@@ -3,18 +3,65 @@
 //! The App struct coordinates all components, manages application state,
 //! and handles the main event loop.
 
+use crate::components::patient::PatientListComponent;
+use crate::components::{Action, Component};
 use crate::config::Config;
 use crate::error::Result;
+use crate::ui::event::EventHandler;
+use crate::ui::tui::Tui;
+use crossterm::event::{KeyCode, KeyModifiers};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::widgets::{Block, Borders, Paragraph, Tabs};
+use ratatui::Frame;
 use sqlx::SqlitePool;
-use tracing::info;
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tracing::{debug, info};
+
+/// Active screen in the application
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Screen {
+    Patients,
+    Appointments,
+    Clinical,
+    Billing,
+}
+
+impl Screen {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Screen::Patients => "Patients",
+            Screen::Appointments => "Appointments",
+            Screen::Clinical => "Clinical",
+            Screen::Billing => "Billing",
+        }
+    }
+
+    pub fn all() -> Vec<Screen> {
+        vec![
+            Screen::Patients,
+            Screen::Appointments,
+            Screen::Clinical,
+            Screen::Billing,
+        ]
+    }
+}
 
 /// Main application struct
 ///
 /// Coordinates all components and manages the application lifecycle.
 pub struct App {
+    #[allow(dead_code)]
     config: Config,
     db_pool: SqlitePool,
     should_quit: bool,
+    active_screen: Screen,
+    patient_component: Option<Box<dyn Component>>,
+    appointment_component: Option<Box<dyn Component>>,
+    clinical_component: Option<Box<dyn Component>>,
+    billing_component: Option<Box<dyn Component>>,
+    action_tx: UnboundedSender<Action>,
+    action_rx: UnboundedReceiver<Action>,
 }
 
 impl App {
@@ -22,18 +69,241 @@ impl App {
     pub fn new(config: Config, db_pool: SqlitePool) -> Result<Self> {
         info!("Initializing application");
         
+        let (action_tx, action_rx) = mpsc::unbounded_channel();
+        
         Ok(Self {
             config,
             db_pool,
             should_quit: false,
+            active_screen: Screen::Patients,
+            patient_component: None,
+            appointment_component: None,
+            clinical_component: None,
+            billing_component: None,
+            action_tx,
+            action_rx,
         })
     }
 
-    /// Run the application
+    /// Run the application main event loop
     pub async fn run(&mut self) -> Result<()> {
         info!("Starting application main loop");
-
+        
+        let mut tui = Tui::new()?;
+        tui.enter()?;
+        
+        let event_handler = EventHandler::new();
+        self.init_components().await?;
+        
+        loop {
+            tui.draw(|f| self.render(f))?;
+            
+            let event = event_handler.next()?;
+            debug!("Received event: {:?}", event);
+            
+            let action = self.handle_global_events(&event);
+            if action != Action::None {
+                self.action_tx.send(action)?;
+            }
+            
+            let component_action = self.get_active_component_mut()
+                .map(|c| c.handle_events(Some(event)))
+                .unwrap_or(Action::None);
+            
+            if component_action != Action::None {
+                self.action_tx.send(component_action)?;
+            }
+            
+            while let Ok(action) = self.action_rx.try_recv() {
+                self.update(action).await?;
+            }
+            
+            if self.should_quit {
+                break;
+            }
+        }
+        
+        tui.exit()?;
+        info!("Application shutdown complete");
+        
         Ok(())
+    }
+
+    /// Initialize all components
+    async fn init_components(&mut self) -> Result<()> {
+        info!("Initializing components");
+        
+        let mut patient_list = PatientListComponent::with_mock_data();
+        patient_list.init().await?;
+        self.patient_component = Some(Box::new(patient_list));
+        
+        Ok(())
+    }
+
+    /// Handle global key events (navigation, quit)
+    fn handle_global_events(&self, event: &crate::ui::event::Event) -> Action {
+        use crate::ui::event::Event;
+        
+        match event {
+            Event::Key(key) => {
+                if (key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c'))
+                    || key.code == KeyCode::Char('q')
+                {
+                    return Action::Quit;
+                }
+                
+                match key.code {
+                    KeyCode::Char('1') => Action::NavigateToPatients,
+                    KeyCode::Char('2') => Action::NavigateToAppointments,
+                    KeyCode::Char('3') => Action::NavigateToClinical,
+                    KeyCode::Char('4') => Action::NavigateToBilling,
+                    KeyCode::Tab => self.next_screen(),
+                    KeyCode::BackTab => self.prev_screen(),
+                    _ => Action::None,
+                }
+            }
+            _ => Action::None,
+        }
+    }
+
+    /// Navigate to next screen
+    fn next_screen(&self) -> Action {
+        match self.active_screen {
+            Screen::Patients => Action::NavigateToAppointments,
+            Screen::Appointments => Action::NavigateToClinical,
+            Screen::Clinical => Action::NavigateToBilling,
+            Screen::Billing => Action::NavigateToPatients,
+        }
+    }
+
+    /// Navigate to previous screen
+    fn prev_screen(&self) -> Action {
+        match self.active_screen {
+            Screen::Patients => Action::NavigateToBilling,
+            Screen::Appointments => Action::NavigateToPatients,
+            Screen::Clinical => Action::NavigateToAppointments,
+            Screen::Billing => Action::NavigateToClinical,
+        }
+    }
+
+    /// Update application state based on action
+    async fn update(&mut self, action: Action) -> Result<()> {
+        debug!("Processing action: {:?}", action);
+        
+        match action {
+            Action::Quit => {
+                info!("Quit action received");
+                self.should_quit = true;
+            }
+            Action::NavigateToPatients => {
+                info!("Navigating to Patients");
+                self.active_screen = Screen::Patients;
+            }
+            Action::NavigateToAppointments => {
+                info!("Navigating to Appointments");
+                self.active_screen = Screen::Appointments;
+            }
+            Action::NavigateToClinical => {
+                info!("Navigating to Clinical");
+                self.active_screen = Screen::Clinical;
+            }
+            Action::NavigateToBilling => {
+                info!("Navigating to Billing");
+                self.active_screen = Screen::Billing;
+            }
+            _ => {
+                if let Some(component) = self.get_active_component_mut() {
+                    if let Some(new_action) = component.update(action).await? {
+                        self.action_tx.send(new_action)?;
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Render the application UI
+    fn render(&mut self, frame: &mut Frame) {
+        let size = frame.area();
+        
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(0),
+            ])
+            .split(size);
+        
+        self.render_header(frame, chunks[0]);
+        self.render_content(frame, chunks[1]);
+    }
+
+    /// Render header with navigation tabs
+    fn render_header(&self, frame: &mut Frame, area: Rect) {
+        let screens = Screen::all();
+        let titles: Vec<&str> = screens.iter().map(|s| s.as_str()).collect();
+        
+        let selected = match self.active_screen {
+            Screen::Patients => 0,
+            Screen::Appointments => 1,
+            Screen::Clinical => 2,
+            Screen::Billing => 3,
+        };
+        
+        let tabs = Tabs::new(titles)
+            .block(Block::default().borders(Borders::ALL).title("OpenGP"))
+            .select(selected)
+            .style(Style::default().fg(Color::White))
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            );
+        
+        frame.render_widget(tabs, area);
+    }
+
+    /// Render active component content
+    fn render_content(&mut self, frame: &mut Frame, area: Rect) {
+        if let Some(component) = self.get_active_component_mut() {
+            component.render(frame, area);
+        } else {
+            self.render_placeholder(frame, area);
+        }
+    }
+
+    /// Render placeholder when component not implemented
+    fn render_placeholder(&self, frame: &mut Frame, area: Rect) {
+        let text = format!(
+            "{} Screen\n\n\
+            Component not yet implemented\n\n\
+            Controls:\n\
+              1-4: Switch screens\n\
+              Tab/Shift+Tab: Navigate screens\n\
+              q or Ctrl+C: Quit",
+            self.active_screen.as_str()
+        );
+        
+        let paragraph = Paragraph::new(text)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!(" {} ", self.active_screen.as_str())),
+            )
+            .style(Style::default().fg(Color::White));
+        
+        frame.render_widget(paragraph, area);
+    }
+
+    /// Get mutable reference to active component
+    fn get_active_component_mut(&mut self) -> Option<&mut Box<dyn Component>> {
+        match self.active_screen {
+            Screen::Patients => self.patient_component.as_mut(),
+            Screen::Appointments => self.appointment_component.as_mut(),
+            Screen::Clinical => self.clinical_component.as_mut(),
+            Screen::Billing => self.billing_component.as_mut(),
+        }
     }
 
     /// Signal the application to quit

@@ -9,7 +9,7 @@ use ratatui::Frame;
 
 use crate::ui::event::Event;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     None,
     Tick,
