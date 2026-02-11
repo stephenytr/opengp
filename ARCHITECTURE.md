@@ -1554,29 +1554,96 @@ impl SqlxPatientRepository {
 
 ## Integration Architecture
 
-### External System Integration Pattern
+### Integration Principles
 
-All external integrations follow a consistent pattern:
+All external integrations follow these principles:
+
+1. **Resilience**: Retry logic with exponential backoff
+2. **Circuit Breaker**: Prevent cascading failures
+3. **Timeouts**: Never wait indefinitely
+4. **Fallback**: Graceful degradation when service unavailable
+5. **Audit**: Log all external calls
+6. **Health Checks**: Monitor service availability
+
+### Common Integration Pattern
 
 ```rust
 // src/integrations/mod.rs
-pub mod medicare;     // Medicare Online
-pub mod pbs;          // PBS API
-pub mod hi_service;   // Healthcare Identifiers
-pub mod mhr;          // My Health Record
-pub mod pathology;    // Pathology labs
+pub mod medicare;          // Medicare Online
+pub mod pbs;               // PBS API
+pub mod air;               // Australian Immunisation Register
+pub mod hi_service;        // Healthcare Identifiers
+pub mod mhr;               // My Health Record
+pub mod proda;             // PRODA Authentication
+pub mod secure_messaging;  // HealthLink, Medical Objects
+pub mod pathology;         // Lab integrations
+pub mod drug_database;     // MIMS or AusDI
+pub mod hl7;               // HL7 v2.x parser
+pub mod fhir;              // FHIR client
 
-// Common integration pattern
+// Common integration trait
 #[async_trait]
 pub trait ExternalService: Send + Sync {
     async fn health_check(&self) -> Result<HealthStatus, IntegrationError>;
     fn service_name(&self) -> &str;
+    fn is_critical(&self) -> bool;  // Can app function without this service?
 }
 
 pub struct HealthStatus {
     pub is_healthy: bool,
     pub latency_ms: u64,
     pub last_check: DateTime<Utc>,
+    pub error_message: Option<String>,
+}
+```
+
+### PRODA Authentication Service
+
+**Critical Foundation**: All Services Australia APIs require PRODA
+
+```rust
+// src/integrations/proda/mod.rs
+pub struct ProdaAuthService {
+    client_id: String,
+    client_secret: String,
+    token_url: String,
+    http_client: reqwest::Client,
+    token_cache: Arc<RwLock<Option<CachedToken>>>,
+}
+
+impl ProdaAuthService {
+    pub async fn get_token(&self) -> Result<String, ProdaError> {
+        // Check cache first
+        if let Some(token) = self.get_cached_token().await {
+            if !token.is_expired() {
+                return Ok(token.access_token);
+            }
+        }
+        
+        // Request new token
+        let response = self.http_client
+            .post(&self.token_url)
+            .form(&[
+                ("grant_type", "client_credentials"),
+                ("client_id", &self.client_id),
+                ("client_secret", &self.client_secret),
+            ])
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await?;
+        
+        let token_response: TokenResponse = response.json().await?;
+        
+        // Cache token
+        let cached = CachedToken {
+            access_token: token_response.access_token.clone(),
+            expires_at: Utc::now() + Duration::from_secs(token_response.expires_in),
+        };
+        
+        *self.token_cache.write().await = Some(cached);
+        
+        Ok(token_response.access_token)
+    }
 }
 ```
 
@@ -1595,18 +1662,14 @@ impl MedicareClient {
         // 1. Get PRODA token
         let token = self.proda_auth.get_token().await?;
         
-        // 2. Build request
-        let request = self.http_client
-            .post(format!("{}/claims", self.base_url))
-            .bearer_auth(token)
-            .json(&claim)
-            .build()?;
+        // 2. Build SOAP request (simplified)
+        let soap_request = self.build_claim_request(&claim)?;
         
         // 3. Send with retry logic
-        let response = self.send_with_retry(request, 3).await?;
+        let response = self.send_with_retry(soap_request, 3).await?;
         
-        // 4. Parse response
-        let claim_response: ClaimResponse = response.json().await?;
+        // 4. Parse SOAP response
+        let claim_response = self.parse_claim_response(&response)?;
         
         // 5. Audit log
         info!("Medicare claim submitted: claim_id={}", claim_response.claim_id);
@@ -1614,35 +1677,602 @@ impl MedicareClient {
         Ok(claim_response)
     }
     
-    async fn send_with_retry(
+    pub async fn verify_patient_eligibility(
         &self,
-        request: reqwest::Request,
-        max_retries: u32,
-    ) -> Result<reqwest::Response, MedicareError> {
-        // Retry logic with exponential backoff
-        for attempt in 0..max_retries {
-            match self.http_client.execute(request.try_clone().unwrap()).await {
-                Ok(response) if response.status().is_success() => return Ok(response),
-                Ok(response) => {
-                    error!("Medicare API error: status={}", response.status());
-                    if attempt < max_retries - 1 {
-                        tokio::time::sleep(Duration::from_secs(2u64.pow(attempt))).await;
-                        continue;
-                    }
-                    return Err(MedicareError::ApiError(response.status().as_u16()));
-                }
-                Err(e) => {
-                    error!("Medicare API request failed: {}", e);
-                    if attempt < max_retries - 1 {
-                        tokio::time::sleep(Duration::from_secs(2u64.pow(attempt))).await;
-                        continue;
-                    }
-                    return Err(MedicareError::NetworkError(e));
-                }
+        medicare_number: &str,
+        irn: u8,
+    ) -> Result<EligibilityResponse, MedicareError> {
+        let token = self.proda_auth.get_token().await?;
+        
+        // SOAP request to verify eligibility
+        let response = self.http_client
+            .post(format!("{}/verification", self.base_url))
+            .bearer_auth(token)
+            .header("SOAPAction", "verify")
+            .body(self.build_verification_request(medicare_number, irn)?)
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await?;
+        
+        self.parse_eligibility_response(&response.text().await?)
+    }
+}
+```
+
+### Drug Database Integration
+
+**Critical for Prescription Safety**
+
+```rust
+// src/integrations/drug_database/mod.rs
+pub trait DrugDatabase: Send + Sync {
+    async fn search_drug(&self, query: &str) -> Result<Vec<Drug>, DrugDbError>;
+    async fn get_drug(&self, code: &str) -> Result<Drug, DrugDbError>;
+    async fn check_interactions(&self, drugs: &[String]) -> Result<Vec<Interaction>, DrugDbError>;
+    async fn check_allergy(&self, drug: &str, allergies: &[String]) -> Result<Vec<AllergyAlert>, DrugDbError>;
+}
+
+// MIMS implementation
+pub struct MimsClient {
+    api_key: String,
+    base_url: String,
+    http_client: reqwest::Client,
+}
+
+impl MimsClient {
+    pub async fn check_interactions(
+        &self,
+        drug_codes: &[String],
+    ) -> Result<Vec<Interaction>, DrugDbError> {
+        let response = self.http_client
+            .post(format!("{}/interactions", self.base_url))
+            .header("X-API-Key", &self.api_key)
+            .json(&json!({ "drugs": drug_codes }))
+            .send()
+            .await?;
+        
+        let interactions: Vec<Interaction> = response.json().await?;
+        
+        // Sort by severity
+        let mut sorted = interactions;
+        sorted.sort_by_key(|i| std::cmp::Reverse(i.severity));
+        
+        Ok(sorted)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Interaction {
+    pub drug_a: String,
+    pub drug_b: String,
+    pub severity: InteractionSeverity,
+    pub description: String,
+    pub clinical_guidance: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum InteractionSeverity {
+    Minor = 1,
+    Moderate = 2,
+    Severe = 3,
+    Contraindicated = 4,
+}
+```
+
+### AIR (Australian Immunisation Register) Integration
+
+```rust
+// src/integrations/air/client.rs
+pub struct AirClient {
+    proda_auth: Arc<ProdaAuthService>,
+    base_url: String,
+    soap_client: SoapClient,
+}
+
+impl AirClient {
+    pub async fn record_vaccination(
+        &self,
+        vaccination: VaccinationRecord,
+    ) -> Result<AirResponse, AirError> {
+        // Build AIR notification message
+        let notification = self.build_notification(&vaccination)?;
+        
+        // Get PRODA token
+        let token = self.proda_auth.get_token().await?;
+        
+        // Send SOAP request
+        let response = self.soap_client
+            .send(notification)
+            .with_auth(token)
+            .call()
+            .await?;
+        
+        // Parse response
+        let air_response = self.parse_response(&response)?;
+        
+        // Handle errors (duplicates, validation)
+        if let Some(error) = air_response.error {
+            if error.code == "DUPLICATE_NOTIFICATION" {
+                warn!("Duplicate AIR notification: {}", vaccination.id);
+                return Ok(air_response);  // Accept duplicate
+            } else {
+                return Err(AirError::ApiError(error));
             }
         }
         
-        Err(MedicareError::MaxRetriesExceeded)
+        info!("AIR notification successful: notification_id={}", air_response.notification_id);
+        
+        Ok(air_response)
+    }
+    
+    pub async fn retrieve_history(
+        &self,
+        ihi: &str,
+    ) -> Result<Vec<VaccinationRecord>, AirError> {
+        let token = self.proda_auth.get_token().await?;
+        
+        let request = self.build_history_request(ihi)?;
+        let response = self.soap_client
+            .send(request)
+            .with_auth(token)
+            .call()
+            .await?;
+        
+        self.parse_history_response(&response)
+    }
+}
+```
+
+### HL7 v2.x Message Parser
+
+```rust
+// src/integrations/hl7/parser.rs
+pub struct Hl7Parser;
+
+impl Hl7Parser {
+    pub fn parse_oru_message(message: &str) -> Result<PathologyResult, Hl7Error> {
+        // Parse HL7 message
+        let segments = message.lines().collect::<Vec<_>>();
+        
+        // Extract MSH (Message Header)
+        let msh = Self::parse_msh(segments[0])?;
+        
+        // Extract PID (Patient Identification)
+        let pid = segments.iter()
+            .find(|s| s.starts_with("PID"))
+            .ok_or(Hl7Error::MissingSegment("PID"))?;
+        let patient_info = Self::parse_pid(pid)?;
+        
+        // Extract OBR (Observation Request)
+        let obr = segments.iter()
+            .find(|s| s.starts_with("OBR"))
+            .ok_or(Hl7Error::MissingSegment("OBR"))?;
+        let test_info = Self::parse_obr(obr)?;
+        
+        // Extract OBX (Observation/Result) segments
+        let obx_segments: Vec<_> = segments.iter()
+            .filter(|s| s.starts_with("OBX"))
+            .collect();
+        
+        let results = obx_segments.iter()
+            .map(|obx| Self::parse_obx(obx))
+            .collect::<Result<Vec<_>, _>>()?;
+        
+        Ok(PathologyResult {
+            message_id: msh.message_id,
+            patient: patient_info,
+            test_info,
+            results,
+            received_at: Utc::now(),
+        })
+    }
+    
+    fn parse_pid(segment: &str) -> Result<PatientInfo, Hl7Error> {
+        let fields: Vec<&str> = segment.split('|').collect();
+        
+        Ok(PatientInfo {
+            medicare_number: fields.get(3).map(|s| s.to_string()),
+            name: fields.get(5).map(|s| s.to_string()),
+            dob: fields.get(7).and_then(|s| NaiveDate::parse_from_str(s, "%Y%m%d").ok()),
+        })
+    }
+    
+    fn parse_obx(segment: &str) -> Result<TestResult, Hl7Error> {
+        let fields: Vec<&str> = segment.split('|').collect();
+        
+        Ok(TestResult {
+            test_code: fields.get(3).map(|s| s.to_string()).unwrap_or_default(),
+            test_name: fields.get(3).map(|s| s.to_string()).unwrap_or_default(),
+            value: fields.get(5).map(|s| s.to_string()),
+            units: fields.get(6).map(|s| s.to_string()),
+            reference_range: fields.get(7).map(|s| s.to_string()),
+            abnormal_flag: fields.get(8).map(|s| s.to_string()),
+        })
+    }
+}
+```
+
+### FHIR Client Architecture
+
+```rust
+// src/integrations/fhir/client.rs
+pub struct FhirClient {
+    base_url: String,
+    http_client: reqwest::Client,
+    auth_provider: Arc<dyn FhirAuthProvider>,
+}
+
+impl FhirClient {
+    pub async fn create_patient(&self, patient: &Patient) -> Result<FhirPatient, FhirError> {
+        // Convert domain model to FHIR resource
+        let fhir_patient = FhirPatient {
+            resource_type: "Patient".to_string(),
+            identifier: vec![
+                FhirIdentifier {
+                    system: "http://ns.electronichealth.net.au/id/hi/ihi/1.0".to_string(),
+                    value: patient.ihi.clone().unwrap_or_default(),
+                },
+                FhirIdentifier {
+                    system: "http://ns.electronichealth.net.au/id/medicare-number".to_string(),
+                    value: patient.medicare_number.clone().unwrap_or_default(),
+                },
+            ],
+            name: vec![
+                FhirName {
+                    family: patient.last_name.clone(),
+                    given: vec![patient.first_name.clone()],
+                },
+            ],
+            birth_date: patient.date_of_birth.to_string(),
+            // ... more FHIR mappings
+        };
+        
+        // POST to FHIR server
+        let token = self.auth_provider.get_token().await?;
+        
+        let response = self.http_client
+            .post(format!("{}/Patient", self.base_url))
+            .bearer_auth(token)
+            .json(&fhir_patient)
+            .send()
+            .await?;
+        
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(FhirError::ServerError(error_text));
+        }
+        
+        response.json().await.map_err(Into::into)
+    }
+    
+    pub async fn upload_document(
+        &self,
+        document: ClinicalDocument,
+    ) -> Result<String, FhirError> {
+        // Convert to FHIR DocumentReference
+        let doc_ref = FhirDocumentReference {
+            resource_type: "DocumentReference".to_string(),
+            status: "current".to_string(),
+            doc_status: "final".to_string(),
+            r#type: CodeableConcept {
+                coding: vec![
+                    Coding {
+                        system: "http://loinc.org".to_string(),
+                        code: "60591-5".to_string(),  // Patient summary
+                        display: "Patient Summary".to_string(),
+                    },
+                ],
+            },
+            subject: Reference {
+                reference: format!("Patient/{}", document.patient_id),
+            },
+            content: vec![
+                Content {
+                    attachment: Attachment {
+                        content_type: "application/pdf".to_string(),
+                        data: base64::encode(&document.pdf_data),
+                    },
+                },
+            ],
+        };
+        
+        let token = self.auth_provider.get_token().await?;
+        
+        let response = self.http_client
+            .post(format!("{}/DocumentReference", self.base_url))
+            .bearer_auth(token)
+            .json(&doc_ref)
+            .send()
+            .await?;
+        
+        let created: FhirDocumentReference = response.json().await?;
+        
+        Ok(created.id.unwrap_or_default())
+    }
+}
+```
+
+### Secure Messaging Integration
+
+```rust
+// src/integrations/secure_messaging/mod.rs
+pub mod healthlink;
+pub mod medical_objects;
+pub mod argus;
+
+pub trait SecureMessagingProvider: Send + Sync {
+    async fn send_message(&self, message: SecureMessage) -> Result<MessageId, MessagingError>;
+    async fn receive_messages(&self) -> Result<Vec<SecureMessage>, MessagingError>;
+    async fn acknowledge(&self, message_id: &str) -> Result<(), MessagingError>;
+}
+
+// HealthLink implementation
+pub struct HealthLinkClient {
+    endpoint: String,
+    practice_id: String,
+    certificate: Certificate,
+    http_client: reqwest::Client,
+}
+
+impl HealthLinkClient {
+    pub async fn send_referral(
+        &self,
+        referral: Referral,
+    ) -> Result<MessageId, MessagingError> {
+        // Build CDA document
+        let cda_document = self.build_referral_cda(&referral)?;
+        
+        // Create secure message
+        let message = SecureMessage {
+            id: Uuid::new_v4().to_string(),
+            from: self.practice_id.clone(),
+            to: referral.recipient_provider_id,
+            subject: format!("Referral: {} {}", referral.patient_first_name, referral.patient_last_name),
+            body: cda_document,
+            attachments: vec![],
+            priority: MessagePriority::Normal,
+        };
+        
+        // Send via HealthLink SOAP API
+        let response = self.http_client
+            .post(&self.endpoint)
+            .header("Content-Type", "application/soap+xml")
+            .body(self.build_soap_envelope(&message)?)
+            .send()
+            .await?;
+        
+        let message_id = self.parse_send_response(&response.text().await?)?;
+        
+        info!("HealthLink message sent: {}", message_id);
+        
+        Ok(message_id)
+    }
+}
+```
+
+### Drug Interaction Checking Architecture
+
+```rust
+// src/integrations/drug_database/interaction_engine.rs
+pub struct InteractionEngine {
+    drug_db: Arc<dyn DrugDatabase>,
+    cache: Arc<RwLock<HashMap<String, Vec<Interaction>>>>,
+}
+
+impl InteractionEngine {
+    pub async fn check_prescription(
+        &self,
+        new_medication: &str,
+        current_medications: &[String],
+        allergies: &[String],
+    ) -> Result<SafetyCheckResult, DrugDbError> {
+        let mut warnings = Vec::new();
+        let mut alerts = Vec::new();
+        
+        // 1. Check drug-drug interactions
+        let mut all_meds = current_medications.to_vec();
+        all_meds.push(new_medication.to_string());
+        
+        let interactions = self.drug_db.check_interactions(&all_meds).await?;
+        
+        for interaction in interactions {
+            match interaction.severity {
+                InteractionSeverity::Contraindicated | InteractionSeverity::Severe => {
+                    alerts.push(SafetyAlert::Interaction(interaction));
+                }
+                InteractionSeverity::Moderate => {
+                    warnings.push(SafetyWarning::Interaction(interaction));
+                }
+                _ => {}
+            }
+        }
+        
+        // 2. Check allergies
+        let allergy_alerts = self.drug_db.check_allergy(new_medication, allergies).await?;
+        
+        for alert in allergy_alerts {
+            if alert.severity >= AllergySeverity::Severe {
+                alerts.push(SafetyAlert::Allergy(alert));
+            } else {
+                warnings.push(SafetyWarning::Allergy(alert));
+            }
+        }
+        
+        Ok(SafetyCheckResult {
+            is_safe: alerts.is_empty(),
+            alerts,
+            warnings,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct SafetyCheckResult {
+    pub is_safe: bool,
+    pub alerts: Vec<SafetyAlert>,      // Must address before prescribing
+    pub warnings: Vec<SafetyWarning>,   // Should review but can proceed
+}
+
+#[derive(Debug)]
+pub enum SafetyAlert {
+    Interaction(Interaction),
+    Allergy(AllergyAlert),
+    Contraindication(String),
+}
+```
+
+### Pathology Lab Integration Architecture
+
+```rust
+// src/integrations/pathology/mod.rs
+pub trait PathologyLab: Send + Sync {
+    async fn send_order(&self, order: PathologyOrder) -> Result<OrderConfirmation, PathologyError>;
+    async fn fetch_results(&self) -> Result<Vec<PathologyResult>, PathologyError>;
+    fn lab_name(&self) -> &str;
+}
+
+// Generic HL7 receiver for all labs
+pub struct Hl7ResultReceiver {
+    hl7_parser: Arc<Hl7Parser>,
+    patient_matcher: Arc<PatientMatcher>,
+    result_repository: Arc<dyn PathologyResultRepository>,
+}
+
+impl Hl7ResultReceiver {
+    pub async fn process_incoming_message(
+        &self,
+        raw_message: String,
+    ) -> Result<(), PathologyError> {
+        // 1. Parse HL7 message
+        let parsed = self.hl7_parser.parse_oru_message(&raw_message)?;
+        
+        // 2. Match to patient
+        let patient_id = self.patient_matcher
+            .match_patient(&parsed.patient)
+            .await?
+            .ok_or(PathologyError::PatientNotFound)?;
+        
+        // 3. Store result
+        let result = PathologyResult {
+            id: Uuid::new_v4(),
+            patient_id,
+            lab_name: parsed.test_info.lab_name,
+            test_name: parsed.test_info.test_name,
+            collected_at: parsed.test_info.collected_at,
+            results: parsed.results,
+            pdf_report: None,  // Fetch separately if available
+            status: ResultStatus::Final,
+            is_acknowledged: false,
+        };
+        
+        self.result_repository.create(result).await?;
+        
+        // 4. Check for abnormal results
+        let has_abnormal = parsed.results.iter()
+            .any(|r| r.abnormal_flag.as_deref() == Some("H") || r.abnormal_flag.as_deref() == Some("L"));
+        
+        if has_abnormal {
+            // Trigger alert to practitioner
+            warn!("Abnormal pathology result received for patient {}", patient_id);
+        }
+        
+        Ok(())
+    }
+}
+
+// Patient matching logic (fuzzy matching on Medicare, DOB, name)
+pub struct PatientMatcher {
+    patient_repository: Arc<dyn PatientRepository>,
+}
+
+impl PatientMatcher {
+    pub async fn match_patient(&self, hl7_patient: &PatientInfo) -> Result<Option<Uuid>, PatientError> {
+        // Try Medicare number first (most reliable)
+        if let Some(ref medicare) = hl7_patient.medicare_number {
+            if let Some(patient) = self.patient_repository.find_by_medicare(medicare).await? {
+                return Ok(Some(patient.id));
+            }
+        }
+        
+        // Fall back to name + DOB matching
+        if let (Some(ref name), Some(dob)) = (&hl7_patient.name, hl7_patient.dob) {
+            let search_results = self.patient_repository.search(PatientSearchQuery {
+                name: Some(name.clone()),
+                date_of_birth: Some(dob),
+                ..Default::default()
+            }).await?;
+            
+            if search_results.items.len() == 1 {
+                return Ok(Some(search_results.items[0].id));
+            }
+        }
+        
+        // No match or ambiguous - requires manual matching
+        Ok(None)
+    }
+}
+```
+
+### Circuit Breaker Pattern for External Services
+
+```rust
+// src/integrations/circuit_breaker.rs
+pub struct CircuitBreaker {
+    state: Arc<RwLock<CircuitState>>,
+    failure_threshold: u32,
+    success_threshold: u32,
+    timeout: Duration,
+}
+
+#[derive(Debug, Clone)]
+enum CircuitState {
+    Closed,                          // Normal operation
+    Open { opened_at: DateTime<Utc> },  // Blocking calls
+    HalfOpen,                        // Testing if service recovered
+}
+
+impl CircuitBreaker {
+    pub async fn call<F, T>(&self, f: F) -> Result<T, CircuitBreakerError>
+    where
+        F: Future<Output = Result<T, Box<dyn std::error::Error>>>,
+    {
+        // Check circuit state
+        let state = self.state.read().await.clone();
+        
+        match state {
+            CircuitState::Open { opened_at } => {
+                // Check if timeout elapsed
+                if Utc::now() - opened_at > self.timeout {
+                    // Try half-open
+                    *self.state.write().await = CircuitState::HalfOpen;
+                } else {
+                    return Err(CircuitBreakerError::CircuitOpen);
+                }
+            }
+            _ => {}
+        }
+        
+        // Execute call
+        match f.await {
+            Ok(result) => {
+                self.on_success().await;
+                Ok(result)
+            }
+            Err(e) => {
+                self.on_failure().await;
+                Err(CircuitBreakerError::CallFailed(e))
+            }
+        }
+    }
+    
+    async fn on_failure(&self) {
+        // Increment failure counter, open circuit if threshold reached
+        // Implementation details...
+    }
+    
+    async fn on_success(&self) {
+        // Reset failure counter, close circuit if in half-open
+        // Implementation details...
     }
 }
 ```
