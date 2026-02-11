@@ -6,11 +6,13 @@ use ratatui::widgets::{Block, Borders, Cell, Row, Table, TableState};
 use ratatui::Frame;
 
 use crate::components::{Action, Component};
-use crate::domain::patient::Patient;
+use crate::domain::patient::{Patient, PatientService};
 use crate::error::Result;
+use std::sync::Arc;
 
 
 pub struct PatientListComponent {
+    patient_service: Option<Arc<PatientService>>,
     all_patients: Vec<Patient>,
     filtered_patients: Vec<Patient>,
     table_state: TableState,
@@ -25,18 +27,13 @@ pub struct PatientListComponent {
     page_size: usize,
 }
 
-impl Default for PatientListComponent {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl PatientListComponent {
-    pub fn new() -> Self {
+    pub fn new(patient_service: Arc<PatientService>) -> Self {
         let mut table_state = TableState::default();
         table_state.select(Some(0));
         
         Self {
+            patient_service: Some(patient_service),
             all_patients: Vec::new(),
             filtered_patients: Vec::new(),
             table_state,
@@ -49,8 +46,8 @@ impl PatientListComponent {
         }
     }
 
-    pub fn with_mock_data() -> Self {
-        let mut component = Self::new();
+    pub fn with_mock_data(patient_service: Arc<PatientService>) -> Self {
+        let mut component = Self::new(patient_service);
         let mock_patients = Self::generate_mock_patients();
         component.all_patients = mock_patients.clone();
         component.filtered_patients = mock_patients;
@@ -780,6 +777,22 @@ impl PatientListComponent {
 #[async_trait]
 impl Component for PatientListComponent {
     async fn init(&mut self) -> Result<()> {
+        if let Some(service) = &self.patient_service {
+            match service.list_active_patients().await {
+                Ok(patients) => {
+                    self.all_patients = patients.clone();
+                    self.filtered_patients = patients;
+                    self.error_message = None;
+                    
+                    if !self.filtered_patients.is_empty() {
+                        self.table_state.select(Some(0));
+                    }
+                }
+                Err(e) => {
+                    self.error_message = Some(format!("Failed to load patients: {}", e));
+                }
+            }
+        }
         Ok(())
     }
 

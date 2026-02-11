@@ -153,7 +153,7 @@ impl App {
     async fn init_components(&mut self) -> Result<()> {
         info!("Initializing components");
         
-        let mut patient_list = PatientListComponent::with_mock_data();
+        let mut patient_list = PatientListComponent::new(self.patient_service.clone());
         patient_list.init().await?;
         self.patient_component = Some(Box::new(patient_list));
         
@@ -175,6 +175,10 @@ impl App {
                     || key.code == KeyCode::Char('q')
                 {
                     return Action::Quit;
+                }
+                
+                if self.showing_form {
+                    return Action::None;
                 }
                 
                 match key.code {
@@ -247,14 +251,6 @@ impl App {
                 self.patient_form_component = Some(Box::new(form));
                 self.showing_form = true;
             }
-            Action::PatientFormSubmit => {
-                info!("Patient form submitted successfully");
-                self.showing_form = false;
-                self.patient_form_component = None;
-                if let Some(component) = &mut self.patient_component {
-                    component.init().await?;
-                }
-            }
             Action::PatientFormCancel => {
                 info!("Patient form cancelled");
                 self.showing_form = false;
@@ -269,7 +265,16 @@ impl App {
                 
                 if let Some(comp) = component {
                     if let Some(new_action) = comp.update(action).await? {
-                        self.action_tx.send(new_action)?;
+                        if new_action == Action::PatientFormSubmit {
+                            info!("Patient form submitted successfully");
+                            self.showing_form = false;
+                            self.patient_form_component = None;
+                            if let Some(list_component) = &mut self.patient_component {
+                                list_component.init().await?;
+                            }
+                        } else {
+                            self.action_tx.send(new_action)?;
+                        }
                     }
                 }
             }

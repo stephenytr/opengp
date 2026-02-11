@@ -161,6 +161,31 @@ impl PatientRepository for SqlxPatientRepository {
         }
     }
 
+    async fn list_active(&self) -> Result<Vec<Patient>, RepositoryError> {
+        let rows = sqlx::query_as::<_, PatientRow>(
+            r#"
+            SELECT 
+                id, ihi, medicare_number, medicare_irn, medicare_expiry,
+                title, first_name, middle_name, last_name, preferred_name,
+                date_of_birth, gender,
+                address_line1, address_line2, suburb, state, postcode, country,
+                phone_home, phone_mobile, email,
+                emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+                is_active, is_deceased,
+                created_at, updated_at
+            FROM patients
+            WHERE is_active = TRUE
+            ORDER BY last_name, first_name
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        
+        rows.into_iter()
+            .map(|r| r.into_patient())
+            .collect()
+    }
+
     async fn create(&self, patient: Patient) -> Result<Patient, RepositoryError> {
         let id_bytes = patient.id.as_bytes().to_vec();
         let gender_str = patient.gender.to_string();
@@ -174,7 +199,7 @@ impl PatientRepository for SqlxPatientRepository {
         let emergency_contact_phone = patient.emergency_contact.as_ref().map(|ec| ec.phone.clone());
         let emergency_contact_relationship = patient.emergency_contact.as_ref().map(|ec| ec.relationship.clone());
         
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             INSERT INTO patients (
                 id, ihi, medicare_number, medicare_irn, medicare_expiry,
@@ -217,9 +242,30 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(created_at_str)
         .bind(updated_at_str)
         .execute(&self.pool)
-        .await?;
+        .await;
         
-        Ok(patient)
+        match result {
+            Ok(_) => Ok(patient),
+            Err(sqlx::Error::Database(db_err)) => {
+                let err_msg = db_err.message();
+                if err_msg.contains("UNIQUE constraint") && err_msg.contains("medicare_number") {
+                    Err(RepositoryError::ConstraintViolation(
+                        "Medicare number already exists in the system".to_string()
+                    ))
+                } else if err_msg.contains("NOT NULL constraint") {
+                    Err(RepositoryError::ConstraintViolation(
+                        "Required field is missing".to_string()
+                    ))
+                } else if err_msg.contains("CHECK constraint") {
+                    Err(RepositoryError::ConstraintViolation(
+                        "Invalid value for field".to_string()
+                    ))
+                } else {
+                    Err(RepositoryError::Database(sqlx::Error::Database(db_err)))
+                }
+            }
+            Err(e) => Err(RepositoryError::Database(e)),
+        }
     }
 
     async fn update(&self, _patient: Patient) -> Result<Patient, RepositoryError> {

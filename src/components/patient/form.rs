@@ -54,6 +54,7 @@ impl FormField {
 pub struct PatientFormComponent {
     patient_service: Arc<PatientService>,
     current_field: usize,
+    scroll_offset: usize,
     first_name: String,
     last_name: String,
     date_of_birth: String,
@@ -71,6 +72,7 @@ impl PatientFormComponent {
         Self {
             patient_service,
             current_field: 0,
+            scroll_offset: 0,
             first_name: String::new(),
             last_name: String::new(),
             date_of_birth: String::new(),
@@ -214,6 +216,7 @@ impl PatientFormComponent {
     fn next_field(&mut self) {
         let fields = FormField::all();
         self.current_field = (self.current_field + 1) % fields.len();
+        self.adjust_scroll();
     }
 
     fn prev_field(&mut self) {
@@ -222,6 +225,17 @@ impl PatientFormComponent {
             self.current_field = fields.len() - 1;
         } else {
             self.current_field -= 1;
+        }
+        self.adjust_scroll();
+    }
+
+    fn adjust_scroll(&mut self) {
+        const VISIBLE_FIELDS: usize = 6;
+        
+        if self.current_field < self.scroll_offset {
+            self.scroll_offset = self.current_field;
+        } else if self.current_field >= self.scroll_offset + VISIBLE_FIELDS {
+            self.scroll_offset = self.current_field.saturating_sub(VISIBLE_FIELDS - 1);
         }
     }
 
@@ -382,19 +396,31 @@ impl Component for PatientFormComponent {
             .constraints([Constraint::Min(0), Constraint::Length(3)])
             .split(area);
 
+        let available_height = chunks[0].height.saturating_sub(4);
+        let max_visible_fields = (available_height / 3).min(8) as usize;
+        
+        let all_fields = FormField::all();
+        let visible_fields: Vec<(usize, FormField)> = all_fields
+            .iter()
+            .enumerate()
+            .skip(self.scroll_offset)
+            .take(max_visible_fields)
+            .map(|(idx, field)| (idx, *field))
+            .collect();
+
         let form_chunks = Layout::default()
             .direction(Direction::Vertical)
             .margin(2)
             .constraints(
-                FormField::all()
+                visible_fields
                     .iter()
                     .map(|_| Constraint::Length(3))
                     .collect::<Vec<_>>(),
             )
             .split(chunks[0]);
 
-        for (idx, field) in FormField::all().iter().enumerate() {
-            let is_current = idx == self.current_field;
+        for (render_idx, (field_idx, field)) in visible_fields.iter().enumerate() {
+            let is_current = *field_idx == self.current_field;
             let value = self.get_field_value(*field);
 
             let display_value = if is_current {
@@ -417,15 +443,21 @@ impl Component for PatientFormComponent {
                         .title(field.label()),
                 );
 
-            frame.render_widget(paragraph, form_chunks[idx]);
+            frame.render_widget(paragraph, form_chunks[render_idx]);
         }
 
+        let field_indicator = format!(
+            "Field {}/{}", 
+            self.current_field + 1, 
+            FormField::all().len()
+        );
+        
         let help_text = if self.is_submitting {
-            "Submitting..."
+            format!("Submitting... | {}", field_indicator)
         } else if !self.validation_errors.is_empty() {
-            "Fix errors above"
+            format!("Fix errors above | {}", field_indicator)
         } else {
-            "Tab/Shift+Tab: Navigate | Enter/F10: Submit | Esc: Cancel"
+            format!("Tab/Shift+Tab: Navigate | Enter/F10: Submit | Esc: Cancel | {}", field_indicator)
         };
 
         let help_style = if !self.validation_errors.is_empty() {

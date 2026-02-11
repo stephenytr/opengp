@@ -30,12 +30,22 @@ async fn main() -> Result<()> {
 fn init_logging(level: &str) {
     let log_level = level.parse().unwrap_or(tracing::Level::INFO);
 
+    std::fs::create_dir_all("logs").ok();
+    
+    let log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("logs/opengp.log")
+        .expect("Failed to open log file");
+
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::fmt::layer()
+                .with_writer(std::sync::Arc::new(log_file))
                 .with_target(true)
                 .with_thread_ids(false)
                 .with_line_number(true)
+                .with_ansi(false)
         )
         .with(
             tracing_subscriber::filter::Targets::new()
