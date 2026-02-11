@@ -85,9 +85,40 @@ Key standards relevant to software:
 
 ### Data Sovereignty Requirements
 
-- **Primary Requirement**: Patient health data should be stored within Australia
-- **Cloud Providers**: Must use Australian data centres
-- **Cross-border transfers**: Require explicit patient consent and adequate protections
+- **Primary Requirement**: All patient health data MUST be physically stored within Australian territory
+- **Cloud Providers**: Must use Australian-based data centres (Sydney, Melbourne, Canberra regions)
+- **Cross-border transfers**: Require explicit patient consent and adequate protections under Privacy Act
+- **Backup locations**: All backups must remain within Australia
+
+### Information Security Manual (ISM) Compliance
+
+**Mandatory for Australian Government and Healthcare**:
+
+The Australian Signals Directorate (ASD) **Information Security Manual** sets baseline security requirements. OpenGP implements:
+
+- **Essential Eight Maturity Level 2**: All 8 mitigation strategies (detailed in Security Requirements section)
+- **System monitoring**: Comprehensive event logging per ISM guidelines
+- **Incident response**: Documented procedures for security incidents
+- **Personnel security**: Background checks for staff with system access (practice responsibility)
+
+### Compliance Penalties and Legal Obligations
+
+**Privacy Act 1988 Penalties**:
+- **Serious or repeated breaches**: Civil penalties up to **$2.1 million** for organizations
+- **Notifiable Data Breaches (NDB) Scheme**: Must notify OAIC and affected individuals within 30 days
+- **Criminal penalties**: Up to 2 years imprisonment for improper disclosure
+
+**Healthcare Identifiers Act 2010 Penalties**:
+- **Unauthorized collection/use**: Criminal penalties up to 2 years imprisonment and/or 120 penalty units
+- **Loss of access**: Revocation of HI Service access
+
+**My Health Record Penalties**:
+- **Non-conformance**: Disconnection from My Health Record system
+- **Improper access**: Criminal penalties under My Health Records Act 2012
+
+**State/Territory Penalties**:
+- Additional penalties may apply under state health records legislation
+- Professional disciplinary action through AHPRA for healthcare providers
 
 ---
 
@@ -242,33 +273,122 @@ opengp/
 
 ## Security Requirements
 
+### Australian Regulatory Compliance
+
+OpenGP must comply with the **Information Security Manual (ISM)** published by the Australian Signals Directorate (ASD).
+
+#### Essential Eight Mitigation Strategies (MANDATORY)
+
+All 8 strategies must be implemented at Maturity Level 2 minimum:
+
+1. **Application Control**: Whitelist approved applications, block unapproved executables
+2. **Patch Applications**: Security updates applied within 48 hours for critical vulnerabilities
+3. **Configure Microsoft Office Macro Settings**: Block macros from internet, only allow signed macros
+4. **User Application Hardening**: Disable Flash, ads, Java in web browsers
+5. **Restrict Administrative Privileges**: Least privilege access, separate admin accounts
+6. **Patch Operating Systems**: Security updates applied within 48 hours for critical vulnerabilities  
+7. **Multi-Factor Authentication (MFA)**: Required for all privileged access, recommended for all users
+8. **Daily Backups**: Automated daily backups with 7-year retention, tested quarterly
+
+**Non-compliance penalties**: Up to **$2.1 million** for serious or repeated privacy breaches under Privacy Act.
+
 ### Authentication
 
-- Password with complexity requirements (min 12 chars)
-- Account lockout after failed attempts
-- Session timeout (default 15 minutes)
-- Optional MFA support
+- **Password Requirements**:
+  - Minimum 12 characters
+  - Complexity: uppercase, lowercase, numbers, special characters
+  - Password history: prevent reuse of last 10 passwords
+  - Password expiry: 90 days (configurable)
+- **Account lockout**: 5 failed attempts, 15-minute lockout
+- **Session timeout**: 15 minutes inactivity (configurable)
+- **Multi-Factor Authentication (MFA)**: TOTP-based (Google Authenticator compatible)
 
 ### Authorization (RBAC)
 
-- Admin, Doctor, Nurse, Receptionist, Billing roles
-- Field-level permissions
-- Break-the-glass emergency access
+- **Roles**: Admin, Doctor, Nurse, Receptionist, Billing
+- **Field-level permissions**: Granular access control
+- **Break-the-glass emergency access**: With mandatory audit logging
+- **Principle of least privilege**: Users granted minimum necessary permissions
 
 ### Encryption
 
-- **At Rest**: AES-256-GCM for sensitive fields
-- **In Transit**: TLS 1.3 for all external APIs
+#### Data at Rest
+- **Algorithm**: AES-256-GCM (Galois/Counter Mode)
+- **Key Management**:
+  - Master encryption key stored in environment variable or KMS
+  - Data encryption keys (DEKs) derived from master key
+  - Key rotation: Annually or on suspected compromise
+  - Keys never stored in database or version control
+- **Scope**: 
+  - Clinical notes (SOAP notes, confidential notes)
+  - Prescription details
+  - Social history
+  - Patient financial information
+  - Any PII marked as sensitive
+- **Database Encryption**: 
+  - Column-level encryption at application layer
+  - SQLite database file encryption (SQLCipher) for additional protection
+  - PostgreSQL: Use pgcrypto or application-level encryption
+
+#### Data in Transit
+- **Protocol**: TLS 1.3 (minimum TLS 1.2 for legacy compatibility)
+- **Certificate Management**: 
+  - Valid certificates from trusted CA
+  - Certificate rotation every 12 months
+  - Certificate pinning for critical integrations
+- **End-to-End Encryption**: For patient communication features (future)
+
+#### Key Management Best Practices
+- **Separation of duties**: Different keys for different data types
+- **Secure deletion**: Keys securely wiped on rotation
+- **Backup encryption**: Backup files encrypted with separate keys
+- **HSM consideration**: Hardware Security Module for production (future)
 
 ### Audit Logging
 
-All patient data access logged:
-- User authentication events
-- Patient record access
-- Clinical data modifications
-- Report generation and exports
+#### Comprehensive Audit Trail (MANDATORY)
 
-**Retention**: Minimum 7 years
+All patient data access MUST be logged per Privacy Act APP 11:
+
+**Events to Log**:
+- User authentication (login, logout, failed attempts, MFA events)
+- Patient record access (view, create, update, delete, search, export)
+- Clinical data operations (consultations, prescriptions, test results)
+- Configuration changes (user management, system settings)
+- Data exports and report generation
+- Break-the-glass access events
+- Failed authorization attempts
+
+**Audit Log Format**:
+```json
+{
+  "timestamp": "ISO8601 with timezone",
+  "user_id": "UUID",
+  "action": "enum (LOGIN, PATIENT_READ, etc.)",
+  "entity_type": "Patient|Consultation|Prescription",
+  "entity_id": "UUID",
+  "ip_address": "IPv4/IPv6",
+  "user_agent": "string",
+  "session_id": "UUID",
+  "result": "SUCCESS|FAILURE",
+  "metadata": { "additional_context": "..." }
+}
+```
+
+**Audit Log Protection**:
+- **Immutability**: Append-only, no deletion or modification allowed
+- **Integrity**: Digital signatures or cryptographic hashing (SHA-256)
+- **Tamper detection**: Hash chain linking logs together
+- **Separate storage**: Audit logs stored separately from application data
+- **Retention**: Minimum **7 years** (aligns with medical record retention)
+- **Backup**: Daily backups with same retention as operational data
+- **Access control**: Read-only access for auditors, restricted for admins
+
+**Compliance Monitoring**:
+- Weekly audit log review for suspicious activity
+- Quarterly access pattern analysis
+- Annual compliance audit by external auditor
+- Real-time alerts for break-the-glass access
 
 ---
 
