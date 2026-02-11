@@ -20,6 +20,10 @@ pub enum Action {
     NavigateToAppointments,
     NavigateToClinical,
     NavigateToBilling,
+
+    PatientCreate,
+    PatientFormSubmit,
+    PatientFormCancel,
 }
 
 #[async_trait]

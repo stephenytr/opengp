@@ -25,6 +25,12 @@ pub struct PatientListComponent {
     page_size: usize,
 }
 
+impl Default for PatientListComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PatientListComponent {
     pub fn new() -> Self {
         let mut table_state = TableState::default();
@@ -807,7 +813,7 @@ impl Component for PatientListComponent {
                 }
             }
             KeyCode::Char('n') => {
-                Action::None
+                Action::PatientCreate
             }
             KeyCode::Char('/') => {
                 self.enter_search_mode();
@@ -894,7 +900,7 @@ impl Component for PatientListComponent {
                     .phone_mobile
                     .as_ref()
                     .or(patient.phone_home.as_ref())
-                    .map(|p| p.clone())
+                    .cloned()
                     .unwrap_or_else(|| "-".to_string());
 
                 Row::new(vec![
@@ -917,10 +923,10 @@ impl Component for PatientListComponent {
         ];
 
         let title = if self.search_query.is_empty() {
-            " Patient List (j/k:navigate g/G:first/last /:search Esc:clear) ".to_string()
+            " Patient List (j/k:navigate g/G:first/last n:new /:search Esc:clear) ".to_string()
         } else {
             format!(
-                " Patient List - {} results (Esc:clear) ",
+                " Patient List - {} results (n:new Esc:clear) ",
                 self.filtered_patients.len()
             )
         };
