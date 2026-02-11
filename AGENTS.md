@@ -1,10 +1,12 @@
 # AGENTS.md - OpenGP Development Guide for AI Coding Agents
 
 **Project**: OpenGP - Open Source General Practice Management Software  
-**Language**: Rust (Edition 2021)  
+**Language**: Rust (Edition 2021, stable path to 2024)  
 **Framework**: Ratatui (TUI), SQLx (Database), Tokio (Async Runtime)  
 **Target**: Australian healthcare providers  
 **License**: AGPL-3.0
+
+> **Note**: Rust 2024 Edition was stabilized in Rust 1.85.0 (February 2025). This project currently uses Edition 2021 with a migration path to 2024 planned. Editions are backward-compatible, opt-in milestones that enable language improvements without breaking existing code.
 
 ---
 
