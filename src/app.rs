@@ -28,7 +28,7 @@ impl App {
         // TODO: Initialize TUI
         // TODO: Initialize components
         // TODO: Start event loop
-        
+
         Ok(())
     }
 

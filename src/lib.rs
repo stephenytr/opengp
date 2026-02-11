@@ -9,11 +9,11 @@ pub mod config;
 pub mod error;
 
 // Layer modules
-pub mod ui;
 pub mod components;
 pub mod domain;
 pub mod infrastructure;
 pub mod integrations;
+pub mod ui;
 
 // Re-exports for convenience
 pub use app::App;

@@ -1,6 +1,6 @@
-pub mod patient;
 pub mod appointment;
 pub mod clinical;
+pub mod patient;
 
 use async_trait::async_trait;
 use crossterm::event::{KeyEvent, MouseEvent};
@@ -15,7 +15,7 @@ pub enum Action {
     Tick,
     Render,
     Quit,
-    
+
     NavigateToPatients,
     NavigateToAppointments,
     NavigateToClinical,
@@ -27,7 +27,7 @@ pub trait Component: Send {
     async fn init(&mut self) -> crate::error::Result<()> {
         Ok(())
     }
-    
+
     fn handle_events(&mut self, event: Option<Event>) -> Action {
         match event {
             Some(Event::Key(key)) => self.handle_key_events(key),
@@ -37,18 +37,18 @@ pub trait Component: Send {
             _ => Action::None,
         }
     }
-    
+
     fn handle_key_events(&mut self, _key: KeyEvent) -> Action {
         Action::None
     }
-    
+
     fn handle_mouse_events(&mut self, _mouse: MouseEvent) -> Action {
         Action::None
     }
-    
+
     async fn update(&mut self, _action: Action) -> crate::error::Result<Option<Action>> {
         Ok(None)
     }
-    
+
     fn render(&mut self, frame: &mut Frame, area: Rect);
 }

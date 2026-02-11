@@ -19,11 +19,11 @@ impl PatientRepository for SqlxPatientRepository {
     async fn find_by_id(&self, _id: Uuid) -> Result<Option<Patient>, RepositoryError> {
         todo!("Implement find_by_id")
     }
-    
+
     async fn find_by_medicare(&self, _medicare: &str) -> Result<Option<Patient>, RepositoryError> {
         todo!("Implement find_by_medicare")
     }
-    
+
     async fn create(&self, _patient: Patient) -> Result<Patient, RepositoryError> {
         todo!("Implement create")
     }
@@ -31,7 +31,7 @@ impl PatientRepository for SqlxPatientRepository {
     async fn update(&self, _patient: Patient) -> Result<Patient, RepositoryError> {
         todo!("Implement update")
     }
-    
+
     async fn deactivate(&self, _id: Uuid) -> Result<(), RepositoryError> {
         todo!("Implement deactivate")
     }
