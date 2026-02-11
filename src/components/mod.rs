@@ -24,6 +24,11 @@ pub enum Action {
     PatientCreate,
     PatientFormSubmit,
     PatientFormCancel,
+
+    AppointmentCreate,
+    AppointmentFormSubmit,
+    AppointmentFormCancel,
+    AppointmentSelect,
 }
 
 #[async_trait]

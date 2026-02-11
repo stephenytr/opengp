@@ -3,12 +3,14 @@
 //! The App struct coordinates all components, manages application state,
 //! and handles the main event loop.
 
+use crate::components::appointment::{AppointmentFormComponent, AppointmentListComponent};
 use crate::components::patient::{PatientFormComponent, PatientListComponent};
 use crate::components::{Action, Component};
 use crate::config::Config;
+use crate::domain::appointment::{AppointmentService, AppointmentRepository};
 use crate::domain::patient::{PatientService, PatientRepository};
 use crate::error::Result;
-use crate::infrastructure::database::repositories::SqlxPatientRepository;
+use crate::infrastructure::database::repositories::{SqlxAppointmentRepository, SqlxPatientRepository};
 use crate::ui::event::EventHandler;
 use crate::ui::tui::Tui;
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -58,11 +60,13 @@ pub struct App {
     config: Config,
     db_pool: SqlitePool,
     patient_service: Arc<PatientService>,
+    appointment_service: Arc<AppointmentService>,
     should_quit: bool,
     active_screen: Screen,
     patient_component: Option<Box<dyn Component>>,
     patient_form_component: Option<Box<dyn Component>>,
     appointment_component: Option<Box<dyn Component>>,
+    appointment_form_component: Option<Box<dyn Component>>,
     clinical_component: Option<Box<dyn Component>>,
     billing_component: Option<Box<dyn Component>>,
     action_tx: UnboundedSender<Action>,
@@ -81,15 +85,21 @@ impl App {
             Arc::new(SqlxPatientRepository::new(db_pool.clone()));
         let patient_service = Arc::new(PatientService::new(patient_repository));
         
+        let appointment_repository: Arc<dyn AppointmentRepository> =
+            Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
+        let appointment_service = Arc::new(AppointmentService::new(appointment_repository));
+        
         Ok(Self {
             config,
             db_pool,
             patient_service,
+            appointment_service,
             should_quit: false,
             active_screen: Screen::Patients,
             patient_component: None,
             patient_form_component: None,
             appointment_component: None,
+            appointment_form_component: None,
             clinical_component: None,
             billing_component: None,
             action_tx,
@@ -120,10 +130,13 @@ impl App {
             }
             
             let component_action = if self.showing_form {
-                self.patient_form_component
-                    .as_mut()
-                    .map(|c| c.handle_events(Some(event)))
-                    .unwrap_or(Action::None)
+                if let Some(form) = self.patient_form_component.as_mut() {
+                    form.handle_events(Some(event))
+                } else if let Some(form) = self.appointment_form_component.as_mut() {
+                    form.handle_events(Some(event))
+                } else {
+                    Action::None
+                }
             } else {
                 self.get_active_component_mut()
                     .map(|c| c.handle_events(Some(event)))
@@ -156,6 +169,10 @@ impl App {
         let mut patient_list = PatientListComponent::new(self.patient_service.clone());
         patient_list.init().await?;
         self.patient_component = Some(Box::new(patient_list));
+        
+        let mut appointment_list = AppointmentListComponent::new(self.appointment_service.clone());
+        appointment_list.init().await?;
+        self.appointment_component = Some(Box::new(appointment_list));
         
         Ok(())
     }
@@ -251,14 +268,33 @@ impl App {
                 self.patient_form_component = Some(Box::new(form));
                 self.showing_form = true;
             }
+            Action::AppointmentCreate => {
+                info!("Opening appointment creation form");
+                let mut form = AppointmentFormComponent::new(
+                    self.appointment_service.clone(),
+                    self.patient_service.clone(),
+                );
+                form.init().await?;
+                self.appointment_form_component = Some(Box::new(form));
+                self.showing_form = true;
+            }
             Action::PatientFormCancel => {
                 info!("Patient form cancelled");
                 self.showing_form = false;
                 self.patient_form_component = None;
             }
+            Action::AppointmentFormCancel => {
+                info!("Appointment form cancelled");
+                self.showing_form = false;
+                self.appointment_form_component = None;
+            }
             _ => {
                 let component = if self.showing_form {
-                    self.patient_form_component.as_mut()
+                    if let Some(form) = self.patient_form_component.as_mut() {
+                        Some(form)
+                    } else {
+                        self.appointment_form_component.as_mut()
+                    }
                 } else {
                     self.get_active_component_mut()
                 };
@@ -270,6 +306,13 @@ impl App {
                             self.showing_form = false;
                             self.patient_form_component = None;
                             if let Some(list_component) = &mut self.patient_component {
+                                list_component.init().await?;
+                            }
+                        } else if new_action == Action::AppointmentFormSubmit {
+                            info!("Appointment form submitted successfully");
+                            self.showing_form = false;
+                            self.appointment_form_component = None;
+                            if let Some(list_component) = &mut self.appointment_component {
                                 list_component.init().await?;
                             }
                         } else {
@@ -328,6 +371,8 @@ impl App {
     fn render_content(&mut self, frame: &mut Frame, area: Rect) {
         if self.showing_form {
             if let Some(form) = &mut self.patient_form_component {
+                form.render(frame, area);
+            } else if let Some(form) = &mut self.appointment_form_component {
                 form.render(frame, area);
             }
         } else if let Some(component) = self.get_active_component_mut() {
