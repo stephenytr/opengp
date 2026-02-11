@@ -2,3 +2,8 @@ pub mod patient;
 pub mod appointment;
 pub mod clinical;
 pub mod billing;
+pub mod prescription;
+pub mod user;
+pub mod immunisation;
+pub mod referral;
+pub mod pathology;

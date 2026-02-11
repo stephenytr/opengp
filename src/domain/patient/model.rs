@@ -29,8 +29,15 @@ pub struct Patient {
 
     pub emergency_contact: Option<EmergencyContact>,
 
+    pub concession_type: Option<ConcessionType>,
+    pub concession_number: Option<String>,
+    pub preferred_language: String,
+    pub interpreter_required: bool,
+    pub aboriginal_torres_strait_islander: Option<AtsiStatus>,
+
     pub is_active: bool,
     pub is_deceased: bool,
+    pub deceased_date: Option<NaiveDate>,
 
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -59,8 +66,16 @@ impl Patient {
             phone_mobile: data.phone_mobile,
             email: data.email,
             emergency_contact: data.emergency_contact,
+            concession_type: data.concession_type,
+            concession_number: data.concession_number,
+            preferred_language: data
+                .preferred_language
+                .unwrap_or_else(|| "English".to_string()),
+            interpreter_required: data.interpreter_required.unwrap_or(false),
+            aboriginal_torres_strait_islander: data.aboriginal_torres_strait_islander,
             is_active: true,
             is_deceased: false,
+            deceased_date: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         })
@@ -139,6 +154,54 @@ impl std::fmt::Display for Gender {
             Gender::Female => write!(f, "Female"),
             Gender::Other => write!(f, "Other"),
             Gender::PreferNotToSay => write!(f, "PreferNotToSay"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum ConcessionType {
+    DVA,
+    Pensioner,
+    HealthcareCard,
+    SafetyNetCard,
+}
+
+impl std::fmt::Display for ConcessionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConcessionType::DVA => write!(f, "DVA"),
+            ConcessionType::Pensioner => write!(f, "Pensioner"),
+            ConcessionType::HealthcareCard => write!(f, "Healthcare Card"),
+            ConcessionType::SafetyNetCard => write!(f, "Safety Net Card"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum AtsiStatus {
+    AboriginalNotTorresStrait,
+    TorresStraitNotAboriginal,
+    BothAboriginalAndTorresStrait,
+    NeitherAboriginalNorTorresStrait,
+    NotStated,
+}
+
+impl std::fmt::Display for AtsiStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AtsiStatus::AboriginalNotTorresStrait => {
+                write!(f, "Aboriginal but not Torres Strait Islander")
+            }
+            AtsiStatus::TorresStraitNotAboriginal => {
+                write!(f, "Torres Strait Islander but not Aboriginal")
+            }
+            AtsiStatus::BothAboriginalAndTorresStrait => {
+                write!(f, "Both Aboriginal and Torres Strait Islander")
+            }
+            AtsiStatus::NeitherAboriginalNorTorresStrait => {
+                write!(f, "Neither Aboriginal nor Torres Strait Islander")
+            }
+            AtsiStatus::NotStated => write!(f, "Not Stated/Inadequately Described"),
         }
     }
 }

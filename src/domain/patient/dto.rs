@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
-use super::model::{Address, EmergencyContact, Gender};
+use super::model::{Address, AtsiStatus, ConcessionType, EmergencyContact, Gender};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewPatientData {
@@ -24,4 +24,10 @@ pub struct NewPatientData {
     pub email: Option<String>,
 
     pub emergency_contact: Option<EmergencyContact>,
+
+    pub concession_type: Option<ConcessionType>,
+    pub concession_number: Option<String>,
+    pub preferred_language: Option<String>,
+    pub interpreter_required: Option<bool>,
+    pub aboriginal_torres_strait_islander: Option<AtsiStatus>,
 }

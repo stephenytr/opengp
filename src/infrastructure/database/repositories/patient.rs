@@ -24,11 +24,11 @@ impl PatientRepository for SqlxPatientRepository {
         todo!("Implement find_by_medicare")
     }
     
-    async fn create(&self, patient: Patient) -> Result<Patient, RepositoryError> {
+    async fn create(&self, _patient: Patient) -> Result<Patient, RepositoryError> {
         todo!("Implement create")
     }
-    
-    async fn update(&self, patient: Patient) -> Result<Patient, RepositoryError> {
+
+    async fn update(&self, _patient: Patient) -> Result<Patient, RepositoryError> {
         todo!("Implement update")
     }
     

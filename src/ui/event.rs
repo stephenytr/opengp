@@ -28,3 +28,9 @@ impl EventHandler {
         }
     }
 }
+
+impl Default for EventHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
