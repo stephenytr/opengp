@@ -65,6 +65,10 @@ pub struct AppointmentCalendarComponent {
     // Filter state
     active_status_filters: HashSet<AppointmentStatus>,
     showing_filter_menu: bool,
+    
+    // Practitioner filter state
+    active_practitioner_filters: HashSet<Uuid>,
+    showing_practitioner_menu: bool,
 }
 
 impl AppointmentCalendarComponent {
@@ -114,6 +118,8 @@ impl AppointmentCalendarComponent {
             search_selected_index: 0,
             active_status_filters: HashSet::new(),
             showing_filter_menu: false,
+            active_practitioner_filters: HashSet::new(),
+            showing_practitioner_menu: false,
         }
     }
     
@@ -232,6 +238,14 @@ impl AppointmentCalendarComponent {
             self.active_status_filters.remove(&status);
         } else {
             self.active_status_filters.insert(status);
+        }
+    }
+    
+    fn toggle_practitioner_filter(&mut self, practitioner_id: Uuid) {
+        if self.active_practitioner_filters.contains(&practitioner_id) {
+            self.active_practitioner_filters.remove(&practitioner_id);
+        } else {
+            self.active_practitioner_filters.insert(practitioner_id);
         }
     }
     
@@ -653,11 +667,16 @@ impl AppointmentCalendarComponent {
 
 
     fn render_practitioner_header(&self, frame: &mut Frame, area: Rect) {
+        let visible_practitioners: Vec<_> = self.practitioners.iter()
+            .filter(|p| self.active_practitioner_filters.is_empty() 
+                || self.active_practitioner_filters.contains(&p.id))
+            .collect();
+        
         let mut header_cells = vec![Cell::from("Time").style(
             Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
         )];
         
-        for practitioner in &self.practitioners {
+        for practitioner in &visible_practitioners {
             let name = format!("Dr. {}", practitioner.last_name);
             header_cells.push(
                 Cell::from(name)
@@ -670,15 +689,20 @@ impl AppointmentCalendarComponent {
             .height(1);
         
         let mut widths = vec![Constraint::Length(8)];
-        for _ in &self.practitioners {
+        for _ in &visible_practitioners {
             widths.push(Constraint::Min(15));
         }
         
-        let title = if self.active_status_filters.is_empty() {
-            " Schedule ".to_string()
-        } else {
-            format!(" Schedule [Filtering: {} status(es)] ", self.active_status_filters.len())
-        };
+        let mut title = " Schedule ".to_string();
+        if !self.active_status_filters.is_empty() {
+            title = format!(" Schedule [Status: {}] ", self.active_status_filters.len());
+        }
+        if !self.active_practitioner_filters.is_empty() {
+            let practitioner_names: Vec<String> = visible_practitioners.iter()
+                .map(|p| format!("Dr. {}", p.last_name))
+                .collect();
+            title = format!(" Schedule [{}] ", practitioner_names.join(", "));
+        }
         
         let table = Table::new(vec![header], widths)
             .block(
@@ -698,6 +722,11 @@ impl AppointmentCalendarComponent {
     }
     
     fn render_time_slots_grid(&mut self, frame: &mut Frame, area: Rect) {
+        let visible_practitioners: Vec<_> = self.practitioners.iter()
+            .filter(|p| self.active_practitioner_filters.is_empty() 
+                || self.active_practitioner_filters.contains(&p.id))
+            .collect();
+        
         let time_slots = Self::generate_time_slots();
         let mut rows = Vec::new();
         let mut rendered_appointments = HashSet::new();
@@ -705,7 +734,7 @@ impl AppointmentCalendarComponent {
         for (slot_index, time_slot) in time_slots.iter().enumerate() {
             let mut cells = vec![Cell::from(time_slot.as_str())];
             
-            for practitioner in &self.practitioners {
+            for practitioner in &visible_practitioners {
                 if let Some(appt) = self.find_appointment_for_slot(practitioner.id, slot_index) {
                     let appt_key = (appt.id, practitioner.id, slot_index);
                     
@@ -749,7 +778,7 @@ impl AppointmentCalendarComponent {
         }
         
         let mut widths = vec![Constraint::Length(8)];
-        for _ in &self.practitioners {
+        for _ in &visible_practitioners {
             widths.push(Constraint::Min(15));
         }
         
@@ -950,6 +979,28 @@ impl AppointmentCalendarComponent {
             }
             KeyCode::Char('8') => {
                 self.toggle_status_filter(AppointmentStatus::Rescheduled);
+                Action::Render
+            }
+            _ => Action::None,
+        }
+    }
+    
+    fn handle_practitioner_menu_key_events(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Esc => {
+                self.showing_practitioner_menu = false;
+                Action::Render
+            }
+            KeyCode::Char('0') => {
+                self.active_practitioner_filters.clear();
+                Action::Render
+            }
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                let digit = c.to_digit(10).unwrap() as usize;
+                if digit > 0 && digit <= self.practitioners.len() {
+                    let practitioner_id = self.practitioners[digit - 1].id;
+                    self.toggle_practitioner_filter(practitioner_id);
+                }
                 Action::Render
             }
             _ => Action::None,
@@ -1368,6 +1419,63 @@ impl AppointmentCalendarComponent {
         
         frame.render_widget(modal_content, modal_area);
     }
+    
+    fn render_practitioner_menu(&self, frame: &mut Frame, area: Rect) {
+        let modal_area = Rect {
+            x: area.width / 5,
+            y: area.height / 6,
+            width: area.width * 3 / 5,
+            height: area.height * 2 / 3,
+        };
+        
+        let mut lines = Vec::new();
+        
+        lines.push(Line::from(vec![
+            Span::styled("Filter by Practitioner", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(""));
+        
+        for (idx, practitioner) in self.practitioners.iter().enumerate() {
+            let key = (idx + 1).to_string();
+            let is_active = self.active_practitioner_filters.contains(&practitioner.id);
+            let checkbox = if is_active { "☑" } else { "☐" };
+            let color = if is_active { Color::Green } else { Color::White };
+            let name = format!("Dr. {}", practitioner.last_name);
+            
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {} ", checkbox), Style::default().fg(color)),
+                Span::styled(format!("[{}] ", key), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(name, Style::default().fg(color)),
+            ]));
+        }
+        
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("0", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Clear all  ", Style::default().fg(Color::White)),
+            Span::styled("Esc", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Close", Style::default().fg(Color::White)),
+        ]));
+        
+        let filter_count = self.active_practitioner_filters.len();
+        let title = if filter_count == 0 {
+            " Practitioner Filter (All) ".to_string()
+        } else {
+            format!(" Practitioner Filter ({} active) ", filter_count)
+        };
+        
+        let modal_content = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(title)
+                    .border_style(Style::default().fg(Color::Magenta))
+            )
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        
+        frame.render_widget(modal_content, modal_area);
+    }
 }
 
 #[async_trait]
@@ -1431,6 +1539,10 @@ impl Component for AppointmentCalendarComponent {
             return self.handle_filter_menu_key_events(key);
         }
         
+        if self.showing_practitioner_menu {
+            return self.handle_practitioner_menu_key_events(key);
+        }
+        
         if self.showing_search_modal {
             return self.handle_search_key_events(key);
         }
@@ -1453,6 +1565,11 @@ impl Component for AppointmentCalendarComponent {
         
         if key.code == KeyCode::Char('f') {
             self.showing_filter_menu = true;
+            return Action::Render;
+        }
+        
+        if key.code == KeyCode::Char('p') {
+            self.showing_practitioner_menu = true;
             return Action::Render;
         }
         
@@ -1691,6 +1808,10 @@ impl Component for AppointmentCalendarComponent {
         
         if self.showing_filter_menu {
             self.render_filter_menu(frame, area);
+        }
+        
+        if self.showing_practitioner_menu {
+            self.render_practitioner_menu(frame, area);
         }
     }
 }
