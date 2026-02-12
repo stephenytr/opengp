@@ -5,7 +5,7 @@ use chrono::Utc;
 
 use super::dto::{NewAppointmentData, UpdateAppointmentData, AppointmentSearchCriteria};
 use super::error::ServiceError;
-use super::model::Appointment;
+use super::model::{Appointment, AppointmentStatus};
 use super::repository::AppointmentRepository;
 
 /// Service layer for appointment business logic
@@ -311,5 +311,91 @@ impl AppointmentService {
         
         info!("Found {} appointments for date {}", appointments.len(), date);
         Ok(appointments)
+    }
+
+    /// Mark appointment as arrived
+    ///
+    /// # Arguments
+    /// * `appointment_id` - Appointment ID
+    /// * `user_id` - ID of user marking the appointment as arrived
+    ///
+    /// # Returns
+    /// * `Ok(Appointment)` - Updated appointment
+    /// * `Err(ServiceError::NotFound)` - Appointment not found
+    /// * `Err(ServiceError::Repository)` - Database error
+    pub async fn mark_arrived(
+        &self,
+        appointment_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Appointment, ServiceError> {
+        info!("Marking appointment {} as arrived by user {}", appointment_id, user_id);
+        
+        let mut appointment = self.repository.find_by_id(appointment_id).await?
+            .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
+        
+        appointment.mark_arrived(user_id);
+        
+        let updated = self.repository.update(appointment).await?;
+        info!("Appointment {} marked as arrived", appointment_id);
+        
+        Ok(updated)
+    }
+
+    /// Mark appointment as completed
+    ///
+    /// # Arguments
+    /// * `appointment_id` - Appointment ID
+    /// * `user_id` - ID of user marking the appointment as completed
+    ///
+    /// # Returns
+    /// * `Ok(Appointment)` - Updated appointment
+    /// * `Err(ServiceError::NotFound)` - Appointment not found
+    /// * `Err(ServiceError::Repository)` - Database error
+    pub async fn mark_completed(
+        &self,
+        appointment_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Appointment, ServiceError> {
+        info!("Marking appointment {} as completed by user {}", appointment_id, user_id);
+        
+        let mut appointment = self.repository.find_by_id(appointment_id).await?
+            .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
+        
+        appointment.mark_completed(user_id);
+        
+        let updated = self.repository.update(appointment).await?;
+        info!("Appointment {} marked as completed", appointment_id);
+        
+        Ok(updated)
+    }
+
+    /// Mark appointment as no show
+    ///
+    /// # Arguments
+    /// * `appointment_id` - Appointment ID
+    /// * `user_id` - ID of user marking the appointment as no show
+    ///
+    /// # Returns
+    /// * `Ok(Appointment)` - Updated appointment
+    /// * `Err(ServiceError::NotFound)` - Appointment not found
+    /// * `Err(ServiceError::Repository)` - Database error
+    pub async fn mark_no_show(
+        &self,
+        appointment_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Appointment, ServiceError> {
+        info!("Marking appointment {} as no show by user {}", appointment_id, user_id);
+        
+        let mut appointment = self.repository.find_by_id(appointment_id).await?
+            .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
+        
+        appointment.status = AppointmentStatus::NoShow;
+        appointment.updated_at = Utc::now();
+        appointment.updated_by = Some(user_id);
+        
+        let updated = self.repository.update(appointment).await?;
+        info!("Appointment {} marked as no show", appointment_id);
+        
+        Ok(updated)
     }
 }

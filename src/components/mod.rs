@@ -29,6 +29,9 @@ pub enum Action {
     AppointmentFormSubmit,
     AppointmentFormCancel,
     AppointmentSelect,
+    AppointmentMarkArrived,
+    AppointmentMarkCompleted,
+    AppointmentMarkNoShow,
 }
 
 #[async_trait]

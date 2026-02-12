@@ -23,7 +23,6 @@ enum FocusArea {
 }
 
 pub struct AppointmentCalendarComponent {
-    #[allow(dead_code)]
     appointment_service: Arc<AppointmentService>,
     practitioner_service: Arc<PractitionerService>,
     patient_service: Arc<PatientService>,
@@ -523,6 +522,9 @@ impl AppointmentCalendarComponent {
                 self.modal_patient = None;
                 Action::Render
             }
+            KeyCode::Char('a') | KeyCode::Char('A') => Action::AppointmentMarkArrived,
+            KeyCode::Char('c') | KeyCode::Char('C') => Action::AppointmentMarkCompleted,
+            KeyCode::Char('n') | KeyCode::Char('N') => Action::AppointmentMarkNoShow,
             _ => Action::None,
         }
     }
@@ -640,6 +642,12 @@ impl AppointmentCalendarComponent {
         lines.push(Line::from(""));
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
+            Span::styled("A", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Arrived  ", Style::default().fg(Color::White)),
+            Span::styled("C", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Completed  ", Style::default().fg(Color::White)),
+            Span::styled("N", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": No Show  ", Style::default().fg(Color::White)),
             Span::styled("Esc", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
             Span::styled(": Close", Style::default().fg(Color::White)),
         ]));
@@ -801,27 +809,78 @@ impl Component for AppointmentCalendarComponent {
     }
     
     async fn update(&mut self, action: Action) -> Result<Option<Action>> {
-        if action == Action::Render {
-            self.load_appointments_for_date().await?;
-            
-            // Load patient data when modal opens
-            if self.showing_detail_modal && self.modal_patient.is_none() {
-                if let Some(appt_id) = self.selected_appointment {
-                    if let Some(appt) = self.appointments.iter().find(|a| a.id == appt_id) {
-                        match self.patient_service.find_patient(appt.patient_id).await {
-                            Ok(Some(patient)) => {
-                                self.modal_patient = Some(patient);
-                            }
-                            Ok(None) => {
-                                tracing::warn!("Patient not found: {}", appt.patient_id);
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to load patient: {}", e);
+        match action {
+            Action::Render => {
+                self.load_appointments_for_date().await?;
+                
+                // Load patient data when modal opens
+                if self.showing_detail_modal && self.modal_patient.is_none() {
+                    if let Some(appt_id) = self.selected_appointment {
+                        if let Some(appt) = self.appointments.iter().find(|a| a.id == appt_id) {
+                            match self.patient_service.find_patient(appt.patient_id).await {
+                                Ok(Some(patient)) => {
+                                    self.modal_patient = Some(patient);
+                                }
+                                Ok(None) => {
+                                    tracing::warn!("Patient not found: {}", appt.patient_id);
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to load patient: {}", e);
+                                }
                             }
                         }
                     }
                 }
             }
+            Action::AppointmentMarkArrived => {
+                if let Some(appt_id) = self.selected_appointment {
+                    let user_id = Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789")
+                        .expect("valid UUID");
+                    
+                    match self.appointment_service.mark_arrived(appt_id, user_id).await {
+                        Ok(_) => {
+                            tracing::info!("Appointment {} marked as arrived", appt_id);
+                            self.load_appointments_for_date().await?;
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to mark appointment as arrived: {}", e);
+                        }
+                    }
+                }
+            }
+            Action::AppointmentMarkCompleted => {
+                if let Some(appt_id) = self.selected_appointment {
+                    let user_id = Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789")
+                        .expect("valid UUID");
+                    
+                    match self.appointment_service.mark_completed(appt_id, user_id).await {
+                        Ok(_) => {
+                            tracing::info!("Appointment {} marked as completed", appt_id);
+                            self.load_appointments_for_date().await?;
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to mark appointment as completed: {}", e);
+                        }
+                    }
+                }
+            }
+            Action::AppointmentMarkNoShow => {
+                if let Some(appt_id) = self.selected_appointment {
+                    let user_id = Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789")
+                        .expect("valid UUID");
+                    
+                    match self.appointment_service.mark_no_show(appt_id, user_id).await {
+                        Ok(_) => {
+                            tracing::info!("Appointment {} marked as no show", appt_id);
+                            self.load_appointments_for_date().await?;
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to mark appointment as no show: {}", e);
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
         Ok(None)
     }
