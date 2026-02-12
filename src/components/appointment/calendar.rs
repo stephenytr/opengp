@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{Datelike, Local, NaiveDate, Utc, Weekday};
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -24,7 +24,6 @@ enum FocusArea {
 
 /// View mode for the day schedule (single day or week view)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 enum ViewMode {
     Day,
     Week,
@@ -43,9 +42,7 @@ pub struct AppointmentCalendarComponent {
     focus_area: FocusArea,
     time_slot_state: TableState,
     selected_month_day: u32,
-    #[allow(dead_code)]
     view_mode: ViewMode,
-    #[allow(dead_code)]
     week_start_date: NaiveDate,
     
     // Modal state for appointment details
@@ -58,7 +55,6 @@ impl AppointmentCalendarComponent {
     pub fn new(
         appointment_service: Arc<AppointmentService>,
         practitioner_service: Arc<PractitionerService>,
-#[allow(dead_code)]
     patient_service: Arc<PatientService>,
     ) -> Self {
         let mut table_state = TableState::default();
@@ -532,7 +528,7 @@ impl AppointmentCalendarComponent {
             .collect();
         let mut rows = Vec::new();
         
-        for (_slot_index, time_slot) in time_slots.iter().enumerate() {
+        for time_slot in time_slots.iter() {
             let mut cells = vec![Cell::from(time_slot.as_str())];
             
             let (hour, minute) = time_slot.split_once(':')
@@ -561,7 +557,7 @@ impl AppointmentCalendarComponent {
                     0 => String::new(),
                     1 => {
                         let appt = appts_at_slot[0];
-                        format!("{}", &appt.patient_id.to_string()[..3])
+                        appt.patient_id.to_string()[..3].to_string()
                     }
                     n => format!("{}", n),
                 };
@@ -1019,6 +1015,21 @@ impl Component for AppointmentCalendarComponent {
                         }
                         Action::None
                     }
+                    KeyCode::Char('v') => {
+                        self.view_mode = match self.view_mode {
+                            ViewMode::Day => ViewMode::Week,
+                            ViewMode::Week => ViewMode::Day,
+                        };
+                        Action::Render
+                    }
+                    KeyCode::Left if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                        self.week_start_date -= chrono::Duration::days(7);
+                        Action::Render
+                    }
+                    KeyCode::Right if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                        self.week_start_date += chrono::Duration::days(7);
+                        Action::Render
+                    }
                     KeyCode::Char('n') => Action::AppointmentCreate,
                     _ => Action::None,
                 }
@@ -1029,7 +1040,10 @@ impl Component for AppointmentCalendarComponent {
     async fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::Render => {
-                self.load_appointments_for_date().await?;
+                match self.view_mode {
+                    ViewMode::Day => self.load_appointments_for_date().await?,
+                    ViewMode::Week => self.load_appointments_for_week().await?,
+                }
                 
                 // Load patient data when modal opens
                 if self.showing_detail_modal && self.modal_patient.is_none() {
@@ -1113,7 +1127,10 @@ impl Component for AppointmentCalendarComponent {
             .split(area);
         
         self.render_month_calendar(frame, chunks[0]);
-        self.render_day_schedule(frame, chunks[1]);
+        match self.view_mode {
+            ViewMode::Day => self.render_day_schedule(frame, chunks[1]),
+            ViewMode::Week => self.render_week_schedule(frame, chunks[1]),
+        }
         
         // Render modal on top if showing
         if self.showing_detail_modal {
