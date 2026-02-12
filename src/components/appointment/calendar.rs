@@ -346,6 +346,49 @@ impl AppointmentCalendarComponent {
         })
     }
     
+    /// Detect all overlapping appointments at a given slot for a practitioner
+    /// Returns a vector of all appointments that overlap at this time slot
+    fn detect_overlaps(
+        &self,
+        practitioner_id: uuid::Uuid,
+        slot_index: usize,
+    ) -> Vec<&Appointment> {
+        let time_slots = Self::generate_time_slots();
+        if slot_index >= time_slots.len() {
+            return Vec::new();
+        }
+        
+        let slot_time_str = &time_slots[slot_index];
+        let (hour, minute) = slot_time_str.split_once(':')
+            .and_then(|(h, m)| {
+                let hour = h.parse::<u32>().ok()?;
+                let minute = m.parse::<u32>().ok()?;
+                Some((hour, minute))
+            })
+            .unwrap_or((0, 0));
+        
+        let date = NaiveDate::from_ymd_opt(
+            self.current_month_start.year(),
+            self.current_month_start.month(),
+            self.selected_month_day,
+        ).expect("valid date");
+        
+        let slot_datetime = date.and_hms_opt(hour, minute, 0)
+            .expect("valid time")
+            .and_utc();
+        
+        // Find ALL appointments that overlap at this slot
+        self.appointments.iter()
+            .filter(|appt| {
+                appt.practitioner_id == practitioner_id
+                    && appt.start_time <= slot_datetime
+                    && appt.end_time > slot_datetime
+                    && (self.active_status_filters.is_empty() 
+                        || self.active_status_filters.contains(&appt.status))
+            })
+            .collect()
+    }
+    
 
     
     fn previous_time_slot(&mut self) {
@@ -735,6 +778,21 @@ impl AppointmentCalendarComponent {
             let mut cells = vec![Cell::from(time_slot.as_str())];
             
             for practitioner in &visible_practitioners {
+                let overlaps = self.detect_overlaps(practitioner.id, slot_index);
+                
+                if overlaps.len() > 1 {
+                    let overlap_ids: Vec<String> = overlaps.iter()
+                        .map(|a| a.id.to_string())
+                        .collect();
+                    tracing::warn!(
+                        "Double-booking detected: {} appointments at slot {} for practitioner {} (IDs: {})",
+                        overlaps.len(),
+                        slot_index,
+                        practitioner.id,
+                        overlap_ids.join(", ")
+                    );
+                }
+                
                 if let Some(appt) = self.find_appointment_for_slot(practitioner.id, slot_index) {
                     let appt_key = (appt.id, practitioner.id, slot_index);
                     
@@ -753,16 +811,24 @@ impl AppointmentCalendarComponent {
                             appt_text = format!("⚠ {}", appt_text);
                         }
                         
-                        let style = match appt.status {
+                        if overlaps.len() > 1 {
+                            appt_text = format!("⚠ {} conflicts\n{}", overlaps.len(), appt_text);
+                        }
+                        
+                        let mut style = match appt.status {
                             AppointmentStatus::Scheduled => Style::default().fg(Color::White).bg(Color::Blue),
                             AppointmentStatus::Confirmed => Style::default().fg(Color::Black).bg(Color::Cyan),
                             AppointmentStatus::Arrived => Style::default().fg(Color::Black).bg(Color::Yellow),
                             AppointmentStatus::InProgress => Style::default().fg(Color::White).bg(Color::Green),
                             AppointmentStatus::Completed => Style::default().fg(Color::White).bg(Color::DarkGray),
                             AppointmentStatus::NoShow => Style::default().fg(Color::White).bg(Color::Red),
-                            AppointmentStatus::Cancelled => Style::default().fg(Color::Gray),
                             AppointmentStatus::Rescheduled => Style::default().fg(Color::Magenta),
+                            AppointmentStatus::Cancelled => Style::default().fg(Color::Gray),
                         };
+                        
+                        if overlaps.len() > 1 {
+                            style = style.fg(Color::Red).add_modifier(Modifier::BOLD);
+                        }
                         
                         cells.push(Cell::from(appt_text).style(style));
                     } else {
@@ -1084,6 +1150,37 @@ impl AppointmentCalendarComponent {
                     lines.push(Line::from(vec![
                         Span::styled("⚠ URGENT", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
                     ]));
+                }
+                
+                let appt_start_hour = appt.start_time.hour();
+                let appt_start_minute = appt.start_time.minute();
+                let slot_index = ((appt_start_hour - 8) * 4 + appt_start_minute / 15) as usize;
+                let overlaps = self.detect_overlaps(appt.practitioner_id, slot_index);
+                
+                if overlaps.len() > 1 {
+                    lines.push(Line::from(vec![
+                        Span::styled("⚠ CONFLICT: ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            format!("{} overlapping appointments detected", overlaps.len()),
+                            Style::default().fg(Color::Red)
+                        ),
+                    ]));
+                    
+                    for overlap_appt in &overlaps {
+                        if overlap_appt.id != appt.id {
+                            lines.push(Line::from(vec![
+                                Span::styled("  • ", Style::default().fg(Color::Red)),
+                                Span::styled(
+                                    format!("ID: {} ({} - {})",
+                                        &overlap_appt.id.to_string()[..8],
+                                        overlap_appt.start_time.format("%H:%M"),
+                                        overlap_appt.end_time.format("%H:%M")
+                                    ),
+                                    Style::default().fg(Color::White)
+                                ),
+                            ]));
+                        }
+                    }
                 }
                 
                 lines.push(Line::from(""));
