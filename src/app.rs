@@ -8,10 +8,11 @@ use crate::components::patient::{PatientFormComponent, PatientListComponent};
 use crate::components::{Action, Component};
 use crate::config::Config;
 use crate::domain::appointment::{AppointmentService, AppointmentRepository};
+use crate::domain::audit::{AuditService, AuditRepository};
 use crate::domain::patient::{PatientService, PatientRepository};
 use crate::domain::user::{PractitionerService, PractitionerRepository, RepositoryError, Practitioner};
 use crate::error::Result;
-use crate::infrastructure::database::repositories::{SqlxAppointmentRepository, SqlxPatientRepository};
+use crate::infrastructure::database::repositories::{SqlxAppointmentRepository, SqlxPatientRepository, SqlxAuditRepository};
 use crate::ui::event::EventHandler;
 use crate::ui::tui::Tui;
 use async_trait::async_trait;
@@ -90,9 +91,13 @@ impl App {
             Arc::new(SqlxPatientRepository::new(db_pool.clone()));
         let patient_service = Arc::new(PatientService::new(patient_repository));
         
+        let audit_repository: Arc<dyn AuditRepository> =
+            Arc::new(SqlxAuditRepository::new(db_pool.clone()));
+        let audit_service = Arc::new(AuditService::new(audit_repository));
+        
         let appointment_repository: Arc<dyn AppointmentRepository> =
             Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
-        let appointment_service = Arc::new(AppointmentService::new(appointment_repository));
+        let appointment_service = Arc::new(AppointmentService::new(appointment_repository, audit_service));
         
         // Create mock practitioner repository for now (Phase 1)
         // In Phase 2, this would use a real SqlxPractitionerRepository

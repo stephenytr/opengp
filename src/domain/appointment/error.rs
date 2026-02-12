@@ -35,6 +35,9 @@ pub enum ServiceError {
 
     #[error("Repository error: {0}")]
     Repository(#[from] RepositoryError),
+
+    #[error("Audit error: {0}")]
+    Audit(#[from] crate::domain::audit::ServiceError),
 }
 
 #[derive(Debug, Error)]

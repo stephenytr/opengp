@@ -7,6 +7,7 @@ use super::dto::{NewAppointmentData, UpdateAppointmentData, AppointmentSearchCri
 use super::error::ServiceError;
 use super::model::{Appointment, AppointmentStatus};
 use super::repository::AppointmentRepository;
+use crate::domain::audit::{AuditEntry, AuditService};
 
 /// Service layer for appointment business logic
 ///
@@ -14,11 +15,12 @@ use super::repository::AppointmentRepository;
 /// Enforces business rules such as overlap checking to prevent double-booking.
 pub struct AppointmentService {
     repository: Arc<dyn AppointmentRepository>,
+    audit_service: Arc<AuditService>,
 }
 
 impl AppointmentService {
-    pub fn new(repository: Arc<dyn AppointmentRepository>) -> Self {
-        Self { repository }
+    pub fn new(repository: Arc<dyn AppointmentRepository>, audit_service: Arc<AuditService>) -> Self {
+        Self { repository, audit_service }
     }
 
     /// Create a new appointment with overlap checking
@@ -334,7 +336,8 @@ impl AppointmentService {
         let mut appointment = self.repository.find_by_id(appointment_id).await?
             .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
         
-        // Validate transition before applying
+        let old_status = appointment.status;
+        
         appointment.can_transition_to(AppointmentStatus::Arrived)
             .map_err(|e| {
                 tracing::warn!("Invalid transition blocked: {}", e);
@@ -345,6 +348,15 @@ impl AppointmentService {
         
         let updated = self.repository.update(appointment).await?;
         info!("Appointment {} marked as arrived", appointment_id);
+        
+        let audit_entry = AuditEntry::new_status_changed(
+            "appointment",
+            appointment_id,
+            format!("{:?}", old_status),
+            format!("{:?}", updated.status),
+            user_id,
+        );
+        self.audit_service.log(audit_entry).await?;
         
         Ok(updated)
     }
@@ -370,7 +382,8 @@ impl AppointmentService {
         let mut appointment = self.repository.find_by_id(appointment_id).await?
             .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
         
-        // Validate transition before applying
+        let old_status = appointment.status;
+        
         appointment.can_transition_to(AppointmentStatus::Completed)
             .map_err(|e| {
                 tracing::warn!("Invalid transition blocked: {}", e);
@@ -381,6 +394,15 @@ impl AppointmentService {
         
         let updated = self.repository.update(appointment).await?;
         info!("Appointment {} marked as completed", appointment_id);
+        
+        let audit_entry = AuditEntry::new_status_changed(
+            "appointment",
+            appointment_id,
+            format!("{:?}", old_status),
+            format!("{:?}", updated.status),
+            user_id,
+        );
+        self.audit_service.log(audit_entry).await?;
         
         Ok(updated)
     }
@@ -406,7 +428,8 @@ impl AppointmentService {
         let mut appointment = self.repository.find_by_id(appointment_id).await?
             .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
         
-        // Validate transition before applying
+        let old_status = appointment.status;
+        
         appointment.can_transition_to(AppointmentStatus::NoShow)
             .map_err(|e| {
                 tracing::warn!("Invalid transition blocked: {}", e);
@@ -419,6 +442,15 @@ impl AppointmentService {
         
         let updated = self.repository.update(appointment).await?;
         info!("Appointment {} marked as no show", appointment_id);
+        
+        let audit_entry = AuditEntry::new_status_changed(
+            "appointment",
+            appointment_id,
+            format!("{:?}", old_status),
+            format!("{:?}", updated.status),
+            user_id,
+        );
+        self.audit_service.log(audit_entry).await?;
         
         Ok(updated)
     }
@@ -436,6 +468,7 @@ impl AppointmentService {
         let mut appointment = self.repository.find_by_id(appointment_id).await?
             .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
         
+        let old_start_time = appointment.start_time;
         let new_end_time = new_start_time + chrono::Duration::minutes(new_duration_minutes);
         
         let overlapping = self.repository
@@ -461,6 +494,14 @@ impl AppointmentService {
         
         let updated = self.repository.update(appointment).await?;
         info!("Appointment {} rescheduled successfully", appointment_id);
+        
+        let audit_entry = AuditEntry::new_rescheduled(
+            appointment_id,
+            old_start_time,
+            new_start_time,
+            user_id,
+        );
+        self.audit_service.log(audit_entry).await?;
         
         Ok(updated)
     }
