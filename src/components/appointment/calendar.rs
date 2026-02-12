@@ -89,6 +89,10 @@ pub struct AppointmentCalendarComponent {
     showing_audit_modal: bool,
     audit_entries: Vec<AuditEntry>,
     audit_selected_index: usize,
+    
+    // Multi-select mode (basic implementation)
+    multi_select_mode: bool,
+    selected_appointments: HashSet<Uuid>,
 }
 
 impl AppointmentCalendarComponent {
@@ -151,6 +155,8 @@ impl AppointmentCalendarComponent {
             showing_audit_modal: false,
             audit_entries: Vec::new(),
             audit_selected_index: 0,
+            multi_select_mode: false,
+            selected_appointments: HashSet::new(),
         }
     }
     
