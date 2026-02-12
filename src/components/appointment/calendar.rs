@@ -421,6 +421,184 @@ impl AppointmentCalendarComponent {
         self.render_time_slots_grid(frame, chunks[1]);
     }
     
+    fn render_week_schedule(&mut self, frame: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(0),
+            ])
+            .split(area);
+        
+        self.render_week_header(frame, chunks[0]);
+        self.render_week_time_slots_grid(frame, chunks[1]);
+    }
+    
+    fn render_week_header(&self, frame: &mut Frame, area: Rect) {
+        let dates: Vec<NaiveDate> = (0..7)
+            .map(|i| self.week_start_date + chrono::Duration::days(i))
+            .collect();
+        
+        fn get_day_name(weekday: Weekday) -> &'static str {
+            match weekday {
+                Weekday::Mon => "Mon",
+                Weekday::Tue => "Tue",
+                Weekday::Wed => "Wed",
+                Weekday::Thu => "Thu",
+                Weekday::Fri => "Fri",
+                Weekday::Sat => "Sat",
+                Weekday::Sun => "Sun",
+            }
+        }
+        
+        let mut header_cells = vec![Cell::from("Time").style(
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        )];
+        
+        for date in &dates {
+            let day_name = get_day_name(date.weekday());
+            let date_str = format!("{} {}", day_name, date.day());
+            
+            let style = if *date == self.current_date {
+                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            };
+            
+            header_cells.push(Cell::from(date_str).style(style));
+        }
+        
+        let header = Row::new(header_cells)
+            .style(Style::default().bg(Color::DarkGray))
+            .height(1);
+        
+        let widths = vec![
+            Constraint::Length(8),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
+        ];
+        
+        let week_start_str = self.week_start_date.format("%b %d").to_string();
+        let week_end_str = (self.week_start_date + chrono::Duration::days(6)).format("%b %d").to_string();
+        let title = format!(" Week: {}-{} ", week_start_str, week_end_str);
+        
+        let table = Table::new(vec![header], widths)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(title)
+                    .border_style(
+                        if self.focus_area == FocusArea::DayView {
+                            Style::default().fg(Color::Yellow)
+                        } else {
+                            Style::default().fg(Color::White)
+                        }
+                    ),
+            );
+        
+        frame.render_widget(table, area);
+    }
+    
+    fn render_week_time_slots_grid(&mut self, frame: &mut Frame, area: Rect) {
+        let time_slots = Self::generate_time_slots();
+        let dates: Vec<NaiveDate> = (0..7)
+            .map(|i| self.week_start_date + chrono::Duration::days(i))
+            .collect();
+        let mut rows = Vec::new();
+        
+        for (_slot_index, time_slot) in time_slots.iter().enumerate() {
+            let mut cells = vec![Cell::from(time_slot.as_str())];
+            
+            let (hour, minute) = time_slot.split_once(':')
+                .and_then(|(h, m)| {
+                    let hour = h.parse::<u32>().ok()?;
+                    let minute = m.parse::<u32>().ok()?;
+                    Some((hour, minute))
+                })
+                .expect("valid time slot format");
+            
+            for date in &dates {
+                let slot_datetime = date.and_hms_opt(hour, minute, 0)
+                    .expect("valid time")
+                    .and_utc();
+                
+                let appts_at_slot: Vec<&Appointment> = self.appointments.iter()
+                    .filter(|a| {
+                        let appt_date = a.start_time.date_naive();
+                        let same_day = appt_date == *date;
+                        let overlaps_time = a.start_time <= slot_datetime && a.end_time > slot_datetime;
+                        same_day && overlaps_time
+                    })
+                    .collect();
+                
+                let cell_content = match appts_at_slot.len() {
+                    0 => String::new(),
+                    1 => {
+                        let appt = appts_at_slot[0];
+                        format!("{}", &appt.patient_id.to_string()[..3])
+                    }
+                    n => format!("{}", n),
+                };
+                
+                let cell_style = match appts_at_slot.len() {
+                    0 => Style::default(),
+                    1 => {
+                        let appt = appts_at_slot[0];
+                        match appt.status {
+                            AppointmentStatus::Scheduled => Style::default().fg(Color::White).bg(Color::Blue),
+                            AppointmentStatus::Confirmed => Style::default().fg(Color::Black).bg(Color::Cyan),
+                            AppointmentStatus::Arrived => Style::default().fg(Color::Black).bg(Color::Yellow),
+                            AppointmentStatus::InProgress => Style::default().fg(Color::White).bg(Color::Green),
+                            AppointmentStatus::Completed => Style::default().fg(Color::White).bg(Color::DarkGray),
+                            AppointmentStatus::NoShow => Style::default().fg(Color::White).bg(Color::Red),
+                            AppointmentStatus::Cancelled => Style::default().fg(Color::Gray),
+                            AppointmentStatus::Rescheduled => Style::default().fg(Color::Magenta),
+                        }
+                    }
+                    _ => Style::default().fg(Color::Yellow).bg(Color::DarkGray).add_modifier(Modifier::BOLD),
+                };
+                
+                cells.push(Cell::from(cell_content).style(cell_style));
+            }
+            
+            let row = Row::new(cells).height(1);
+            rows.push(row);
+        }
+        
+        let widths = vec![
+            Constraint::Length(8),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
+        ];
+        
+        let table = Table::new(rows, widths)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" (↑↓/j/k: Navigate, n: New, Tab/Esc: Month View) "),
+            )
+            .row_highlight_style(
+                Style::default()
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol(">> ");
+        
+        frame.render_stateful_widget(table, area, &mut self.time_slot_state);
+    }
+    
+
+
     fn render_practitioner_header(&self, frame: &mut Frame, area: Rect) {
         let mut header_cells = vec![Cell::from("Time").style(
             Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
