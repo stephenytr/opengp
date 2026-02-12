@@ -243,6 +243,27 @@ impl AppointmentCalendarComponent {
         }
     }
     
+    /// Load appointments for all 7 days of the current week (Mon-Sun)
+    /// based on `week_start_date`. Collects all appointments into a single Vec.
+    async fn load_appointments_for_week(&mut self) -> Result<()> {
+        let mut all_appointments = Vec::new();
+        
+        for i in 0..7 {
+            let date = self.week_start_date + chrono::Duration::days(i);
+            match self.appointment_service.get_day_appointments(date, None).await {
+                Ok(mut appointments) => {
+                    all_appointments.append(&mut appointments);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load appointments for {}: {}", date, e);
+                }
+            }
+        }
+        
+        self.appointments = all_appointments;
+        Ok(())
+    }
+    
     fn find_appointment_for_slot(
         &self,
         practitioner_id: uuid::Uuid,
