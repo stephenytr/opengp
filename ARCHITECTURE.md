@@ -2604,3 +2604,205 @@ pbs_api_url = "https://data.pbs.gov.au/api"
 
 **Contributors**: OpenGP Architecture Team  
 **Review Cycle**: Quarterly or with major releases
+
+## Audit Domain Module
+
+### Overview
+The audit module provides comprehensive change tracking for compliance with Australian healthcare regulations (Privacy Act 1988, My Health Records Act 2012).
+
+### Architecture
+
+```
+src/domain/audit/
+├── mod.rs          # Module exports
+├── model.rs        # AuditEntry and AuditAction types
+├── service.rs      # Audit service layer
+├── repository.rs   # Repository trait
+└── error.rs        # Audit-specific errors
+```
+
+### Key Components
+
+#### AuditEntry
+Domain entity representing a single audit log entry.
+
+```rust
+pub struct AuditEntry {
+    pub id: Uuid,
+    pub entity_type: String,      // "appointment", "patient", etc.
+    pub entity_id: Uuid,
+    pub action: AuditAction,
+    pub old_value: Option<String>,
+    pub new_value: Option<String>,
+    pub changed_by: Uuid,
+    pub changed_at: DateTime<Utc>,
+}
+```
+
+#### AuditAction
+Enum representing different types of auditable actions.
+
+```rust
+pub enum AuditAction {
+    Created,
+    Updated,
+    StatusChanged { from: String, to: String },
+    Rescheduled { from: DateTime<Utc>, to: DateTime<Utc> },
+    Cancelled { reason: String },
+}
+```
+
+#### AuditRepository Trait
+Defines persistence interface for audit logs.
+
+```rust
+#[async_trait]
+pub trait AuditRepository: Send + Sync {
+    async fn create(&self, entry: AuditEntry) -> Result<AuditEntry>;
+    async fn find_by_entity(&self, entity_type: &str, entity_id: Uuid) -> Result<Vec<AuditEntry>>;
+    async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<AuditEntry>>;
+    async fn find_by_time_range(&self, from: DateTime<Utc>, to: DateTime<Utc>) -> Result<Vec<AuditEntry>>;
+}
+```
+
+#### AuditService
+Business logic layer for audit operations.
+
+```rust
+pub struct AuditService {
+    repository: Arc<dyn AuditRepository>,
+}
+
+impl AuditService {
+    pub async fn log(&self, entry: AuditEntry) -> Result<()>;
+    pub async fn get_appointment_history(&self, appointment_id: Uuid) -> Result<Vec<AuditEntry>>;
+    pub async fn get_user_activity(&self, user_id: Uuid) -> Result<Vec<AuditEntry>>;
+}
+```
+
+### Database Schema
+
+```sql
+CREATE TABLE audit_logs (
+    id BLOB PRIMARY KEY,
+    entity_type TEXT NOT NULL,
+    entity_id BLOB NOT NULL,
+    action TEXT NOT NULL,  -- JSON serialized AuditAction
+    old_value TEXT,
+    new_value TEXT,
+    changed_by BLOB NOT NULL,
+    changed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    FOREIGN KEY (changed_by) REFERENCES users(id)
+);
+
+CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
+CREATE INDEX idx_audit_user ON audit_logs(changed_by);
+CREATE INDEX idx_audit_time ON audit_logs(changed_at);
+CREATE INDEX idx_audit_entity_time ON audit_logs(entity_type, entity_id, changed_at);
+```
+
+### Design Decisions
+
+#### Append-Only Design
+Audit logs are **append-only** - no UPDATE or DELETE operations allowed. This ensures:
+- Immutable audit trail
+- Compliance with healthcare regulations
+- Forensic integrity
+
+#### JSON Serialization
+`AuditAction` enum is serialized to JSON for storage, allowing:
+- Complex action types with associated data
+- Easy querying and filtering
+- Future extensibility
+
+#### Automatic Logging
+Audit entries are created automatically by service layer methods:
+
+```rust
+pub async fn mark_arrived(&self, appointment_id: Uuid, user_id: Uuid) -> Result<Appointment> {
+    let mut appt = self.repository.find_by_id(appointment_id).await?
+        .ok_or(ServiceError::NotFound)?;
+    
+    let old_status = appt.status;
+    appt.mark_arrived(user_id);
+    
+    let updated = self.repository.update(appt.clone()).await?;
+    
+    // Automatic audit logging
+    let audit_entry = AuditEntry::for_status_change(
+        appointment_id,
+        old_status,
+        updated.status,
+        user_id
+    );
+    self.audit_service.log(audit_entry).await?;
+    
+    Ok(updated)
+}
+```
+
+### Integration Points
+
+#### Appointment Service
+All appointment status changes automatically create audit entries:
+- `mark_arrived()` → StatusChanged audit entry
+- `mark_completed()` → StatusChanged audit entry
+- `mark_no_show()` → StatusChanged audit entry
+- `reschedule_appointment()` → Rescheduled audit entry
+
+#### UI Components
+Audit history accessible via:
+- 'H' keybind in appointment detail modal
+- Displays chronological timeline
+- Color-coded by action type
+- Sortable and filterable
+
+### Compliance Features
+
+#### Australian Healthcare Requirements
+- **Privacy Act 1988**: All access to patient data logged
+- **My Health Records Act 2012**: Complete audit trail maintained
+- **Retention**: Audit logs retained indefinitely
+- **Integrity**: Append-only design prevents tampering
+
+#### Query Capabilities
+- By entity (all changes to specific appointment)
+- By user (all actions by specific user)
+- By time range (changes within date range)
+- Combined filters (entity + time range)
+
+### Performance Considerations
+
+#### Indexing Strategy
+Four indexes optimize common queries:
+1. `idx_audit_entity`: Entity lookups (most common)
+2. `idx_audit_user`: User activity reports
+3. `idx_audit_time`: Time-based queries
+4. `idx_audit_entity_time`: Combined entity + time (fastest)
+
+#### Pagination
+For large audit trails, implement pagination:
+```rust
+pub async fn get_appointment_history_paginated(
+    &self,
+    appointment_id: Uuid,
+    page: usize,
+    page_size: usize,
+) -> Result<(Vec<AuditEntry>, usize)>
+```
+
+### Future Enhancements
+
+#### Planned Features
+- [ ] User name resolution (currently shows UUIDs)
+- [ ] CSV export for audit reports
+- [ ] Advanced filtering in UI
+- [ ] Audit log retention policies
+- [ ] Automated compliance reports
+
+#### Extension Points
+- Additional entity types (patient, prescription, etc.)
+- Custom action types per entity
+- Webhook notifications for critical actions
+- Integration with external audit systems
+
