@@ -272,8 +272,6 @@ impl App {
                     KeyCode::Char('2') => Action::NavigateToAppointments,
                     KeyCode::Char('3') => Action::NavigateToClinical,
                     KeyCode::Char('4') => Action::NavigateToBilling,
-                    KeyCode::Tab => self.next_screen(),
-                    KeyCode::BackTab => self.prev_screen(),
                     _ => Action::None,
                 }
             }
@@ -458,7 +456,6 @@ impl App {
             Component not yet implemented\n\n\
             Controls:\n\
               1-4: Switch screens\n\
-              Tab/Shift+Tab: Navigate screens\n\
               q or Ctrl+C: Quit",
             self.active_screen.as_str()
         );
