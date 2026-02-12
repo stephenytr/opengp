@@ -897,7 +897,7 @@ impl AppointmentCalendarComponent {
             }
             KeyCode::Char('a') | KeyCode::Char('A') => Action::AppointmentMarkArrived,
             KeyCode::Char('c') | KeyCode::Char('C') => Action::AppointmentMarkCompleted,
-            KeyCode::Char('n') | KeyCode::Char('N') => Action::AppointmentMarkNoShow,
+            KeyCode::Char('x') | KeyCode::Char('X') => Action::AppointmentMarkNoShow,
             KeyCode::Char('r') | KeyCode::Char('R') => {
                 if let Some(appt_id) = self.selected_appointment {
                     if let Some(appt) = self.appointments.iter().find(|a| a.id == appt_id) {
@@ -1265,7 +1265,7 @@ impl AppointmentCalendarComponent {
             Span::styled(": Arrived  ", Style::default().fg(Color::White)),
             Span::styled("C", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
             Span::styled(": Completed  ", Style::default().fg(Color::White)),
-            Span::styled("N", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled("X", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
             Span::styled(": No Show", Style::default().fg(Color::White)),
         ]));
         lines.push(Line::from(vec![

@@ -64,6 +64,18 @@ impl AppointmentListComponent {
         };
         self.table_state.select(Some(i));
     }
+
+    fn select_first(&mut self) {
+        if !self.appointments.is_empty() {
+            self.table_state.select(Some(0));
+        }
+    }
+
+    fn select_last(&mut self) {
+        if !self.appointments.is_empty() {
+            self.table_state.select(Some(self.appointments.len() - 1));
+        }
+    }
 }
 
 #[async_trait]
@@ -97,6 +109,14 @@ impl Component for AppointmentListComponent {
             KeyCode::Up | KeyCode::Char('k') => {
                 self.previous();
                 Action::None
+            }
+            KeyCode::Char('g') => {
+                self.select_first();
+                Action::Render
+            }
+            KeyCode::Char('G') => {
+                self.select_last();
+                Action::Render
             }
             KeyCode::Char('n') => Action::AppointmentCreate,
             _ => Action::None,
@@ -141,7 +161,7 @@ impl Component for AppointmentListComponent {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" Appointments (↑↓: Navigate, n: New) "),
+                    .title(" Appointments (↑↓/jk: Navigate, g/G: First/Last, n: New) "),
             )
             .row_highlight_style(
                 Style::default()
