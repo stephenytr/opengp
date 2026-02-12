@@ -73,6 +73,16 @@ pub struct AppointmentCalendarComponent {
     // Error modal state
     showing_error_modal: bool,
     error_message: String,
+    
+    // Direct status update state
+    showing_confirmation: bool,
+    confirmation_message: String,
+    pending_status: Option<AppointmentStatus>,
+    pending_appointment_id: Option<Uuid>,
+    
+    // Undo stack (max 5 recent status changes)
+    recent_status_changes: Vec<(Uuid, AppointmentStatus)>,
+    undo_timestamp: Option<chrono::DateTime<Utc>>,
 }
 
 impl AppointmentCalendarComponent {
@@ -126,6 +136,12 @@ impl AppointmentCalendarComponent {
             showing_practitioner_menu: false,
             showing_error_modal: false,
             error_message: String::new(),
+            showing_confirmation: false,
+            confirmation_message: String::new(),
+            pending_status: None,
+            pending_appointment_id: None,
+            recent_status_changes: Vec::new(),
+            undo_timestamp: None,
         }
     }
     
@@ -1580,6 +1596,169 @@ impl AppointmentCalendarComponent {
         frame.render_widget(modal_content, modal_area);
     }
     
+    fn initiate_status_change(&mut self, new_status: AppointmentStatus) -> Action {
+        if let Some(selected_slot) = self.time_slot_state.selected() {
+            if let Some(practitioner) = self.practitioners.first() {
+                let practitioner_id = practitioner.id;
+                if let Some(appt) = self.find_appointment_for_slot(practitioner_id, selected_slot) {
+                    let appt_id = appt.id;
+                    let patient_id_str = appt.patient_id.to_string();
+                    let patient_text = format!("Patient {}", &patient_id_str[..8]);
+                    
+                    let status_text = match new_status {
+                        AppointmentStatus::Arrived => "Arrived",
+                        AppointmentStatus::Completed => "Completed",
+                        AppointmentStatus::NoShow => "No Show",
+                        _ => "Unknown",
+                    };
+                    
+                    let needs_confirmation = matches!(new_status, AppointmentStatus::NoShow);
+                    
+                    if needs_confirmation {
+                        self.confirmation_message = format!(
+                            "Mark {} as {}?\n\nThis is a serious status change.\nPress 'y' to confirm or 'n' to cancel.",
+                            patient_text, status_text
+                        );
+                        self.pending_status = Some(new_status);
+                        self.pending_appointment_id = Some(appt_id);
+                        self.showing_confirmation = true;
+                        return Action::Render;
+                    } else {
+                        self.pending_appointment_id = Some(appt_id);
+                        return self.execute_status_change(appt_id, new_status);
+                    }
+                }
+            }
+        }
+        Action::None
+    }
+    
+    fn execute_status_change(&mut self, appt_id: Uuid, new_status: AppointmentStatus) -> Action {
+        if let Some(appt) = self.appointments.iter().find(|a| a.id == appt_id) {
+            let old_status = appt.status;
+            self.add_to_undo_stack(appt_id, old_status);
+        }
+        
+        match new_status {
+            AppointmentStatus::Arrived => Action::AppointmentMarkArrived,
+            AppointmentStatus::Completed => Action::AppointmentMarkCompleted,
+            AppointmentStatus::NoShow => Action::AppointmentMarkNoShow,
+            _ => Action::None,
+        }
+    }
+    
+    fn handle_confirmation_key_events(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                self.showing_confirmation = false;
+                if let (Some(appt_id), Some(status)) = (self.pending_appointment_id, self.pending_status) {
+                    self.pending_appointment_id = None;
+                    self.pending_status = None;
+                    return self.execute_status_change(appt_id, status);
+                }
+                Action::None
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                self.showing_confirmation = false;
+                self.pending_appointment_id = None;
+                self.pending_status = None;
+                Action::Render
+            }
+            _ => Action::None,
+        }
+    }
+    
+    fn add_to_undo_stack(&mut self, appt_id: Uuid, old_status: AppointmentStatus) {
+        self.recent_status_changes.push((appt_id, old_status));
+        if self.recent_status_changes.len() > 5 {
+            self.recent_status_changes.remove(0);
+        }
+        self.undo_timestamp = Some(Utc::now());
+    }
+    
+    fn handle_undo(&mut self) -> Action {
+        self.clear_undo_if_expired();
+        
+        if self.recent_status_changes.is_empty() {
+            return Action::None;
+        }
+        
+        if let Some((appt_id, old_status)) = self.recent_status_changes.pop() {
+            tracing::info!("Undoing status change for appointment {}, restoring to {:?}", appt_id, old_status);
+            
+            self.selected_appointment = Some(appt_id);
+            self.undo_timestamp = None;
+            
+            match old_status {
+                AppointmentStatus::Arrived => Action::AppointmentMarkArrived,
+                AppointmentStatus::Completed => Action::AppointmentMarkCompleted,
+                AppointmentStatus::NoShow => Action::AppointmentMarkNoShow,
+                _ => {
+                    tracing::warn!("Cannot undo to status {:?} - not supported", old_status);
+                    Action::None
+                }
+            }
+        } else {
+            Action::None
+        }
+    }
+    
+    fn clear_undo_if_expired(&mut self) {
+        if let Some(timestamp) = self.undo_timestamp {
+            let elapsed = Utc::now().signed_duration_since(timestamp);
+            if elapsed.num_seconds() > 30 {
+                self.clear_undo_stack();
+            }
+        }
+    }
+    
+    fn clear_undo_stack(&mut self) {
+        self.recent_status_changes.clear();
+        self.undo_timestamp = None;
+    }
+    
+    fn render_confirmation_overlay(&self, frame: &mut Frame, area: Rect) {
+        let modal_area = Rect {
+            x: area.width / 4,
+            y: area.height / 3,
+            width: area.width / 2,
+            height: area.height / 3,
+        };
+        
+        let message = self.confirmation_message.clone();
+        
+        let lines = vec![
+            Line::from(vec![
+                Span::styled("⚠ Confirmation Required", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(message, Style::default().fg(Color::White)),
+            ]),
+            Line::from(""),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("Y", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled(": Confirm  ", Style::default().fg(Color::White)),
+                Span::styled("N", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                Span::styled(": Cancel  ", Style::default().fg(Color::White)),
+                Span::styled("Esc", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(": Cancel", Style::default().fg(Color::White)),
+            ]),
+        ];
+        
+        let modal_content = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Confirm Action ")
+                    .border_style(Style::default().fg(Color::Yellow))
+            )
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        
+        frame.render_widget(modal_content, modal_area);
+    }
+    
     fn render_error_modal(&self, frame: &mut Frame, area: Rect) {
         let modal_area = Rect {
             x: area.width / 4,
@@ -1677,6 +1856,10 @@ impl Component for AppointmentCalendarComponent {
     }
 
     fn handle_key_events(&mut self, key: KeyEvent) -> Action {
+        if self.showing_confirmation {
+            return self.handle_confirmation_key_events(key);
+        }
+        
         if self.showing_error_modal {
             return match key.code {
                 KeyCode::Esc | KeyCode::Enter => {
@@ -1706,6 +1889,10 @@ impl Component for AppointmentCalendarComponent {
         
         if self.showing_detail_modal {
             return self.handle_modal_key_events(key);
+        }
+        
+        if key.code == KeyCode::Char('z') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return self.handle_undo();
         }
         
         if key.code == KeyCode::Char('/') {
@@ -1772,24 +1959,27 @@ impl Component for AppointmentCalendarComponent {
             FocusArea::DayView => {
                 match key.code {
                     KeyCode::Up | KeyCode::Char('k') => {
+                        self.clear_undo_if_expired();
                         self.previous_time_slot();
                         Action::Render
                     }
                     KeyCode::Down | KeyCode::Char('j') => {
+                        self.clear_undo_if_expired();
                         self.next_time_slot();
                         Action::Render
                     }
                     KeyCode::Tab => {
+                        self.clear_undo_stack();
                         self.focus_area = FocusArea::MonthView;
                         Action::Render
                     }
                     KeyCode::Esc => {
+                        self.clear_undo_stack();
                         self.focus_area = FocusArea::MonthView;
                         Action::Render
                     }
                     KeyCode::Enter => {
                         if let Some(selected_slot) = self.time_slot_state.selected() {
-                            // Find appointment at current slot for first practitioner
                             if let Some(practitioner) = self.practitioners.first() {
                                 if let Some(appt) = self.find_appointment_for_slot(practitioner.id, selected_slot) {
                                     self.selected_appointment = Some(appt.id);
@@ -1799,6 +1989,15 @@ impl Component for AppointmentCalendarComponent {
                             }
                         }
                         Action::None
+                    }
+                    KeyCode::Char('a') => {
+                        self.initiate_status_change(AppointmentStatus::Arrived)
+                    }
+                    KeyCode::Char('c') => {
+                        self.initiate_status_change(AppointmentStatus::Completed)
+                    }
+                    KeyCode::Char('n') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        self.initiate_status_change(AppointmentStatus::NoShow)
                     }
                     KeyCode::Char('v') => {
                         self.view_mode = match self.view_mode {
@@ -1815,7 +2014,6 @@ impl Component for AppointmentCalendarComponent {
                         self.week_start_date += chrono::Duration::days(7);
                         Action::Render
                     }
-                    KeyCode::Char('n') => Action::AppointmentCreate,
                     _ => Action::None,
                 }
             }
@@ -1981,6 +2179,10 @@ impl Component for AppointmentCalendarComponent {
         
         if self.showing_error_modal {
             self.render_error_modal(frame, area);
+        }
+        
+        if self.showing_confirmation {
+            self.render_confirmation_overlay(frame, area);
         }
     }
 }
