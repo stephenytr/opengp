@@ -279,26 +279,6 @@ impl App {
         }
     }
 
-    /// Navigate to next screen
-    fn next_screen(&self) -> Action {
-        match self.active_screen {
-            Screen::Patients => Action::NavigateToAppointments,
-            Screen::Appointments => Action::NavigateToClinical,
-            Screen::Clinical => Action::NavigateToBilling,
-            Screen::Billing => Action::NavigateToPatients,
-        }
-    }
-
-    /// Navigate to previous screen
-    fn prev_screen(&self) -> Action {
-        match self.active_screen {
-            Screen::Patients => Action::NavigateToBilling,
-            Screen::Appointments => Action::NavigateToPatients,
-            Screen::Clinical => Action::NavigateToAppointments,
-            Screen::Billing => Action::NavigateToClinical,
-        }
-    }
-
     /// Update application state based on action
     async fn update(&mut self, action: Action) -> Result<()> {
         debug!("Processing action: {:?}", action);
