@@ -1,4 +1,5 @@
 pub mod appointment;
+pub mod audit;
 pub mod billing;
 pub mod clinical;
 pub mod immunisation;
