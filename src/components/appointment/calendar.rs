@@ -22,6 +22,14 @@ enum FocusArea {
     DayView,
 }
 
+/// View mode for the day schedule (single day or week view)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum ViewMode {
+    Day,
+    Week,
+}
+
 pub struct AppointmentCalendarComponent {
     appointment_service: Arc<AppointmentService>,
     practitioner_service: Arc<PractitionerService>,
@@ -35,6 +43,10 @@ pub struct AppointmentCalendarComponent {
     focus_area: FocusArea,
     time_slot_state: TableState,
     selected_month_day: u32,
+    #[allow(dead_code)]
+    view_mode: ViewMode,
+    #[allow(dead_code)]
+    week_start_date: NaiveDate,
     
     // Modal state for appointment details
     selected_appointment: Option<Uuid>,
@@ -59,6 +71,11 @@ impl AppointmentCalendarComponent {
             1
         ).expect("first day of month is always valid");
         
+        // Calculate week start date (Monday of current week)
+        let weekday = today.weekday();
+        let days_from_monday = weekday.num_days_from_monday();
+        let week_start = today - chrono::Duration::days(days_from_monday as i64);
+        
         Self {
             appointment_service,
             practitioner_service,
@@ -70,6 +87,8 @@ impl AppointmentCalendarComponent {
             focus_area: FocusArea::MonthView,
             time_slot_state: table_state,
             selected_month_day: today.day(),
+            view_mode: ViewMode::Day,
+            week_start_date: week_start,
             selected_appointment: None,
             showing_detail_modal: false,
             modal_patient: None,
