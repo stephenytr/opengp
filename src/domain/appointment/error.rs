@@ -28,7 +28,10 @@ pub enum ServiceError {
     Conflict(String),
 
     #[error("Validation error: {0}")]
-    Validation(#[from] ValidationError),
+    ValidationError(#[from] ValidationError),
+
+    #[error("Invalid status transition: {0}")]
+    InvalidTransition(String),
 
     #[error("Repository error: {0}")]
     Repository(#[from] RepositoryError),

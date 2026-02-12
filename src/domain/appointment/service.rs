@@ -322,6 +322,7 @@ impl AppointmentService {
     /// # Returns
     /// * `Ok(Appointment)` - Updated appointment
     /// * `Err(ServiceError::NotFound)` - Appointment not found
+    /// * `Err(ServiceError::InvalidTransition)` - Invalid status transition
     /// * `Err(ServiceError::Repository)` - Database error
     pub async fn mark_arrived(
         &self,
@@ -332,6 +333,13 @@ impl AppointmentService {
         
         let mut appointment = self.repository.find_by_id(appointment_id).await?
             .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
+        
+        // Validate transition before applying
+        appointment.can_transition_to(AppointmentStatus::Arrived)
+            .map_err(|e| {
+                tracing::warn!("Invalid transition blocked: {}", e);
+                ServiceError::InvalidTransition(e)
+            })?;
         
         appointment.mark_arrived(user_id);
         
@@ -350,6 +358,7 @@ impl AppointmentService {
     /// # Returns
     /// * `Ok(Appointment)` - Updated appointment
     /// * `Err(ServiceError::NotFound)` - Appointment not found
+    /// * `Err(ServiceError::InvalidTransition)` - Invalid status transition
     /// * `Err(ServiceError::Repository)` - Database error
     pub async fn mark_completed(
         &self,
@@ -360,6 +369,13 @@ impl AppointmentService {
         
         let mut appointment = self.repository.find_by_id(appointment_id).await?
             .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
+        
+        // Validate transition before applying
+        appointment.can_transition_to(AppointmentStatus::Completed)
+            .map_err(|e| {
+                tracing::warn!("Invalid transition blocked: {}", e);
+                ServiceError::InvalidTransition(e)
+            })?;
         
         appointment.mark_completed(user_id);
         
@@ -378,6 +394,7 @@ impl AppointmentService {
     /// # Returns
     /// * `Ok(Appointment)` - Updated appointment
     /// * `Err(ServiceError::NotFound)` - Appointment not found
+    /// * `Err(ServiceError::InvalidTransition)` - Invalid status transition
     /// * `Err(ServiceError::Repository)` - Database error
     pub async fn mark_no_show(
         &self,
@@ -389,12 +406,61 @@ impl AppointmentService {
         let mut appointment = self.repository.find_by_id(appointment_id).await?
             .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
         
+        // Validate transition before applying
+        appointment.can_transition_to(AppointmentStatus::NoShow)
+            .map_err(|e| {
+                tracing::warn!("Invalid transition blocked: {}", e);
+                ServiceError::InvalidTransition(e)
+            })?;
+        
         appointment.status = AppointmentStatus::NoShow;
         appointment.updated_at = Utc::now();
         appointment.updated_by = Some(user_id);
         
         let updated = self.repository.update(appointment).await?;
         info!("Appointment {} marked as no show", appointment_id);
+        
+        Ok(updated)
+    }
+
+    pub async fn reschedule_appointment(
+        &self,
+        appointment_id: Uuid,
+        new_start_time: chrono::DateTime<Utc>,
+        new_duration_minutes: i64,
+        user_id: Uuid,
+    ) -> Result<Appointment, ServiceError> {
+        info!("Rescheduling appointment {} to {} with duration {} minutes", 
+            appointment_id, new_start_time, new_duration_minutes);
+        
+        let mut appointment = self.repository.find_by_id(appointment_id).await?
+            .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
+        
+        let new_end_time = new_start_time + chrono::Duration::minutes(new_duration_minutes);
+        
+        let overlapping = self.repository
+            .find_overlapping(appointment.practitioner_id, new_start_time, new_end_time)
+            .await?;
+        
+        let conflicts: Vec<&Appointment> = overlapping.iter()
+            .filter(|a| a.id != appointment_id)
+            .collect();
+        
+        if !conflicts.is_empty() {
+            error!("Overlapping appointment(s) found during reschedule: {} conflict(s)", conflicts.len());
+            return Err(ServiceError::Conflict(format!(
+                "Practitioner has {} overlapping appointment(s) during this time",
+                conflicts.len()
+            )));
+        }
+        
+        appointment.start_time = new_start_time;
+        appointment.end_time = new_end_time;
+        appointment.updated_at = Utc::now();
+        appointment.updated_by = Some(user_id);
+        
+        let updated = self.repository.update(appointment).await?;
+        info!("Appointment {} rescheduled successfully", appointment_id);
         
         Ok(updated)
     }

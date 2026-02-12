@@ -69,6 +69,10 @@ pub struct AppointmentCalendarComponent {
     // Practitioner filter state
     active_practitioner_filters: HashSet<Uuid>,
     showing_practitioner_menu: bool,
+    
+    // Error modal state
+    showing_error_modal: bool,
+    error_message: String,
 }
 
 impl AppointmentCalendarComponent {
@@ -120,6 +124,8 @@ impl AppointmentCalendarComponent {
             showing_filter_menu: false,
             active_practitioner_filters: HashSet::new(),
             showing_practitioner_menu: false,
+            showing_error_modal: false,
+            error_message: String::new(),
         }
     }
     
@@ -1573,6 +1579,45 @@ impl AppointmentCalendarComponent {
         
         frame.render_widget(modal_content, modal_area);
     }
+    
+    fn render_error_modal(&self, frame: &mut Frame, area: Rect) {
+        let modal_area = Rect {
+            x: area.width / 4,
+            y: area.height / 3,
+            width: area.width / 2,
+            height: area.height / 3,
+        };
+        
+        let lines = vec![
+            Line::from(vec![
+                Span::styled("⚠ Error", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(&self.error_message, Style::default().fg(Color::White)),
+            ]),
+            Line::from(""),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("Press ", Style::default().fg(Color::White)),
+                Span::styled("Esc", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(" or ", Style::default().fg(Color::White)),
+                Span::styled("Enter", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(" to close", Style::default().fg(Color::White)),
+            ]),
+        ];
+        
+        let modal_content = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Invalid Operation ")
+                    .border_style(Style::default().fg(Color::Red))
+            )
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        
+        frame.render_widget(modal_content, modal_area);
+    }
 }
 
 #[async_trait]
@@ -1632,6 +1677,17 @@ impl Component for AppointmentCalendarComponent {
     }
 
     fn handle_key_events(&mut self, key: KeyEvent) -> Action {
+        if self.showing_error_modal {
+            return match key.code {
+                KeyCode::Esc | KeyCode::Enter => {
+                    self.showing_error_modal = false;
+                    self.error_message.clear();
+                    Action::Render
+                }
+                _ => Action::None,
+            };
+        }
+        
         if self.showing_filter_menu {
             return self.handle_filter_menu_key_events(key);
         }
@@ -1801,10 +1857,14 @@ impl Component for AppointmentCalendarComponent {
                     match self.appointment_service.mark_arrived(appt_id, user_id).await {
                         Ok(_) => {
                             tracing::info!("Appointment {} marked as arrived", appt_id);
+                            self.showing_detail_modal = false;
                             self.load_appointments_for_date().await?;
                         }
                         Err(e) => {
                             tracing::error!("Failed to mark appointment as arrived: {}", e);
+                            self.error_message = e.to_string();
+                            self.showing_error_modal = true;
+                            self.showing_detail_modal = false;
                         }
                     }
                 }
@@ -1817,10 +1877,14 @@ impl Component for AppointmentCalendarComponent {
                     match self.appointment_service.mark_completed(appt_id, user_id).await {
                         Ok(_) => {
                             tracing::info!("Appointment {} marked as completed", appt_id);
+                            self.showing_detail_modal = false;
                             self.load_appointments_for_date().await?;
                         }
                         Err(e) => {
                             tracing::error!("Failed to mark appointment as completed: {}", e);
+                            self.error_message = e.to_string();
+                            self.showing_error_modal = true;
+                            self.showing_detail_modal = false;
                         }
                     }
                 }
@@ -1833,10 +1897,14 @@ impl Component for AppointmentCalendarComponent {
                     match self.appointment_service.mark_no_show(appt_id, user_id).await {
                         Ok(_) => {
                             tracing::info!("Appointment {} marked as no show", appt_id);
+                            self.showing_detail_modal = false;
                             self.load_appointments_for_date().await?;
                         }
                         Err(e) => {
                             tracing::error!("Failed to mark appointment as no show: {}", e);
+                            self.error_message = e.to_string();
+                            self.showing_error_modal = true;
+                            self.showing_detail_modal = false;
                         }
                     }
                 }
@@ -1909,6 +1977,10 @@ impl Component for AppointmentCalendarComponent {
         
         if self.showing_practitioner_menu {
             self.render_practitioner_menu(frame, area);
+        }
+        
+        if self.showing_error_modal {
+            self.render_error_modal(frame, area);
         }
     }
 }

@@ -110,6 +110,67 @@ impl Appointment {
         self.updated_at = Utc::now();
         self.updated_by = Some(user_id);
     }
+
+    /// Validate if appointment can transition to a new status
+    ///
+    /// Enforces valid state transitions to prevent illogical status changes.
+    /// Terminal states (Completed, NoShow, Cancelled) cannot transition to other states.
+    ///
+    /// # Valid Transitions
+    /// - Scheduled → Confirmed, Cancelled, Rescheduled
+    /// - Confirmed → Arrived, Cancelled, Rescheduled
+    /// - Arrived → InProgress, NoShow
+    /// - InProgress → Completed
+    /// - Terminal states (Completed, NoShow, Cancelled) → No transitions allowed
+    ///
+    /// # Arguments
+    /// * `new_status` - The status to transition to
+    ///
+    /// # Returns
+    /// * `Ok(())` - Transition is valid
+    /// * `Err(String)` - Transition is invalid with reason
+    pub fn can_transition_to(&self, new_status: AppointmentStatus) -> Result<(), String> {
+        use AppointmentStatus::*;
+
+        // Same state is always valid (idempotent)
+        if self.status == new_status {
+            return Ok(());
+        }
+
+        let valid = match (self.status, new_status) {
+            // From Scheduled
+            (Scheduled, Confirmed | Cancelled | Rescheduled) => true,
+
+            // From Confirmed
+            (Confirmed, Arrived | Cancelled | Rescheduled) => true,
+
+            // From Arrived
+            (Arrived, InProgress | NoShow) => true,
+
+            // From InProgress
+            (InProgress, Completed) => true,
+
+            // Terminal states cannot transition (data integrity)
+            (Completed, _) => false,
+            (NoShow, _) => false,
+            (Cancelled, _) => false,
+
+            // Rescheduled is also terminal (new appointment should be created)
+            (Rescheduled, _) => false,
+
+            // All other transitions are invalid
+            _ => false,
+        };
+
+        if valid {
+            Ok(())
+        } else {
+            Err(format!(
+                "Cannot transition from {} to {}",
+                self.status, new_status
+            ))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -234,6 +295,170 @@ impl std::fmt::Display for AppointmentStatus {
             AppointmentStatus::Cancelled => write!(f, "Cancelled"),
             AppointmentStatus::Rescheduled => write!(f, "Rescheduled"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration;
+
+    fn create_test_appointment(status: AppointmentStatus) -> Appointment {
+        let mut appt = Appointment::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Utc::now(),
+            Duration::minutes(15),
+            AppointmentType::Standard,
+            Some(Uuid::new_v4()),
+        );
+        appt.status = status;
+        appt
+    }
+
+    #[test]
+    fn test_scheduled_can_transition_to_confirmed() {
+        let appt = create_test_appointment(AppointmentStatus::Scheduled);
+        assert!(appt.can_transition_to(AppointmentStatus::Confirmed).is_ok());
+    }
+
+    #[test]
+    fn test_scheduled_can_transition_to_cancelled() {
+        let appt = create_test_appointment(AppointmentStatus::Scheduled);
+        assert!(appt.can_transition_to(AppointmentStatus::Cancelled).is_ok());
+    }
+
+    #[test]
+    fn test_scheduled_can_transition_to_rescheduled() {
+        let appt = create_test_appointment(AppointmentStatus::Scheduled);
+        assert!(appt
+            .can_transition_to(AppointmentStatus::Rescheduled)
+            .is_ok());
+    }
+
+    #[test]
+    fn test_scheduled_cannot_transition_to_arrived() {
+        let appt = create_test_appointment(AppointmentStatus::Scheduled);
+        assert!(appt.can_transition_to(AppointmentStatus::Arrived).is_err());
+    }
+
+    #[test]
+    fn test_confirmed_can_transition_to_arrived() {
+        let appt = create_test_appointment(AppointmentStatus::Confirmed);
+        assert!(appt.can_transition_to(AppointmentStatus::Arrived).is_ok());
+    }
+
+    #[test]
+    fn test_confirmed_can_transition_to_cancelled() {
+        let appt = create_test_appointment(AppointmentStatus::Confirmed);
+        assert!(appt.can_transition_to(AppointmentStatus::Cancelled).is_ok());
+    }
+
+    #[test]
+    fn test_confirmed_cannot_transition_to_completed() {
+        let appt = create_test_appointment(AppointmentStatus::Confirmed);
+        assert!(appt
+            .can_transition_to(AppointmentStatus::Completed)
+            .is_err());
+    }
+
+    #[test]
+    fn test_arrived_can_transition_to_in_progress() {
+        let appt = create_test_appointment(AppointmentStatus::Arrived);
+        assert!(appt
+            .can_transition_to(AppointmentStatus::InProgress)
+            .is_ok());
+    }
+
+    #[test]
+    fn test_arrived_can_transition_to_no_show() {
+        let appt = create_test_appointment(AppointmentStatus::Arrived);
+        assert!(appt.can_transition_to(AppointmentStatus::NoShow).is_ok());
+    }
+
+    #[test]
+    fn test_arrived_cannot_transition_to_completed() {
+        let appt = create_test_appointment(AppointmentStatus::Arrived);
+        assert!(appt
+            .can_transition_to(AppointmentStatus::Completed)
+            .is_err());
+    }
+
+    #[test]
+    fn test_in_progress_can_transition_to_completed() {
+        let appt = create_test_appointment(AppointmentStatus::InProgress);
+        assert!(appt.can_transition_to(AppointmentStatus::Completed).is_ok());
+    }
+
+    #[test]
+    fn test_in_progress_cannot_transition_to_cancelled() {
+        let appt = create_test_appointment(AppointmentStatus::InProgress);
+        assert!(appt
+            .can_transition_to(AppointmentStatus::Cancelled)
+            .is_err());
+    }
+
+    #[test]
+    fn test_completed_cannot_transition_to_any_status() {
+        let appt = create_test_appointment(AppointmentStatus::Completed);
+        assert!(appt
+            .can_transition_to(AppointmentStatus::Scheduled)
+            .is_err());
+        assert!(appt
+            .can_transition_to(AppointmentStatus::Confirmed)
+            .is_err());
+        assert!(appt.can_transition_to(AppointmentStatus::Arrived).is_err());
+        assert!(appt
+            .can_transition_to(AppointmentStatus::InProgress)
+            .is_err());
+        assert!(appt.can_transition_to(AppointmentStatus::NoShow).is_err());
+        assert!(appt
+            .can_transition_to(AppointmentStatus::Cancelled)
+            .is_err());
+    }
+
+    #[test]
+    fn test_no_show_cannot_transition_to_any_status() {
+        let appt = create_test_appointment(AppointmentStatus::NoShow);
+        assert!(appt
+            .can_transition_to(AppointmentStatus::Scheduled)
+            .is_err());
+        assert!(appt.can_transition_to(AppointmentStatus::Arrived).is_err());
+        assert!(appt
+            .can_transition_to(AppointmentStatus::Completed)
+            .is_err());
+    }
+
+    #[test]
+    fn test_cancelled_cannot_transition_to_any_status() {
+        let appt = create_test_appointment(AppointmentStatus::Cancelled);
+        assert!(appt
+            .can_transition_to(AppointmentStatus::Scheduled)
+            .is_err());
+        assert!(appt
+            .can_transition_to(AppointmentStatus::Confirmed)
+            .is_err());
+        assert!(appt.can_transition_to(AppointmentStatus::Arrived).is_err());
+    }
+
+    #[test]
+    fn test_same_status_transition_is_idempotent() {
+        let appt = create_test_appointment(AppointmentStatus::Scheduled);
+        assert!(appt.can_transition_to(AppointmentStatus::Scheduled).is_ok());
+
+        let appt = create_test_appointment(AppointmentStatus::Completed);
+        assert!(appt.can_transition_to(AppointmentStatus::Completed).is_ok());
+    }
+
+    #[test]
+    fn test_transition_error_message_format() {
+        let appt = create_test_appointment(AppointmentStatus::Cancelled);
+        let result = appt.can_transition_to(AppointmentStatus::Arrived);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(err_msg.contains("Cannot transition from"));
+        assert!(err_msg.contains("Cancelled"));
+        assert!(err_msg.contains("Arrived"));
     }
 }
 
