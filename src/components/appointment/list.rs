@@ -161,7 +161,7 @@ impl Component for AppointmentListComponent {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" Appointments (↑↓/jk: Navigate, g/G: First/Last, n: New) "),
+                    .title(" Appointments (j/k/↑↓: Nav, g/G: First/Last, n: New) "),
             )
             .row_highlight_style(
                 Style::default()

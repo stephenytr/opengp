@@ -857,14 +857,14 @@ impl AppointmentFormComponent {
             )));
         }
         
-        if self.current_field == FormField::Patient {
+         if self.current_field == FormField::Patient {
             lines.push(Line::from(vec![
                 Span::styled("[↑↓]", Style::default().fg(Color::Cyan)),
                 Span::raw(" Navigate  "),
+                Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
+                Span::raw(" Select  "),
                 Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
                 Span::raw(" Clear  "),
-                Span::styled("[Ctrl+U]", Style::default().fg(Color::Cyan)),
-                Span::raw(" Clear All  "),
                 Span::styled("[Ctrl+S]", Style::default().fg(Color::Green)),
                 Span::raw(" Submit"),
             ]));
@@ -872,8 +872,10 @@ impl AppointmentFormComponent {
             lines.push(Line::from(vec![
                 Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
                 Span::raw(" Next  "),
-                Span::styled("[Shift+Tab]", Style::default().fg(Color::Cyan)),
-                Span::raw(" Prev  "),
+                Span::styled("[Enter]", Style::default().fg(Color::Cyan)),
+                Span::raw(" Select  "),
+                Span::styled("[↑↓]", Style::default().fg(Color::Cyan)),
+                Span::raw(" Navigate  "),
                 Span::styled("[Ctrl+S]", Style::default().fg(Color::Green)),
                 Span::raw(" Submit  "),
                 Span::styled("[Esc]", Style::default().fg(Color::Red)),

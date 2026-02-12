@@ -527,7 +527,7 @@ impl AppointmentCalendarComponent {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(format!(" {} (h/l: Month, t: Today, n: New, Enter: Day View) ", month_year))
+                    .title(format!(" {} (↑↓: Day, h/l: Month, t: Today, n: New, Enter/Tab: Day View) ", month_year))
                     .border_style(
                         if self.focus_area == FocusArea::MonthView {
                             Style::default().fg(Color::Yellow)
@@ -717,7 +717,7 @@ impl AppointmentCalendarComponent {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" (↑↓/j/k: Navigate, v: Day View, Shift+←/→: Week, n: New, Tab/Esc: Month) "),
+                    .title(" (j/k/↑↓: Nav, v: Day, Shift+←→: Week, n: New, Tab/Esc: Month) "),
             )
             .row_highlight_style(
                 Style::default()
@@ -874,7 +874,7 @@ impl AppointmentCalendarComponent {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" (↑↓/j/k: Navigate, v: Week View, n: New, Tab/Esc: Month View) "),
+                    .title(" (j/k/↑↓: Nav, v: Week, n: New, Enter: Details, /: Search, f: Filter, p: Practitioner, Ctrl+Z: Undo, Tab/Esc: Month) "),
             )
             .row_highlight_style(
                 Style::default()

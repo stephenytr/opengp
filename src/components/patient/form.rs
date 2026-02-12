@@ -457,7 +457,7 @@ impl Component for PatientFormComponent {
         } else if !self.validation_errors.is_empty() {
             format!("Fix errors above | {}", field_indicator)
         } else {
-            format!("Tab/Shift+Tab: Navigate | Enter/F10: Submit | Esc: Cancel | {}", field_indicator)
+            format!("Tab/Shift+Tab: Next/Prev, ↑↓: Fields, Enter/F10: Submit, Esc: Cancel | {}", field_indicator)
         };
 
         let help_style = if !self.validation_errors.is_empty() {

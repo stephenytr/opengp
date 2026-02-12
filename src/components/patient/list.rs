@@ -341,10 +341,10 @@ impl Component for PatientListComponent {
         ];
 
         let title = if self.search_query.is_empty() {
-            " Patient List (j/k:navigate g/G:first/last n:new /:search Esc:clear) ".to_string()
+            " Patients (j/k/↑↓: Nav, g/G: First/Last, n: New, /: Search, Esc: Clear) ".to_string()
         } else {
             format!(
-                " Patient List - {} results (n:new Esc:clear) ",
+                " Patients - {} results (n: New, Esc: Clear) ",
                 self.filtered_patients.len()
             )
         };
