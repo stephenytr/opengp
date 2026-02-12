@@ -93,3 +93,67 @@ pub struct AppointmentSearchCriteria {
     /// Filter by confirmation status
     pub confirmed: Option<bool>,
 }
+
+/// Calendar view for a specific day showing all practitioners and appointments
+///
+/// Used by the calendar UI to display a day's schedule across multiple practitioners.
+/// Contains all appointments organized by practitioner for efficient rendering.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CalendarDayView {
+    /// The date being displayed
+    pub date: chrono::NaiveDate,
+
+    /// List of practitioners with their schedules for this day
+    pub practitioners: Vec<PractitionerSchedule>,
+}
+
+/// Schedule for a single practitioner on a specific day
+///
+/// Groups all appointments for one practitioner, making it easy to
+/// render a practitioner's column in the calendar view.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PractitionerSchedule {
+    /// Practitioner unique identifier
+    pub practitioner_id: Uuid,
+
+    /// Practitioner display name (e.g., "Dr. Smith")
+    pub practitioner_name: String,
+
+    /// All appointments for this practitioner on this day
+    pub appointments: Vec<CalendarAppointment>,
+}
+
+/// Simplified appointment for calendar display
+///
+/// Contains only the essential fields needed to render an appointment
+/// in the calendar grid. Patient name is denormalized for performance.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CalendarAppointment {
+    /// Appointment unique identifier
+    pub id: Uuid,
+
+    /// Patient unique identifier
+    pub patient_id: Uuid,
+
+    /// Patient display name (denormalized for performance)
+    pub patient_name: String,
+
+    /// Appointment start time
+    pub start_time: DateTime<Utc>,
+
+    /// Appointment end time
+    pub end_time: DateTime<Utc>,
+
+    /// Type of appointment (Standard, LongConsultation, etc.)
+    pub appointment_type: AppointmentType,
+
+    /// Current status (Scheduled, CheckedIn, etc.)
+    pub status: AppointmentStatus,
+
+    /// Whether this is an urgent appointment
+    #[serde(default)]
+    pub is_urgent: bool,
+
+    /// Number of 15-minute slots this appointment spans (for rendering)
+    pub slot_span: u8,
+}

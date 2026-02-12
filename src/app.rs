@@ -3,16 +3,19 @@
 //! The App struct coordinates all components, manages application state,
 //! and handles the main event loop.
 
-use crate::components::appointment::{AppointmentFormComponent, AppointmentListComponent};
+use crate::components::appointment::{AppointmentFormComponent, AppointmentCalendarComponent};
 use crate::components::patient::{PatientFormComponent, PatientListComponent};
 use crate::components::{Action, Component};
 use crate::config::Config;
 use crate::domain::appointment::{AppointmentService, AppointmentRepository};
 use crate::domain::patient::{PatientService, PatientRepository};
+use crate::domain::user::{PractitionerService, PractitionerRepository, RepositoryError, Practitioner};
 use crate::error::Result;
 use crate::infrastructure::database::repositories::{SqlxAppointmentRepository, SqlxPatientRepository};
 use crate::ui::event::EventHandler;
 use crate::ui::tui::Tui;
+use async_trait::async_trait;
+use chrono::Utc;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -22,6 +25,7 @@ use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::{debug, info};
+use uuid::Uuid;
 
 /// Active screen in the application
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,6 +65,7 @@ pub struct App {
     db_pool: SqlitePool,
     patient_service: Arc<PatientService>,
     appointment_service: Arc<AppointmentService>,
+    practitioner_service: Arc<crate::domain::user::PractitionerService>,
     should_quit: bool,
     active_screen: Screen,
     patient_component: Option<Box<dyn Component>>,
@@ -89,11 +94,71 @@ impl App {
             Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
         let appointment_service = Arc::new(AppointmentService::new(appointment_repository));
         
+        // Create mock practitioner repository for now (Phase 1)
+        // In Phase 2, this would use a real SqlxPractitionerRepository
+        struct MockPractitionerRepository;
+
+        #[async_trait]
+        impl PractitionerRepository for MockPractitionerRepository {
+            async fn list_active(&self) -> std::result::Result<Vec<Practitioner>, RepositoryError> {
+                Ok(vec![
+                    Practitioner {
+                        id: Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789")
+                            .expect("valid UUID"),
+                        user_id: None,
+                        first_name: "Sarah".to_string(),
+                        middle_name: None,
+                        last_name: "Johnson".to_string(),
+                        title: "Dr".to_string(),
+                        hpi_i: Some("8003610000000000".to_string()),
+                        ahpra_registration: Some("MED0001234567".to_string()),
+                        prescriber_number: Some("123456".to_string()),
+                        provider_number: "123456A".to_string(),
+                        speciality: Some("General Practice".to_string()),
+                        qualifications: vec!["MBBS".to_string(), "FRACGP".to_string()],
+                        phone: Some("02 9876 5432".to_string()),
+                        email: Some("s.johnson@clinic.com".to_string()),
+                        is_active: true,
+                        created_at: Utc::now(),
+                        updated_at: Utc::now(),
+                    },
+                    Practitioner {
+                        id: Uuid::parse_str("b2c3d4e5-f6a7-89a1-b2c3-d4e5f6a789a1")
+                            .expect("valid UUID"),
+                        user_id: None,
+                        first_name: "Michael".to_string(),
+                        middle_name: Some("James".to_string()),
+                        last_name: "Chen".to_string(),
+                        title: "Dr".to_string(),
+                        hpi_i: Some("8003610000000001".to_string()),
+                        ahpra_registration: Some("MED0001234568".to_string()),
+                        prescriber_number: Some("234567".to_string()),
+                        provider_number: "234567B".to_string(),
+                        speciality: Some("General Practice".to_string()),
+                        qualifications: vec!["MBBS".to_string(), "FRACGP".to_string()],
+                        phone: Some("02 9876 5433".to_string()),
+                        email: Some("m.chen@clinic.com".to_string()),
+                        is_active: true,
+                        created_at: Utc::now(),
+                        updated_at: Utc::now(),
+                    },
+                ])
+            }
+            
+            async fn find_by_id(&self, _id: Uuid) -> std::result::Result<Option<Practitioner>, RepositoryError> {
+                Ok(None)
+            }
+        }
+
+        let practitioner_repository: Arc<dyn PractitionerRepository> = Arc::new(MockPractitionerRepository);
+        let practitioner_service = Arc::new(PractitionerService::new(practitioner_repository));
+        
         Ok(Self {
             config,
             db_pool,
             patient_service,
             appointment_service,
+            practitioner_service,
             should_quit: false,
             active_screen: Screen::Patients,
             patient_component: None,
@@ -170,9 +235,13 @@ impl App {
         patient_list.init().await?;
         self.patient_component = Some(Box::new(patient_list));
         
-        let mut appointment_list = AppointmentListComponent::new(self.appointment_service.clone());
-        appointment_list.init().await?;
-        self.appointment_component = Some(Box::new(appointment_list));
+        let mut appointment_calendar = AppointmentCalendarComponent::new(
+            self.appointment_service.clone(),
+            self.practitioner_service.clone(),
+            self.patient_service.clone(),
+        );
+        appointment_calendar.init().await?;
+        self.appointment_component = Some(Box::new(appointment_calendar));
         
         Ok(())
     }

@@ -263,4 +263,53 @@ impl AppointmentService {
         info!("Found {} appointments", appointments.len());
         Ok(appointments)
     }
+
+    /// Fetch appointments for a specific date
+    ///
+    /// # Arguments
+    /// * `date` - The date to fetch appointments for
+    /// * `practitioner_ids` - Optional list of practitioner IDs to filter by
+    ///
+    /// # Returns
+    /// * `Ok(Vec<Appointment>)` - List of appointments for the date
+    /// * `Err(ServiceError)` - Database error
+    pub async fn get_day_appointments(
+        &self,
+        date: chrono::NaiveDate,
+        practitioner_ids: Option<Vec<Uuid>>,
+    ) -> Result<Vec<Appointment>, ServiceError> {
+        use chrono::TimeZone;
+        
+        info!("Fetching appointments for date: {}", date);
+        
+        // Convert date to UTC datetime range (these times are always valid)
+        let start_of_day = chrono::Utc.from_utc_datetime(
+            &date.and_hms_opt(0, 0, 0).expect("00:00:00 is always valid")
+        );
+        let end_of_day = chrono::Utc.from_utc_datetime(
+            &date.and_hms_opt(23, 59, 59).expect("23:59:59 is always valid")
+        );
+        
+        // Build search criteria
+        let criteria = AppointmentSearchCriteria {
+            patient_id: None,
+            practitioner_id: None,
+            date_from: Some(start_of_day),
+            date_to: Some(end_of_day),
+            status: None,
+            appointment_type: None,
+            is_urgent: None,
+            confirmed: None,
+        };
+        
+        let mut appointments = self.search_appointments(&criteria).await?;
+        
+        // Filter by practitioner IDs if provided
+        if let Some(ids) = practitioner_ids {
+            appointments.retain(|a| ids.contains(&a.practitioner_id));
+        }
+        
+        info!("Found {} appointments for date {}", appointments.len(), date);
+        Ok(appointments)
+    }
 }
