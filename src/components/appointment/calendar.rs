@@ -602,7 +602,7 @@ impl AppointmentCalendarComponent {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" (↑↓/j/k: Navigate, n: New, Tab/Esc: Month View) "),
+                    .title(" (↑↓/j/k: Navigate, v: Day View, Shift+←/→: Week, n: New, Tab/Esc: Month) "),
             )
             .row_highlight_style(
                 Style::default()
@@ -715,7 +715,7 @@ impl AppointmentCalendarComponent {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" (↑↓/j/k: Navigate, n: New, Tab/Esc: Month View) "),
+                    .title(" (↑↓/j/k: Navigate, v: Week View, n: New, Tab/Esc: Month View) "),
             )
             .row_highlight_style(
                 Style::default()
