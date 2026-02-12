@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::components::{Action, Component};
 use crate::domain::appointment::{Appointment, AppointmentService, AppointmentStatus};
+use crate::domain::audit::{AuditEntry, AuditAction};
 use crate::domain::patient::{Patient, PatientService};
 use crate::domain::user::{Practitioner, PractitionerService};
 use crate::error::Result;
@@ -83,6 +84,11 @@ pub struct AppointmentCalendarComponent {
     // Undo stack (max 5 recent status changes)
     recent_status_changes: Vec<(Uuid, AppointmentStatus)>,
     undo_timestamp: Option<chrono::DateTime<Utc>>,
+    
+    // Audit history modal state
+    showing_audit_modal: bool,
+    audit_entries: Vec<AuditEntry>,
+    audit_selected_index: usize,
 }
 
 impl AppointmentCalendarComponent {
@@ -142,6 +148,9 @@ impl AppointmentCalendarComponent {
             pending_appointment_id: None,
             recent_status_changes: Vec::new(),
             undo_timestamp: None,
+            showing_audit_modal: false,
+            audit_entries: Vec::new(),
+            audit_selected_index: 0,
         }
     }
     
@@ -898,6 +907,18 @@ impl AppointmentCalendarComponent {
             KeyCode::Char('a') | KeyCode::Char('A') => Action::AppointmentMarkArrived,
             KeyCode::Char('c') | KeyCode::Char('C') => Action::AppointmentMarkCompleted,
             KeyCode::Char('x') | KeyCode::Char('X') => Action::AppointmentMarkNoShow,
+            KeyCode::Char('h') | KeyCode::Char('H') => {
+                // Open audit history modal
+                if let Some(_appt_id) = self.selected_appointment {
+                    self.showing_detail_modal = false;
+                    self.showing_audit_modal = true;
+                    self.audit_entries.clear();
+                    self.audit_selected_index = 0;
+                    // TODO: Fetch audit history from service
+                    return Action::Render;
+                }
+                Action::None
+            }
             KeyCode::Char('r') | KeyCode::Char('R') => {
                 if let Some(appt_id) = self.selected_appointment {
                     if let Some(appt) = self.appointments.iter().find(|a| a.id == appt_id) {
@@ -910,6 +931,31 @@ impl AppointmentCalendarComponent {
                     }
                 }
                 Action::None
+            }
+            _ => Action::None,
+        }
+    }
+    
+    fn handle_audit_modal_key_events(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Esc => {
+                self.showing_audit_modal = false;
+                self.audit_entries.clear();
+                self.audit_selected_index = 0;
+                self.showing_detail_modal = true;
+                Action::Render
+            }
+            KeyCode::Up => {
+                if self.audit_selected_index > 0 {
+                    self.audit_selected_index -= 1;
+                }
+                Action::Render
+            }
+            KeyCode::Down => {
+                if !self.audit_entries.is_empty() && self.audit_selected_index < self.audit_entries.len() - 1 {
+                    self.audit_selected_index += 1;
+                }
+                Action::Render
             }
             _ => Action::None,
         }
@@ -1271,6 +1317,8 @@ impl AppointmentCalendarComponent {
         lines.push(Line::from(vec![
             Span::styled("R", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
             Span::styled(": Reschedule  ", Style::default().fg(Color::White)),
+            Span::styled("H", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": History  ", Style::default().fg(Color::White)),
             Span::styled("Esc", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
             Span::styled(": Close", Style::default().fg(Color::White)),
         ]));
@@ -1285,6 +1333,88 @@ impl AppointmentCalendarComponent {
             .wrap(ratatui::widgets::Wrap { trim: true });
         
         frame.render_widget(modal_content, modal_area);
+    }
+    
+    fn render_audit_history_modal(&self, frame: &mut Frame, area: Rect) {
+        let modal_area = Rect {
+            x: area.width / 5,
+            y: area.height / 6,
+            width: area.width * 3 / 5,
+            height: area.height * 2 / 3,
+        };
+        
+        let mut lines = Vec::new();
+        
+        if self.audit_entries.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("No audit history available", Style::default().fg(Color::Gray)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("Timestamp", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::raw(" | "),
+                Span::styled("Action", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::raw(" | "),
+                Span::styled("User", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            ]));
+            lines.push(Line::from("")); // Empty line for spacing
+            
+            for (index, entry) in self.audit_entries.iter().enumerate() {
+                let timestamp = entry.changed_at.format("%Y-%m-%d %H:%M:%S").to_string();
+                let user_id_str = format!("{}", entry.changed_by);
+                let user_short = format!("User: {}...", &user_id_str[..8]);
+                
+                let (action_text, action_color) = match &entry.action {
+                    AuditAction::Created => ("Created".to_string(), Color::Green),
+                    AuditAction::Updated => ("Updated".to_string(), Color::Cyan),
+                    AuditAction::StatusChanged { from, to } => {
+                        (format!("Status: {} → {}", from, to), Color::Yellow)
+                    },
+                    AuditAction::Rescheduled { from, to } => {
+                        (format!("Resched: {} → {}", 
+                            from.format("%H:%M"), 
+                            to.format("%H:%M")), Color::Magenta)
+                    },
+                    AuditAction::Cancelled { reason } => {
+                        (format!("Cancelled: {}", reason), Color::Red)
+                    },
+                };
+                
+                let is_selected = index == self.audit_selected_index;
+                let base_style = if is_selected {
+                    Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                
+                let action_style = base_style.fg(action_color);
+                let timestamp_style = base_style.fg(Color::Cyan);
+                let user_style = base_style.fg(Color::White);
+                
+                lines.push(Line::from(vec![
+                    Span::styled(timestamp, timestamp_style),
+                    Span::raw(" | "),
+                    Span::styled(action_text, action_style),
+                    Span::raw(" | "),
+                    Span::styled(user_short, user_style),
+                ]));
+            }
+        }
+        
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("↑/↓", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Navigate  ", Style::default().fg(Color::White)),
+            Span::styled("Esc", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Close", Style::default().fg(Color::White)),
+        ]));
+        
+        let content = Paragraph::new(lines)
+            .block(Block::default().borders(Borders::ALL).title(" Audit History "))
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        
+        frame.render_widget(content, modal_area);
     }
     
     fn render_search_modal(&self, frame: &mut Frame, area: Rect) {
@@ -1891,6 +2021,10 @@ impl Component for AppointmentCalendarComponent {
             return self.handle_modal_key_events(key);
         }
         
+        if self.showing_audit_modal {
+            return self.handle_audit_modal_key_events(key);
+        }
+        
         if key.code == KeyCode::Char('z') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return self.handle_undo();
         }
@@ -2159,6 +2293,10 @@ impl Component for AppointmentCalendarComponent {
         
         if self.showing_detail_modal {
             self.render_appointment_detail_modal(frame, area);
+        }
+        
+        if self.showing_audit_modal {
+            self.render_audit_history_modal(frame, area);
         }
         
         if self.showing_reschedule_modal {
