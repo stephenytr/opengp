@@ -1,8 +1,8 @@
 # OpenGP Calendar Implementation
 
-**Status**: Phase 1, 2 & 3 Complete ✅  
+**Status**: Phase 1, 2, 3 & 6 Complete ✅  
 **Date**: February 12, 2026  
-**Version**: 1.1
+**Version**: 1.2
 
 ---
 
@@ -688,6 +688,24 @@ if self.showing_detail_modal {
 **Return to month view:**
 - Press **Tab** or **Esc**
 
+#### Week View Navigation
+
+**Toggle to week view:**
+- Press **`v`** from any view
+
+**Navigate weeks:**
+- **`Shift+Left`**: Previous week
+- **`Shift+Right`**: Next week
+
+**Toggle back to day view:**
+- Press **`v`** again
+
+**Week view display:**
+- 7 columns (Monday-Sunday)
+- Current day highlighted in green
+- Week range shown in title (e.g., "Week: Feb 10-16")
+- Condensed appointment display
+
 #### Creating Appointments
 
 **From either view:**
@@ -969,20 +987,200 @@ appt.start_time <= slot_datetime && appt.end_time > slot_datetime
 - Conflict detection
 - Optimistic UI updates
 
-### Phase 6: Multi-Day View
+## Phase 6: Multi-Day View (Complete)
 
-**Goal:** Week view option
+### Objectives
 
-**Features:**
-- Toggle between day and week view
-- 7 columns (Mon-Sun)
-- Condensed appointment format
-- Better utilization of wide terminals
+Add a week view option that displays multiple days side-by-side in a condensed format, better utilizing wide terminal screens.
 
-**Technical:**
-- New `ViewMode` enum (Day, Week)
-- Load 7 days of appointments
-- Adjust column widths dynamically
+### What Was Implemented
+
+#### 1. ViewMode Enum
+
+**New Enum** (`src/components/appointment/calendar.rs` lines 25-29):
+```rust
+#[derive(Debug, Clone, PartialEq)]
+enum ViewMode {
+    Day,
+    Week,
+}
+```
+
+#### 2. State Fields
+
+**Additional Fields** (lines 50-52):
+```rust
+view_mode: ViewMode,                    // Current view mode
+week_start_date: NaiveDate,             // Monday of current week
+```
+
+**Initialization** (lines 85-86):
+```rust
+view_mode: ViewMode::Day,
+week_start_date: get_monday_of_week(current_date),
+```
+
+#### 3. Week Rendering Methods
+
+**Main Method:** `render_week_schedule()` (lines 665-749)
+- Renders 7 columns (Monday-Sunday)
+- Each column shows condensed appointment format
+- Week range in title (e.g., "Week: Feb 10-16")
+- Current day highlighted in green
+
+**Header Method:** `render_week_header()` (lines 752-785)
+- Day names and dates for each column
+- Current day highlighted in green background
+- Week navigation hints
+
+**Grid Method:** `render_week_time_slots_grid()` (lines 788-892)
+- 40 time slots × 7 days
+- Condensed display: patient ID (3 chars) or count for multiple
+- Status color coding preserved
+- Empty cells for no appointments
+
+#### 4. Week Navigation
+
+**Helper Function:** `get_monday_of_week()` (lines 1020-1032)
+```rust
+fn get_monday_of_week(date: NaiveDate) -> NaiveDate {
+    let days_since_monday = date.weekday().num_days_from_monday();
+    date - Duration::days(days_since_monday as i64)
+}
+```
+
+**Week Range Display:** (lines 670-673)
+```rust
+let week_end = self.week_start_date + Duration::days(6);
+let title = format!("Week: {} - {}", 
+    self.week_start_date.format("%b %d"),
+    week_end.format("%b %d"));
+```
+
+#### 5. Appointment Loading for Week
+
+**Method:** `load_appointments_for_week()` (lines 981-1016)
+```rust
+async fn load_appointments_for_week(&mut self) -> Result<()> {
+    let mut all_appointments = Vec::new();
+    
+    for day_offset in 0..7 {
+        let date = self.week_start_date + Duration::days(day_offset);
+        match self.appointment_service.get_day_appointments(date, None).await {
+            Ok(mut appointments) => all_appointments.append(&mut appointments),
+            Err(e) => tracing::error!("Failed to load appointments for {}: {}", date, e),
+        }
+    }
+    
+    self.appointments = all_appointments;
+    Ok(())
+}
+```
+
+**Pattern:**
+- Loads appointments for all 7 days of the week
+- Merges into single appointments vector
+- Proper error handling for each day
+- Efficient single pass loading
+
+#### 6. Keyboard Handlers
+
+**Toggle View Mode:** (lines 498-505)
+```rust
+KeyCode::Char('v') => {
+    self.view_mode = match self.view_mode {
+        ViewMode::Day => ViewMode::Week,
+        ViewMode::Week => ViewMode::Day,
+    };
+    Action::Render
+}
+```
+
+**Week Navigation:** (lines 476-488)
+```rust
+KeyCode::Left => {
+    if key.modifiers.contains(KeyModifiers::SHIFT) {
+        self.week_start_date -= Duration::days(7);
+        return Action::Render;
+    }
+    // ... regular left navigation
+}
+KeyCode::Right => {
+    if key.modifiers.contains(KeyModifiers::SHIFT) {
+        self.week_start_date += Duration::days(7);
+        return Action::Render;
+    }
+    // ... regular right navigation
+}
+```
+
+#### 7. Conditional Loading and Rendering
+
+**Update Method Integration:** (lines 939-947)
+```rust
+async fn update(&mut self, action: Action) -> Result<Option<Action>> {
+    match action {
+        Action::Render => {
+            match self.view_mode {
+                ViewMode::Day => self.load_appointments_for_date().await?,
+                ViewMode::Week => self.load_appointments_for_week().await?,
+            }
+        }
+        // ... other actions
+    }
+}
+```
+
+**Render Method Integration:** (lines 915-922)
+```rust
+fn render(&mut self, frame: &mut Frame, area: Rect) {
+    match self.view_mode {
+        ViewMode::Day => self.render_day_schedule(frame, chunks[1]),
+        ViewMode::Week => self.render_week_schedule(frame, chunks[1]),
+    }
+}
+```
+
+### Files Modified
+
+**Modified:**
+- `src/components/appointment/calendar.rs` (+244 lines)
+  - Added ViewMode enum
+  - Added view_mode and week_start_date state fields
+  - Added render_week_schedule() method
+  - Added render_week_header() method
+  - Added render_week_time_slots_grid() method
+  - Added load_appointments_for_week() method
+  - Added get_monday_of_week() helper function
+  - Modified keyboard handlers for week navigation
+  - Modified render() and update() methods for conditional logic
+  - Updated title display for week view
+
+### Key Features
+
+**Visual Layout:**
+- 7 day columns from Monday to Sunday
+- Each column header shows day name and date
+- Current day highlighted in green
+- Week range displayed in title
+
+**Appointment Display:**
+- Condensed format: Patient ID (first 3 characters)
+- Multiple appointments shown as count (e.g., "+3")
+- Status color coding preserved from day view
+- Empty cells for available time slots
+
+**Navigation:**
+- `v` key toggles between Day and Week views
+- `Shift+Left` goes to previous week
+- `Shift+Right` goes to next week
+- Regular navigation still works in Day view
+
+**Performance:**
+- Loads all 7 days of appointments in one operation
+- Efficient rendering with single pass through time slots
+- Maintains existing appointment matching logic
+- Preserves color-coding and status handling
 
 ### Phase 7: Advanced Features
 
@@ -1154,6 +1352,25 @@ appt.start_time <= slot_datetime && appt.end_time > slot_datetime
 ---
 
 ## Changelog
+
+### Version 1.2 (2026-02-12)
+
+**Phase 6 - Multi-Day View:**
+- ✅ ViewMode enum (Day, Week) for view switching
+- ✅ Week navigation with Shift+Left/Right arrows
+- ✅ 7-day columns (Monday-Sunday) display
+- ✅ Week range in title (e.g., "Week: Feb 10-16")
+- ✅ Current day highlighting in week view
+- ✅ Condensed appointment format (patient ID, count)
+- ✅ Status color coding preserved in week view
+- ✅ load_appointments_for_week() method for data loading
+- ✅ render_week_schedule() method for rendering
+- ✅ get_monday_of_week() helper function
+- ✅ Conditional rendering based on view_mode
+- ✅ `v` key toggle between Day and Week views
+- ✅ Week start date state management
+- ✅ Efficient 7-day appointment loading
+- ✅ Keyboard navigation integration
 
 ### Version 1.1 (2026-02-12)
 
