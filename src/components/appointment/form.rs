@@ -8,6 +8,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wra
 use ratatui::Frame;
 use std::collections::HashMap;
 use std::sync::Arc;
+use sublime_fuzzy::best_match;
 use uuid::Uuid;
 
 use crate::components::{Action, Component};
@@ -149,100 +150,7 @@ impl AppointmentFormComponent {
         }
     }
     
-    fn generate_mock_patients() -> Vec<Patient> {
-        use chrono::NaiveDate;
-        use crate::domain::patient::{Address, Gender};
-        
-        vec![
-            Patient {
-                id: Uuid::new_v4(),
-                ihi: Some("8003608166690503".to_string()),
-                medicare_number: Some("2123456781".to_string()),
-                medicare_irn: Some(1),
-                medicare_expiry: Some(NaiveDate::from_ymd_opt(2025, 12, 31).unwrap()),
-                title: Some("Mr".to_string()),
-                first_name: "John".to_string(),
-                middle_name: Some("David".to_string()),
-                last_name: "Smith".to_string(),
-                preferred_name: None,
-                date_of_birth: NaiveDate::from_ymd_opt(1980, 5, 15).unwrap(),
-                gender: Gender::Male,
-                address: Address::default(),
-                phone_home: Some("02 9876 5432".to_string()),
-                phone_mobile: Some("0412 345 678".to_string()),
-                email: Some("john.smith@example.com".to_string()),
-                emergency_contact: None,
-                concession_type: None,
-                concession_number: None,
-                preferred_language: "English".to_string(),
-                interpreter_required: false,
-                aboriginal_torres_strait_islander: None,
-                is_active: true,
-                is_deceased: false,
-                deceased_date: None,
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
-            },
-            Patient {
-                id: Uuid::new_v4(),
-                ihi: Some("8003608166690511".to_string()),
-                medicare_number: Some("3234567892".to_string()),
-                medicare_irn: Some(1),
-                medicare_expiry: Some(NaiveDate::from_ymd_opt(2026, 6, 30).unwrap()),
-                title: Some("Ms".to_string()),
-                first_name: "Sarah".to_string(),
-                middle_name: None,
-                last_name: "Johnson".to_string(),
-                preferred_name: Some("Sally".to_string()),
-                date_of_birth: NaiveDate::from_ymd_opt(1992, 8, 22).unwrap(),
-                gender: Gender::Female,
-                address: Address::default(),
-                phone_home: None,
-                phone_mobile: Some("0423 456 789".to_string()),
-                email: Some("sarah.j@example.com".to_string()),
-                emergency_contact: None,
-                concession_type: None,
-                concession_number: None,
-                preferred_language: "English".to_string(),
-                interpreter_required: false,
-                aboriginal_torres_strait_islander: None,
-                is_active: true,
-                is_deceased: false,
-                deceased_date: None,
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
-            },
-            Patient {
-                id: Uuid::new_v4(),
-                ihi: Some("8003608166690529".to_string()),
-                medicare_number: Some("4345678903".to_string()),
-                medicare_irn: Some(2),
-                medicare_expiry: Some(NaiveDate::from_ymd_opt(2025, 3, 31).unwrap()),
-                title: Some("Dr".to_string()),
-                first_name: "Michael".to_string(),
-                middle_name: Some("James".to_string()),
-                last_name: "Chen".to_string(),
-                preferred_name: None,
-                date_of_birth: NaiveDate::from_ymd_opt(1975, 12, 10).unwrap(),
-                gender: Gender::Male,
-                address: Address::default(),
-                phone_home: Some("03 8765 4321".to_string()),
-                phone_mobile: Some("0434 567 890".to_string()),
-                email: Some("m.chen@example.com".to_string()),
-                emergency_contact: None,
-                concession_type: None,
-                concession_number: None,
-                preferred_language: "English".to_string(),
-                interpreter_required: false,
-                aboriginal_torres_strait_islander: None,
-                is_active: true,
-                is_deceased: false,
-                deceased_date: None,
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
-            },
-        ]
-    }
+
     
     fn generate_mock_practitioners() -> Vec<Practitioner> {
         vec![
@@ -310,29 +218,41 @@ impl AppointmentFormComponent {
         if self.patient_query.is_empty() {
             self.filtered_patients = self.all_patients.clone();
         } else {
-            let query = self.patient_query.to_lowercase();
-            self.filtered_patients = self
+            let query = &self.patient_query;
+            
+            let mut scored_patients: Vec<(Patient, isize)> = self
                 .all_patients
                 .iter()
-                .filter(|p| {
-                    let full_name = format!("{} {}", p.first_name, p.last_name).to_lowercase();
-                    let preferred = p
-                        .preferred_name
-                        .as_ref()
-                        .map(|n| n.to_lowercase())
-                        .unwrap_or_default();
-                    let medicare = p
-                        .medicare_number
-                        .as_ref()
-                        .map(|m| m.to_lowercase())
-                        .unwrap_or_default();
-
-                    full_name.contains(&query)
-                        || preferred.contains(&query)
-                        || medicare.contains(&query)
+                .filter_map(|p| {
+                    let full_name = format!("{} {}", p.first_name, p.last_name);
+                    let preferred = p.preferred_name.as_deref().unwrap_or("");
+                    let medicare = p.medicare_number.as_deref().unwrap_or("");
+                    
+                    let name_match = best_match(query, &full_name);
+                    let preferred_match = best_match(query, preferred);
+                    let medicare_match = best_match(query, medicare);
+                    
+                    let best_score = [
+                        name_match.map(|m| m.score()),
+                        preferred_match.map(|m| m.score()),
+                        medicare_match.map(|m| m.score()),
+                    ]
+                    .iter()
+                    .filter_map(|&s| s)
+                    .max()
+                    .unwrap_or(0);
+                    
+                    if best_score > 0 {
+                        Some((p.clone(), best_score))
+                    } else {
+                        None
+                    }
                 })
-                .cloned()
                 .collect();
+            
+            scored_patients.sort_by(|a, b| b.1.cmp(&a.1));
+            
+            self.filtered_patients = scored_patients.into_iter().map(|(p, _)| p).collect();
         }
         
         if !self.filtered_patients.is_empty() {
@@ -439,8 +359,7 @@ impl AppointmentFormComponent {
             is_urgent: false,
         };
         
-        // Mock user ID for now
-        let user_id = Uuid::new_v4();
+        let user_id = Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789").unwrap();
         
         // Call service
         self.appointment_service
@@ -486,6 +405,16 @@ impl AppointmentFormComponent {
     
     fn handle_patient_input(&mut self, key: KeyEvent) -> Action {
         match key.code {
+            KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if c == 'u' {
+                    self.patient_query.clear();
+                    self.selected_patient_id = None;
+                    self.apply_patient_filter();
+                    Action::Render
+                } else {
+                    Action::None
+                }
+            }
             KeyCode::Char(c) => {
                 self.patient_search_active = true;
                 self.patient_query.push(c);
@@ -502,6 +431,16 @@ impl AppointmentFormComponent {
                     }
                 }
                 Action::Render
+            }
+            KeyCode::Esc => {
+                if !self.patient_query.is_empty() {
+                    self.patient_query.clear();
+                    self.selected_patient_id = None;
+                    self.apply_patient_filter();
+                    Action::Render
+                } else {
+                    Action::None
+                }
             }
             KeyCode::Down => {
                 if self.patient_search_active && !self.filtered_patients.is_empty() {
@@ -669,32 +608,48 @@ impl AppointmentFormComponent {
         }
         
         // Show search results if active
-        if self.patient_search_active && is_focused && !self.filtered_patients.is_empty() {
-            let results: Vec<String> = self
-                .filtered_patients
-                .iter()
-                .take(3)
-                .map(|p| {
-                    format!(
-                        "{}, {} ({})",
-                        p.last_name,
-                        p.preferred_name.as_ref().unwrap_or(&p.first_name),
-                        p.medicare_number.as_ref().unwrap_or(&"-".to_string())
-                    )
-                })
-                .collect();
-            
-            for (i, result) in results.iter().enumerate() {
-                let is_selected = Some(i) == self.patient_list_state.selected();
-                let style = if is_selected {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(Color::Gray)
-                };
+        if self.patient_search_active && is_focused {
+            if self.filtered_patients.is_empty() {
                 lines.push(Line::from(Span::styled(
-                    format!("  {}", result),
-                    style,
+                    "  No matching patients found",
+                    Style::default().fg(Color::Gray).add_modifier(Modifier::ITALIC),
                 )));
+            } else {
+                let max_results = 8;
+                let total_count = self.filtered_patients.len();
+                let visible_count = total_count.min(max_results);
+                
+                lines.push(Line::from(Span::styled(
+                    format!("  {} of {} matches", visible_count, total_count),
+                    Style::default().fg(Color::DarkGray),
+                )));
+                
+                let results: Vec<String> = self
+                    .filtered_patients
+                    .iter()
+                    .take(max_results)
+                    .map(|p| {
+                        format!(
+                            "{}, {} ({})",
+                            p.last_name,
+                            p.preferred_name.as_ref().unwrap_or(&p.first_name),
+                            p.medicare_number.as_ref().unwrap_or(&"-".to_string())
+                        )
+                    })
+                    .collect();
+                
+                for (i, result) in results.iter().enumerate() {
+                    let is_selected = Some(i) == self.patient_list_state.selected();
+                    let style = if is_selected {
+                        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::Gray)
+                    };
+                    lines.push(Line::from(Span::styled(
+                        format!("  {}", result),
+                        style,
+                    )));
+                }
             }
         }
         
@@ -902,17 +857,29 @@ impl AppointmentFormComponent {
             )));
         }
         
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
-            Span::raw(" Next Field  "),
-            Span::styled("[Shift+Tab]", Style::default().fg(Color::Cyan)),
-            Span::raw(" Previous  "),
-            Span::styled("[Ctrl+S]", Style::default().fg(Color::Green)),
-            Span::raw(" Submit  "),
-            Span::styled("[Esc]", Style::default().fg(Color::Red)),
-            Span::raw(" Cancel"),
-        ]));
+        if self.current_field == FormField::Patient {
+            lines.push(Line::from(vec![
+                Span::styled("[↑↓]", Style::default().fg(Color::Cyan)),
+                Span::raw(" Navigate  "),
+                Span::styled("[Esc]", Style::default().fg(Color::Cyan)),
+                Span::raw(" Clear  "),
+                Span::styled("[Ctrl+U]", Style::default().fg(Color::Cyan)),
+                Span::raw(" Clear All  "),
+                Span::styled("[Ctrl+S]", Style::default().fg(Color::Green)),
+                Span::raw(" Submit"),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
+                Span::raw(" Next  "),
+                Span::styled("[Shift+Tab]", Style::default().fg(Color::Cyan)),
+                Span::raw(" Prev  "),
+                Span::styled("[Ctrl+S]", Style::default().fg(Color::Green)),
+                Span::raw(" Submit  "),
+                Span::styled("[Esc]", Style::default().fg(Color::Red)),
+                Span::raw(" Cancel"),
+            ]));
+        }
         
         let paragraph = Paragraph::new(lines)
             .block(Block::default().borders(Borders::ALL).title(" Help "))
@@ -932,8 +899,6 @@ impl Component for AppointmentFormComponent {
             }
             Err(e) => {
                 self.error_message = Some(format!("Failed to load patients: {}", e));
-                self.all_patients = Self::generate_mock_patients();
-                self.filtered_patients = self.all_patients.clone();
             }
         }
         Ok(())
@@ -1009,14 +974,14 @@ impl Component for AppointmentFormComponent {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // Title
-                Constraint::Length(4),  // Patient
-                Constraint::Length(3),  // Practitioner
-                Constraint::Length(3),  // Date
-                Constraint::Length(3),  // Time
-                Constraint::Length(3),  // Type
-                Constraint::Length(4),  // Reason
-                Constraint::Min(1),     // Error/Help
+                Constraint::Length(3),   // Title
+                Constraint::Length(12),  // Patient (increased for 8 results)
+                Constraint::Length(3),   // Practitioner
+                Constraint::Length(3),   // Date
+                Constraint::Length(3),   // Time
+                Constraint::Length(3),   // Type
+                Constraint::Length(4),   // Reason
+                Constraint::Length(4),   // Error/Help (fixed height, compact)
             ])
             .split(area);
         

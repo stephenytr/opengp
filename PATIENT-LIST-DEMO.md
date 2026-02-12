@@ -20,10 +20,10 @@ The Patient List component displays a table of patients with search and navigati
 - `G` (Shift+g) - Jump to last patient
 - `Enter` - Select patient (placeholder)
 
-✅ **Mock Data**
-- 3 sample patients pre-loaded
-- Realistic Australian healthcare data
-- Medicare numbers, IHI, contact details
+⏳ **Patient Data**
+- Mock data has been removed
+- Proper patient generation logic to be implemented
+- Will use database or programmatic generation
 
 ## How to Run
 
@@ -47,22 +47,14 @@ Then press `1` to navigate to the Patients screen.
 | `1-4` | Switch screens |
 | `q` | Quit |
 
-## Mock Patients
+## Patient Data
 
-1. **John David Smith**
-   - DOB: 15/05/1980 (45 years old)
-   - Medicare: 2123456781-1
-   - Phone: 0412 345 678
+Mock patients have been removed from the codebase. The patient list now loads from the database via the PatientRepository.
 
-2. **Sarah Johnson** (Sally)
-   - DOB: 22/08/1992 (33 years old)
-   - Medicare: 3234567892-1
-   - Phone: 0423 456 789
-
-3. **Michael James Chen**
-   - DOB: 10/12/1975 (50 years old)
-   - Medicare: 4345678903-2
-   - Phone: 0434 567 890
+To add test patients:
+- Use the "New Patient" form (press `n`)
+- Implement database seed data
+- Use a test data generation script
 
 ## Architecture
 

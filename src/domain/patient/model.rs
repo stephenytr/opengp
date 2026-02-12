@@ -139,7 +139,7 @@ pub struct EmergencyContact {
     pub relationship: String,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Gender {
     Male,
     Female,

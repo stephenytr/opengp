@@ -6,14 +6,12 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Cell, Row, Table, TableState};
 use ratatui::Frame;
 use std::sync::Arc;
-use uuid::Uuid;
 
 use crate::components::{Action, Component};
-use crate::domain::appointment::{Appointment, AppointmentService, AppointmentType};
+use crate::domain::appointment::{Appointment, AppointmentSearchCriteria, AppointmentService};
 use crate::error::Result;
 
 pub struct AppointmentListComponent {
-    #[allow(dead_code)]
     appointment_service: Arc<AppointmentService>,
     appointments: Vec<Appointment>,
     table_state: TableState,
@@ -31,37 +29,7 @@ impl AppointmentListComponent {
         }
     }
 
-    fn generate_mock_appointments() -> Vec<Appointment> {
-        let patient_id = Uuid::new_v4();
-        let practitioner_id = Uuid::new_v4();
-        
-        vec![
-            Appointment::new(
-                patient_id,
-                practitioner_id,
-                Utc::now() + Duration::hours(2),
-                Duration::minutes(15),
-                AppointmentType::Standard,
-                None,
-            ),
-            Appointment::new(
-                Uuid::new_v4(),
-                practitioner_id,
-                Utc::now() + Duration::hours(4),
-                Duration::minutes(30),
-                AppointmentType::Long,
-                None,
-            ),
-            Appointment::new(
-                Uuid::new_v4(),
-                practitioner_id,
-                Utc::now() + Duration::days(1),
-                Duration::minutes(45),
-                AppointmentType::NewPatient,
-                None,
-            ),
-        ]
-    }
+
 
     fn next(&mut self) {
         if self.appointments.is_empty() {
@@ -101,8 +69,22 @@ impl AppointmentListComponent {
 #[async_trait]
 impl Component for AppointmentListComponent {
     async fn init(&mut self) -> Result<()> {
-        // Load mock data for now
-        self.appointments = Self::generate_mock_appointments();
+        let criteria = AppointmentSearchCriteria {
+            patient_id: None,
+            practitioner_id: None,
+            date_from: Some(Utc::now() - Duration::days(7)),
+            date_to: None,
+            status: None,
+            appointment_type: None,
+            is_urgent: None,
+            confirmed: None,
+        };
+        
+        self.appointments = self.appointment_service
+            .search_appointments(&criteria)
+            .await
+            .map_err(|e| crate::error::Error::App(format!("Failed to load appointments: {}", e)))?;
+        
         Ok(())
     }
 
