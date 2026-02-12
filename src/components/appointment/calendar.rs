@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{Datelike, Local, NaiveDate, Utc, Weekday};
+use chrono::{Datelike, Local, NaiveDate, Timelike, Utc, Weekday};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -49,6 +49,22 @@ pub struct AppointmentCalendarComponent {
     selected_appointment: Option<Uuid>,
     showing_detail_modal: bool,
     modal_patient: Option<Patient>,
+    
+    // Reschedule modal state
+    showing_reschedule_modal: bool,
+    reschedule_new_start_time: Option<chrono::DateTime<Utc>>,
+    reschedule_new_duration: i64,  // in minutes
+    reschedule_conflict_warning: Option<String>,
+    
+    // Search modal state
+    showing_search_modal: bool,
+    search_query: String,
+    search_results: Vec<Appointment>,
+    search_selected_index: usize,
+    
+    // Filter state
+    active_status_filters: HashSet<AppointmentStatus>,
+    showing_filter_menu: bool,
 }
 
 impl AppointmentCalendarComponent {
@@ -88,6 +104,16 @@ impl AppointmentCalendarComponent {
             selected_appointment: None,
             showing_detail_modal: false,
             modal_patient: None,
+            showing_reschedule_modal: false,
+            reschedule_new_start_time: None,
+            reschedule_new_duration: 15,
+            reschedule_conflict_warning: None,
+            showing_search_modal: false,
+            search_query: String::new(),
+            search_results: Vec::new(),
+            search_selected_index: 0,
+            active_status_filters: HashSet::new(),
+            showing_filter_menu: false,
         }
     }
     
@@ -201,6 +227,14 @@ impl AppointmentCalendarComponent {
         }
     }
     
+    fn toggle_status_filter(&mut self, status: AppointmentStatus) {
+        if self.active_status_filters.contains(&status) {
+            self.active_status_filters.remove(&status);
+        } else {
+            self.active_status_filters.insert(status);
+        }
+    }
+    
     fn get_month_name(&self) -> &'static str {
         match self.current_month_start.month() {
             1 => "January",
@@ -293,6 +327,8 @@ impl AppointmentCalendarComponent {
             appt.practitioner_id == practitioner_id
                 && appt.start_time <= slot_datetime
                 && appt.end_time > slot_datetime
+                && (self.active_status_filters.is_empty() 
+                    || self.active_status_filters.contains(&appt.status))
         })
     }
     
@@ -638,11 +674,17 @@ impl AppointmentCalendarComponent {
             widths.push(Constraint::Min(15));
         }
         
+        let title = if self.active_status_filters.is_empty() {
+            " Schedule ".to_string()
+        } else {
+            format!(" Schedule [Filtering: {} status(es)] ", self.active_status_filters.len())
+        };
+        
         let table = Table::new(vec![header], widths)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" Schedule ")
+                    .title(title)
                     .border_style(
                         if self.focus_area == FocusArea::DayView {
                             Style::default().fg(Color::Yellow)
@@ -739,8 +781,202 @@ impl AppointmentCalendarComponent {
             KeyCode::Char('a') | KeyCode::Char('A') => Action::AppointmentMarkArrived,
             KeyCode::Char('c') | KeyCode::Char('C') => Action::AppointmentMarkCompleted,
             KeyCode::Char('n') | KeyCode::Char('N') => Action::AppointmentMarkNoShow,
+            KeyCode::Char('r') | KeyCode::Char('R') => {
+                if let Some(appt_id) = self.selected_appointment {
+                    if let Some(appt) = self.appointments.iter().find(|a| a.id == appt_id) {
+                        self.reschedule_new_start_time = Some(appt.start_time);
+                        self.reschedule_new_duration = appt.duration_minutes();
+                        self.showing_detail_modal = false;
+                        self.showing_reschedule_modal = true;
+                        self.reschedule_conflict_warning = None;
+                        return Action::Render;
+                    }
+                }
+                Action::None
+            }
             _ => Action::None,
         }
+    }
+    
+    fn handle_reschedule_modal_key_events(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Esc => {
+                self.showing_reschedule_modal = false;
+                self.reschedule_new_start_time = None;
+                self.reschedule_conflict_warning = None;
+                self.showing_detail_modal = true;
+                Action::Render
+            }
+            KeyCode::Up => {
+                if let Some(current_time) = self.reschedule_new_start_time {
+                    self.reschedule_new_start_time = Some(current_time - chrono::Duration::minutes(15));
+                    Action::Render
+                } else {
+                    Action::None
+                }
+            }
+            KeyCode::Down => {
+                if let Some(current_time) = self.reschedule_new_start_time {
+                    self.reschedule_new_start_time = Some(current_time + chrono::Duration::minutes(15));
+                    Action::Render
+                } else {
+                    Action::None
+                }
+            }
+            KeyCode::Char('+') => {
+                self.reschedule_new_duration += 15;
+                Action::Render
+            }
+            KeyCode::Char('-') => {
+                if self.reschedule_new_duration > 15 {
+                    self.reschedule_new_duration -= 15;
+                }
+                Action::Render
+            }
+            KeyCode::Enter => {
+                Action::AppointmentReschedule
+            }
+            _ => Action::None,
+        }
+    }
+    
+    fn handle_search_key_events(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Esc => {
+                self.showing_search_modal = false;
+                self.search_query.clear();
+                self.search_results.clear();
+                self.search_selected_index = 0;
+                Action::Render
+            }
+            KeyCode::Up => {
+                if self.search_selected_index > 0 {
+                    self.search_selected_index -= 1;
+                }
+                Action::Render
+            }
+            KeyCode::Down => {
+                if !self.search_results.is_empty() && self.search_selected_index < self.search_results.len() - 1 {
+                    self.search_selected_index += 1;
+                }
+                Action::Render
+            }
+            KeyCode::Enter => {
+                if let Some(appt) = self.search_results.get(self.search_selected_index).cloned() {
+                    self.navigate_to_appointment(&appt);
+                    self.showing_search_modal = false;
+                    self.search_query.clear();
+                    self.search_results.clear();
+                    self.search_selected_index = 0;
+                }
+                Action::Render
+            }
+            KeyCode::Char(c) => {
+                self.search_query.push(c);
+                self.filter_appointments_by_query();
+                self.search_selected_index = 0;
+                Action::Render
+            }
+            KeyCode::Backspace => {
+                self.search_query.pop();
+                self.filter_appointments_by_query();
+                self.search_selected_index = 0;
+                Action::Render
+            }
+            _ => Action::None,
+        }
+    }
+    
+    fn filter_appointments_by_query(&mut self) {
+        if self.search_query.is_empty() {
+            self.search_results.clear();
+            return;
+        }
+        
+        let query_lower = self.search_query.to_lowercase();
+        
+        self.search_results = self.appointments.iter()
+            .filter(|appt| {
+                let patient_id_str = appt.patient_id.to_string().to_lowercase();
+                let type_str = format!("{:?}", appt.appointment_type).to_lowercase();
+                let status_str = format!("{:?}", appt.status).to_lowercase();
+                
+                patient_id_str.contains(&query_lower) ||
+                type_str.contains(&query_lower) ||
+                status_str.contains(&query_lower)
+            })
+            .take(50)
+            .cloned()
+            .collect();
+    }
+    
+    fn handle_filter_menu_key_events(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Esc => {
+                self.showing_filter_menu = false;
+                Action::Render
+            }
+            KeyCode::Char('0') => {
+                self.active_status_filters.clear();
+                Action::Render
+            }
+            KeyCode::Char('1') => {
+                self.toggle_status_filter(AppointmentStatus::Scheduled);
+                Action::Render
+            }
+            KeyCode::Char('2') => {
+                self.toggle_status_filter(AppointmentStatus::Confirmed);
+                Action::Render
+            }
+            KeyCode::Char('3') => {
+                self.toggle_status_filter(AppointmentStatus::Arrived);
+                Action::Render
+            }
+            KeyCode::Char('4') => {
+                self.toggle_status_filter(AppointmentStatus::InProgress);
+                Action::Render
+            }
+            KeyCode::Char('5') => {
+                self.toggle_status_filter(AppointmentStatus::Completed);
+                Action::Render
+            }
+            KeyCode::Char('6') => {
+                self.toggle_status_filter(AppointmentStatus::NoShow);
+                Action::Render
+            }
+            KeyCode::Char('7') => {
+                self.toggle_status_filter(AppointmentStatus::Cancelled);
+                Action::Render
+            }
+            KeyCode::Char('8') => {
+                self.toggle_status_filter(AppointmentStatus::Rescheduled);
+                Action::Render
+            }
+            _ => Action::None,
+        }
+    }
+    
+    fn navigate_to_appointment(&mut self, appt: &Appointment) {
+        let appt_date = appt.start_time.date_naive();
+        
+        self.current_month_start = NaiveDate::from_ymd_opt(
+            appt_date.year(),
+            appt_date.month(),
+            1
+        ).expect("valid month start");
+        
+        self.selected_month_day = appt_date.day();
+        
+        let hour = appt.start_time.hour();
+        let minute = appt.start_time.minute();
+        let slot_index = ((hour - 8) * 4 + minute / 15) as usize;
+        
+        if slot_index < 40 {
+            self.time_slot_state.select(Some(slot_index));
+        }
+        
+        self.focus_area = FocusArea::DayView;
+        self.view_mode = ViewMode::Day;
     }
     
     /// Render appointment detail modal as a centered overlay
@@ -852,7 +1088,6 @@ impl AppointmentCalendarComponent {
             }
         }
         
-        // Footer with keyboard hints
         lines.push(Line::from(""));
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
@@ -861,7 +1096,11 @@ impl AppointmentCalendarComponent {
             Span::styled("C", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
             Span::styled(": Completed  ", Style::default().fg(Color::White)),
             Span::styled("N", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(": No Show  ", Style::default().fg(Color::White)),
+            Span::styled(": No Show", Style::default().fg(Color::White)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("R", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Reschedule  ", Style::default().fg(Color::White)),
             Span::styled("Esc", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
             Span::styled(": Close", Style::default().fg(Color::White)),
         ]));
@@ -872,6 +1111,258 @@ impl AppointmentCalendarComponent {
                     .borders(Borders::ALL)
                     .title(" Appointment Details ")
                     .border_style(Style::default().fg(Color::Yellow))
+            )
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        
+        frame.render_widget(modal_content, modal_area);
+    }
+    
+    fn render_search_modal(&self, frame: &mut Frame, area: Rect) {
+        let modal_area = Rect {
+            x: area.width / 5,
+            y: area.height / 6,
+            width: area.width * 3 / 5,
+            height: area.height * 2 / 3,
+        };
+        
+        let mut lines = Vec::new();
+        
+        lines.push(Line::from(vec![
+            Span::styled("Search Appointments", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(""));
+        
+        lines.push(Line::from(vec![
+            Span::styled("Query: ", Style::default().fg(Color::Cyan)),
+            Span::styled(&self.search_query, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled("█", Style::default().fg(Color::White)),
+        ]));
+        
+        lines.push(Line::from(""));
+        
+        if self.search_query.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("Start typing to search...", Style::default().fg(Color::DarkGray)),
+            ]));
+        } else if self.search_results.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("No appointments found", Style::default().fg(Color::Red)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("Found {} result(s) (showing up to 50)", self.search_results.len()),
+                    Style::default().fg(Color::Green)
+                ),
+            ]));
+            lines.push(Line::from(""));
+            
+            for (idx, appt) in self.search_results.iter().enumerate() {
+                let is_selected = idx == self.search_selected_index;
+                let prefix = if is_selected { "→ " } else { "  " };
+                
+                let patient_id_short = &appt.patient_id.to_string()[..8];
+                let date_str = appt.start_time.format("%Y-%m-%d").to_string();
+                let time_str = appt.start_time.format("%H:%M").to_string();
+                let type_str = format!("{:?}", appt.appointment_type);
+                
+                let style = if is_selected {
+                    Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+                
+                lines.push(Line::from(vec![
+                    Span::styled(prefix, style),
+                    Span::styled(format!("Patient {}  ", patient_id_short), style),
+                    Span::styled(format!("{} {}  ", date_str, time_str), style),
+                    Span::styled(type_str, style),
+                ]));
+            }
+        }
+        
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("↑↓", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Navigate  ", Style::default().fg(Color::White)),
+            Span::styled("Enter", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Select  ", Style::default().fg(Color::White)),
+            Span::styled("Esc", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Close", Style::default().fg(Color::White)),
+        ]));
+        
+        let modal_content = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Search Appointments ")
+                    .border_style(Style::default().fg(Color::Cyan))
+            )
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        
+        frame.render_widget(modal_content, modal_area);
+    }
+    
+    fn render_reschedule_modal(&mut self, frame: &mut Frame, area: Rect) {
+        let modal_area = Rect {
+            x: area.width / 5,
+            y: area.height / 6,
+            width: area.width * 3 / 5,
+            height: area.height / 2,
+        };
+        
+        let mut lines = Vec::new();
+        
+        if let Some(appt_id) = self.selected_appointment {
+            if let Some(appt) = self.appointments.iter().find(|a| a.id == appt_id) {
+                let patient_name = if let Some(ref patient) = self.modal_patient {
+                    format!("{} {}", patient.first_name, patient.last_name)
+                } else {
+                    "Loading...".to_string()
+                };
+                
+                lines.push(Line::from(vec![
+                    Span::styled("Reschedule Appointment", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                ]));
+                lines.push(Line::from(""));
+                
+                lines.push(Line::from(vec![
+                    Span::styled("Patient: ", Style::default().fg(Color::Yellow)),
+                    Span::styled(patient_name, Style::default().fg(Color::White)),
+                ]));
+                
+                lines.push(Line::from(""));
+                
+                let current_time_str = format!("{}", appt.start_time.format("%Y-%m-%d %H:%M"));
+                lines.push(Line::from(vec![
+                    Span::styled("Current Time: ", Style::default().fg(Color::Yellow)),
+                    Span::styled(current_time_str.clone(), Style::default().fg(Color::White)),
+                ]));
+                
+                let current_duration = appt.duration_minutes();
+                lines.push(Line::from(vec![
+                    Span::styled("Current Duration: ", Style::default().fg(Color::Yellow)),
+                    Span::styled(format!("{} minutes", current_duration), Style::default().fg(Color::White)),
+                ]));
+                
+                lines.push(Line::from(""));
+                lines.push(Line::from(vec![
+                    Span::styled("New Time: ", Style::default().fg(Color::Yellow)),
+                    Span::styled(
+                        if let Some(new_time) = self.reschedule_new_start_time {
+                            format!("{}", new_time.format("%Y-%m-%d %H:%M"))
+                        } else {
+                            current_time_str
+                        },
+                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                    ),
+                ]));
+                
+                lines.push(Line::from(vec![
+                    Span::styled("New Duration: ", Style::default().fg(Color::Yellow)),
+                    Span::styled(
+                        format!("{} minutes", self.reschedule_new_duration),
+                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                    ),
+                ]));
+                
+                if let Some(ref warning) = self.reschedule_conflict_warning {
+                    lines.push(Line::from(""));
+                    lines.push(Line::from(vec![
+                        Span::styled("⚠ ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                        Span::styled(warning, Style::default().fg(Color::Red)),
+                    ]));
+                }
+            }
+        }
+        
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("↑↓", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Time  ", Style::default().fg(Color::White)),
+            Span::styled("+/-", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Duration  ", Style::default().fg(Color::White)),
+            Span::styled("Enter", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Save  ", Style::default().fg(Color::White)),
+            Span::styled("Esc", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Cancel", Style::default().fg(Color::White)),
+        ]));
+        
+        let modal_content = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Reschedule Appointment ")
+                    .border_style(Style::default().fg(Color::Yellow))
+            )
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        
+        frame.render_widget(modal_content, modal_area);
+    }
+    
+    fn render_filter_menu(&self, frame: &mut Frame, area: Rect) {
+        let modal_area = Rect {
+            x: area.width / 5,
+            y: area.height / 6,
+            width: area.width * 3 / 5,
+            height: area.height * 2 / 3,
+        };
+        
+        let mut lines = Vec::new();
+        
+        lines.push(Line::from(vec![
+            Span::styled("Filter by Status", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        ]));
+        lines.push(Line::from(""));
+        
+        // Status filter options with checkmarks
+        let statuses = vec![
+            (AppointmentStatus::Scheduled, "1", "Scheduled"),
+            (AppointmentStatus::Confirmed, "2", "Confirmed"),
+            (AppointmentStatus::Arrived, "3", "Arrived"),
+            (AppointmentStatus::InProgress, "4", "In Progress"),
+            (AppointmentStatus::Completed, "5", "Completed"),
+            (AppointmentStatus::NoShow, "6", "No Show"),
+            (AppointmentStatus::Cancelled, "7", "Cancelled"),
+            (AppointmentStatus::Rescheduled, "8", "Rescheduled"),
+        ];
+        
+        for (status, key, label) in statuses {
+            let is_active = self.active_status_filters.contains(&status);
+            let checkbox = if is_active { "☑" } else { "☐" };
+            let color = if is_active { Color::Green } else { Color::White };
+            
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {} ", checkbox), Style::default().fg(color)),
+                Span::styled(format!("[{}] ", key), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(label, Style::default().fg(color)),
+            ]));
+        }
+        
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("0", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Clear all  ", Style::default().fg(Color::White)),
+            Span::styled("Esc", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(": Close", Style::default().fg(Color::White)),
+        ]));
+        
+        let filter_count = self.active_status_filters.len();
+        let title = if filter_count == 0 {
+            " Status Filter (All) ".to_string()
+        } else {
+            format!(" Status Filter ({} active) ", filter_count)
+        };
+        
+        let modal_content = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(title)
+                    .border_style(Style::default().fg(Color::Green))
             )
             .wrap(ratatui::widgets::Wrap { trim: true });
         
@@ -936,9 +1427,33 @@ impl Component for AppointmentCalendarComponent {
     }
 
     fn handle_key_events(&mut self, key: KeyEvent) -> Action {
-        // Check if modal is open and handle modal-specific keys
+        if self.showing_filter_menu {
+            return self.handle_filter_menu_key_events(key);
+        }
+        
+        if self.showing_search_modal {
+            return self.handle_search_key_events(key);
+        }
+        
+        if self.showing_reschedule_modal {
+            return self.handle_reschedule_modal_key_events(key);
+        }
+        
         if self.showing_detail_modal {
             return self.handle_modal_key_events(key);
+        }
+        
+        if key.code == KeyCode::Char('/') {
+            self.showing_search_modal = true;
+            self.search_query.clear();
+            self.search_results.clear();
+            self.search_selected_index = 0;
+            return Action::Render;
+        }
+        
+        if key.code == KeyCode::Char('f') {
+            self.showing_filter_menu = true;
+            return Action::Render;
         }
         
         match self.focus_area {
@@ -1112,6 +1627,36 @@ impl Component for AppointmentCalendarComponent {
                     }
                 }
             }
+            Action::AppointmentReschedule => {
+                if let Some(appt_id) = self.selected_appointment {
+                    if let Some(new_start_time) = self.reschedule_new_start_time {
+                        let user_id = Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789")
+                            .expect("valid UUID");
+                        
+                        match self.appointment_service.reschedule_appointment(
+                            appt_id,
+                            new_start_time,
+                            self.reschedule_new_duration,
+                            user_id
+                        ).await {
+                            Ok(_) => {
+                                tracing::info!("Appointment {} rescheduled successfully", appt_id);
+                                self.showing_reschedule_modal = false;
+                                self.reschedule_new_start_time = None;
+                                self.reschedule_conflict_warning = None;
+                                match self.view_mode {
+                                    ViewMode::Day => self.load_appointments_for_date().await?,
+                                    ViewMode::Week => self.load_appointments_for_week().await?,
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to reschedule appointment: {}", e);
+                                self.reschedule_conflict_warning = Some(e.to_string());
+                            }
+                        }
+                    }
+                }
+            }
             _ => {}
         }
         Ok(None)
@@ -1132,9 +1677,20 @@ impl Component for AppointmentCalendarComponent {
             ViewMode::Week => self.render_week_schedule(frame, chunks[1]),
         }
         
-        // Render modal on top if showing
         if self.showing_detail_modal {
             self.render_appointment_detail_modal(frame, area);
+        }
+        
+        if self.showing_reschedule_modal {
+            self.render_reschedule_modal(frame, area);
+        }
+        
+        if self.showing_search_modal {
+            self.render_search_modal(frame, area);
+        }
+        
+        if self.showing_filter_menu {
+            self.render_filter_menu(frame, area);
         }
     }
 }
