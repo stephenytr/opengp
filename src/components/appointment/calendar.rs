@@ -1170,6 +1170,16 @@ impl AppointmentCalendarComponent {
         self.view_mode = ViewMode::Day;
     }
     
+    fn get_user_display_name(&self, user_id: Uuid) -> String {
+        if let Some(practitioner) = self.practitioners.iter().find(|p| {
+            p.user_id.is_some_and(|uid| uid == user_id)
+        }) {
+            format!("{} {}", practitioner.title, practitioner.last_name)
+        } else {
+            format!("User {}...", &user_id.to_string()[..8])
+        }
+    }
+    
     /// Render appointment detail modal as a centered overlay
     fn render_appointment_detail_modal(&mut self, frame: &mut Frame, area: Rect) {
         // Calculate centered modal area: 60% width, 70% height
@@ -1361,14 +1371,15 @@ impl AppointmentCalendarComponent {
                 Span::raw(" | "),
                 Span::styled("Action", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
                 Span::raw(" | "),
-                Span::styled("User", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled("Changed By", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
             ]));
             lines.push(Line::from("")); // Empty line for spacing
             
             for (index, entry) in self.audit_entries.iter().enumerate() {
                 let timestamp = entry.changed_at.format("%Y-%m-%d %H:%M:%S").to_string();
-                let user_id_str = format!("{}", entry.changed_by);
-                let user_short = format!("User: {}...", &user_id_str[..8]);
+                
+                // Try to find practitioner name, fall back to UUID
+                let user_display = self.get_user_display_name(entry.changed_by);
                 
                 let (action_text, action_color) = match &entry.action {
                     AuditAction::Created => ("Created".to_string(), Color::Green),
@@ -1402,7 +1413,7 @@ impl AppointmentCalendarComponent {
                     Span::raw(" | "),
                     Span::styled(action_text, action_style),
                     Span::raw(" | "),
-                    Span::styled(user_short, user_style),
+                    Span::styled(user_display, user_style),
                 ]));
             }
         }
