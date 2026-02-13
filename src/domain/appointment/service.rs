@@ -3,9 +3,10 @@ use uuid::Uuid;
 use tracing::{info, error};
 use chrono::Utc;
 
-use super::dto::{NewAppointmentData, UpdateAppointmentData, AppointmentSearchCriteria};
+use super::dto::{NewAppointmentData, UpdateAppointmentData, AppointmentSearchCriteria, CalendarAppointment};
 use super::error::ServiceError;
 use super::model::{Appointment, AppointmentStatus};
+use super::query::AppointmentCalendarQuery;
 use super::repository::AppointmentRepository;
 use crate::domain::audit::{AuditEntry, AuditService};
 
@@ -16,11 +17,16 @@ use crate::domain::audit::{AuditEntry, AuditService};
 pub struct AppointmentService {
     repository: Arc<dyn AppointmentRepository>,
     audit_service: Arc<AuditService>,
+    calendar_query: Arc<dyn AppointmentCalendarQuery>,
 }
 
 impl AppointmentService {
-    pub fn new(repository: Arc<dyn AppointmentRepository>, audit_service: Arc<AuditService>) -> Self {
-        Self { repository, audit_service }
+    pub fn new(
+        repository: Arc<dyn AppointmentRepository>,
+        audit_service: Arc<AuditService>,
+        calendar_query: Arc<dyn AppointmentCalendarQuery>,
+    ) -> Self {
+        Self { repository, audit_service, calendar_query }
     }
 
     /// Create a new appointment with overlap checking
@@ -263,6 +269,29 @@ impl AppointmentService {
         let appointments = self.repository.find_by_criteria(criteria).await?;
 
         info!("Found {} appointments", appointments.len());
+        Ok(appointments)
+    }
+
+    /// Get calendar appointments with denormalized patient names
+    ///
+    /// This method returns a read model optimized for calendar display.
+    /// It includes patient names denormalized from the patient table for efficient rendering.
+    ///
+    /// # Arguments
+    /// * `criteria` - Search criteria (all fields optional)
+    ///
+    /// # Returns
+    /// * `Ok(Vec<CalendarAppointment>)` - List of calendar appointments with patient names
+    /// * `Err(ServiceError::Repository)` - Database error
+    pub async fn get_calendar_appointments(
+        &self,
+        criteria: &AppointmentSearchCriteria,
+    ) -> Result<Vec<CalendarAppointment>, ServiceError> {
+        info!("Fetching calendar appointments with criteria: {:?}", criteria);
+
+        let appointments = self.calendar_query.find_calendar_appointments(criteria).await?;
+
+        info!("Found {} calendar appointments", appointments.len());
         Ok(appointments)
     }
 

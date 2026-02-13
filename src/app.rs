@@ -7,7 +7,7 @@ use crate::components::appointment::{AppointmentFormComponent, AppointmentCalend
 use crate::components::patient::{PatientFormComponent, PatientListComponent};
 use crate::components::{Action, Component};
 use crate::config::Config;
-use crate::domain::appointment::{AppointmentService, AppointmentRepository};
+use crate::domain::appointment::{AppointmentService, AppointmentRepository, AppointmentCalendarQuery};
 use crate::domain::audit::{AuditService, AuditRepository};
 use crate::domain::patient::{PatientService, PatientRepository};
 use crate::domain::user::{PractitionerService, PractitionerRepository, RepositoryError, Practitioner};
@@ -95,9 +95,10 @@ impl App {
             Arc::new(SqlxAuditRepository::new(db_pool.clone()));
         let audit_service = Arc::new(AuditService::new(audit_repository));
         
-        let appointment_repository: Arc<dyn AppointmentRepository> =
-            Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
-        let appointment_service = Arc::new(AppointmentService::new(appointment_repository, audit_service));
+        let appointment_repo = Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
+        let appointment_repository: Arc<dyn AppointmentRepository> = appointment_repo.clone();
+        let appointment_calendar_query: Arc<dyn AppointmentCalendarQuery> = appointment_repo;
+        let appointment_service = Arc::new(AppointmentService::new(appointment_repository, audit_service, appointment_calendar_query));
         
         // Create mock practitioner repository for now (Phase 1)
         // In Phase 2, this would use a real SqlxPractitionerRepository

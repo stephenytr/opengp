@@ -8,12 +8,12 @@ use ratatui::Frame;
 use std::sync::Arc;
 
 use crate::components::{Action, Component};
-use crate::domain::appointment::{Appointment, AppointmentSearchCriteria, AppointmentService};
+use crate::domain::appointment::{AppointmentSearchCriteria, AppointmentService, CalendarAppointment};
 use crate::error::Result;
 
 pub struct AppointmentListComponent {
     appointment_service: Arc<AppointmentService>,
-    appointments: Vec<Appointment>,
+    appointments: Vec<CalendarAppointment>,
     table_state: TableState,
 }
 
@@ -93,7 +93,7 @@ impl Component for AppointmentListComponent {
         };
         
         self.appointments = self.appointment_service
-            .search_appointments(&criteria)
+            .get_calendar_appointments(&criteria)
             .await
             .map_err(|e| crate::error::Error::App(format!("Failed to load appointments: {}", e)))?;
         
@@ -134,7 +134,7 @@ impl Component for AppointmentListComponent {
         let rows = self.appointments.iter().map(|appointment| {
             let date = appointment.start_time.format("%Y-%m-%d").to_string();
             let time = appointment.start_time.format("%H:%M").to_string();
-            let patient = format!("{:.8}", appointment.patient_id.to_string());
+            let patient = appointment.patient_name.clone();
             let appt_type = format!("{}", appointment.appointment_type);
             let status = format!("{}", appointment.status);
 

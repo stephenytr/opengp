@@ -138,6 +138,9 @@ pub struct CalendarAppointment {
     /// Patient display name (denormalized for performance)
     pub patient_name: String,
 
+    /// Practitioner unique identifier (needed for calendar filtering)
+    pub practitioner_id: Uuid,
+
     /// Appointment start time
     pub start_time: DateTime<Utc>,
 
@@ -156,4 +159,17 @@ pub struct CalendarAppointment {
 
     /// Number of 15-minute slots this appointment spans (for rendering)
     pub slot_span: u8,
+
+    /// Reason for visit (optional, for modal display)
+    pub reason: Option<String>,
+
+    /// Internal notes (optional, for modal display)
+    pub notes: Option<String>,
+}
+
+impl CalendarAppointment {
+    /// Calculate duration in minutes
+    pub fn duration_minutes(&self) -> i64 {
+        (self.end_time - self.start_time).num_minutes()
+    }
 }

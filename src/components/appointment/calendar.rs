@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{Datelike, Local, NaiveDate, Timelike, Utc, Weekday};
+use chrono::{Datelike, Local, NaiveDate, Timelike, Utc, Weekday, TimeZone};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -10,7 +10,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::components::{Action, Component};
-use crate::domain::appointment::{Appointment, AppointmentService, AppointmentStatus};
+use crate::domain::appointment::{AppointmentService, AppointmentStatus, CalendarAppointment, AppointmentSearchCriteria};
 use crate::domain::audit::{AuditEntry, AuditAction};
 use crate::domain::patient::{Patient, PatientService};
 use crate::domain::user::{Practitioner, PractitionerService};
@@ -38,7 +38,7 @@ pub struct AppointmentCalendarComponent {
     current_date: NaiveDate,
     current_month_start: NaiveDate,
     practitioners: Vec<Practitioner>,
-    appointments: Vec<Appointment>,
+    appointments: Vec<CalendarAppointment>,
     
     focus_area: FocusArea,
     time_slot_state: TableState,
@@ -60,7 +60,7 @@ pub struct AppointmentCalendarComponent {
     // Search modal state
     showing_search_modal: bool,
     search_query: String,
-    search_results: Vec<Appointment>,
+    search_results: Vec<CalendarAppointment>,
     search_selected_index: usize,
     
     // Filter state
@@ -323,7 +323,25 @@ impl AppointmentCalendarComponent {
             self.selected_month_day,
         ).expect("valid date from selected day");
         
-        match self.appointment_service.get_day_appointments(date, None).await {
+        let start_of_day = chrono::Utc.from_utc_datetime(
+            &date.and_hms_opt(0, 0, 0).expect("00:00:00 is always valid")
+        );
+        let end_of_day = chrono::Utc.from_utc_datetime(
+            &date.and_hms_opt(23, 59, 59).expect("23:59:59 is always valid")
+        );
+        
+        let criteria = AppointmentSearchCriteria {
+            patient_id: None,
+            practitioner_id: None,
+            date_from: Some(start_of_day),
+            date_to: Some(end_of_day),
+            status: None,
+            appointment_type: None,
+            is_urgent: None,
+            confirmed: None,
+        };
+        
+        match self.appointment_service.get_calendar_appointments(&criteria).await {
             Ok(appointments) => {
                 self.appointments = appointments;
                 Ok(())
@@ -343,7 +361,25 @@ impl AppointmentCalendarComponent {
         
         for i in 0..7 {
             let date = self.week_start_date + chrono::Duration::days(i);
-            match self.appointment_service.get_day_appointments(date, None).await {
+            let start_of_day = chrono::Utc.from_utc_datetime(
+                &date.and_hms_opt(0, 0, 0).expect("00:00:00 is always valid")
+            );
+            let end_of_day = chrono::Utc.from_utc_datetime(
+                &date.and_hms_opt(23, 59, 59).expect("23:59:59 is always valid")
+            );
+            
+            let criteria = AppointmentSearchCriteria {
+                patient_id: None,
+                practitioner_id: None,
+                date_from: Some(start_of_day),
+                date_to: Some(end_of_day),
+                status: None,
+                appointment_type: None,
+                is_urgent: None,
+                confirmed: None,
+            };
+            
+            match self.appointment_service.get_calendar_appointments(&criteria).await {
                 Ok(mut appointments) => {
                     all_appointments.append(&mut appointments);
                 }
@@ -361,7 +397,7 @@ impl AppointmentCalendarComponent {
         &self,
         practitioner_id: uuid::Uuid,
         slot_index: usize,
-    ) -> Option<&Appointment> {
+    ) -> Option<&CalendarAppointment> {
         let time_slots = Self::generate_time_slots();
         if slot_index >= time_slots.len() {
             return None;
@@ -401,7 +437,7 @@ impl AppointmentCalendarComponent {
         &self,
         practitioner_id: uuid::Uuid,
         slot_index: usize,
-    ) -> Vec<&Appointment> {
+    ) -> Vec<&CalendarAppointment> {
         let time_slots = Self::generate_time_slots();
         if slot_index >= time_slots.len() {
             return Vec::new();
@@ -686,7 +722,7 @@ impl AppointmentCalendarComponent {
                     .expect("valid time")
                     .and_utc();
                 
-                let appts_at_slot: Vec<&Appointment> = self.appointments.iter()
+                let appts_at_slot: Vec<&CalendarAppointment> = self.appointments.iter()
                     .filter(|a| {
                         let appt_date = a.start_time.date_naive();
                         let same_day = appt_date == *date;
@@ -853,7 +889,7 @@ impl AppointmentCalendarComponent {
                             rendered_appointments.insert((appt.id, practitioner.id, slot_index + i));
                         }
                         
-                        let patient_name = format!("Patient {}", &appt.patient_id.to_string()[..8]);
+                        let patient_name = &appt.patient_name;
                         
                         let mut appt_text = if self.multi_select_mode && self.selected_appointments.contains(&appt.id) {
                             format!("☑ {}\n{}", patient_name, appt.appointment_type)
@@ -1201,7 +1237,7 @@ impl AppointmentCalendarComponent {
         }
     }
     
-    fn navigate_to_appointment(&mut self, appt: &Appointment) {
+    fn navigate_to_appointment(&mut self, appt: &CalendarAppointment) {
         let appt_date = appt.start_time.date_naive();
         
         self.current_month_start = NaiveDate::from_ymd_opt(
@@ -1488,6 +1524,7 @@ impl AppointmentCalendarComponent {
         frame.render_widget(content, modal_area);
     }
     
+    #[allow(clippy::vec_init_then_push)]
     fn render_search_modal(&self, frame: &mut Frame, area: Rect) {
         let modal_area = Rect {
             x: area.width / 5,
