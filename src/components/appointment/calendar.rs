@@ -93,6 +93,13 @@ pub struct AppointmentCalendarComponent {
     // Multi-select mode (basic implementation)
     multi_select_mode: bool,
     selected_appointments: HashSet<Uuid>,
+    
+    // Batch operations modal state
+    showing_batch_menu: bool,
+    batch_operation_in_progress: bool,
+    batch_progress_current: usize,
+    batch_progress_total: usize,
+    batch_progress_message: String,
 }
 
 impl AppointmentCalendarComponent {
@@ -157,6 +164,11 @@ impl AppointmentCalendarComponent {
             audit_selected_index: 0,
             multi_select_mode: false,
             selected_appointments: HashSet::new(),
+            showing_batch_menu: false,
+            batch_operation_in_progress: false,
+            batch_progress_current: 0,
+            batch_progress_total: 0,
+            batch_progress_message: String::new(),
         }
     }
     
@@ -843,7 +855,14 @@ impl AppointmentCalendarComponent {
                         
                         let patient_name = format!("Patient {}", &appt.patient_id.to_string()[..8]);
                         
-                        let mut appt_text = format!("{}\n{}", patient_name, appt.appointment_type);
+                        let mut appt_text = if self.multi_select_mode && self.selected_appointments.contains(&appt.id) {
+                            format!("☑ {}\n{}", patient_name, appt.appointment_type)
+                        } else if self.multi_select_mode {
+                            format!("☐ {}\n{}", patient_name, appt.appointment_type)
+                        } else {
+                            format!("{}\n{}", patient_name, appt.appointment_type)
+                        };
+                        
                         if appt.is_urgent {
                             appt_text = format!("⚠ {}", appt_text);
                         }
@@ -862,6 +881,10 @@ impl AppointmentCalendarComponent {
                             AppointmentStatus::Rescheduled => Style::default().fg(Color::Magenta),
                             AppointmentStatus::Cancelled => Style::default().fg(Color::Gray),
                         };
+                        
+                        if self.multi_select_mode && self.selected_appointments.contains(&appt.id) {
+                            style = style.add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
+                        }
                         
                         if overlaps.len() > 1 {
                             style = style.fg(Color::Red).add_modifier(Modifier::BOLD);
@@ -885,11 +908,18 @@ impl AppointmentCalendarComponent {
             widths.push(Constraint::Min(15));
         }
         
+        let title = if self.multi_select_mode {
+            let count = self.selected_appointments.len();
+            format!(" Multi-Select: {} selected (Space: Toggle, Ctrl+A: All, Esc: Exit, m: Toggle Mode) ", count)
+        } else {
+            " (j/k/↑↓: Nav, v: Week, n: New, Enter: Details, /: Search, f: Filter, p: Practitioner, m: Multi-Select, Ctrl+Z: Undo, Tab/Esc: Month) ".to_string()
+        };
+        
         let table = Table::new(rows, widths)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" (j/k/↑↓: Nav, v: Week, n: New, Enter: Details, /: Search, f: Filter, p: Practitioner, Ctrl+Z: Undo, Tab/Esc: Month) "),
+                    .title(title),
             )
             .row_highlight_style(
                 Style::default()
@@ -961,6 +991,30 @@ impl AppointmentCalendarComponent {
                 if !self.audit_entries.is_empty() && self.audit_selected_index < self.audit_entries.len() - 1 {
                     self.audit_selected_index += 1;
                 }
+                Action::Render
+            }
+            _ => Action::None,
+        }
+    }
+    
+    fn handle_batch_menu_key_events(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Esc => {
+                self.showing_batch_menu = false;
+                Action::Render
+            }
+            KeyCode::Char('1') => {
+                self.showing_batch_menu = false;
+                Action::AppointmentBatchMarkArrived
+            }
+            KeyCode::Char('2') => {
+                self.showing_batch_menu = false;
+                Action::AppointmentBatchMarkCompleted
+            }
+            KeyCode::Char('3') => {
+                self.showing_batch_menu = false;
+                self.error_message = "Batch cancel with reason not yet implemented. Use individual cancellation.".to_string();
+                self.showing_error_modal = true;
                 Action::Render
             }
             _ => Action::None,
@@ -1944,6 +1998,113 @@ impl AppointmentCalendarComponent {
         
         frame.render_widget(modal_content, modal_area);
     }
+    
+    fn render_batch_menu(&self, frame: &mut Frame, area: Rect) {
+        let modal_area = Rect {
+            x: area.width / 4,
+            y: area.height / 3,
+            width: area.width / 2,
+            height: area.height / 3,
+        };
+        
+        let selection_count = self.selected_appointments.len();
+        
+        let lines = vec![
+            Line::from(vec![
+                Span::styled(
+                    format!("Batch Operations ({} appointments)", selection_count),
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("[1] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("Mark all as Arrived", Style::default().fg(Color::Green)),
+            ]),
+            Line::from(vec![
+                Span::styled("[2] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("Mark all as Completed", Style::default().fg(Color::Green)),
+            ]),
+            Line::from(vec![
+                Span::styled("[3] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("Cancel all (not yet implemented)", Style::default().fg(Color::DarkGray)),
+            ]),
+            Line::from(""),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("Select an option or press ", Style::default().fg(Color::White)),
+                Span::styled("Esc", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(" to cancel", Style::default().fg(Color::White)),
+            ]),
+        ];
+        
+        let modal_content = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Batch Operations ")
+                    .border_style(Style::default().fg(Color::Yellow))
+            )
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        
+        frame.render_widget(modal_content, modal_area);
+    }
+    
+    fn render_batch_progress(&self, frame: &mut Frame, area: Rect) {
+        let modal_area = Rect {
+            x: area.width / 4,
+            y: area.height / 3,
+            width: area.width / 2,
+            height: area.height / 4,
+        };
+        
+        let progress_percent = if self.batch_progress_total > 0 {
+            (self.batch_progress_current as f64 / self.batch_progress_total as f64 * 100.0) as usize
+        } else {
+            0
+        };
+        
+        let progress_bar_width = 40;
+        let filled = (progress_bar_width * progress_percent) / 100;
+        let progress_bar = format!(
+            "[{}{}] {}%",
+            "=".repeat(filled),
+            " ".repeat(progress_bar_width - filled),
+            progress_percent
+        );
+        
+        let lines = vec![
+            Line::from(vec![
+                Span::styled("Processing Batch Operation", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(&self.batch_progress_message, Style::default().fg(Color::White)),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(progress_bar, Style::default().fg(Color::Cyan)),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    format!("Processing {} of {}", self.batch_progress_current, self.batch_progress_total),
+                    Style::default().fg(Color::DarkGray)
+                ),
+            ]),
+        ];
+        
+        let modal_content = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Please Wait ")
+                    .border_style(Style::default().fg(Color::Yellow))
+            )
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        
+        frame.render_widget(modal_content, modal_area);
+    }
 }
 
 #[async_trait]
@@ -2042,6 +2203,10 @@ impl Component for AppointmentCalendarComponent {
             return self.handle_audit_modal_key_events(key);
         }
         
+        if self.showing_batch_menu {
+            return self.handle_batch_menu_key_events(key);
+        }
+        
         if key.code == KeyCode::Char('z') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return self.handle_undo();
         }
@@ -2062,6 +2227,72 @@ impl Component for AppointmentCalendarComponent {
         if key.code == KeyCode::Char('p') {
             self.showing_practitioner_menu = true;
             return Action::Render;
+        }
+        
+        // Multi-select mode toggle (m key)
+        if key.code == KeyCode::Char('m') {
+            self.multi_select_mode = !self.multi_select_mode;
+            if !self.multi_select_mode {
+                self.selected_appointments.clear();
+            }
+            tracing::info!("Multi-select mode: {}", if self.multi_select_mode { "ON" } else { "OFF" });
+            return Action::Render;
+        }
+        
+        // Handle multi-select mode keyboard shortcuts
+        if self.multi_select_mode {
+            match key.code {
+                // Esc exits multi-select mode
+                KeyCode::Esc => {
+                    self.multi_select_mode = false;
+                    self.selected_appointments.clear();
+                    tracing::info!("Exiting multi-select mode");
+                    return Action::Render;
+                }
+                // Space toggles selection on current appointment
+                KeyCode::Char(' ') if self.focus_area == FocusArea::DayView => {
+                    if let Some(selected_slot) = self.time_slot_state.selected() {
+                        let visible_practitioners: Vec<_> = self.practitioners.iter()
+                            .filter(|p| self.active_practitioner_filters.is_empty() 
+                                || self.active_practitioner_filters.contains(&p.id))
+                            .collect();
+                        
+                        if let Some(practitioner) = visible_practitioners.first() {
+                            if let Some(appt) = self.find_appointment_for_slot(practitioner.id, selected_slot) {
+                                let appt_id = appt.id;
+                                if self.selected_appointments.contains(&appt_id) {
+                                    self.selected_appointments.remove(&appt_id);
+                                    tracing::info!("Deselected appointment {}", appt_id);
+                                } else {
+                                    self.selected_appointments.insert(appt_id);
+                                    tracing::info!("Selected appointment {}", appt_id);
+                                }
+                            }
+                        }
+                    }
+                    return Action::Render;
+                }
+                // Ctrl+A selects all visible appointments
+                KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.selected_appointments.clear();
+                    for appt in &self.appointments {
+                        // Only select appointments matching current filters
+                        if (self.active_status_filters.is_empty() || self.active_status_filters.contains(&appt.status))
+                            && (self.active_practitioner_filters.is_empty() || self.active_practitioner_filters.contains(&appt.practitioner_id)) {
+                            self.selected_appointments.insert(appt.id);
+                        }
+                    }
+                    tracing::info!("Selected all {} visible appointments", self.selected_appointments.len());
+                    return Action::Render;
+                }
+                // B key opens batch operations menu
+                KeyCode::Char('b') if !self.selected_appointments.is_empty() => {
+                    self.showing_batch_menu = true;
+                    tracing::info!("Batch operations menu requested for {} appointments", self.selected_appointments.len());
+                    return Action::Render;
+                }
+                _ => {}
+            }
         }
         
         match self.focus_area {
@@ -2288,6 +2519,108 @@ impl Component for AppointmentCalendarComponent {
                     }
                 }
             }
+            Action::AppointmentBatchMarkArrived => {
+                let user_id = Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789")
+                    .expect("valid UUID");
+                
+                let appointment_ids: Vec<Uuid> = self.selected_appointments.iter().copied().collect();
+                let total = appointment_ids.len();
+                
+                self.batch_operation_in_progress = true;
+                self.batch_progress_total = total;
+                self.batch_progress_current = 0;
+                
+                let mut success_count = 0;
+                let mut error_count = 0;
+                
+                tracing::info!("Starting batch mark arrived for {} appointments", total);
+                
+                for (idx, appt_id) in appointment_ids.iter().enumerate() {
+                    self.batch_progress_current = idx + 1;
+                    self.batch_progress_message = format!("Marking appointment {} as arrived...", idx + 1);
+                    
+                    match self.appointment_service.mark_arrived(*appt_id, user_id).await {
+                        Ok(_) => {
+                            success_count += 1;
+                            tracing::info!("Batch: Appointment {} marked as arrived", appt_id);
+                        }
+                        Err(e) => {
+                            error_count += 1;
+                            tracing::error!("Batch: Failed to mark appointment {} as arrived: {}", appt_id, e);
+                        }
+                    }
+                }
+                
+                self.batch_operation_in_progress = false;
+                self.multi_select_mode = false;
+                self.selected_appointments.clear();
+                
+                tracing::info!("Batch mark arrived completed: {} succeeded, {} failed", success_count, error_count);
+                
+                if error_count > 0 {
+                    self.error_message = format!(
+                        "Batch operation completed with errors:\n{} succeeded, {} failed\n\nCheck logs for details.",
+                        success_count, error_count
+                    );
+                    self.showing_error_modal = true;
+                }
+                
+                match self.view_mode {
+                    ViewMode::Day => self.load_appointments_for_date().await?,
+                    ViewMode::Week => self.load_appointments_for_week().await?,
+                }
+            }
+            Action::AppointmentBatchMarkCompleted => {
+                let user_id = Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789")
+                    .expect("valid UUID");
+                
+                let appointment_ids: Vec<Uuid> = self.selected_appointments.iter().copied().collect();
+                let total = appointment_ids.len();
+                
+                self.batch_operation_in_progress = true;
+                self.batch_progress_total = total;
+                self.batch_progress_current = 0;
+                
+                let mut success_count = 0;
+                let mut error_count = 0;
+                
+                tracing::info!("Starting batch mark completed for {} appointments", total);
+                
+                for (idx, appt_id) in appointment_ids.iter().enumerate() {
+                    self.batch_progress_current = idx + 1;
+                    self.batch_progress_message = format!("Marking appointment {} as completed...", idx + 1);
+                    
+                    match self.appointment_service.mark_completed(*appt_id, user_id).await {
+                        Ok(_) => {
+                            success_count += 1;
+                            tracing::info!("Batch: Appointment {} marked as completed", appt_id);
+                        }
+                        Err(e) => {
+                            error_count += 1;
+                            tracing::error!("Batch: Failed to mark appointment {} as completed: {}", appt_id, e);
+                        }
+                    }
+                }
+                
+                self.batch_operation_in_progress = false;
+                self.multi_select_mode = false;
+                self.selected_appointments.clear();
+                
+                tracing::info!("Batch mark completed: {} succeeded, {} failed", success_count, error_count);
+                
+                if error_count > 0 {
+                    self.error_message = format!(
+                        "Batch operation completed with errors:\n{} succeeded, {} failed\n\nCheck logs for details.",
+                        success_count, error_count
+                    );
+                    self.showing_error_modal = true;
+                }
+                
+                match self.view_mode {
+                    ViewMode::Day => self.load_appointments_for_date().await?,
+                    ViewMode::Week => self.load_appointments_for_week().await?,
+                }
+            }
             _ => {}
         }
         Ok(None)
@@ -2338,6 +2671,14 @@ impl Component for AppointmentCalendarComponent {
         
         if self.showing_confirmation {
             self.render_confirmation_overlay(frame, area);
+        }
+        
+        if self.showing_batch_menu {
+            self.render_batch_menu(frame, area);
+        }
+        
+        if self.batch_operation_in_progress {
+            self.render_batch_progress(frame, area);
         }
     }
 }

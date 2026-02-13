@@ -33,6 +33,8 @@ pub enum Action {
     AppointmentMarkCompleted,
     AppointmentMarkNoShow,
     AppointmentReschedule,
+    AppointmentBatchMarkArrived,
+    AppointmentBatchMarkCompleted,
 }
 
 #[async_trait]
