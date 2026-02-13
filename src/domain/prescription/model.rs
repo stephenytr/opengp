@@ -38,6 +38,7 @@ pub struct Prescription {
 }
 
 impl Prescription {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         patient_id: Uuid,
         practitioner_id: Uuid,

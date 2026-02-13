@@ -1,9 +1,11 @@
-use std::sync::Arc;
-use uuid::Uuid;
-use tracing::{info, error};
 use chrono::Utc;
+use std::sync::Arc;
+use tracing::{error, info};
+use uuid::Uuid;
 
-use super::dto::{NewAppointmentData, UpdateAppointmentData, AppointmentSearchCriteria, CalendarAppointment};
+use super::dto::{
+    AppointmentSearchCriteria, CalendarAppointment, NewAppointmentData, UpdateAppointmentData,
+};
 use super::error::ServiceError;
 use super::model::{Appointment, AppointmentStatus};
 use super::query::AppointmentCalendarQuery;
@@ -26,7 +28,11 @@ impl AppointmentService {
         audit_service: Arc<AuditService>,
         calendar_query: Arc<dyn AppointmentCalendarQuery>,
     ) -> Self {
-        Self { repository, audit_service, calendar_query }
+        Self {
+            repository,
+            audit_service,
+            calendar_query,
+        }
     }
 
     /// Create a new appointment with overlap checking
@@ -287,9 +293,15 @@ impl AppointmentService {
         &self,
         criteria: &AppointmentSearchCriteria,
     ) -> Result<Vec<CalendarAppointment>, ServiceError> {
-        info!("Fetching calendar appointments with criteria: {:?}", criteria);
+        info!(
+            "Fetching calendar appointments with criteria: {:?}",
+            criteria
+        );
 
-        let appointments = self.calendar_query.find_calendar_appointments(criteria).await?;
+        let appointments = self
+            .calendar_query
+            .find_calendar_appointments(criteria)
+            .await?;
 
         info!("Found {} calendar appointments", appointments.len());
         Ok(appointments)
@@ -310,17 +322,18 @@ impl AppointmentService {
         practitioner_ids: Option<Vec<Uuid>>,
     ) -> Result<Vec<Appointment>, ServiceError> {
         use chrono::TimeZone;
-        
+
         info!("Fetching appointments for date: {}", date);
-        
+
         // Convert date to UTC datetime range (these times are always valid)
-        let start_of_day = chrono::Utc.from_utc_datetime(
-            &date.and_hms_opt(0, 0, 0).expect("00:00:00 is always valid")
-        );
+        let start_of_day = chrono::Utc
+            .from_utc_datetime(&date.and_hms_opt(0, 0, 0).expect("00:00:00 is always valid"));
         let end_of_day = chrono::Utc.from_utc_datetime(
-            &date.and_hms_opt(23, 59, 59).expect("23:59:59 is always valid")
+            &date
+                .and_hms_opt(23, 59, 59)
+                .expect("23:59:59 is always valid"),
         );
-        
+
         // Build search criteria
         let criteria = AppointmentSearchCriteria {
             patient_id: None,
@@ -332,15 +345,19 @@ impl AppointmentService {
             is_urgent: None,
             confirmed: None,
         };
-        
+
         let mut appointments = self.search_appointments(&criteria).await?;
-        
+
         // Filter by practitioner IDs if provided
         if let Some(ids) = practitioner_ids {
             appointments.retain(|a| ids.contains(&a.practitioner_id));
         }
-        
-        info!("Found {} appointments for date {}", appointments.len(), date);
+
+        info!(
+            "Found {} appointments for date {}",
+            appointments.len(),
+            date
+        );
         Ok(appointments)
     }
 
@@ -360,24 +377,31 @@ impl AppointmentService {
         appointment_id: Uuid,
         user_id: Uuid,
     ) -> Result<Appointment, ServiceError> {
-        info!("Marking appointment {} as arrived by user {}", appointment_id, user_id);
-        
-        let mut appointment = self.repository.find_by_id(appointment_id).await?
+        info!(
+            "Marking appointment {} as arrived by user {}",
+            appointment_id, user_id
+        );
+
+        let mut appointment = self
+            .repository
+            .find_by_id(appointment_id)
+            .await?
             .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
-        
+
         let old_status = appointment.status;
-        
-        appointment.can_transition_to(AppointmentStatus::Arrived)
+
+        appointment
+            .can_transition_to(AppointmentStatus::Arrived)
             .map_err(|e| {
                 tracing::warn!("Invalid transition blocked: {}", e);
                 ServiceError::InvalidTransition(e)
             })?;
-        
+
         appointment.mark_arrived(user_id);
-        
+
         let updated = self.repository.update(appointment).await?;
         info!("Appointment {} marked as arrived", appointment_id);
-        
+
         let audit_entry = AuditEntry::new_status_changed(
             "appointment",
             appointment_id,
@@ -386,7 +410,7 @@ impl AppointmentService {
             user_id,
         );
         self.audit_service.log(audit_entry).await?;
-        
+
         Ok(updated)
     }
 
@@ -406,24 +430,31 @@ impl AppointmentService {
         appointment_id: Uuid,
         user_id: Uuid,
     ) -> Result<Appointment, ServiceError> {
-        info!("Marking appointment {} as completed by user {}", appointment_id, user_id);
-        
-        let mut appointment = self.repository.find_by_id(appointment_id).await?
+        info!(
+            "Marking appointment {} as completed by user {}",
+            appointment_id, user_id
+        );
+
+        let mut appointment = self
+            .repository
+            .find_by_id(appointment_id)
+            .await?
             .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
-        
+
         let old_status = appointment.status;
-        
-        appointment.can_transition_to(AppointmentStatus::Completed)
+
+        appointment
+            .can_transition_to(AppointmentStatus::Completed)
             .map_err(|e| {
                 tracing::warn!("Invalid transition blocked: {}", e);
                 ServiceError::InvalidTransition(e)
             })?;
-        
+
         appointment.mark_completed(user_id);
-        
+
         let updated = self.repository.update(appointment).await?;
         info!("Appointment {} marked as completed", appointment_id);
-        
+
         let audit_entry = AuditEntry::new_status_changed(
             "appointment",
             appointment_id,
@@ -432,7 +463,7 @@ impl AppointmentService {
             user_id,
         );
         self.audit_service.log(audit_entry).await?;
-        
+
         Ok(updated)
     }
 
@@ -452,26 +483,33 @@ impl AppointmentService {
         appointment_id: Uuid,
         user_id: Uuid,
     ) -> Result<Appointment, ServiceError> {
-        info!("Marking appointment {} as no show by user {}", appointment_id, user_id);
-        
-        let mut appointment = self.repository.find_by_id(appointment_id).await?
+        info!(
+            "Marking appointment {} as no show by user {}",
+            appointment_id, user_id
+        );
+
+        let mut appointment = self
+            .repository
+            .find_by_id(appointment_id)
+            .await?
             .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
-        
+
         let old_status = appointment.status;
-        
-        appointment.can_transition_to(AppointmentStatus::NoShow)
+
+        appointment
+            .can_transition_to(AppointmentStatus::NoShow)
             .map_err(|e| {
                 tracing::warn!("Invalid transition blocked: {}", e);
                 ServiceError::InvalidTransition(e)
             })?;
-        
+
         appointment.status = AppointmentStatus::NoShow;
         appointment.updated_at = Utc::now();
         appointment.updated_by = Some(user_id);
-        
+
         let updated = self.repository.update(appointment).await?;
         info!("Appointment {} marked as no show", appointment_id);
-        
+
         let audit_entry = AuditEntry::new_status_changed(
             "appointment",
             appointment_id,
@@ -480,7 +518,7 @@ impl AppointmentService {
             user_id,
         );
         self.audit_service.log(audit_entry).await?;
-        
+
         Ok(updated)
     }
 
@@ -491,47 +529,53 @@ impl AppointmentService {
         new_duration_minutes: i64,
         user_id: Uuid,
     ) -> Result<Appointment, ServiceError> {
-        info!("Rescheduling appointment {} to {} with duration {} minutes", 
-            appointment_id, new_start_time, new_duration_minutes);
-        
-        let mut appointment = self.repository.find_by_id(appointment_id).await?
+        info!(
+            "Rescheduling appointment {} to {} with duration {} minutes",
+            appointment_id, new_start_time, new_duration_minutes
+        );
+
+        let mut appointment = self
+            .repository
+            .find_by_id(appointment_id)
+            .await?
             .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
-        
+
         let old_start_time = appointment.start_time;
         let new_end_time = new_start_time + chrono::Duration::minutes(new_duration_minutes);
-        
-        let overlapping = self.repository
+
+        let overlapping = self
+            .repository
             .find_overlapping(appointment.practitioner_id, new_start_time, new_end_time)
             .await?;
-        
-        let conflicts: Vec<&Appointment> = overlapping.iter()
+
+        let conflicts: Vec<&Appointment> = overlapping
+            .iter()
             .filter(|a| a.id != appointment_id)
             .collect();
-        
+
         if !conflicts.is_empty() {
-            error!("Overlapping appointment(s) found during reschedule: {} conflict(s)", conflicts.len());
+            error!(
+                "Overlapping appointment(s) found during reschedule: {} conflict(s)",
+                conflicts.len()
+            );
             return Err(ServiceError::Conflict(format!(
                 "Practitioner has {} overlapping appointment(s) during this time",
                 conflicts.len()
             )));
         }
-        
+
         appointment.start_time = new_start_time;
         appointment.end_time = new_end_time;
         appointment.updated_at = Utc::now();
         appointment.updated_by = Some(user_id);
-        
+
         let updated = self.repository.update(appointment).await?;
         info!("Appointment {} rescheduled successfully", appointment_id);
-        
-        let audit_entry = AuditEntry::new_rescheduled(
-            appointment_id,
-            old_start_time,
-            new_start_time,
-            user_id,
-        );
+
+        let audit_entry =
+            AuditEntry::new_rescheduled(appointment_id, old_start_time, new_start_time, user_id);
         self.audit_service.log(audit_entry).await?;
-        
+
         Ok(updated)
     }
 }

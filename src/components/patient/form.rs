@@ -10,6 +10,7 @@ use std::sync::Arc;
 use crate::components::{Action, Component};
 use crate::domain::patient::{Address, Gender, NewPatientData, PatientService};
 use crate::error::Result;
+use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FormField {
@@ -231,7 +232,7 @@ impl PatientFormComponent {
 
     fn adjust_scroll(&mut self) {
         const VISIBLE_FIELDS: usize = 6;
-        
+
         if self.current_field < self.scroll_offset {
             self.scroll_offset = self.current_field;
         } else if self.current_field >= self.scroll_offset + VISIBLE_FIELDS {
@@ -398,7 +399,7 @@ impl Component for PatientFormComponent {
 
         let available_height = chunks[0].height.saturating_sub(4);
         let max_visible_fields = (available_height / 3).min(8) as usize;
-        
+
         let all_fields = FormField::all();
         let visible_fields: Vec<(usize, FormField)> = all_fields
             .iter()
@@ -430,34 +431,33 @@ impl Component for PatientFormComponent {
             };
 
             let style = if is_current {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
 
             let paragraph = Paragraph::new(display_value)
                 .style(style)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title(field.label()),
-                );
+                .block(Block::default().borders(Borders::ALL).title(field.label()));
 
             frame.render_widget(paragraph, form_chunks[render_idx]);
         }
 
         let field_indicator = format!(
-            "Field {}/{}", 
-            self.current_field + 1, 
+            "Field {}/{}",
+            self.current_field + 1,
             FormField::all().len()
         );
-        
+
         let help_text = if self.is_submitting {
             format!("Submitting... | {}", field_indicator)
         } else if !self.validation_errors.is_empty() {
             format!("Fix errors above | {}", field_indicator)
         } else {
-            format!("Tab/Shift+Tab: Next/Prev, ↑↓: Fields, Enter/F10: Submit, Esc: Cancel | {}", field_indicator)
+            let help = KeybindRegistry::get_help_text(KeybindContext::PatientForm);
+            format!("{} | {}", help, field_indicator)
         };
 
         let help_style = if !self.validation_errors.is_empty() {

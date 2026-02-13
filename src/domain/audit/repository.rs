@@ -17,19 +17,30 @@ use super::model::AuditEntry;
 /// # Example
 /// ```
 /// use async_trait::async_trait;
+/// use chrono::Utc;
 /// use uuid::Uuid;
 /// use opengp::domain::audit::{AuditEntry, AuditRepository};
-/// use opengp::domain::audit::error::RepositoryError;
+/// use opengp::domain::audit::RepositoryError;
 ///
 /// struct MyAuditRepository { /* ... */ }
 ///
 /// #[async_trait]
 /// impl AuditRepository for MyAuditRepository {
 ///     async fn create(&self, entry: AuditEntry) -> Result<AuditEntry, RepositoryError> {
-///         // Implementation would insert into database
 ///         Ok(entry)
 ///     }
-///     // ... implement other methods
+///     async fn find_by_entity(&self, _entity_type: &str, _entity_id: Uuid) -> Result<Vec<AuditEntry>, RepositoryError> {
+///         Ok(vec![])
+///     }
+///     async fn find_by_user(&self, _user_id: Uuid) -> Result<Vec<AuditEntry>, RepositoryError> {
+///         Ok(vec![])
+///     }
+///     async fn find_by_time_range(&self, _start_time: chrono::DateTime<Utc>, _end_time: chrono::DateTime<Utc>) -> Result<Vec<AuditEntry>, RepositoryError> {
+///         Ok(vec![])
+///     }
+///     async fn find_by_entity_and_time_range(&self, _entity_type: &str, _entity_id: Uuid, _start_time: chrono::DateTime<Utc>, _end_time: chrono::DateTime<Utc>) -> Result<Vec<AuditEntry>, RepositoryError> {
+///         Ok(vec![])
+///     }
 /// }
 /// ```
 #[async_trait]

@@ -3,16 +3,22 @@
 //! The App struct coordinates all components, manages application state,
 //! and handles the main event loop.
 
-use crate::components::appointment::{AppointmentFormComponent, AppointmentCalendarComponent};
+use crate::components::appointment::{AppointmentCalendarComponent, AppointmentFormComponent};
 use crate::components::patient::{PatientFormComponent, PatientListComponent};
 use crate::components::{Action, Component};
 use crate::config::Config;
-use crate::domain::appointment::{AppointmentService, AppointmentRepository, AppointmentCalendarQuery};
-use crate::domain::audit::{AuditService, AuditRepository};
-use crate::domain::patient::{PatientService, PatientRepository};
-use crate::domain::user::{PractitionerService, PractitionerRepository, RepositoryError, Practitioner};
+use crate::domain::appointment::{
+    AppointmentCalendarQuery, AppointmentRepository, AppointmentService,
+};
+use crate::domain::audit::{AuditRepository, AuditService};
+use crate::domain::patient::{PatientRepository, PatientService};
+use crate::domain::user::{
+    Practitioner, PractitionerRepository, PractitionerService, RepositoryError,
+};
 use crate::error::Result;
-use crate::infrastructure::database::repositories::{SqlxAppointmentRepository, SqlxPatientRepository, SqlxAuditRepository};
+use crate::infrastructure::database::repositories::{
+    SqlxAppointmentRepository, SqlxAuditRepository, SqlxPatientRepository,
+};
 use crate::ui::event::EventHandler;
 use crate::ui::tui::Tui;
 use async_trait::async_trait;
@@ -84,22 +90,26 @@ impl App {
     /// Create a new App instance
     pub fn new(config: Config, db_pool: SqlitePool) -> Result<Self> {
         info!("Initializing application");
-        
+
         let (action_tx, action_rx) = mpsc::unbounded_channel();
-        
+
         let patient_repository: Arc<dyn PatientRepository> =
             Arc::new(SqlxPatientRepository::new(db_pool.clone()));
         let patient_service = Arc::new(PatientService::new(patient_repository));
-        
+
         let audit_repository: Arc<dyn AuditRepository> =
             Arc::new(SqlxAuditRepository::new(db_pool.clone()));
         let audit_service = Arc::new(AuditService::new(audit_repository));
-        
+
         let appointment_repo = Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
         let appointment_repository: Arc<dyn AppointmentRepository> = appointment_repo.clone();
         let appointment_calendar_query: Arc<dyn AppointmentCalendarQuery> = appointment_repo;
-        let appointment_service = Arc::new(AppointmentService::new(appointment_repository, audit_service, appointment_calendar_query));
-        
+        let appointment_service = Arc::new(AppointmentService::new(
+            appointment_repository,
+            audit_service,
+            appointment_calendar_query,
+        ));
+
         // Create mock practitioner repository for now (Phase 1)
         // In Phase 2, this would use a real SqlxPractitionerRepository
         struct MockPractitionerRepository;
@@ -150,15 +160,19 @@ impl App {
                     },
                 ])
             }
-            
-            async fn find_by_id(&self, _id: Uuid) -> std::result::Result<Option<Practitioner>, RepositoryError> {
+
+            async fn find_by_id(
+                &self,
+                _id: Uuid,
+            ) -> std::result::Result<Option<Practitioner>, RepositoryError> {
                 Ok(None)
             }
         }
 
-        let practitioner_repository: Arc<dyn PractitionerRepository> = Arc::new(MockPractitionerRepository);
+        let practitioner_repository: Arc<dyn PractitionerRepository> =
+            Arc::new(MockPractitionerRepository);
         let practitioner_service = Arc::new(PractitionerService::new(practitioner_repository));
-        
+
         Ok(Self {
             config,
             db_pool,
@@ -182,24 +196,24 @@ impl App {
     /// Run the application main event loop
     pub async fn run(&mut self) -> Result<()> {
         info!("Starting application main loop");
-        
+
         let mut tui = Tui::new()?;
         tui.enter()?;
-        
+
         let event_handler = EventHandler::new();
         self.init_components().await?;
-        
+
         loop {
             tui.draw(|f| self.render(f))?;
-            
+
             let event = event_handler.next()?;
             debug!("Received event: {:?}", event);
-            
+
             let action = self.handle_global_events(&event);
             if action != Action::None {
                 self.action_tx.send(action)?;
             }
-            
+
             let component_action = if self.showing_form {
                 if let Some(form) = self.patient_form_component.as_mut() {
                     form.handle_events(Some(event))
@@ -213,34 +227,34 @@ impl App {
                     .map(|c| c.handle_events(Some(event)))
                     .unwrap_or(Action::None)
             };
-            
+
             if component_action != Action::None {
                 self.action_tx.send(component_action)?;
             }
-            
+
             while let Ok(action) = self.action_rx.try_recv() {
                 self.update(action).await?;
             }
-            
+
             if self.should_quit {
                 break;
             }
         }
-        
+
         tui.exit()?;
         info!("Application shutdown complete");
-        
+
         Ok(())
     }
 
     /// Initialize all components
     async fn init_components(&mut self) -> Result<()> {
         info!("Initializing components");
-        
+
         let mut patient_list = PatientListComponent::new(self.patient_service.clone());
         patient_list.init().await?;
         self.patient_component = Some(Box::new(patient_list));
-        
+
         let mut appointment_calendar = AppointmentCalendarComponent::new(
             self.appointment_service.clone(),
             self.practitioner_service.clone(),
@@ -248,10 +262,10 @@ impl App {
         );
         appointment_calendar.init().await?;
         self.appointment_component = Some(Box::new(appointment_calendar));
-        
+
         Ok(())
     }
-    
+
     /// Get reference to patient service
     pub fn patient_service(&self) -> Arc<PatientService> {
         self.patient_service.clone()
@@ -260,7 +274,7 @@ impl App {
     /// Handle global key events (navigation, quit)
     fn handle_global_events(&self, event: &crate::ui::event::Event) -> Action {
         use crate::ui::event::Event;
-        
+
         match event {
             Event::Key(key) => {
                 if (key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c'))
@@ -268,11 +282,11 @@ impl App {
                 {
                     return Action::Quit;
                 }
-                
+
                 if self.showing_form {
                     return Action::None;
                 }
-                
+
                 match key.code {
                     KeyCode::Char('1') => Action::NavigateToPatients,
                     KeyCode::Char('2') => Action::NavigateToAppointments,
@@ -288,7 +302,7 @@ impl App {
     /// Update application state based on action
     async fn update(&mut self, action: Action) -> Result<()> {
         debug!("Processing action: {:?}", action);
-        
+
         match action {
             Action::Quit => {
                 info!("Quit action received");
@@ -351,7 +365,7 @@ impl App {
                 } else {
                     self.get_active_component_mut()
                 };
-                
+
                 if let Some(comp) = component {
                     if let Some(new_action) = comp.update(action).await? {
                         if new_action == Action::PatientFormSubmit {
@@ -375,22 +389,19 @@ impl App {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     /// Render the application UI
     fn render(&mut self, frame: &mut Frame) {
         let size = frame.area();
-        
+
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(0),
-            ])
+            .constraints([Constraint::Length(3), Constraint::Min(0)])
             .split(size);
-        
+
         self.render_header(frame, chunks[0]);
         self.render_content(frame, chunks[1]);
     }
@@ -399,14 +410,14 @@ impl App {
     fn render_header(&self, frame: &mut Frame, area: Rect) {
         let screens = Screen::all();
         let titles: Vec<&str> = screens.iter().map(|s| s.as_str()).collect();
-        
+
         let selected = match self.active_screen {
             Screen::Patients => 0,
             Screen::Appointments => 1,
             Screen::Clinical => 2,
             Screen::Billing => 3,
         };
-        
+
         let tabs = Tabs::new(titles)
             .block(Block::default().borders(Borders::ALL).title("OpenGP"))
             .select(selected)
@@ -416,7 +427,7 @@ impl App {
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
             );
-        
+
         frame.render_widget(tabs, area);
     }
 
@@ -445,7 +456,7 @@ impl App {
               q or Ctrl+C: Quit",
             self.active_screen.as_str()
         );
-        
+
         let paragraph = Paragraph::new(text)
             .block(
                 Block::default()
@@ -453,7 +464,7 @@ impl App {
                     .title(format!(" {} ", self.active_screen.as_str())),
             )
             .style(Style::default().fg(Color::White));
-        
+
         frame.render_widget(paragraph, area);
     }
 

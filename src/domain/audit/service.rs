@@ -1,6 +1,6 @@
 use std::sync::Arc;
+use tracing::{error, info};
 use uuid::Uuid;
-use tracing::{info, error};
 
 use super::error::ServiceError;
 use super::model::AuditEntry;
@@ -107,10 +107,7 @@ impl AuditService {
         &self,
         appointment_id: Uuid,
     ) -> Result<Vec<AuditEntry>, ServiceError> {
-        info!(
-            "Fetching audit history for appointment: {}",
-            appointment_id
-        );
+        info!("Fetching audit history for appointment: {}", appointment_id);
 
         let mut entries = self
             .repository
@@ -140,10 +137,7 @@ impl AuditService {
     /// # Returns
     /// * `Ok(Vec<AuditEntry>)` - List of audit entries by the user
     /// * `Err(ServiceError::Repository)` - Database error
-    pub async fn get_user_activity(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Vec<AuditEntry>, ServiceError> {
+    pub async fn get_user_activity(&self, user_id: Uuid) -> Result<Vec<AuditEntry>, ServiceError> {
         info!("Fetching activity for user: {}", user_id);
 
         let entries = self.repository.find_by_user(user_id).await?;
@@ -167,7 +161,10 @@ mod tests {
 
     #[async_trait]
     impl AuditRepository for MockAuditRepository {
-        async fn create(&self, entry: AuditEntry) -> Result<AuditEntry, super::super::error::RepositoryError> {
+        async fn create(
+            &self,
+            entry: AuditEntry,
+        ) -> Result<AuditEntry, super::super::error::RepositoryError> {
             Ok(entry)
         }
 
@@ -207,9 +204,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_log_audit_entry() {
-        let repo = Arc::new(MockAuditRepository {
-            entries: vec![],
-        });
+        let repo = Arc::new(MockAuditRepository { entries: vec![] });
         let service = AuditService::new(repo);
 
         let entry = AuditEntry::new_created(
@@ -231,10 +226,10 @@ mod tests {
 
         // Create entries with different timestamps
         let entry1 = AuditEntry::new_created("appointment", appointment_id, "{}", user_id);
-        
+
         // Wait a bit to ensure different timestamps
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        
+
         let entry2 = AuditEntry::new_status_changed(
             "appointment",
             appointment_id,
@@ -248,8 +243,11 @@ mod tests {
         });
         let service = AuditService::new(repo);
 
-        let history = service.get_appointment_history(appointment_id).await.unwrap();
-        
+        let history = service
+            .get_appointment_history(appointment_id)
+            .await
+            .unwrap();
+
         assert_eq!(history.len(), 2);
         // Verify newest first (DESC order)
         assert!(history[0].changed_at >= history[1].changed_at);

@@ -90,9 +90,7 @@ pub async fn create_pool(config: &DatabaseConfig) -> Result<SqlitePool, sqlx::Er
 pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     info!("Running database migrations");
 
-    sqlx::migrate!("./migrations")
-        .run(pool)
-        .await?;
+    sqlx::migrate!("./migrations").run(pool).await?;
 
     info!("Database migrations completed successfully");
 
@@ -108,9 +106,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 /// * `Ok(())` - Database is healthy
 /// * `Err(sqlx::Error)` - Database is unhealthy
 pub async fn health_check(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    sqlx::query("SELECT 1")
-        .execute(pool)
-        .await?;
+    sqlx::query("SELECT 1").execute(pool).await?;
 
     Ok(())
 }

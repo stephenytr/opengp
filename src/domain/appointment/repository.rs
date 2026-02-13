@@ -2,9 +2,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use super::dto::AppointmentSearchCriteria;
 use super::error::RepositoryError;
 use super::model::Appointment;
-use super::dto::AppointmentSearchCriteria;
 
 /// Repository trait for appointment persistence
 ///

@@ -3,7 +3,9 @@ use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
-use crate::domain::patient::{Address, EmergencyContact, Gender, Patient, PatientRepository, RepositoryError};
+use crate::domain::patient::{
+    Address, EmergencyContact, Gender, Patient, PatientRepository, RepositoryError,
+};
 
 #[derive(Debug, FromRow)]
 struct PatientRow {
@@ -40,7 +42,9 @@ struct PatientRow {
 impl PatientRow {
     fn into_patient(self) -> Result<Patient, RepositoryError> {
         Ok(Patient {
-            id: Uuid::from_slice(&self.id).map_err(|e| RepositoryError::ConstraintViolation(format!("Invalid UUID: {}", e)))?,
+            id: Uuid::from_slice(&self.id).map_err(|e| {
+                RepositoryError::ConstraintViolation(format!("Invalid UUID: {}", e))
+            })?,
             ihi: self.ihi,
             medicare_number: self.medicare_number,
             medicare_irn: self.medicare_irn.map(|i| i as u8),
@@ -68,9 +72,9 @@ impl PatientRow {
             phone_home: self.phone_home,
             phone_mobile: self.phone_mobile,
             email: self.email,
-            emergency_contact: if self.emergency_contact_name.is_some() {
+            emergency_contact: if let Some(name) = self.emergency_contact_name {
                 Some(EmergencyContact {
-                    name: self.emergency_contact_name.unwrap(),
+                    name,
                     phone: self.emergency_contact_phone.unwrap_or_default(),
                     relationship: self.emergency_contact_relationship.unwrap_or_default(),
                 })
@@ -109,7 +113,7 @@ impl SqlxPatientRepository {
 impl PatientRepository for SqlxPatientRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Patient>, RepositoryError> {
         let id_bytes = id.as_bytes().to_vec();
-        
+
         let row = sqlx::query_as::<_, PatientRow>(
             r#"
             SELECT 
@@ -123,12 +127,12 @@ impl PatientRepository for SqlxPatientRepository {
                 created_at, updated_at
             FROM patients
             WHERE id = ? AND is_active = TRUE
-            "#
+            "#,
         )
         .bind(id_bytes)
         .fetch_optional(&self.pool)
         .await?;
-        
+
         match row {
             Some(r) => Ok(Some(r.into_patient()?)),
             None => Ok(None),
@@ -149,12 +153,12 @@ impl PatientRepository for SqlxPatientRepository {
                 created_at, updated_at
             FROM patients
             WHERE medicare_number = ? AND is_active = TRUE
-            "#
+            "#,
         )
         .bind(medicare)
         .fetch_optional(&self.pool)
         .await?;
-        
+
         match row {
             Some(r) => Ok(Some(r.into_patient()?)),
             None => Ok(None),
@@ -176,14 +180,12 @@ impl PatientRepository for SqlxPatientRepository {
             FROM patients
             WHERE is_active = TRUE
             ORDER BY last_name, first_name
-            "#
+            "#,
         )
         .fetch_all(&self.pool)
         .await?;
-        
-        rows.into_iter()
-            .map(|r| r.into_patient())
-            .collect()
+
+        rows.into_iter().map(|r| r.into_patient()).collect()
     }
 
     async fn create(&self, patient: Patient) -> Result<Patient, RepositoryError> {
@@ -194,11 +196,17 @@ impl PatientRepository for SqlxPatientRepository {
         let created_at_str = patient.created_at.to_rfc3339();
         let updated_at_str = patient.updated_at.to_rfc3339();
         let medicare_irn_i64 = patient.medicare_irn.map(|i| i as i64);
-        
+
         let emergency_contact_name = patient.emergency_contact.as_ref().map(|ec| ec.name.clone());
-        let emergency_contact_phone = patient.emergency_contact.as_ref().map(|ec| ec.phone.clone());
-        let emergency_contact_relationship = patient.emergency_contact.as_ref().map(|ec| ec.relationship.clone());
-        
+        let emergency_contact_phone = patient
+            .emergency_contact
+            .as_ref()
+            .map(|ec| ec.phone.clone());
+        let emergency_contact_relationship = patient
+            .emergency_contact
+            .as_ref()
+            .map(|ec| ec.relationship.clone());
+
         let result = sqlx::query(
             r#"
             INSERT INTO patients (
@@ -243,22 +251,22 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(updated_at_str)
         .execute(&self.pool)
         .await;
-        
+
         match result {
             Ok(_) => Ok(patient),
             Err(sqlx::Error::Database(db_err)) => {
                 let err_msg = db_err.message();
                 if err_msg.contains("UNIQUE constraint") && err_msg.contains("medicare_number") {
                     Err(RepositoryError::ConstraintViolation(
-                        "Medicare number already exists in the system".to_string()
+                        "Medicare number already exists in the system".to_string(),
                     ))
                 } else if err_msg.contains("NOT NULL constraint") {
                     Err(RepositoryError::ConstraintViolation(
-                        "Required field is missing".to_string()
+                        "Required field is missing".to_string(),
                     ))
                 } else if err_msg.contains("CHECK constraint") {
                     Err(RepositoryError::ConstraintViolation(
-                        "Invalid value for field".to_string()
+                        "Invalid value for field".to_string(),
                     ))
                 } else {
                     Err(RepositoryError::Database(sqlx::Error::Database(db_err)))
