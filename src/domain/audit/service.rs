@@ -10,6 +10,27 @@ use super::repository::AuditRepository;
 ///
 /// Provides high-level methods for audit logging and history retrieval.
 /// Acts as a facade over the audit repository, providing business-logic-level operations.
+///
+/// # Example
+/// ```ignore
+/// use opengp::domain::audit::{AuditEntry, AuditService};
+/// use std::sync::Arc;
+/// use uuid::Uuid;
+///
+/// // Create service with a repository implementation
+/// let repository = Arc::new(SqlxAuditRepository::new(pool));
+/// let audit_service = AuditService::new(repository);
+///
+/// // Log an appointment creation
+/// let entry = AuditEntry::new_created(
+///     "appointment",
+///     appointment_id,
+///     r#"{"patient_id": "123", "practitioner_id": "456"}"#,
+///     user_id,
+/// );
+///
+/// let saved = audit_service.log(entry).await?;
+/// ```
 pub struct AuditService {
     repository: Arc<dyn AuditRepository>,
 }
@@ -56,6 +77,32 @@ impl AuditService {
     /// # Returns
     /// * `Ok(Vec<AuditEntry>)` - List of audit entries sorted by changed_at DESC
     /// * `Err(ServiceError::Repository)` - Database error
+    ///
+    /// # Example
+    /// ```ignore
+    /// use opengp::domain::audit::AuditService;
+    /// use uuid::Uuid;
+    ///
+    /// async fn show_appointment_history(
+    ///     audit_service: &AuditService,
+    ///     appointment_id: Uuid,
+    /// ) {
+    ///     match audit_service.get_appointment_history(appointment_id).await {
+    ///         Ok(entries) => {
+    ///             for entry in entries {
+    ///                 println!(
+    ///                     "[{}] {} by {} - {}",
+    ///                     entry.changed_at.format("%Y-%m-%d %H:%M"),
+    ///                     entry.action,
+    ///                     entry.changed_by,
+    ///                     entry.entity_type
+    ///                 );
+    ///             }
+    ///         }
+    ///         Err(e) => eprintln!("Failed to fetch history: {}", e),
+    ///     }
+    /// }
+    /// ```
     pub async fn get_appointment_history(
         &self,
         appointment_id: Uuid,

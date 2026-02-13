@@ -13,6 +13,25 @@ use super::model::AuditEntry;
 /// # Compliance Note
 /// All audit entries are immutable once created (append-only log).
 /// Never implement update or delete operations for audit entries.
+///
+/// # Example
+/// ```
+/// use async_trait::async_trait;
+/// use uuid::Uuid;
+/// use opengp::domain::audit::{AuditEntry, AuditRepository};
+/// use opengp::domain::audit::error::RepositoryError;
+///
+/// struct MyAuditRepository { /* ... */ }
+///
+/// #[async_trait]
+/// impl AuditRepository for MyAuditRepository {
+///     async fn create(&self, entry: AuditEntry) -> Result<AuditEntry, RepositoryError> {
+///         // Implementation would insert into database
+///         Ok(entry)
+///     }
+///     // ... implement other methods
+/// }
+/// ```
 #[async_trait]
 pub trait AuditRepository: Send + Sync {
     /// Create a new audit entry

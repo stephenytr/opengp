@@ -199,6 +199,26 @@ impl AuditEntry {
 }
 
 /// Types of actions that can be audited
+///
+/// This enum represents all possible actions that can be recorded in the audit log.
+/// Variants with payloads (like `StatusChanged`, `Rescheduled`, `Cancelled`) serialize
+/// their payload as JSON for storage in the database.
+///
+/// # JSON Serialization
+/// The `AuditAction` enum is serialized to JSON for storage in the `action` column
+/// of the audit entries table. This allows capturing detailed information about
+/// each action type while maintaining a consistent schema.
+///
+/// # Example
+/// ```json
+/// {
+///   "StatusChanged": { "from": "Scheduled", "to": "Confirmed" }
+/// }
+/// ```
+///
+/// # Display Format
+/// Each variant implements [`std::fmt::Display`] for human-readable logging.
+/// Use `entry.action.to_string()` to get a formatted description of the action.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AuditAction {
     /// Entity was created
