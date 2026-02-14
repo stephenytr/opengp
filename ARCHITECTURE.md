@@ -1,7 +1,7 @@
 # OpenGP Architecture Documentation
 
 **Version**: 1.0  
-**Last Updated**: 2026-02-11  
+**Last Updated**: 2026-02-14  
 **Status**: Living Document
 
 ---
@@ -2394,6 +2394,257 @@ impl Config {
   /____________\
 ```
 
+### Mock Repositories
+
+OpenGP uses **in-memory mock repository implementations** to test service-layer logic without a real database.
+
+- **Location**: `src/infrastructure/database/mocks.rs`
+- **Pattern**: `Arc<Mutex<Vec<T>>>` storage for async + thread-safe tests
+- **Purpose**: make service tests fast, deterministic, and independent of SQLx/SQLite/PostgreSQL
+
+#### Test Dependency Flow
+
+```
+Service Layer Tests
+       |
+       v
+Mock Repositories (in-memory)
+       |
+       v
+Fixture Generators (test data)
+       |
+       v
+Assertion Helpers (verification)
+```
+
+This keeps the **domain/service layer** testable via dependency injection while preserving the layer rule:
+
+```
+tests/ (outer)
+  |
+  v uses
+domain::*/service.rs
+  |
+  v depends on
+domain::*/repository.rs (traits)
+  |
+  v implemented by (in tests)
+infrastructure::database::mocks::*
+```
+
+**Example (from `src/infrastructure/database/mocks.rs`):**
+
+```rust
+#[derive(Clone)]
+pub struct MockPatientRepository {
+    storage: Arc<Mutex<Vec<Patient>>>,
+}
+
+impl MockPatientRepository {
+    /// Create a new empty mock patient repository
+    pub fn new() -> Self {
+        Self {
+            storage: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    /// Create a mock repository with initial patients (for testing)
+    pub fn with_patients(patients: Vec<Patient>) -> Self {
+        Self {
+            storage: Arc::new(Mutex::new(patients)),
+        }
+    }
+}
+
+impl Default for MockPatientRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl PatientRepository for MockPatientRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<Patient>, PatientRepositoryError> {
+        let storage = self.storage.lock().await;
+        Ok(storage.iter().find(|p| p.id == id).cloned())
+    }
+
+    async fn find_by_medicare(
+        &self,
+        medicare: &str,
+    ) -> Result<Option<Patient>, PatientRepositoryError> {
+        let storage = self.storage.lock().await;
+        Ok(storage
+            .iter()
+            .find(|p| p.medicare_number.as_deref() == Some(medicare))
+            .cloned())
+    }
+
+    async fn list_active(&self) -> Result<Vec<Patient>, PatientRepositoryError> {
+        let storage = self.storage.lock().await;
+        Ok(storage.iter().filter(|p| p.is_active).cloned().collect())
+    }
+
+    async fn create(&self, patient: Patient) -> Result<Patient, PatientRepositoryError> {
+        let mut storage = self.storage.lock().await;
+        storage.push(patient.clone());
+        Ok(patient)
+    }
+
+    async fn update(&self, patient: Patient) -> Result<Patient, PatientRepositoryError> {
+        let mut storage = self.storage.lock().await;
+        if let Some(pos) = storage.iter().position(|p| p.id == patient.id) {
+            storage[pos] = patient.clone();
+            Ok(patient)
+        } else {
+            Err(PatientRepositoryError::NotFound)
+        }
+    }
+
+    async fn deactivate(&self, id: Uuid) -> Result<(), PatientRepositoryError> {
+        let mut storage = self.storage.lock().await;
+        if let Some(patient) = storage.iter_mut().find(|p| p.id == id) {
+            patient.is_active = false;
+            Ok(())
+        } else {
+            Err(PatientRepositoryError::NotFound)
+        }
+    }
+}
+```
+
+### Fixture Generators
+
+OpenGP provides **fixture generators** that create realistic domain entities for tests, demos, and seeded environments.
+
+- **Location**: `src/infrastructure/fixtures/`
+- **Pattern**: `Config + Default` + `Generator::new(config)` + `generate() -> Vec<T>`
+- **Goal**: reduce brittle, repetitive test setup and keep test data realistic (e.g., weekday business hours for appointments)
+
+The module re-exports generator types to keep usage consistent across the codebase:
+
+```rust
+pub mod appointment_generator;
+pub mod audit_generator;
+pub mod immunisation_generator;
+pub mod patient_generator;
+pub mod prescription_generator;
+
+pub use appointment_generator::{AppointmentGenerator, AppointmentGeneratorConfig};
+pub use audit_generator::{AuditGenerator, AuditGeneratorConfig};
+pub use immunisation_generator::{ImmunisationGenerator, ImmunisationGeneratorConfig};
+pub use patient_generator::{PatientGenerator, PatientGeneratorConfig};
+pub use prescription_generator::{PrescriptionGenerator, PrescriptionGeneratorConfig};
+```
+
+**Excerpt (from `src/infrastructure/fixtures/appointment_generator.rs`):**
+
+```rust
+/// Configuration for appointment generation
+///
+/// Controls how many appointments are generated and their characteristics.
+#[derive(Debug, Clone)]
+pub struct AppointmentGeneratorConfig {
+    /// Number of appointments to generate
+    pub count: usize,
+    /// Percentage of appointments that should be in the future (0.0-1.0)
+    pub future_percentage: f32,
+    /// Percentage of appointments that should be confirmed (0.0-1.0)
+    pub confirmed_percentage: f32,
+    /// Percentage of appointments that should be urgent (0.0-1.0)
+    pub urgent_percentage: f32,
+    /// Percentage of appointments with notes (0.0-1.0)
+    pub notes_percentage: f32,
+}
+
+impl Default for AppointmentGeneratorConfig {
+    fn default() -> Self {
+        Self {
+            count: 10,
+            future_percentage: 0.70,
+            confirmed_percentage: 0.60,
+            urgent_percentage: 0.10,
+            notes_percentage: 0.40,
+        }
+    }
+}
+
+/// Generator for realistic appointment test data
+///
+/// Creates appointments with realistic time slots (9am-5pm weekdays),
+/// various types, and statuses. Supports configurable practitioner and patient IDs.
+pub struct AppointmentGenerator {
+    config: AppointmentGeneratorConfig,
+    rng: rand::rngs::ThreadRng,
+}
+
+impl AppointmentGenerator {
+    /// Create a new appointment generator with the given configuration
+    pub fn new(config: AppointmentGeneratorConfig) -> Self {
+        Self {
+            config,
+            rng: rand::thread_rng(),
+        }
+    }
+
+    /// Generate a vector of appointments
+pub fn generate(&mut self) -> Vec<Appointment> {
+    (0..self.config.count)
+        .map(|_| self.generate_appointment())
+        .collect()
+}
+```
+
+### Assertion Helpers
+
+Tests use **assertion helpers** to compare domain entities field-by-field with clear error messages.
+
+- **Location**: `tests/helpers/assertions.rs`
+- **Approach**: explicit comparisons for each important field, with targeted failure messages
+- **Benefit**: faster diagnosis than large `assert_eq!(actual, expected)` diffs (especially for nested structs and timestamps)
+
+**Excerpt (from `tests/helpers/assertions.rs`):**
+
+```rust
+/// Assert that two Patient entities are equal
+///
+/// Compares all important fields including IDs, names, dates, contact info,
+/// and status flags. Provides field-by-field error messages on failure.
+pub fn assert_patient_eq(actual: &Patient, expected: &Patient) {
+    assert_eq!(actual.id, expected.id, "Patient ID mismatch");
+    assert_eq!(actual.ihi, expected.ihi, "Patient IHI mismatch");
+    assert_eq!(
+        actual.medicare_number, expected.medicare_number,
+        "Patient Medicare number mismatch"
+    );
+    assert_eq!(
+        actual.medicare_irn, expected.medicare_irn,
+        "Patient Medicare IRN mismatch"
+    );
+    assert_eq!(
+        actual.medicare_expiry, expected.medicare_expiry,
+        "Patient Medicare expiry mismatch"
+    );
+```
+
+Timestamp comparisons are intentionally normalized to avoid flaky tests due to sub-second differences:
+
+```rust
+/// Helper function to compare DateTime values with approximate equality
+///
+/// Compares two DateTime<Utc> values to the same second, allowing for
+/// minor differences in microseconds that may occur during test execution.
+fn assert_datetime_eq(
+    actual: DateTime<chrono::Utc>,
+    expected: DateTime<chrono::Utc>,
+    message: &str,
+) {
+    let actual_secs = actual.timestamp();
+    let expected_secs = expected.timestamp();
+    assert_eq!(actual_secs, expected_secs, "{}", message);
+}
+```
+
 ### Unit Tests
 
 Test domain logic in isolation:
@@ -2805,4 +3056,3 @@ pub async fn get_appointment_history_paginated(
 - Custom action types per entity
 - Webhook notifications for critical actions
 - Integration with external audit systems
-

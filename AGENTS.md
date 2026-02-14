@@ -732,6 +732,313 @@ pub struct PatientService {
 }
 ```
 
+### Builder Pattern Usage
+
+Use a builder-style API (or a config struct + `Default`) when a constructor/DTO has **~9+ parameters** or when callers frequently set only a subset of fields.
+
+**Current pattern in codebase (config struct + `Default` + struct update):**
+
+```rust
+// src/infrastructure/fixtures/appointment_generator.rs
+let config = AppointmentGeneratorConfig {
+    count: 5,
+    ..Default::default()
+};
+
+let mut generator = AppointmentGenerator::new(config);
+let appointments = generator.generate();
+```
+
+**Motivation (large DTO literals get unwieldy quickly):**
+
+```rust
+// src/infrastructure/database/mocks.rs
+let patient_data = NewPatientData {
+    first_name: "John".to_string(),
+    last_name: "Doe".to_string(),
+    date_of_birth: NaiveDate::from_ymd_opt(1980, 1, 1).unwrap(),
+    gender: Gender::Male,
+    medicare_number: Some("1234567890".to_string()),
+    ihi: None,
+    medicare_irn: None,
+    medicare_expiry: None,
+    title: None,
+    middle_name: None,
+    preferred_name: None,
+    address: crate::domain::patient::Address {
+        line1: Some("123 Main St".to_string()),
+        line2: None,
+        suburb: Some("Sydney".to_string()),
+        state: Some("NSW".to_string()),
+        postcode: Some("2000".to_string()),
+        country: "Australia".to_string(),
+    },
+    phone_home: None,
+    phone_mobile: None,
+    email: None,
+    emergency_contact: None,
+    concession_type: None,
+    concession_number: None,
+    preferred_language: Some("English".to_string()),
+    interpreter_required: Some(false),
+    aboriginal_torres_strait_islander: None,
+};
+```
+
+**Guideline (manual builder, no new dependencies):**
+
+- Prefer a `FooBuilder` (or `FooConfig`) when call sites repeatedly set many optional fields.
+- Keep required fields explicit (builder `new(required...)`) and validate on `build()` (or in `Foo::new(...)`).
+- If you later want a derive-based builder, **ASK FIRST** before adding dependencies.
+
+### Repository Testing Patterns
+
+Prefer in-memory mocks for fast unit tests and service tests. OpenGP uses `Arc<Mutex<Vec<T>>>` (Tokio mutex) so mocks are:
+
+- `Send + Sync` friendly
+- async-compatible (`.lock().await`)
+- cheap to clone (clone the `Arc`)
+
+**Mock repository shape (storage + async trait impl):**
+
+```rust
+// src/infrastructure/database/mocks.rs
+#[derive(Clone)]
+pub struct MockPatientRepository {
+    storage: Arc<Mutex<Vec<Patient>>>,
+}
+
+impl MockPatientRepository {
+    pub fn new() -> Self {
+        Self {
+            storage: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub fn with_patients(patients: Vec<Patient>) -> Self {
+        Self {
+            storage: Arc::new(Mutex::new(patients)),
+        }
+    }
+}
+
+#[async_trait]
+impl PatientRepository for MockPatientRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<Patient>, PatientRepositoryError> {
+        let storage = self.storage.lock().await;
+        Ok(storage.iter().find(|p| p.id == id).cloned())
+    }
+
+    async fn create(&self, patient: Patient) -> Result<Patient, PatientRepositoryError> {
+        let mut storage = self.storage.lock().await;
+        storage.push(patient.clone());
+        Ok(patient)
+    }
+}
+```
+
+**Example test using the mocks:**
+
+```rust
+// src/infrastructure/database/mocks.rs
+#[tokio::test]
+async fn test_mock_patient_repository_create_and_find() {
+    let repo = MockPatientRepository::new();
+
+    let patient_data = NewPatientData {
+        first_name: "John".to_string(),
+        last_name: "Doe".to_string(),
+        date_of_birth: NaiveDate::from_ymd_opt(1980, 1, 1).unwrap(),
+        gender: Gender::Male,
+        medicare_number: Some("1234567890".to_string()),
+        ihi: None,
+        medicare_irn: None,
+        medicare_expiry: None,
+        title: None,
+        middle_name: None,
+        preferred_name: None,
+        address: crate::domain::patient::Address {
+            line1: Some("123 Main St".to_string()),
+            line2: None,
+            suburb: Some("Sydney".to_string()),
+            state: Some("NSW".to_string()),
+            postcode: Some("2000".to_string()),
+            country: "Australia".to_string(),
+        },
+        phone_home: None,
+        phone_mobile: None,
+        email: None,
+        emergency_contact: None,
+        concession_type: None,
+        concession_number: None,
+        preferred_language: Some("English".to_string()),
+        interpreter_required: Some(false),
+        aboriginal_torres_strait_islander: None,
+    };
+
+    let patient = Patient::new(patient_data).unwrap();
+    let patient_id = patient.id;
+
+    let created = repo.create(patient).await.unwrap();
+    assert_eq!(created.id, patient_id);
+
+    let found = repo.find_by_id(patient_id).await.unwrap();
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().id, patient_id);
+}
+```
+
+### Widget Reusability Guidelines
+
+Extract widgets when either:
+
+- the same behavior/state is needed in 2+ places, or
+- the code mixes rendering + interaction state in a way that obscures the component logic.
+
+Prefer **small reusable state helpers** over large "god widgets". OpenGP currently ships a few utilities designed for composition.
+
+**List selection state (`ListSelector<T>`):**
+
+```rust
+// src/ui/widgets/list_selector.rs
+let mut selector = ListSelector::new(vec!["apple", "banana", "cherry"]);
+assert_eq!(selector.selected(), Some(&"apple"));
+
+selector.next();
+selector.previous();
+assert_eq!(selector.selected(), Some(&"cherry"));
+```
+
+**Fuzzy filtering state (`SearchFilter<T>`):**
+
+```rust
+// src/ui/widgets/search_filter.rs
+let items = vec!["apple", "banana", "apricot"];
+let filter = SearchFilter::new(items.clone(), |s: &&str| s.to_string());
+
+filter.set_query("ap");
+let matched: Vec<_> = filter.filtered().collect();
+
+assert_eq!(matched.len(), 2);
+assert_eq!(matched[0], "apple");
+```
+
+**Modal state coordination (`ModalState` + `ModalHandler`):**
+
+```rust
+// src/ui/widgets/modal_handler.rs
+struct TestComponent {
+    modal_state: ModalState,
+}
+
+impl ModalHandler for TestComponent {
+    fn get_modal_state(&self) -> &ModalState {
+        &self.modal_state
+    }
+
+    fn get_modal_state_mut(&mut self) -> &mut ModalState {
+        &mut self.modal_state
+    }
+}
+
+let mut component = TestComponent {
+    modal_state: ModalState::none(),
+};
+
+component.show_modal(ModalType::Help);
+assert!(component.is_modal_active());
+assert!(component.is_showing_help());
+component.hide_modal();
+assert!(!component.is_modal_active());
+```
+
+**Composition tips:**
+
+- Keep widget structs focused on state + small helpers; keep actual drawing in component renderers.
+- Pass widget state (`TableState`, filter query, modal type) into renderer functions rather than re-deriving state every frame.
+- Prefer generic widgets (`ListSelector<T>`, `SearchFilter<T>`) that accept extractors/adapters.
+
+### State Management Best Practices
+
+For complex components, prefer **nested state structs** to keep responsibilities isolated and reduce field sprawl.
+
+The appointment calendar is split into grouped state buckets:
+
+```rust
+// src/components/appointment/calendar/component.rs
+pub struct AppointmentCalendarComponent {
+    appointment_service: Arc<AppointmentService>,
+    practitioner_service: Arc<PractitionerService>,
+    patient_service: Arc<PatientService>,
+
+    calendar_state: CalendarState,
+    filter_state: FilterState,
+    history_state: HistoryState,
+
+    modal_state: ModalState,
+    detail_data: DetailModalData,
+    reschedule_data: RescheduleModalData,
+    search_data: SearchModalData,
+    confirmation_data: ConfirmationModalData,
+    audit_data: AuditModalData,
+    batch_data: BatchModalData,
+    error_data: ErrorModalData,
+}
+```
+
+Separate state by intent (filters vs history vs navigation):
+
+```rust
+// src/components/appointment/calendar/state.rs
+#[derive(Debug, Clone)]
+pub struct FilterState {
+    pub active_status_filters: HashSet<AppointmentStatus>,
+    pub showing_filter_menu: bool,
+    pub active_practitioner_filters: HashSet<Uuid>,
+    pub showing_practitioner_menu: bool,
+}
+
+impl FilterState {
+    pub fn new() -> Self {
+        Self {
+            active_status_filters: HashSet::new(),
+            showing_filter_menu: false,
+            active_practitioner_filters: HashSet::new(),
+            showing_practitioner_menu: false,
+        }
+    }
+
+    pub fn toggle_status_filter(&mut self, status: AppointmentStatus) {
+        if self.active_status_filters.contains(&status) {
+            self.active_status_filters.remove(&status);
+        } else {
+            self.active_status_filters.insert(status);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HistoryState {
+    pub recent_status_changes: Vec<(Uuid, AppointmentStatus)>,
+    pub undo_timestamp: Option<DateTime<Utc>>,
+    pub multi_select_mode: bool,
+    pub selected_appointments: HashSet<Uuid>,
+}
+
+impl HistoryState {
+    pub fn new() -> Self {
+        Self {
+            recent_status_changes: Vec::new(),
+            undo_timestamp: None,
+            multi_select_mode: false,
+            selected_appointments: HashSet::new(),
+        }
+    }
+}
+```
+
+**Modal state:** prefer a single modal discriminant (`ModalState` / `ModalType`) over scattered booleans. Keep modal-specific payloads in dedicated structs (e.g., `SearchModalData`, `ErrorModalData`) and keep them alongside the modal selector.
+
 ---
 
 ## References
