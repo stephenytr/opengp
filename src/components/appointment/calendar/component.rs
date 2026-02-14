@@ -2703,13 +2703,22 @@ impl AppointmentCalendarComponent {
             return None;
         };
 
-        let column_offset = grid_col + column_padding - column_start_offset;
-        let practitioner_index = (column_offset / column_width) as usize;
+        // Calculate which column we're in (no padding involved)
+        let practitioner_index = if grid_col >= column_start_offset {
+            ((grid_col - column_start_offset) / column_width) as usize
+        } else {
+            return None;  // Click is before first column
+        };
+
+        // Calculate the actual bounds of that column
         let column_start = column_start_offset + (practitioner_index as u16 * column_width);
         let column_end = column_start + column_width - 1;
+
+        // Apply padding for easier clicking
         let hit_start = column_start.saturating_sub(column_padding);
         let hit_end = column_end.saturating_add(column_padding);
 
+        // Check if click is within padded bounds
         if grid_col < hit_start || grid_col > hit_end {
             return None;
         }
