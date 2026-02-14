@@ -2668,7 +2668,7 @@ impl AppointmentCalendarComponent {
         let column_padding = 1u16;
         let row_padding = 1u16;
         let column_width = 15u16;
-        let column_start_offset = 8u16;
+        let column_start_offset = 9u16;  // 1 (left border) + 8 (time column width)
 
         if col.saturating_add(column_padding) < 30 {
             return None;
