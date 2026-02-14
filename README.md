@@ -43,7 +43,7 @@ OpenGP is designed to comply with:
 ### Building
 
 ```bash
-git clone https://github.com/yourusername/opengp.git
+git clone https://gitea.snares-kitchen.ts.net/stephenp/opengp.git
 cd opengp
 cargo build --release
 ```
@@ -56,11 +56,21 @@ cargo run --release
 
 ## Documentation
 
-See [REQUIREMENTS.md](REQUIREMENTS.md) for detailed requirements and architecture documentation.
+📚 **[View Full Documentation Wiki](https://gitea.snares-kitchen.ts.net/stephenp/opengp/wiki)**
+
+The wiki contains comprehensive guides for:
+- [Getting Started](https://gitea.snares-kitchen.ts.net/stephenp/opengp/wiki/Getting-Started) - Installation & Setup
+- [Quick Start](https://gitea.snares-kitchen.ts.net/stephenp/opengp/wiki/Quick-Start) - Usage Tutorial
+- [Keyboard Shortcuts](https://gitea.snares-kitchen.ts.net/stephenp/opengp/wiki/Keyboard-Shortcuts) - Complete Reference
+- [Architecture](https://gitea.snares-kitchen.ts.net/stephenp/opengp/wiki/Architecture) - Technical Design
+- [Development Guide](https://gitea.snares-kitchen.ts.net/stephenp/opengp/wiki/Development-Guide) - Contributing
+- [Compliance Guide](https://gitea.snares-kitchen.ts.net/stephenp/opengp/wiki/Compliance-Guide) - Australian Healthcare
+
+For detailed specifications, see [REQUIREMENTS.md](REQUIREMENTS.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
+Contributions are welcome! Please read the [Development Guide](https://gitea.snares-kitchen.ts.net/stephenp/opengp/wiki/Development-Guide) before submitting PRs.
 
 ## License
 
