@@ -1,6 +1,6 @@
 use std::sync::Arc;
+use tracing::{error, info};
 use uuid::Uuid;
-use tracing::{info, error};
 
 use super::model::Practitioner;
 use super::repository::PractitionerRepository;
@@ -9,7 +9,7 @@ use super::repository::PractitionerRepository;
 pub enum ServiceError {
     #[error("Repository error: {0}")]
     Repository(String),
-    
+
     #[error("Practitioner not found: {0}")]
     NotFound(Uuid),
 }
@@ -23,7 +23,7 @@ impl PractitionerService {
     pub fn new(repository: Arc<dyn PractitionerRepository>) -> Self {
         Self { repository }
     }
-    
+
     /// Get all active practitioners
     ///
     /// # Returns
@@ -31,7 +31,7 @@ impl PractitionerService {
     /// * `Err(ServiceError)` - Database error
     pub async fn get_active_practitioners(&self) -> Result<Vec<Practitioner>, ServiceError> {
         info!("Fetching active practitioners");
-        
+
         match self.repository.list_active().await {
             Ok(practitioners) => {
                 info!("Found {} active practitioners", practitioners.len());

@@ -140,7 +140,9 @@ impl CalendarAppointmentRow {
             practitioner_id: Uuid::from_slice(&self.practitioner_id).map_err(|e| {
                 RepositoryError::ConstraintViolation(format!("Invalid practitioner UUID: {}", e))
             })?,
-            patient_name: self.patient_name.unwrap_or_else(|| "Unknown Patient".to_string()),
+            patient_name: self
+                .patient_name
+                .unwrap_or_else(|| "Unknown Patient".to_string()),
             start_time,
             end_time,
             appointment_type: match self.appointment_type.as_str() {

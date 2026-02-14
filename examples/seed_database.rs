@@ -1,7 +1,7 @@
 use opengp::config::Config;
 use opengp::domain::patient::PatientRepository;
-use opengp::infrastructure::database::{create_pool, run_migrations};
 use opengp::infrastructure::database::repositories::SqlxPatientRepository;
+use opengp::infrastructure::database::{create_pool, run_migrations};
 use opengp::infrastructure::fixtures::{PatientGenerator, PatientGeneratorConfig};
 use std::sync::Arc;
 

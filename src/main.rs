@@ -1,6 +1,6 @@
 use color_eyre::Result;
-use opengp::{App, Config};
 use opengp::infrastructure::database::{create_pool, run_migrations};
+use opengp::{App, Config};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -31,7 +31,7 @@ fn init_logging(level: &str) {
     let log_level = level.parse().unwrap_or(tracing::Level::INFO);
 
     std::fs::create_dir_all("logs").ok();
-    
+
     let log_file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -45,12 +45,12 @@ fn init_logging(level: &str) {
                 .with_target(true)
                 .with_thread_ids(false)
                 .with_line_number(true)
-                .with_ansi(false)
+                .with_ansi(false),
         )
         .with(
             tracing_subscriber::filter::Targets::new()
                 .with_target("opengp", log_level)
-                .with_default(tracing::Level::WARN)
+                .with_default(tracing::Level::WARN),
         )
         .init();
 }

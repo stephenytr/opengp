@@ -1,10 +1,13 @@
 use chrono::{Duration, NaiveDate, Utc};
 use opengp::domain::appointment::{
-    Appointment, AppointmentRepository, AppointmentService, AppointmentStatus, AppointmentType,
+    Appointment, AppointmentCalendarQuery, AppointmentRepository, AppointmentService,
+    AppointmentStatus, AppointmentType,
 };
 use opengp::domain::audit::{AuditRepository, AuditService};
 use opengp::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
-use opengp::infrastructure::database::repositories::{SqlxAppointmentRepository, SqlxPatientRepository, SqlxAuditRepository};
+use opengp::infrastructure::database::repositories::{
+    SqlxAppointmentRepository, SqlxAuditRepository, SqlxPatientRepository,
+};
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -13,24 +16,25 @@ async fn setup_test_database() -> SqlitePool {
     let pool = SqlitePool::connect(":memory:")
         .await
         .expect("Failed to create in-memory database");
-    
+
     sqlx::migrate!("./migrations")
         .run(&pool)
         .await
         .expect("Failed to run migrations");
-    
+
     pool
 }
 
 fn create_mock_audit_service(pool: &SqlitePool) -> Arc<AuditService> {
-    let audit_repository: Arc<dyn AuditRepository> = Arc::new(SqlxAuditRepository::new(pool.clone()));
+    let audit_repository: Arc<dyn AuditRepository> =
+        Arc::new(SqlxAuditRepository::new(pool.clone()));
     Arc::new(AuditService::new(audit_repository))
 }
 
 async fn create_test_patient(pool: &SqlitePool) -> Uuid {
     let repository: Arc<dyn PatientRepository> = Arc::new(SqlxPatientRepository::new(pool.clone()));
     let service = PatientService::new(repository);
-    
+
     let data = NewPatientData {
         ihi: None,
         medicare_number: Some(format!("{:010}", Uuid::new_v4().as_u128() % 10000000000)),
@@ -54,15 +58,19 @@ async fn create_test_patient(pool: &SqlitePool) -> Uuid {
         interpreter_required: None,
         aboriginal_torres_strait_islander: None,
     };
-    
-    service.register_patient(data).await.expect("Failed to create patient").id
+
+    service
+        .register_patient(data)
+        .await
+        .expect("Failed to create patient")
+        .id
 }
 
 async fn create_test_practitioner(pool: &SqlitePool) -> Uuid {
     let id = Uuid::new_v4();
     let username = format!("dr_{}", id);
     let now = Utc::now();
-    
+
     sqlx::query!(
         "INSERT INTO users (id, username, password_hash, role, is_active, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -77,7 +85,7 @@ async fn create_test_practitioner(pool: &SqlitePool) -> Uuid {
     .execute(pool)
     .await
     .expect("Failed to create practitioner");
-    
+
     id
 }
 
@@ -111,10 +119,11 @@ fn create_test_appointment(
 #[tokio::test]
 async fn test_mark_arrived_updates_status() {
     let pool = setup_test_database().await;
-    let repository: Arc<dyn AppointmentRepository> =
-        Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repo = Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repository: Arc<dyn AppointmentRepository> = repo.clone();
+    let calendar_query: Arc<dyn AppointmentCalendarQuery> = repo.clone();
     let audit_service = create_mock_audit_service(&pool);
-    let service = AppointmentService::new(repository.clone(), audit_service);
+    let service = AppointmentService::new(repository.clone(), audit_service, calendar_query);
 
     let patient_id = create_test_patient(&pool).await;
     let practitioner_id = create_test_practitioner(&pool).await;
@@ -129,7 +138,10 @@ async fn test_mark_arrived_updates_status() {
     );
     let appointment_id = appointment.id;
 
-    let created = repository.create(appointment).await.expect("Failed to create appointment");
+    let created = repository
+        .create(appointment)
+        .await
+        .expect("Failed to create appointment");
     assert_eq!(created.status, AppointmentStatus::Confirmed);
 
     let updated = service
@@ -145,10 +157,11 @@ async fn test_mark_arrived_updates_status() {
 #[tokio::test]
 async fn test_mark_completed_updates_status() {
     let pool = setup_test_database().await;
-    let repository: Arc<dyn AppointmentRepository> =
-        Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repo = Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repository: Arc<dyn AppointmentRepository> = repo.clone();
+    let calendar_query: Arc<dyn AppointmentCalendarQuery> = repo.clone();
     let audit_service = create_mock_audit_service(&pool);
-    let service = AppointmentService::new(repository.clone(), audit_service);
+    let service = AppointmentService::new(repository.clone(), audit_service, calendar_query);
 
     let patient_id = create_test_patient(&pool).await;
     let practitioner_id = create_test_practitioner(&pool).await;
@@ -163,7 +176,10 @@ async fn test_mark_completed_updates_status() {
     );
     let appointment_id = appointment.id;
 
-    let created = repository.create(appointment).await.expect("Failed to create appointment");
+    let created = repository
+        .create(appointment)
+        .await
+        .expect("Failed to create appointment");
     assert_eq!(created.status, AppointmentStatus::InProgress);
 
     let updated = service
@@ -179,10 +195,11 @@ async fn test_mark_completed_updates_status() {
 #[tokio::test]
 async fn test_mark_no_show_updates_status() {
     let pool = setup_test_database().await;
-    let repository: Arc<dyn AppointmentRepository> =
-        Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repo = Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repository: Arc<dyn AppointmentRepository> = repo.clone();
+    let calendar_query: Arc<dyn AppointmentCalendarQuery> = repo.clone();
     let audit_service = create_mock_audit_service(&pool);
-    let service = AppointmentService::new(repository.clone(), audit_service);
+    let service = AppointmentService::new(repository.clone(), audit_service, calendar_query);
 
     let patient_id = create_test_patient(&pool).await;
     let practitioner_id = create_test_practitioner(&pool).await;
@@ -197,7 +214,10 @@ async fn test_mark_no_show_updates_status() {
     );
     let appointment_id = appointment.id;
 
-    let created = repository.create(appointment).await.expect("Failed to create appointment");
+    let created = repository
+        .create(appointment)
+        .await
+        .expect("Failed to create appointment");
     assert_eq!(created.status, AppointmentStatus::Arrived);
 
     let updated = service
@@ -213,10 +233,11 @@ async fn test_mark_no_show_updates_status() {
 #[tokio::test]
 async fn test_mark_arrived_not_found_returns_error() {
     let pool = setup_test_database().await;
-    let repository: Arc<dyn AppointmentRepository> =
-        Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repo = Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repository: Arc<dyn AppointmentRepository> = repo.clone();
+    let calendar_query: Arc<dyn AppointmentCalendarQuery> = repo.clone();
     let audit_service = create_mock_audit_service(&pool);
-    let service = AppointmentService::new(repository, audit_service);
+    let service = AppointmentService::new(repository, audit_service, calendar_query);
 
     let invalid_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
@@ -229,10 +250,11 @@ async fn test_mark_arrived_not_found_returns_error() {
 #[tokio::test]
 async fn test_mark_completed_persists_to_database() {
     let pool = setup_test_database().await;
-    let repository: Arc<dyn AppointmentRepository> =
-        Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repo = Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repository: Arc<dyn AppointmentRepository> = repo.clone();
+    let calendar_query: Arc<dyn AppointmentCalendarQuery> = repo.clone();
     let audit_service = create_mock_audit_service(&pool);
-    let service = AppointmentService::new(repository.clone(), audit_service);
+    let service = AppointmentService::new(repository.clone(), audit_service, calendar_query);
 
     let patient_id = create_test_patient(&pool).await;
     let practitioner_id = create_test_practitioner(&pool).await;
@@ -247,7 +269,10 @@ async fn test_mark_completed_persists_to_database() {
     );
     let appointment_id = appointment.id;
 
-    repository.create(appointment).await.expect("Failed to create appointment");
+    repository
+        .create(appointment)
+        .await
+        .expect("Failed to create appointment");
 
     service
         .mark_completed(appointment_id, user_id)
@@ -267,10 +292,11 @@ async fn test_mark_completed_persists_to_database() {
 #[tokio::test]
 async fn test_status_update_audit_trail() {
     let pool = setup_test_database().await;
-    let repository: Arc<dyn AppointmentRepository> =
-        Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repo = Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repository: Arc<dyn AppointmentRepository> = repo.clone();
+    let calendar_query: Arc<dyn AppointmentCalendarQuery> = repo.clone();
     let audit_service = create_mock_audit_service(&pool);
-    let service = AppointmentService::new(repository.clone(), audit_service);
+    let service = AppointmentService::new(repository.clone(), audit_service, calendar_query);
 
     let patient_id = create_test_patient(&pool).await;
     let practitioner_id = create_test_practitioner(&pool).await;
@@ -286,7 +312,10 @@ async fn test_status_update_audit_trail() {
     );
     let appointment_id = appointment.id;
 
-    repository.create(appointment).await.expect("Failed to create appointment");
+    repository
+        .create(appointment)
+        .await
+        .expect("Failed to create appointment");
 
     let arrived = service
         .mark_arrived(appointment_id, user_a)
@@ -297,11 +326,18 @@ async fn test_status_update_audit_trail() {
 
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-    let mut in_progress_appt = repository.find_by_id(appointment_id).await.unwrap().unwrap();
+    let mut in_progress_appt = repository
+        .find_by_id(appointment_id)
+        .await
+        .unwrap()
+        .unwrap();
     in_progress_appt.status = AppointmentStatus::InProgress;
     in_progress_appt.updated_by = Some(user_a);
     in_progress_appt.updated_at = Utc::now();
-    repository.update(in_progress_appt).await.expect("Failed to update to InProgress");
+    repository
+        .update(in_progress_appt)
+        .await
+        .expect("Failed to update to InProgress");
 
     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
@@ -316,10 +352,15 @@ async fn test_status_update_audit_trail() {
 #[tokio::test]
 async fn test_concurrent_status_updates() {
     let pool = setup_test_database().await;
-    let repository: Arc<dyn AppointmentRepository> =
-        Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repo = Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repository: Arc<dyn AppointmentRepository> = repo.clone();
+    let calendar_query: Arc<dyn AppointmentCalendarQuery> = repo.clone();
     let audit_service = create_mock_audit_service(&pool);
-    let service = Arc::new(AppointmentService::new(repository.clone(), audit_service));
+    let service = Arc::new(AppointmentService::new(
+        repository.clone(),
+        audit_service,
+        calendar_query,
+    ));
 
     let patient_id = create_test_patient(&pool).await;
     let practitioner_id = create_test_practitioner(&pool).await;
@@ -332,16 +373,14 @@ async fn test_concurrent_status_updates() {
         AppointmentStatus::InProgress,
         AppointmentStatus::Arrived,
     ];
-    
+
     for status in statuses {
-        let appointment = create_test_appointment(
-            patient_id,
-            practitioner_id,
-            start_time,
-            status,
-        );
+        let appointment = create_test_appointment(patient_id, practitioner_id, start_time, status);
         let id = appointment.id;
-        repository.create(appointment).await.expect("Failed to create appointment");
+        repository
+            .create(appointment)
+            .await
+            .expect("Failed to create appointment");
         appointment_ids.push(id);
     }
 
@@ -391,10 +430,11 @@ async fn test_concurrent_status_updates() {
 #[tokio::test]
 async fn test_status_update_from_scheduled_to_arrived() {
     let pool = setup_test_database().await;
-    let repository: Arc<dyn AppointmentRepository> =
-        Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repo = Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repository: Arc<dyn AppointmentRepository> = repo.clone();
+    let calendar_query: Arc<dyn AppointmentCalendarQuery> = repo.clone();
     let audit_service = create_mock_audit_service(&pool);
-    let service = AppointmentService::new(repository.clone(), audit_service);
+    let service = AppointmentService::new(repository.clone(), audit_service, calendar_query);
 
     let patient_id = create_test_patient(&pool).await;
     let practitioner_id = create_test_practitioner(&pool).await;
@@ -409,7 +449,10 @@ async fn test_status_update_from_scheduled_to_arrived() {
     );
     let appointment_id = appointment.id;
 
-    repository.create(appointment).await.expect("Failed to create appointment");
+    repository
+        .create(appointment)
+        .await
+        .expect("Failed to create appointment");
 
     let updated = service
         .mark_arrived(appointment_id, user_id)
@@ -424,10 +467,11 @@ async fn test_status_update_from_scheduled_to_arrived() {
 #[tokio::test]
 async fn test_status_update_from_arrived_to_completed() {
     let pool = setup_test_database().await;
-    let repository: Arc<dyn AppointmentRepository> =
-        Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repo = Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let repository: Arc<dyn AppointmentRepository> = repo.clone();
+    let calendar_query: Arc<dyn AppointmentCalendarQuery> = repo.clone();
     let audit_service = create_mock_audit_service(&pool);
-    let service = AppointmentService::new(repository.clone(), audit_service);
+    let service = AppointmentService::new(repository.clone(), audit_service, calendar_query);
 
     let patient_id = create_test_patient(&pool).await;
     let practitioner_id = create_test_practitioner(&pool).await;
@@ -442,7 +486,10 @@ async fn test_status_update_from_arrived_to_completed() {
     );
     let appointment_id = appointment.id;
 
-    repository.create(appointment).await.expect("Failed to create appointment");
+    repository
+        .create(appointment)
+        .await
+        .expect("Failed to create appointment");
 
     let updated = service
         .mark_completed(appointment_id, user_id)

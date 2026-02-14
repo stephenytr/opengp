@@ -1,7 +1,7 @@
 mod model;
-mod service;
 mod repository;
+mod service;
 
 pub use model::*;
-pub use service::*;
 pub use repository::*;
+pub use service::*;

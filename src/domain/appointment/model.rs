@@ -139,7 +139,7 @@ impl Appointment {
 
         let valid = match (self.status, new_status) {
             // From Scheduled
-            (Scheduled, Confirmed | Cancelled | Rescheduled) => true,
+            (Scheduled, Confirmed | Arrived | Cancelled | Rescheduled) => true,
 
             // From Confirmed
             (Confirmed, Arrived | Cancelled | Rescheduled) => true,
@@ -337,9 +337,9 @@ mod tests {
     }
 
     #[test]
-    fn test_scheduled_cannot_transition_to_arrived() {
+    fn test_scheduled_can_transition_to_arrived() {
         let appt = create_test_appointment(AppointmentStatus::Scheduled);
-        assert!(appt.can_transition_to(AppointmentStatus::Arrived).is_err());
+        assert!(appt.can_transition_to(AppointmentStatus::Arrived).is_ok());
     }
 
     #[test]

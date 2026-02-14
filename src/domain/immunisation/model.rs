@@ -40,6 +40,7 @@ pub struct Immunisation {
 }
 
 impl Immunisation {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         patient_id: Uuid,
         practitioner_id: Uuid,

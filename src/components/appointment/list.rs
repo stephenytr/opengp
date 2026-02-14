@@ -8,28 +8,32 @@ use ratatui::Frame;
 use std::sync::Arc;
 
 use crate::components::{Action, Component};
-use crate::domain::appointment::{AppointmentSearchCriteria, AppointmentService, CalendarAppointment};
+use crate::domain::appointment::{
+    AppointmentSearchCriteria, AppointmentService, CalendarAppointment,
+};
 use crate::error::Result;
+use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
+use crate::ui::widgets::HelpModal;
 
 pub struct AppointmentListComponent {
     appointment_service: Arc<AppointmentService>,
     appointments: Vec<CalendarAppointment>,
     table_state: TableState,
+    showing_help_modal: bool,
 }
 
 impl AppointmentListComponent {
     pub fn new(appointment_service: Arc<AppointmentService>) -> Self {
         let mut table_state = TableState::default();
         table_state.select(Some(0));
-        
+
         Self {
             appointment_service,
             appointments: Vec::new(),
             table_state,
+            showing_help_modal: false,
         }
     }
-
-
 
     fn next(&mut self) {
         if self.appointments.is_empty() {
@@ -91,16 +95,27 @@ impl Component for AppointmentListComponent {
             is_urgent: None,
             confirmed: None,
         };
-        
-        self.appointments = self.appointment_service
+
+        self.appointments = self
+            .appointment_service
             .get_calendar_appointments(&criteria)
             .await
             .map_err(|e| crate::error::Error::App(format!("Failed to load appointments: {}", e)))?;
-        
+
         Ok(())
     }
 
     fn handle_key_events(&mut self, key: KeyEvent) -> Action {
+        if self.showing_help_modal {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('?') => {
+                    self.showing_help_modal = false;
+                    return Action::Render;
+                }
+                _ => return Action::None,
+            }
+        }
+
         match key.code {
             KeyCode::Down | KeyCode::Char('j') => {
                 self.next();
@@ -119,6 +134,10 @@ impl Component for AppointmentListComponent {
                 Action::Render
             }
             KeyCode::Char('n') => Action::AppointmentCreate,
+            KeyCode::Char('?') => {
+                self.showing_help_modal = true;
+                Action::Render
+            }
             _ => Action::None,
         }
     }
@@ -126,7 +145,13 @@ impl Component for AppointmentListComponent {
     fn render(&mut self, frame: &mut Frame, area: Rect) {
         let header_cells = ["Date", "Time", "Patient", "Type", "Status"]
             .iter()
-            .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
+            .map(|h| {
+                Cell::from(*h).style(
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                )
+            });
         let header = Row::new(header_cells)
             .style(Style::default().bg(Color::DarkGray))
             .height(1);
@@ -149,19 +174,22 @@ impl Component for AppointmentListComponent {
         });
 
         let widths = [
-            Constraint::Length(12),  // Date
-            Constraint::Length(8),   // Time
-            Constraint::Length(16),  // Patient
-            Constraint::Length(20),  // Type
-            Constraint::Length(12),  // Status
+            Constraint::Length(12), // Date
+            Constraint::Length(8),  // Time
+            Constraint::Length(16), // Patient
+            Constraint::Length(20), // Type
+            Constraint::Length(12), // Status
         ];
+
+        let help = KeybindRegistry::get_help_text(KeybindContext::AppointmentList);
+        let title = format!(" Appointments - {} ", help);
 
         let table = Table::new(rows, widths)
             .header(header)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" Appointments (j/k/↑↓: Nav, g/G: First/Last, n: New) "),
+                    .title(title),
             )
             .row_highlight_style(
                 Style::default()
@@ -171,5 +199,10 @@ impl Component for AppointmentListComponent {
             .highlight_symbol(">> ");
 
         frame.render_stateful_widget(table, area, &mut self.table_state);
+
+        if self.showing_help_modal {
+            let help_modal = HelpModal::new(KeybindContext::AppointmentList);
+            help_modal.render(frame, area);
+        }
     }
 }

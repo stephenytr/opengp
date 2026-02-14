@@ -8,8 +8,9 @@ use ratatui::Frame;
 use crate::components::{Action, Component};
 use crate::domain::patient::{Patient, PatientService};
 use crate::error::Result;
+use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
+use crate::ui::widgets::HelpModal;
 use std::sync::Arc;
-
 
 pub struct PatientListComponent {
     patient_service: Option<Arc<PatientService>>,
@@ -25,13 +26,14 @@ pub struct PatientListComponent {
     page: usize,
     #[allow(dead_code)]
     page_size: usize,
+    showing_help_modal: bool,
 }
 
 impl PatientListComponent {
     pub fn new(patient_service: Arc<PatientService>) -> Self {
         let mut table_state = TableState::default();
         table_state.select(Some(0));
-        
+
         Self {
             patient_service: Some(patient_service),
             all_patients: Vec::new(),
@@ -43,16 +45,15 @@ impl PatientListComponent {
             search_mode: false,
             page: 0,
             page_size: 20,
+            showing_help_modal: false,
         }
     }
-
-
 
     fn select_next(&mut self) {
         if self.filtered_patients.is_empty() {
             return;
         }
-        
+
         let current = self.table_state.selected().unwrap_or(0);
         let next = (current + 1).min(self.filtered_patients.len() - 1);
         self.table_state.select(Some(next));
@@ -62,7 +63,7 @@ impl PatientListComponent {
         if self.filtered_patients.is_empty() {
             return;
         }
-        
+
         let current = self.table_state.selected().unwrap_or(0);
         let prev = current.saturating_sub(1);
         self.table_state.select(Some(prev));
@@ -76,7 +77,8 @@ impl PatientListComponent {
 
     fn select_last(&mut self) {
         if !self.filtered_patients.is_empty() {
-            self.table_state.select(Some(self.filtered_patients.len() - 1));
+            self.table_state
+                .select(Some(self.filtered_patients.len() - 1));
         }
     }
 
@@ -114,7 +116,7 @@ impl PatientListComponent {
                 .cloned()
                 .collect();
         }
-        
+
         if !self.filtered_patients.is_empty() {
             self.table_state.select(Some(0));
         } else {
@@ -188,7 +190,7 @@ impl Component for PatientListComponent {
                     self.all_patients = patients.clone();
                     self.filtered_patients = patients;
                     self.error_message = None;
-                    
+
                     if !self.filtered_patients.is_empty() {
                         self.table_state.select(Some(0));
                     }
@@ -202,6 +204,16 @@ impl Component for PatientListComponent {
     }
 
     fn handle_key_events(&mut self, key: KeyEvent) -> Action {
+        if self.showing_help_modal {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('?') => {
+                    self.showing_help_modal = false;
+                    return Action::Render;
+                }
+                _ => return Action::None,
+            }
+        }
+
         if self.search_mode {
             return self.handle_search_input(key);
         }
@@ -224,17 +236,23 @@ impl Component for PatientListComponent {
                 Action::Render
             }
             KeyCode::Enter => {
+                // TODO: Implement patient detail view
+                // When implemented, this will navigate to a read-only patient detail screen
+                // showing complete patient information, medical history, and clinical notes.
+                // For now, this keybind is disabled to avoid confusion.
                 if let Some(_patient) = self.selected_patient() {
                     Action::None
                 } else {
                     Action::None
                 }
             }
-            KeyCode::Char('n') => {
-                Action::PatientCreate
-            }
+            KeyCode::Char('n') => Action::PatientCreate,
             KeyCode::Char('/') => {
                 self.enter_search_mode();
+                Action::Render
+            }
+            KeyCode::Char('?') => {
+                self.showing_help_modal = true;
                 Action::Render
             }
             KeyCode::Esc => {
@@ -252,9 +270,7 @@ impl Component for PatientListComponent {
 
     async fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
-            Action::Tick => {
-                Ok(None)
-            }
+            Action::Tick => Ok(None),
             _ => Ok(None),
         }
     }
@@ -265,10 +281,7 @@ impl Component for PatientListComponent {
         let table_area = if self.search_mode || !self.search_query.is_empty() {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    LayoutConstraint::Length(3),
-                    LayoutConstraint::Min(0),
-                ])
+                .constraints([LayoutConstraint::Length(3), LayoutConstraint::Min(0)])
                 .split(area);
             Self::render_search_bar_static(frame, chunks[0], &self.search_query, self.search_mode);
             chunks[1]
@@ -297,7 +310,8 @@ impl Component for PatientListComponent {
                 let name = format!(
                     "{}, {}",
                     patient.last_name,
-                    patient.preferred_name
+                    patient
+                        .preferred_name
                         .as_ref()
                         .unwrap_or(&patient.first_name)
                 );
@@ -341,7 +355,8 @@ impl Component for PatientListComponent {
         ];
 
         let title = if self.search_query.is_empty() {
-            " Patients (j/k/↑↓: Nav, g/G: First/Last, n: New, /: Search, Esc: Clear) ".to_string()
+            let help = KeybindRegistry::get_help_text(KeybindContext::PatientList);
+            format!(" Patients - {} ", help)
         } else {
             format!(
                 " Patients - {} results (n: New, Esc: Clear) ",
@@ -363,9 +378,14 @@ impl Component for PatientListComponent {
 
         if let Some(ref error) = self.error_message {
             let error_text = format!("Error: {}", error);
-            let error_paragraph = ratatui::widgets::Paragraph::new(error_text)
-                .style(Style::default().fg(Color::Red));
+            let error_paragraph =
+                ratatui::widgets::Paragraph::new(error_text).style(Style::default().fg(Color::Red));
             frame.render_widget(error_paragraph, table_area);
+        }
+
+        if self.showing_help_modal {
+            let help_modal = HelpModal::new(KeybindContext::PatientList);
+            help_modal.render(frame, area);
         }
     }
 }

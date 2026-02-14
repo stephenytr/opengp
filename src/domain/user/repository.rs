@@ -7,7 +7,7 @@ use super::model::Practitioner;
 pub enum RepositoryError {
     #[error("Database error: {0}")]
     Database(String),
-    
+
     #[error("Not found")]
     NotFound,
 }
@@ -21,7 +21,7 @@ pub trait PractitionerRepository: Send + Sync {
     /// * `Ok(Vec<Practitioner>)` - List of active practitioners
     /// * `Err(RepositoryError)` - Database error
     async fn list_active(&self) -> Result<Vec<Practitioner>, RepositoryError>;
-    
+
     /// Find practitioner by ID
     ///
     /// # Returns

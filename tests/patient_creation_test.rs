@@ -20,7 +20,7 @@ async fn test_create_patient_with_database() {
     let service = PatientService::new(repository);
 
     let medicare_number = generate_unique_medicare();
-    
+
     let data = NewPatientData {
         ihi: None,
         medicare_number: Some(medicare_number.clone()),
@@ -47,7 +47,11 @@ async fn test_create_patient_with_database() {
 
     let result = service.register_patient(data).await;
 
-    assert!(result.is_ok(), "Failed to create patient: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Failed to create patient: {:?}",
+        result.err()
+    );
 
     let patient = result.unwrap();
     assert_eq!(patient.first_name, "Test");
@@ -67,7 +71,7 @@ async fn test_duplicate_medicare_number() {
     let service = PatientService::new(repository);
 
     let unique_medicare = generate_unique_medicare();
-    
+
     let data = NewPatientData {
         ihi: None,
         medicare_number: Some(unique_medicare),
@@ -96,7 +100,10 @@ async fn test_duplicate_medicare_number() {
     assert!(first_result.is_ok());
 
     let second_result = service.register_patient(data).await;
-    assert!(second_result.is_err(), "Should fail with duplicate Medicare number");
+    assert!(
+        second_result.is_err(),
+        "Should fail with duplicate Medicare number"
+    );
 }
 
 #[tokio::test]

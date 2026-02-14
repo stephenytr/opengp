@@ -1,7 +1,7 @@
 use opengp::config::Config;
 use opengp::domain::patient::PatientRepository;
-use opengp::infrastructure::database::{create_pool, run_migrations};
 use opengp::infrastructure::database::repositories::SqlxPatientRepository;
+use opengp::infrastructure::database::{create_pool, run_migrations};
 use opengp::infrastructure::fixtures::{PatientGenerator, PatientGeneratorConfig};
 use std::sync::Arc;
 
@@ -9,20 +9,20 @@ use std::sync::Arc;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("OpenGP Clear & Seed Tool\n");
     println!("========================\n");
-    
+
     println!("⚠️  WARNING: This will DELETE ALL patients and reseed with fresh data!\n");
-    
+
     let config = Config::from_env()?;
     let pool = create_pool(&config.database).await?;
     run_migrations(&pool).await?;
-    
+
     println!("Database: {}\n", config.database.url);
-    
+
     let patient_repository = Arc::new(SqlxPatientRepository::new(pool.clone()));
-    
+
     println!("⚠️  Note: This tool adds patients without clearing existing data\n");
     println!("For a clean slate, delete the database file and run again.\n");
-    
+
     let gen_config = PatientGeneratorConfig {
         count: 30,
         min_age: 0,
@@ -34,16 +34,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         mobile_percentage: 0.85,
         email_percentage: 0.70,
     };
-    
+
     println!("Generating {} fresh patients...", gen_config.count);
     let mut generator = PatientGenerator::new(gen_config);
     let patients = generator.generate();
-    
+
     println!("Inserting into database...\n");
-    
+
     let mut success_count = 0;
     let mut error_count = 0;
-    
+
     for (i, patient) in patients.iter().enumerate() {
         match patient_repository.create(patient.clone()).await {
             Ok(_) => {
@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    
+
     println!();
     println!("========================");
     println!("Complete!");
@@ -66,13 +66,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Inserted: {}", success_count);
     println!("  Errors: {}", error_count);
     println!();
-    
+
     if error_count == 0 {
         println!("✓ Database successfully cleared and seeded!");
     } else {
         println!("⚠  Completed with {} errors", error_count);
         return Err("Seeding completed with errors".into());
     }
-    
+
     Ok(())
 }
