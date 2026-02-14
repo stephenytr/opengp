@@ -23,13 +23,11 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::domain::appointment::{
-    AppointmentSearchCriteria, Appointment, AppointmentRepository,
+    Appointment, AppointmentRepository, AppointmentSearchCriteria,
     RepositoryError as AppointmentRepositoryError,
 };
 
-use crate::domain::audit::{
-    AuditEntry, AuditRepository, RepositoryError as AuditRepositoryError,
-};
+use crate::domain::audit::{AuditEntry, AuditRepository, RepositoryError as AuditRepositoryError};
 
 use crate::domain::patient::{
     Patient, PatientRepository, RepositoryError as PatientRepositoryError,
@@ -81,7 +79,10 @@ impl PatientRepository for MockPatientRepository {
         Ok(storage.iter().find(|p| p.id == id).cloned())
     }
 
-    async fn find_by_medicare(&self, medicare: &str) -> Result<Option<Patient>, PatientRepositoryError> {
+    async fn find_by_medicare(
+        &self,
+        medicare: &str,
+    ) -> Result<Option<Patient>, PatientRepositoryError> {
         let storage = self.storage.lock().await;
         Ok(storage
             .iter()
@@ -91,11 +92,7 @@ impl PatientRepository for MockPatientRepository {
 
     async fn list_active(&self) -> Result<Vec<Patient>, PatientRepositoryError> {
         let storage = self.storage.lock().await;
-        Ok(storage
-            .iter()
-            .filter(|p| p.is_active)
-            .cloned()
-            .collect())
+        Ok(storage.iter().filter(|p| p.is_active).cloned().collect())
     }
 
     async fn create(&self, patient: Patient) -> Result<Patient, PatientRepositoryError> {
@@ -166,18 +163,27 @@ impl Default for MockAppointmentRepository {
 
 #[async_trait]
 impl AppointmentRepository for MockAppointmentRepository {
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<Appointment>, AppointmentRepositoryError> {
+    async fn find_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<Appointment>, AppointmentRepositoryError> {
         let storage = self.storage.lock().await;
         Ok(storage.iter().find(|a| a.id == id).cloned())
     }
 
-    async fn create(&self, appointment: Appointment) -> Result<Appointment, AppointmentRepositoryError> {
+    async fn create(
+        &self,
+        appointment: Appointment,
+    ) -> Result<Appointment, AppointmentRepositoryError> {
         let mut storage = self.storage.lock().await;
         storage.push(appointment.clone());
         Ok(appointment)
     }
 
-    async fn update(&self, appointment: Appointment) -> Result<Appointment, AppointmentRepositoryError> {
+    async fn update(
+        &self,
+        appointment: Appointment,
+    ) -> Result<Appointment, AppointmentRepositoryError> {
         let mut storage = self.storage.lock().await;
         if let Some(pos) = storage.iter().position(|a| a.id == appointment.id) {
             storage[pos] = appointment.clone();
@@ -420,9 +426,9 @@ impl AuditRepository for MockAuditRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::patient::NewPatientData;
-    use crate::domain::patient::Gender;
     use crate::domain::audit::AuditAction;
+    use crate::domain::patient::Gender;
+    use crate::domain::patient::NewPatientData;
     use chrono::NaiveDate;
 
     #[tokio::test]

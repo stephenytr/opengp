@@ -1,9 +1,11 @@
 use chrono::{DateTime, NaiveDate, Utc};
+use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Builder)]
+#[builder(setter(into))]
 pub struct Prescription {
     pub id: Uuid,
     pub patient_id: Uuid,

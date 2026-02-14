@@ -8,6 +8,9 @@ pub mod repositories;
 pub use helpers::*;
 
 #[cfg(test)]
+pub mod mocks;
+
+#[cfg(test)]
 pub mod test_utils;
 
 use serde::{Deserialize, Serialize};

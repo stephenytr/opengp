@@ -54,7 +54,9 @@ impl PatientRow {
             last_name: self.last_name,
             preferred_name: self.preferred_name,
             date_of_birth: self.date_of_birth,
-            gender: self.gender.parse::<Gender>()
+            gender: self
+                .gender
+                .parse::<Gender>()
                 .unwrap_or(Gender::PreferNotToSay),
             address: Address {
                 line1: self.address_line1,

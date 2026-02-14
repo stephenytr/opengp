@@ -7,9 +7,8 @@ use crate::domain::audit::{AuditAction, AuditEntry, AuditRepository, RepositoryE
 use crate::infrastructure::database::helpers as db_helpers;
 
 fn bytes_to_uuid(bytes: &[u8]) -> Result<Uuid, RepositoryError> {
-    db_helpers::bytes_to_uuid(bytes).map_err(|_| {
-        RepositoryError::ConstraintViolation("Invalid UUID bytes".to_string())
-    })
+    db_helpers::bytes_to_uuid(bytes)
+        .map_err(|_| RepositoryError::ConstraintViolation("Invalid UUID bytes".to_string()))
 }
 
 fn string_to_datetime(s: &str) -> DateTime<Utc> {

@@ -10,8 +10,8 @@ use std::sync::Arc;
 use crate::components::{Action, Component};
 use crate::domain::patient::{Address, Gender, NewPatientData, PatientService};
 use crate::error::Result;
-use crate::ui::Theme;
 use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
+use crate::ui::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FormField {
@@ -519,8 +519,8 @@ impl Component for PatientFormComponent {
                 .style(Style::default().fg(Color::Red));
 
             let error_width = modal_area.width.saturating_mul(2) / 3;
-            let error_height = (self.validation_errors.len() as u16 + 2)
-                .min(modal_area.height.saturating_sub(4));
+            let error_height =
+                (self.validation_errors.len() as u16 + 2).min(modal_area.height.saturating_sub(4));
             let error_area = Rect {
                 x: modal_area.x + modal_area.width.saturating_sub(error_width) / 2,
                 y: modal_area.y + modal_area.height.saturating_sub(error_height) / 2,

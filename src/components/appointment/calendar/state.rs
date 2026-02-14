@@ -43,6 +43,8 @@ pub struct CalendarState {
     pub practitioners: Vec<Practitioner>,
     /// Loaded appointments for current view
     pub appointments: Vec<CalendarAppointment>,
+    /// Currently selected practitioner column index (0-based)
+    pub selected_practitioner_column: usize,
 }
 
 impl CalendarState {
@@ -70,6 +72,7 @@ impl CalendarState {
             time_slot_state: table_state,
             practitioners: Vec::new(),
             appointments: Vec::new(),
+            selected_practitioner_column: 0,
         }
     }
 }

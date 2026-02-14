@@ -138,12 +138,10 @@ Standard navigation patterns apply to all list components:
 | Key | Action |
 |-----|--------|
 | **`↑`** / **`↓`** | Navigate to previous/next day |
-| **`h`** | Navigate to previous month |
-| **`l`** | Navigate to next month |
+| **`h`** / **`l`** | Navigate to previous/next month |
 | **`t`** | Jump to today's date |
 | **`n`** | Create new appointment |
-| **`Enter`** | Switch to day view |
-| **`Tab`** | Switch to day view |
+| **`Enter`** / **`Tab`** | Switch to day view |
 
 ### Appointment Calendar - Day View
 

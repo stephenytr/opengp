@@ -10,6 +10,7 @@
 
 ---
 
+
 ## Quick Reference
 
 **Build**: `cargo build`  
@@ -1038,6 +1039,16 @@ impl HistoryState {
 ```
 
 **Modal state:** prefer a single modal discriminant (`ModalState` / `ModalType`) over scattered booleans. Keep modal-specific payloads in dedicated structs (e.g., `SearchModalData`, `ErrorModalData`) and keep them alongside the modal selector.
+
+---
+
+## Rules
+
+- Do not use rm command without explicit permission.
+- Logic that may be used over and over again should be abstracted.
+- Use codegraphcontext when needed.
+- use context 7 for documentation.
+- You must not roll back changes without explicit permission.
 
 ---
 
