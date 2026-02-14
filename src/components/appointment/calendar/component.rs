@@ -20,6 +20,7 @@ use crate::error::Result;
 use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
 use crate::ui::widgets::{HelpModal, ModalState, ModalType};
 
+use super::layout::CalendarLayout;
 use super::renderers::{CalendarRenderer, ModalRenderer};
 use super::state::{
     AuditModalData, BatchModalData, CalendarState, ConfirmationModalData, DetailModalData,
@@ -2665,16 +2666,6 @@ impl AppointmentCalendarComponent {
     }
 
     fn find_appointment_at_position(&self, col: u16, row: u16) -> Option<Uuid> {
-        let column_padding = 1u16;
-        let row_padding = 1u16;
-        let column_width = 15u16;
-        let column_start_offset = 9u16;  // 1 (left border) + 8 (time column width)
-
-        if col.saturating_add(column_padding) < 30 {
-            return None;
-        }
-
-        let grid_col = col - 30;
         let visible_practitioners: Vec<_> = self
             .calendar_state
             .practitioners
@@ -2692,40 +2683,12 @@ impl AppointmentCalendarComponent {
             return None;
         }
 
-        if row.saturating_add(row_padding) < 6 {
-            return None;
-        }
+        let layout = CalendarLayout::new(
+            self.calendar_state.last_rendered_area,
+            visible_practitioners.len(),
+        );
 
-        let grid_row = row.saturating_sub(6);
-        let slot_index = (grid_row / 2) as usize;
-
-        if grid_col.saturating_add(column_padding) < column_start_offset {
-            return None;
-        };
-
-        // Calculate which column we're in (no padding involved)
-        let practitioner_index = if grid_col >= column_start_offset {
-            ((grid_col - column_start_offset) / column_width) as usize
-        } else {
-            return None;  // Click is before first column
-        };
-
-        // Calculate the actual bounds of that column
-        let column_start = column_start_offset + (practitioner_index as u16 * column_width);
-        let column_end = column_start + column_width - 1;
-
-        // Apply padding for easier clicking
-        let hit_start = column_start.saturating_sub(column_padding);
-        let hit_end = column_end.saturating_add(column_padding);
-
-        // Check if click is within padded bounds
-        if grid_col < hit_start || grid_col > hit_end {
-            return None;
-        }
-
-        if practitioner_index >= visible_practitioners.len() {
-            return None;
-        }
+        let (practitioner_index, slot_index) = layout.hit_test(col, row)?;
 
         let practitioner = visible_practitioners.get(practitioner_index)?;
 
@@ -3163,6 +3126,8 @@ impl Component for AppointmentCalendarComponent {
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {
+        self.calendar_state.last_rendered_area = area;
+        
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(30), Constraint::Min(50)])

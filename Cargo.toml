@@ -34,3 +34,4 @@ sublime_fuzzy = "0.7"
 strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 derive_builder = "0.20"
+ratatui-interact = "0.4.2"

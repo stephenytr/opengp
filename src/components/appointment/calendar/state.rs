@@ -7,6 +7,7 @@
 //! - `HistoryState`: Undo/redo and multi-select state
 
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use ratatui::layout::Rect;
 use ratatui::widgets::TableState;
 use std::collections::HashSet;
 use uuid::Uuid;
@@ -47,6 +48,8 @@ pub struct CalendarState {
     pub selected_practitioner_column: usize,
     /// Currently hovered appointment ID (for mouse hover highlighting)
     pub hovered_appointment: Option<Uuid>,
+    /// Last rendered area (for mouse hit detection)
+    pub last_rendered_area: Rect,
 }
 
 impl CalendarState {
@@ -76,6 +79,7 @@ impl CalendarState {
             appointments: Vec::new(),
             selected_practitioner_column: 0,
             hovered_appointment: None,
+            last_rendered_area: Rect::default(),
         }
     }
 }

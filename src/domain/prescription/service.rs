@@ -352,12 +352,11 @@ impl PrescriptionService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::prescription::*;
     use async_trait::async_trait;
     use chrono::NaiveDate;
 
-    use crate::domain::audit::AuditRepository;
-    use crate::domain::audit::RepositoryError as AuditRepositoryError;
-
+    use crate::domain::audit::{AuditRepository, AuditRepositoryError};
     // Mock repositories for testing
     struct MockPrescriptionRepository {
         prescriptions: Vec<Prescription>,

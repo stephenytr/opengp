@@ -153,7 +153,7 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use chrono::Utc;
-
+    use crate::domain::audit::AuditRepositoryError;
     // Mock repository for testing
     struct MockAuditRepository {
         entries: Vec<AuditEntry>,
@@ -164,7 +164,7 @@ mod tests {
         async fn create(
             &self,
             entry: AuditEntry,
-        ) -> Result<AuditEntry, super::super::error::RepositoryError> {
+        ) -> Result<AuditEntry, AuditRepositoryError> {
             Ok(entry)
         }
 
@@ -172,14 +172,14 @@ mod tests {
             &self,
             _entity_type: &str,
             _entity_id: Uuid,
-        ) -> Result<Vec<AuditEntry>, super::super::error::RepositoryError> {
+        ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
             Ok(self.entries.clone())
         }
 
         async fn find_by_user(
             &self,
             _user_id: Uuid,
-        ) -> Result<Vec<AuditEntry>, super::super::error::RepositoryError> {
+        ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
             Ok(self.entries.clone())
         }
 
@@ -187,7 +187,7 @@ mod tests {
             &self,
             _start_time: chrono::DateTime<Utc>,
             _end_time: chrono::DateTime<Utc>,
-        ) -> Result<Vec<AuditEntry>, super::super::error::RepositoryError> {
+        ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
             Ok(self.entries.clone())
         }
 
@@ -197,7 +197,7 @@ mod tests {
             _entity_id: Uuid,
             _start_time: chrono::DateTime<Utc>,
             _end_time: chrono::DateTime<Utc>,
-        ) -> Result<Vec<AuditEntry>, super::super::error::RepositoryError> {
+        ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
             Ok(self.entries.clone())
         }
     }

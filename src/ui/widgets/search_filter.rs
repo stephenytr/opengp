@@ -294,7 +294,7 @@ mod tests {
     #[test]
     fn test_new_with_items() {
         let items = vec!["apple", "banana", "cherry"];
-        let mut filter = SearchFilter::new(items.clone(), |s: &&str| s.to_string());
+        let filter = SearchFilter::new(items.clone(), |s: &&str| s.to_string());
         assert_eq!(filter.items(), &items);
     }
 
@@ -307,7 +307,7 @@ mod tests {
 
     #[test]
     fn test_new_preserves_extractor() {
-        let mut filter = SearchFilter::new(vec![1, 2, 3], |i: &i32| i.to_string());
+        let filter = SearchFilter::new(vec![1, 2, 3], |i: &i32| i.to_string());
         // The extractor is stored but we can't directly test it without filtering
         assert_eq!(filter.len(), 3);
     }
@@ -530,7 +530,7 @@ mod tests {
 
     #[test]
     fn test_len() {
-        let mut filter = SearchFilter::new(vec!["a", "b", "c", "d"], |s: &&str| s.to_string());
+        let filter = SearchFilter::new(vec!["a", "b", "c", "d"], |s: &&str| s.to_string());
         assert_eq!(filter.len(), 4);
     }
 
@@ -548,7 +548,7 @@ mod tests {
 
     #[test]
     fn test_is_empty_false() {
-        let mut filter = SearchFilter::new(vec![1], |i: &i32| i.to_string());
+        let filter = SearchFilter::new(vec![1], |i: &i32| i.to_string());
         assert!(!filter.is_empty());
     }
 
@@ -565,7 +565,7 @@ mod tests {
 
     #[test]
     fn test_matched_count_empty_query() {
-        let mut filter = SearchFilter::new(vec!["a", "b", "c"], |s: &&str| s.to_string());
+        let filter = SearchFilter::new(vec!["a", "b", "c"], |s: &&str| s.to_string());
 
         // Empty query returns all items
         assert_eq!(filter.matched_count(), 3);
@@ -684,7 +684,7 @@ mod tests {
         // This test verifies that filtered() returns an iterator
         // that can be consumed multiple times (not consuming the original)
         let items = vec!["apple", "banana", "cherry"];
-        let mut filter = SearchFilter::new(items.clone(), |s: &&str| s.to_string());
+        let filter = SearchFilter::new(items.clone(), |s: &&str| s.to_string());
 
         // Get first result
         let first = filter.filtered().next();

@@ -210,6 +210,8 @@ impl AppointmentGenerator {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Timelike;
+
     use super::*;
 
     #[test]

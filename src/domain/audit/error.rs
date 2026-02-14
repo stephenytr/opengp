@@ -61,12 +61,12 @@ pub enum ServiceError {
     /// This error wraps [`RepositoryError`] and occurs when the underlying
     /// database operation fails (connection error, query error, etc.).
     #[error("Repository error: {0}")]
-    Repository(#[from] RepositoryError),
+    Repository(#[from] AuditRepositoryError),
 }
 
 /// Errors that can occur in the audit repository layer
 #[derive(Debug, Error)]
-pub enum RepositoryError {
+pub enum AuditRepositoryError {
     /// Returned when a database operation fails
     ///
     /// This wraps SQLx database errors. Common causes include:

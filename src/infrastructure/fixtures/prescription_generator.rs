@@ -1,6 +1,7 @@
 use rand::seq::SliceRandom;
 use rand::Rng;
 use uuid::Uuid;
+use sqlx::types::chrono::Utc;
 
 use crate::domain::prescription::{
     AuthorityType, Medication, MedicationForm, PBSStatus, Prescription, PrescriptionType,

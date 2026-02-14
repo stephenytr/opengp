@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use super::error::RepositoryError;
+use super::error::AuditRepositoryError;
 use super::model::AuditEntry;
 
 /// Repository trait for audit entry persistence
@@ -20,25 +20,25 @@ use super::model::AuditEntry;
 /// use chrono::Utc;
 /// use uuid::Uuid;
 /// use opengp::domain::audit::{AuditEntry, AuditRepository};
-/// use opengp::domain::audit::RepositoryError;
+/// use opengp::domain::audit::AuditRepositoryError;
 ///
 /// struct MyAuditRepository { /* ... */ }
 ///
 /// #[async_trait]
 /// impl AuditRepository for MyAuditRepository {
-///     async fn create(&self, entry: AuditEntry) -> Result<AuditEntry, RepositoryError> {
+///     async fn create(&self, entry: AuditEntry) -> Result<AuditEntry, AuditRepositoryError> {
 ///         Ok(entry)
 ///     }
-///     async fn find_by_entity(&self, _entity_type: &str, _entity_id: Uuid) -> Result<Vec<AuditEntry>, RepositoryError> {
+///     async fn find_by_entity(&self, _entity_type: &str, _entity_id: Uuid) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
 ///         Ok(vec![])
 ///     }
-///     async fn find_by_user(&self, _user_id: Uuid) -> Result<Vec<AuditEntry>, RepositoryError> {
+///     async fn find_by_user(&self, _user_id: Uuid) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
 ///         Ok(vec![])
 ///     }
-///     async fn find_by_time_range(&self, _start_time: chrono::DateTime<Utc>, _end_time: chrono::DateTime<Utc>) -> Result<Vec<AuditEntry>, RepositoryError> {
+///     async fn find_by_time_range(&self, _start_time: chrono::DateTime<Utc>, _end_time: chrono::DateTime<Utc>) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
 ///         Ok(vec![])
 ///     }
-///     async fn find_by_entity_and_time_range(&self, _entity_type: &str, _entity_id: Uuid, _start_time: chrono::DateTime<Utc>, _end_time: chrono::DateTime<Utc>) -> Result<Vec<AuditEntry>, RepositoryError> {
+///     async fn find_by_entity_and_time_range(&self, _entity_type: &str, _entity_id: Uuid, _start_time: chrono::DateTime<Utc>, _end_time: chrono::DateTime<Utc>) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
 ///         Ok(vec![])
 ///     }
 /// }
@@ -52,8 +52,8 @@ pub trait AuditRepository: Send + Sync {
     ///
     /// # Returns
     /// * `Ok(entry)` - Successfully created audit entry
-    /// * `Err(RepositoryError)` - Database error or constraint violation
-    async fn create(&self, entry: AuditEntry) -> Result<AuditEntry, RepositoryError>;
+    /// * `Err(AuditRepositoryError)` - Database error or constraint violation
+    async fn create(&self, entry: AuditEntry) -> Result<AuditEntry, AuditRepositoryError>;
 
     /// Find all audit entries for a specific entity
     ///
@@ -65,12 +65,12 @@ pub trait AuditRepository: Send + Sync {
     ///
     /// # Returns
     /// * `Ok(entries)` - List of audit entries for the entity
-    /// * `Err(RepositoryError)` - Database error
+    /// * `Err(AuditRepositoryError)` - Database error
     async fn find_by_entity(
         &self,
         entity_type: &str,
         entity_id: Uuid,
-    ) -> Result<Vec<AuditEntry>, RepositoryError>;
+    ) -> Result<Vec<AuditEntry>, AuditRepositoryError>;
 
     /// Find all audit entries created by a specific user
     ///
@@ -81,8 +81,8 @@ pub trait AuditRepository: Send + Sync {
     ///
     /// # Returns
     /// * `Ok(entries)` - List of audit entries by the user
-    /// * `Err(RepositoryError)` - Database error
-    async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<AuditEntry>, RepositoryError>;
+    /// * `Err(AuditRepositoryError)` - Database error
+    async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<AuditEntry>, AuditRepositoryError>;
 
     /// Find audit entries within a time range
     ///
@@ -94,12 +94,12 @@ pub trait AuditRepository: Send + Sync {
     ///
     /// # Returns
     /// * `Ok(entries)` - List of audit entries in the time range
-    /// * `Err(RepositoryError)` - Database error
+    /// * `Err(AuditRepositoryError)` - Database error
     async fn find_by_time_range(
         &self,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
-    ) -> Result<Vec<AuditEntry>, RepositoryError>;
+    ) -> Result<Vec<AuditEntry>, AuditRepositoryError>;
 
     /// Find audit entries for a specific entity within a time range
     ///
@@ -114,12 +114,12 @@ pub trait AuditRepository: Send + Sync {
     ///
     /// # Returns
     /// * `Ok(entries)` - List of audit entries matching criteria
-    /// * `Err(RepositoryError)` - Database error
+    /// * `Err(AuditRepositoryError)` - Database error
     async fn find_by_entity_and_time_range(
         &self,
         entity_type: &str,
         entity_id: Uuid,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
-    ) -> Result<Vec<AuditEntry>, RepositoryError>;
+    ) -> Result<Vec<AuditEntry>, AuditRepositoryError>;
 }

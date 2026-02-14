@@ -27,7 +27,7 @@ use crate::domain::appointment::{
     RepositoryError as AppointmentRepositoryError,
 };
 
-use crate::domain::audit::{AuditEntry, AuditRepository, RepositoryError as AuditRepositoryError};
+use crate::domain::audit::{AuditEntry, AuditRepository, AuditRepositoryError};
 
 use crate::domain::patient::{
     Patient, PatientRepository, RepositoryError as PatientRepositoryError,
