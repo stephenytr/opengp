@@ -47,6 +47,7 @@ OpenGP's keybind system is built on these principles:
 | `Enter` | - | Select | Switch view/Select | Submit/Confirm | Select/Confirm |
 | `Tab` | - | - | Toggle view | Next field | - |
 | `a` | - | - | - | - | Mark Arrived |
+| `i` | - | - | - | - | Mark In Progress |
 | `c` | - | - | - | - | Mark Completed |
 | `x` | - | - | - | - | Mark No-show |
 | `r` | - | - | - | - | Reschedule |
@@ -169,6 +170,7 @@ Standard navigation patterns apply to all list components:
 | Key | Action | Case Sensitivity |
 |-----|--------|------------------|
 | **`a`** / **`A`** | Mark as Arrived | Case-insensitive |
+| **`i`** / **`I`** | Mark as In Progress | Case-insensitive |
 | **`c`** / **`C`** | Mark as Completed | Case-insensitive |
 | **`x`** / **`X`** | Mark as No-show | Case-insensitive |
 | **`r`** / **`R`** | Reschedule appointment | Case-insensitive |
@@ -259,6 +261,7 @@ All form components follow consistent navigation patterns:
 
 Most action keys are case-insensitive to improve usability:
 - **`a`**/**`A`**: Mark as Arrived
+- **`i`**/**`I`**: Mark as In Progress
 - **`c`**/**`C`**: Mark as Completed  
 - **`x`**/**`X`**: Mark as No-show
 - **`r`**/**`R`**: Reschedule
@@ -305,6 +308,14 @@ This reduces cognitive load and prevents errors from accidental Caps Lock.
 3. Fill form using `Tab` to navigate fields
 4. Press `Enter` or `Ctrl+S` to submit
 5. Press `Esc` to cancel if needed
+
+#### Appointment Status Workflow
+1. Press `2` to go to Appointments screen
+2. Select an appointment in day view
+3. Press `a` to mark as Arrived (when patient arrives)
+4. Press `i` to mark as In Progress (when consultation starts)
+5. Press `c` to mark as Completed (when finished)
+6. Or press `x` if patient doesn't show
 
 ### Troubleshooting
 

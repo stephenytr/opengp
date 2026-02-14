@@ -13,7 +13,7 @@ use chrono::{Datelike, Timelike, Weekday};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
+use ratatui::widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table};
 use ratatui::Frame;
 use std::collections::HashSet;
 
@@ -21,6 +21,7 @@ use crate::domain::appointment::{AppointmentStatus, CalendarAppointment};
 use crate::domain::audit::AuditAction;
 use crate::domain::user::Practitioner;
 use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
+use crate::ui::Theme;
 
 use super::state::{
     AuditModalData, BatchModalData, CalendarState, ConfirmationModalData, DetailModalData,
@@ -760,6 +761,47 @@ impl CalendarRenderer {
 pub struct ModalRenderer;
 
 impl ModalRenderer {
+    fn render_modal_background(
+        frame: &mut Frame,
+        area: Rect,
+        width_percent: u16,
+        height_percent: u16,
+    ) -> Rect {
+        let theme = Theme::default();
+        let vertical_margin = (100 - height_percent) / 2;
+        let horizontal_margin = (100 - width_percent) / 2;
+
+        let vertical = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(vertical_margin),
+                Constraint::Percentage(height_percent),
+                Constraint::Percentage(100 - height_percent - vertical_margin),
+            ])
+            .split(area);
+
+        let horizontal = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(horizontal_margin),
+                Constraint::Percentage(width_percent),
+                Constraint::Percentage(100 - width_percent - horizontal_margin),
+            ])
+            .split(vertical[1]);
+
+        let modal_area = horizontal[1];
+        frame.render_widget(Clear, modal_area);
+
+        let modal_block = Block::default()
+            .borders(Borders::ALL)
+            .style(theme.modal_background)
+            .border_style(theme.normal);
+        let inner_area = modal_block.inner(modal_area);
+        frame.render_widget(modal_block, modal_area);
+
+        inner_area
+    }
+
     /// Get user display name from practitioners list
     pub fn get_user_display_name(practitioners: &[Practitioner], user_id: uuid::Uuid) -> String {
         if let Some(practitioner) = practitioners
@@ -780,12 +822,7 @@ impl ModalRenderer {
         frame: &mut Frame,
         area: Rect,
     ) {
-        let modal_area = Rect {
-            x: area.width / 5,
-            y: area.height / 6,
-            width: area.width * 3 / 5,
-            height: area.height * 2 / 3,
-        };
+        let inner_area = Self::render_modal_background(frame, area, 60, 66);
 
         let mut lines = Vec::new();
 
@@ -948,6 +985,13 @@ impl ModalRenderer {
             ),
             Span::styled(": Arrived  ", Style::default().fg(Color::White)),
             Span::styled(
+                "I",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(": In Progress  ", Style::default().fg(Color::White)),
+            Span::styled(
                 "C",
                 Style::default()
                     .fg(Color::Cyan)
@@ -995,7 +1039,7 @@ impl ModalRenderer {
             )
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        frame.render_widget(modal_content, modal_area);
+        frame.render_widget(modal_content, inner_area);
     }
 
     /// Render audit history modal
@@ -1005,12 +1049,7 @@ impl ModalRenderer {
         frame: &mut Frame,
         area: Rect,
     ) {
-        let modal_area = Rect {
-            x: area.width / 5,
-            y: area.height / 6,
-            width: area.width * 3 / 5,
-            height: area.height * 2 / 3,
-        };
+        let inner_area = Self::render_modal_background(frame, area, 60, 66);
 
         let mut lines = Vec::new();
 
@@ -1114,17 +1153,12 @@ impl ModalRenderer {
             )
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        frame.render_widget(content, modal_area);
+        frame.render_widget(content, inner_area);
     }
 
     /// Render search modal
     pub fn render_search_modal(search_data: &SearchModalData, frame: &mut Frame, area: Rect) {
-        let modal_area = Rect {
-            x: area.width / 5,
-            y: area.height / 6,
-            width: area.width * 3 / 5,
-            height: area.height * 2 / 3,
-        };
+        let inner_area = Self::render_modal_background(frame, area, 60, 66);
 
         let mut lines = Vec::new();
 
@@ -1231,7 +1265,7 @@ impl ModalRenderer {
             )
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        frame.render_widget(modal_content, modal_area);
+        frame.render_widget(modal_content, inner_area);
     }
 
     /// Render reschedule modal
@@ -1242,12 +1276,7 @@ impl ModalRenderer {
         frame: &mut Frame,
         area: Rect,
     ) {
-        let modal_area = Rect {
-            x: area.width / 5,
-            y: area.height / 6,
-            width: area.width * 3 / 5,
-            height: area.height / 2,
-        };
+        let inner_area = Self::render_modal_background(frame, area, 60, 50);
 
         let mut lines = Vec::new();
 
@@ -1369,17 +1398,12 @@ impl ModalRenderer {
             )
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        frame.render_widget(modal_content, modal_area);
+        frame.render_widget(modal_content, inner_area);
     }
 
     /// Render filter menu modal
     pub fn render_filter_menu(filter_state: &FilterState, frame: &mut Frame, area: Rect) {
-        let modal_area = Rect {
-            x: area.width / 5,
-            y: area.height / 6,
-            width: area.width * 3 / 5,
-            height: area.height * 2 / 3,
-        };
+        let inner_area = Self::render_modal_background(frame, area, 60, 66);
 
         let mut lines = Vec::new();
 
@@ -1458,7 +1482,7 @@ impl ModalRenderer {
             )
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        frame.render_widget(modal_content, modal_area);
+        frame.render_widget(modal_content, inner_area);
     }
 
     /// Render practitioner filter menu
@@ -1614,12 +1638,7 @@ impl ModalRenderer {
 
     /// Render error modal
     pub fn render_error_modal(error_data: &ErrorModalData, frame: &mut Frame, area: Rect) {
-        let modal_area = Rect {
-            x: area.width / 4,
-            y: area.height / 3,
-            width: area.width / 2,
-            height: area.height / 3,
-        };
+        let inner_area = Self::render_modal_background(frame, area, 50, 33);
 
         let lines = vec![
             Line::from(vec![Span::styled(
@@ -1661,7 +1680,7 @@ impl ModalRenderer {
             )
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        frame.render_widget(modal_content, modal_area);
+        frame.render_widget(modal_content, inner_area);
     }
 
     /// Render batch menu modal

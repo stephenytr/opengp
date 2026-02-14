@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,6 +16,7 @@ use crate::domain::appointment::{AppointmentService, AppointmentType, NewAppoint
 use crate::domain::patient::{Patient, PatientService};
 use crate::domain::user::Practitioner;
 use crate::error::Result;
+use crate::ui::Theme;
 use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -966,6 +967,35 @@ impl Component for AppointmentFormComponent {
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {
+        let theme = Theme::default();
+        let vertical = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(10),
+                Constraint::Percentage(80),
+                Constraint::Percentage(10),
+            ])
+            .split(area);
+
+        let horizontal = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(15),
+                Constraint::Percentage(70),
+                Constraint::Percentage(15),
+            ])
+            .split(vertical[1]);
+
+        let modal_area = horizontal[1];
+        frame.render_widget(Clear, modal_area);
+
+        let modal_block = Block::default()
+            .borders(Borders::ALL)
+            .style(theme.modal_background)
+            .border_style(theme.normal);
+        let inner_area = modal_block.inner(modal_area);
+        frame.render_widget(modal_block, modal_area);
+
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -978,7 +1008,7 @@ impl Component for AppointmentFormComponent {
                 Constraint::Length(4),  // Reason
                 Constraint::Length(4),  // Error/Help (fixed height, compact)
             ])
-            .split(area);
+            .split(inner_area);
 
         // Title
         let title = Paragraph::new("Create New Appointment")

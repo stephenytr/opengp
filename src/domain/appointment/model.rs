@@ -97,6 +97,13 @@ impl Appointment {
         self.updated_by = Some(user_id);
     }
 
+    /// Mark as in progress
+    pub fn mark_in_progress(&mut self, user_id: Uuid) {
+        self.status = AppointmentStatus::InProgress;
+        self.updated_at = Utc::now();
+        self.updated_by = Some(user_id);
+    }
+
     /// Mark as completed
     pub fn mark_completed(&mut self, user_id: Uuid) {
         self.status = AppointmentStatus::Completed;

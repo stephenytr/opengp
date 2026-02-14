@@ -474,6 +474,54 @@ impl AppointmentService {
         Ok(updated)
     }
 
+    /// Mark appointment as in progress
+    ///
+    /// # Arguments
+    /// * `appointment_id` - Appointment ID
+    /// * `user_id` - ID of user marking the appointment as in progress
+    ///
+    /// # Returns
+    /// * `Ok(Appointment)` - Updated appointment
+    /// * `Err(ServiceError::NotFound)` - Appointment not found
+    /// * `Err(ServiceError::InvalidTransition)` - Invalid status transition
+    /// * `Err(ServiceError::Repository)` - Database error
+    pub async fn mark_in_progress(
+        &self,
+        appointment_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Appointment, ServiceError> {
+        info!(
+            "Marking appointment {} as in progress by user {}",
+            appointment_id, user_id
+        );
+
+        let mut appointment = self
+            .repository
+            .find_by_id(appointment_id)
+            .await?
+            .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
+
+        let old_status = appointment.status;
+
+        self.validate_transition(&appointment, AppointmentStatus::InProgress)?;
+
+        appointment.mark_in_progress(user_id);
+
+        let updated = self.repository.update(appointment).await?;
+        info!("Appointment {} marked as in progress", appointment_id);
+
+        let audit_entry = AuditEntry::new_status_changed(
+            "appointment",
+            appointment_id,
+            format!("{:?}", old_status),
+            format!("{:?}", updated.status),
+            user_id,
+        );
+        self.audit_log(audit_entry).await?;
+
+        Ok(updated)
+    }
+
     /// Mark appointment as completed
     ///
     /// # Arguments

@@ -3,13 +3,14 @@ use chrono::NaiveDate;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
 use ratatui::Frame;
 use std::sync::Arc;
 
 use crate::components::{Action, Component};
 use crate::domain::patient::{Address, Gender, NewPatientData, PatientService};
 use crate::error::Result;
+use crate::ui::Theme;
 use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -392,10 +393,39 @@ impl Component for PatientFormComponent {
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {
+        let theme = Theme::default();
+        let vertical = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(10),
+                Constraint::Percentage(80),
+                Constraint::Percentage(10),
+            ])
+            .split(area);
+
+        let horizontal = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(15),
+                Constraint::Percentage(70),
+                Constraint::Percentage(15),
+            ])
+            .split(vertical[1]);
+
+        let modal_area = horizontal[1];
+        frame.render_widget(Clear, modal_area);
+
+        let modal_block = Block::default()
+            .borders(Borders::ALL)
+            .style(theme.modal_background)
+            .border_style(theme.normal);
+        let inner_area = modal_block.inner(modal_area);
+        frame.render_widget(modal_block, modal_area);
+
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(0), Constraint::Length(3)])
-            .split(area);
+            .split(inner_area);
 
         let available_height = chunks[0].height.saturating_sub(4);
         let max_visible_fields = (available_height / 3).min(8) as usize;
@@ -488,11 +518,14 @@ impl Component for PatientFormComponent {
                 )
                 .style(Style::default().fg(Color::Red));
 
+            let error_width = modal_area.width.saturating_mul(2) / 3;
+            let error_height = (self.validation_errors.len() as u16 + 2)
+                .min(modal_area.height.saturating_sub(4));
             let error_area = Rect {
-                x: area.width / 4,
-                y: area.height / 4,
-                width: area.width / 2,
-                height: (self.validation_errors.len() as u16 + 2).min(10),
+                x: modal_area.x + modal_area.width.saturating_sub(error_width) / 2,
+                y: modal_area.y + modal_area.height.saturating_sub(error_height) / 2,
+                width: error_width,
+                height: error_height,
             };
 
             frame.render_widget(error_list, error_area);

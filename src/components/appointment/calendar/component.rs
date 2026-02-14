@@ -937,6 +937,7 @@ impl AppointmentCalendarComponent {
                 Action::Render
             }
             KeyCode::Char('a') | KeyCode::Char('A') => Action::AppointmentMarkArrived,
+            KeyCode::Char('i') | KeyCode::Char('I') => Action::AppointmentMarkInProgress,
             KeyCode::Char('c') | KeyCode::Char('C') => Action::AppointmentMarkCompleted,
             KeyCode::Char('x') | KeyCode::Char('X') => Action::AppointmentMarkNoShow,
             KeyCode::Char('h') | KeyCode::Char('H') => {
@@ -1412,6 +1413,13 @@ impl AppointmentCalendarComponent {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(": Arrived  ", Style::default().fg(Color::White)),
+            Span::styled(
+                "I",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(": In Progress  ", Style::default().fg(Color::White)),
             Span::styled(
                 "C",
                 Style::default()
@@ -2038,6 +2046,7 @@ impl AppointmentCalendarComponent {
 
         match new_status {
             AppointmentStatus::Arrived => Action::AppointmentMarkArrived,
+            AppointmentStatus::InProgress => Action::AppointmentMarkInProgress,
             AppointmentStatus::Completed => Action::AppointmentMarkCompleted,
             AppointmentStatus::NoShow => Action::AppointmentMarkNoShow,
             _ => Action::None,
@@ -2094,6 +2103,7 @@ impl AppointmentCalendarComponent {
 
             match old_status {
                 AppointmentStatus::Arrived => Action::AppointmentMarkArrived,
+                AppointmentStatus::InProgress => Action::AppointmentMarkInProgress,
                 AppointmentStatus::Completed => Action::AppointmentMarkCompleted,
                 AppointmentStatus::NoShow => Action::AppointmentMarkNoShow,
                 _ => {
@@ -2533,6 +2543,7 @@ impl AppointmentCalendarComponent {
                 Action::None
             }
             KeyCode::Char('a') => self.initiate_status_change(AppointmentStatus::Arrived),
+            KeyCode::Char('i') => self.initiate_status_change(AppointmentStatus::InProgress),
             KeyCode::Char('c') => self.initiate_status_change(AppointmentStatus::Completed),
             KeyCode::Char('x') | KeyCode::Char('X') => {
                 self.initiate_status_change(AppointmentStatus::NoShow)
@@ -2740,6 +2751,30 @@ impl Component for AppointmentCalendarComponent {
                         }
                         Err(e) => {
                             tracing::error!("Failed to mark appointment as arrived: {}", e);
+                            self.error_data.message = e.to_string();
+                            self.error_data.showing = true;
+                            self.detail_data.showing = false;
+                        }
+                    }
+                }
+            }
+            Action::AppointmentMarkInProgress => {
+                if let Some(appt_id) = self.detail_data.appointment_id {
+                    let user_id = Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789")
+                        .expect("valid UUID");
+
+                    match self
+                        .appointment_service
+                        .mark_in_progress(appt_id, user_id)
+                        .await
+                    {
+                        Ok(_) => {
+                            tracing::info!("Appointment {} marked as in progress", appt_id);
+                            self.detail_data.showing = false;
+                            self.load_appointments_for_date().await?;
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to mark appointment as in progress: {}", e);
                             self.error_data.message = e.to_string();
                             self.error_data.showing = true;
                             self.detail_data.showing = false;

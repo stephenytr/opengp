@@ -30,6 +30,7 @@ pub enum Action {
     AppointmentFormCancel,
     AppointmentSelect,
     AppointmentMarkArrived,
+    AppointmentMarkInProgress,
     AppointmentMarkCompleted,
     AppointmentMarkNoShow,
     AppointmentReschedule,
