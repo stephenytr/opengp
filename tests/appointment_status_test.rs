@@ -5,6 +5,7 @@ use opengp::domain::appointment::{
 };
 use opengp::domain::audit::{AuditRepository, AuditService};
 use opengp::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
+use opengp::infrastructure::crypto::EncryptionService;
 use opengp::infrastructure::database::repositories::{
     SqlxAppointmentRepository, SqlxAuditRepository, SqlxPatientRepository,
 };
@@ -32,7 +33,9 @@ fn create_mock_audit_service(pool: &SqlitePool) -> Arc<AuditService> {
 }
 
 async fn create_test_patient(pool: &SqlitePool) -> Uuid {
-    let repository: Arc<dyn PatientRepository> = Arc::new(SqlxPatientRepository::new(pool.clone()));
+    let crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
+    let repository: Arc<dyn PatientRepository> =
+        Arc::new(SqlxPatientRepository::new(pool.clone(), crypto));
     let service = PatientService::new(repository);
 
     let data = NewPatientData {

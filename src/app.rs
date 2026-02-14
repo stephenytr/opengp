@@ -14,6 +14,7 @@ use crate::domain::audit::{AuditRepository, AuditService};
 use crate::domain::patient::{PatientRepository, PatientService};
 use crate::domain::user::{PractitionerRepository, PractitionerService};
 use crate::error::Result;
+use crate::infrastructure::crypto::EncryptionService;
 use crate::infrastructure::database::repositories::{
     SqlxAppointmentRepository, SqlxAuditRepository, SqlxPatientRepository,
     SqlxPractitionerRepository,
@@ -89,8 +90,10 @@ impl App {
 
         let (action_tx, action_rx) = mpsc::unbounded_channel();
 
+        let crypto = Arc::new(EncryptionService::new()?);
+
         let patient_repository: Arc<dyn PatientRepository> =
-            Arc::new(SqlxPatientRepository::new(db_pool.clone()));
+            Arc::new(SqlxPatientRepository::new(db_pool.clone(), crypto));
         let patient_service = Arc::new(PatientService::new(patient_repository));
 
         let audit_repository: Arc<dyn AuditRepository> =

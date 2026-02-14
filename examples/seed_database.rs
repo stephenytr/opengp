@@ -1,5 +1,6 @@
 use opengp::config::Config;
 use opengp::domain::patient::PatientRepository;
+use opengp::infrastructure::crypto::EncryptionService;
 use opengp::infrastructure::database::repositories::SqlxPatientRepository;
 use opengp::infrastructure::database::{create_pool, run_migrations};
 use opengp::infrastructure::fixtures::{PatientGenerator, PatientGeneratorConfig};
@@ -16,7 +17,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Database connected: {}\n", config.database.url);
 
-    let patient_repository = Arc::new(SqlxPatientRepository::new(pool.clone()));
+    let crypto = Arc::new(EncryptionService::new()?);
+    let patient_repository = Arc::new(SqlxPatientRepository::new(pool.clone(), crypto));
 
     println!("Ready to seed database\n");
 

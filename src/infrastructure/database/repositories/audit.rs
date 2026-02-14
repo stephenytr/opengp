@@ -76,7 +76,10 @@ impl AuditRepository for SqlxAuditRepository {
         let changed_at_str = entry.changed_at.to_rfc3339();
 
         let action_json = serde_json::to_string(&entry.action).map_err(|e| {
-            AuditRepositoryError::ConstraintViolation(format!("Failed to serialize AuditAction: {}", e))
+            AuditRepositoryError::ConstraintViolation(format!(
+                "Failed to serialize AuditAction: {}",
+                e
+            ))
         })?;
 
         let result = sqlx::query(
@@ -112,7 +115,9 @@ impl AuditRepository for SqlxAuditRepository {
                         "Required field is missing".to_string(),
                     ))
                 } else {
-                    Err(AuditRepositoryError::Database(sqlx::Error::Database(db_err)))
+                    Err(AuditRepositoryError::Database(sqlx::Error::Database(
+                        db_err,
+                    )))
                 }
             }
             Err(e) => Err(AuditRepositoryError::Database(e)),

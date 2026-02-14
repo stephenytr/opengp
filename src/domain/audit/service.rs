@@ -151,9 +151,9 @@ impl AuditService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::audit::AuditRepositoryError;
     use async_trait::async_trait;
     use chrono::Utc;
-    use crate::domain::audit::AuditRepositoryError;
     // Mock repository for testing
     struct MockAuditRepository {
         entries: Vec<AuditEntry>,
@@ -161,10 +161,7 @@ mod tests {
 
     #[async_trait]
     impl AuditRepository for MockAuditRepository {
-        async fn create(
-            &self,
-            entry: AuditEntry,
-        ) -> Result<AuditEntry, AuditRepositoryError> {
+        async fn create(&self, entry: AuditEntry) -> Result<AuditEntry, AuditRepositoryError> {
             Ok(entry)
         }
 

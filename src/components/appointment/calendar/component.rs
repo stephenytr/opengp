@@ -2790,7 +2790,7 @@ impl Component for AppointmentCalendarComponent {
         use crossterm::event::{MouseButton, MouseEventKind};
 
         let hovered = self.find_appointment_at_position(mouse.column, mouse.row);
-        
+
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 if let Some(appt_id) = hovered {
@@ -3127,7 +3127,7 @@ impl Component for AppointmentCalendarComponent {
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {
         self.calendar_state.last_rendered_area = area;
-        
+
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(30), Constraint::Min(50)])

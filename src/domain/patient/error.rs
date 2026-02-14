@@ -34,4 +34,7 @@ pub enum RepositoryError {
 
     #[error("Constraint violation: {0}")]
     ConstraintViolation(String),
+
+    #[error("Encryption error: {0}")]
+    Encryption(String),
 }

@@ -1,5 +1,6 @@
 use chrono::NaiveDate;
 use opengp::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
+use opengp::infrastructure::crypto::EncryptionService;
 use opengp::infrastructure::database::repositories::SqlxPatientRepository;
 use sqlx::SqlitePool;
 use std::sync::Arc;
@@ -16,7 +17,10 @@ async fn test_create_patient_with_database() {
         .await
         .expect("Failed to connect to database");
 
-    let repository: Arc<dyn PatientRepository> = Arc::new(SqlxPatientRepository::new(pool));
+    // Initialize encryption service for tests
+    let crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
+
+    let repository: Arc<dyn PatientRepository> = Arc::new(SqlxPatientRepository::new(pool, crypto));
     let service = PatientService::new(repository);
 
     let medicare_number = generate_unique_medicare();
@@ -67,7 +71,10 @@ async fn test_duplicate_medicare_number() {
         .await
         .expect("Failed to connect to database");
 
-    let repository: Arc<dyn PatientRepository> = Arc::new(SqlxPatientRepository::new(pool));
+    // Initialize encryption service for tests
+    let crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
+
+    let repository: Arc<dyn PatientRepository> = Arc::new(SqlxPatientRepository::new(pool, crypto));
     let service = PatientService::new(repository);
 
     let unique_medicare = generate_unique_medicare();
@@ -112,7 +119,10 @@ async fn test_find_patient_by_id() {
         .await
         .expect("Failed to connect to database");
 
-    let repository: Arc<dyn PatientRepository> = Arc::new(SqlxPatientRepository::new(pool));
+    // Initialize encryption service for tests
+    let crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
+
+    let repository: Arc<dyn PatientRepository> = Arc::new(SqlxPatientRepository::new(pool, crypto));
     let service = PatientService::new(repository.clone());
 
     let data = NewPatientData {

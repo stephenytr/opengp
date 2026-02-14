@@ -87,6 +87,7 @@ impl CalendarRenderer {
         practitioner_id: uuid::Uuid,
         slot_index: usize,
         active_status_filters: &HashSet<AppointmentStatus>,
+        date: chrono::NaiveDate,
     ) -> Vec<&'a CalendarAppointment> {
         let time_slots = Self::generate_time_slots();
         if slot_index >= time_slots.len() {
@@ -102,8 +103,6 @@ impl CalendarRenderer {
                 Some((hour, minute))
             })
             .unwrap_or((0, 0));
-
-        let date = chrono::Local::now().date_naive();
 
         let slot_datetime = date
             .and_hms_opt(hour, minute, 0)
@@ -128,6 +127,7 @@ impl CalendarRenderer {
         practitioner_id: uuid::Uuid,
         slot_index: usize,
         active_status_filters: &HashSet<AppointmentStatus>,
+        date: chrono::NaiveDate,
     ) -> Option<&'a CalendarAppointment> {
         let time_slots = Self::generate_time_slots();
         if slot_index >= time_slots.len() {
@@ -140,8 +140,6 @@ impl CalendarRenderer {
             let minute = m.parse::<u32>().ok()?;
             Some((hour, minute))
         })?;
-
-        let date = chrono::Local::now().date_naive();
 
         let slot_datetime = date
             .and_hms_opt(hour, minute, 0)
@@ -495,6 +493,12 @@ impl CalendarRenderer {
         let time_slots = Self::generate_time_slots();
         let mut rows = Vec::new();
 
+        // Get the selected date from calendar state
+        let selected_date = calendar_state
+            .current_month_start
+            .with_day(calendar_state.selected_month_day)
+            .unwrap_or(calendar_state.current_date);
+
         for (slot_index, time_slot) in time_slots.iter().enumerate() {
             let mut cells = vec![Cell::from(time_slot.as_str())];
 
@@ -504,6 +508,7 @@ impl CalendarRenderer {
                     practitioner.id,
                     slot_index,
                     &filter_state.active_status_filters,
+                    selected_date,
                 );
 
                 if overlaps.len() > 1 {
@@ -523,9 +528,9 @@ impl CalendarRenderer {
                     practitioner.id,
                     slot_index,
                     &filter_state.active_status_filters,
+                    selected_date,
                 ) {
-                    let time_slots = Self::generate_time_slots();
-                    let slot_time_str = &time_slots[slot_index];
+                    let slot_time_str = time_slot;
                     let (hour, minute) = slot_time_str
                         .split_once(':')
                         .and_then(|(h, m)| {
@@ -535,8 +540,7 @@ impl CalendarRenderer {
                         })
                         .unwrap_or((0, 0));
 
-                    let date = chrono::Local::now().date_naive();
-                    let slot_datetime = date
+                    let slot_datetime = selected_date
                         .and_hms_opt(hour, minute, 0)
                         .expect("valid time")
                         .and_utc();
@@ -768,11 +772,13 @@ impl ModalRenderer {
                 let appt_start_hour = appt.start_time.hour();
                 let appt_start_minute = appt.start_time.minute();
                 let slot_index = ((appt_start_hour - 8) * 4 + appt_start_minute / 15) as usize;
+                let appt_date = appt.start_time.date_naive();
                 let overlaps = CalendarRenderer::detect_overlaps(
                     &calendar_state.appointments,
                     appt.practitioner_id,
                     slot_index,
                     &HashSet::new(),
+                    appt_date,
                 );
 
                 if overlaps.len() > 1 {

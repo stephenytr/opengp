@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use chrono::NaiveDate;
 use sqlx::{FromRow, SqlitePool};
@@ -6,13 +8,14 @@ use uuid::Uuid;
 use crate::domain::patient::{
     Address, EmergencyContact, Gender, Patient, PatientRepository, RepositoryError,
 };
+use crate::infrastructure::crypto::EncryptionService;
 use crate::infrastructure::database::helpers::*;
 
 #[derive(Debug, FromRow)]
 struct PatientRow {
     id: Vec<u8>,
-    ihi: Option<String>,
-    medicare_number: Option<String>,
+    ihi: Option<Vec<u8>>,
+    medicare_number: Option<Vec<u8>>,
     medicare_irn: Option<i64>,
     medicare_expiry: Option<NaiveDate>,
     title: Option<String>,
@@ -41,11 +44,31 @@ struct PatientRow {
 }
 
 impl PatientRow {
-    fn into_patient(self) -> Result<Patient, RepositoryError> {
+    fn into_patient(self, crypto: &EncryptionService) -> Result<Patient, RepositoryError> {
+        let ihi = match self.ihi {
+            Some(encrypted) => {
+                let decrypted = crypto.decrypt(&encrypted).map_err(|e| {
+                    RepositoryError::Encryption(format!("Failed to decrypt IHI: {}", e))
+                })?;
+                Some(decrypted)
+            }
+            None => None,
+        };
+
+        let medicare_number = match self.medicare_number {
+            Some(encrypted) => {
+                let decrypted = crypto.decrypt(&encrypted).map_err(|e| {
+                    RepositoryError::Encryption(format!("Failed to decrypt Medicare number: {}", e))
+                })?;
+                Some(decrypted)
+            }
+            None => None,
+        };
+
         Ok(Patient {
             id: bytes_to_uuid(&self.id)?,
-            ihi: self.ihi,
-            medicare_number: self.medicare_number,
+            ihi,
+            medicare_number,
             medicare_irn: self.medicare_irn.map(|i| i as u8),
             medicare_expiry: self.medicare_expiry,
             title: self.title,
@@ -107,11 +130,12 @@ FROM patients
 
 pub struct SqlxPatientRepository {
     pool: SqlitePool,
+    crypto: Arc<EncryptionService>,
 }
 
 impl SqlxPatientRepository {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(pool: SqlitePool, crypto: Arc<EncryptionService>) -> Self {
+        Self { pool, crypto }
     }
 }
 
@@ -129,24 +153,21 @@ impl PatientRepository for SqlxPatientRepository {
         .await?;
 
         match row {
-            Some(r) => Ok(Some(r.into_patient()?)),
+            Some(r) => Ok(Some(r.into_patient(&self.crypto)?)),
             None => Ok(None),
         }
     }
 
     async fn find_by_medicare(&self, medicare: &str) -> Result<Option<Patient>, RepositoryError> {
-        let row = sqlx::query_as::<_, PatientRow>(&format!(
-            "{} WHERE medicare_number = ? AND is_active = TRUE",
-            PATIENT_SELECT_QUERY
-        ))
-        .bind(medicare)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        match row {
-            Some(r) => Ok(Some(r.into_patient()?)),
-            None => Ok(None),
-        }
+        // With encryption, we cannot search directly on medicare number
+        // We must fetch all patients and filter in memory
+        let patients = self.list_active().await?;
+        Ok(patients.into_iter().find(|p| {
+            p.medicare_number
+                .as_ref()
+                .map(|m| m == medicare)
+                .unwrap_or(false)
+        }))
     }
 
     async fn list_active(&self) -> Result<Vec<Patient>, RepositoryError> {
@@ -157,7 +178,9 @@ impl PatientRepository for SqlxPatientRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        rows.into_iter().map(|r| r.into_patient()).collect()
+        rows.into_iter()
+            .map(|r| r.into_patient(&self.crypto))
+            .collect()
     }
 
     async fn create(&self, patient: Patient) -> Result<Patient, RepositoryError> {
@@ -168,6 +191,21 @@ impl PatientRepository for SqlxPatientRepository {
         let created_at_str = datetime_to_string(&patient.created_at);
         let updated_at_str = datetime_to_string(&patient.updated_at);
         let medicare_irn_i64 = patient.medicare_irn.map(|i| i as i64);
+
+        // Encrypt sensitive fields
+        let ihi_encrypted: Option<Vec<u8>> = match &patient.ihi {
+            Some(ihi) => Some(self.crypto.encrypt(ihi).map_err(|e| {
+                RepositoryError::Encryption(format!("Failed to encrypt IHI: {}", e))
+            })?),
+            None => None,
+        };
+
+        let medicare_encrypted: Option<Vec<u8>> = match &patient.medicare_number {
+            Some(num) => Some(self.crypto.encrypt(num).map_err(|e| {
+                RepositoryError::Encryption(format!("Failed to encrypt Medicare number: {}", e))
+            })?),
+            None => None,
+        };
 
         let emergency_contact_name = patient.emergency_contact.as_ref().map(|ec| ec.name.clone());
         let emergency_contact_phone = patient
@@ -194,8 +232,8 @@ impl PatientRepository for SqlxPatientRepository {
             "#
         )
         .bind(id_bytes)
-        .bind(&patient.ihi)
-        .bind(&patient.medicare_number)
+        .bind(ihi_encrypted)
+        .bind(medicare_encrypted)
         .bind(medicare_irn_i64)
         .bind(medicare_expiry)
         .bind(&patient.title)

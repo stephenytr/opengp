@@ -136,8 +136,6 @@ impl AppointmentFormComponent {
         let time_input = "09:00".to_string();
         let initial_date = now.date_naive();
 
-        
-
         Self {
             appointment_service,
             patient_service,
