@@ -2665,7 +2665,12 @@ impl AppointmentCalendarComponent {
     }
 
     fn find_appointment_at_position(&self, col: u16, row: u16) -> Option<Uuid> {
-        if col < 30 {
+        let column_padding = 1u16;
+        let row_padding = 1u16;
+        let column_width = 15u16;
+        let column_start_offset = 8u16;
+
+        if col.saturating_add(column_padding) < 30 {
             return None;
         }
 
@@ -2687,18 +2692,27 @@ impl AppointmentCalendarComponent {
             return None;
         }
 
-        if row < 6 {
+        if row.saturating_add(row_padding) < 6 {
             return None;
         }
 
-        let grid_row = row - 6;
+        let grid_row = row.saturating_sub(6);
         let slot_index = (grid_row / 2) as usize;
 
-        let practitioner_index = if grid_col < 8 {
+        if grid_col.saturating_add(column_padding) < column_start_offset {
             return None;
-        } else {
-            ((grid_col - 8) / 15) as usize
         };
+
+        let column_offset = grid_col + column_padding - column_start_offset;
+        let practitioner_index = (column_offset / column_width) as usize;
+        let column_start = column_start_offset + (practitioner_index as u16 * column_width);
+        let column_end = column_start + column_width - 1;
+        let hit_start = column_start.saturating_sub(column_padding);
+        let hit_end = column_end.saturating_add(column_padding);
+
+        if grid_col < hit_start || grid_col > hit_end {
+            return None;
+        }
 
         if practitioner_index >= visible_practitioners.len() {
             return None;
@@ -2711,12 +2725,7 @@ impl AppointmentCalendarComponent {
             return None;
         }
 
-        let appt = CalendarRenderer::find_appointment_for_slot(
-            &self.calendar_state.appointments,
-            practitioner.id,
-            slot_index,
-            &self.filter_state.active_status_filters,
-        )?;
+        let appt = self.find_appointment_for_slot(practitioner.id, slot_index)?;
 
         Some(appt.id)
     }
