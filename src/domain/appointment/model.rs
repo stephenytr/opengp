@@ -1,5 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 /// Core appointment entity
@@ -173,7 +174,7 @@ impl Appointment {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AppointmentType {
     /// Standard 15-minute consultation
     Standard,
@@ -236,27 +237,7 @@ impl AppointmentType {
     }
 }
 
-impl std::fmt::Display for AppointmentType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AppointmentType::Standard => write!(f, "Standard"),
-            AppointmentType::Long => write!(f, "Long"),
-            AppointmentType::Brief => write!(f, "Brief"),
-            AppointmentType::NewPatient => write!(f, "New Patient"),
-            AppointmentType::HealthAssessment => write!(f, "Health Assessment"),
-            AppointmentType::ChronicDiseaseReview => write!(f, "Chronic Disease Review"),
-            AppointmentType::MentalHealthPlan => write!(f, "Mental Health Plan"),
-            AppointmentType::Immunisation => write!(f, "Immunisation"),
-            AppointmentType::Procedure => write!(f, "Procedure"),
-            AppointmentType::Telephone => write!(f, "Telephone"),
-            AppointmentType::Telehealth => write!(f, "Telehealth"),
-            AppointmentType::HomeVisit => write!(f, "Home Visit"),
-            AppointmentType::Emergency => write!(f, "Emergency"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Display, EnumString)]
 pub enum AppointmentStatus {
     /// Appointment scheduled
     Scheduled,
@@ -281,21 +262,6 @@ pub enum AppointmentStatus {
 
     /// Rescheduled to another time
     Rescheduled,
-}
-
-impl std::fmt::Display for AppointmentStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AppointmentStatus::Scheduled => write!(f, "Scheduled"),
-            AppointmentStatus::Confirmed => write!(f, "Confirmed"),
-            AppointmentStatus::Arrived => write!(f, "Arrived"),
-            AppointmentStatus::InProgress => write!(f, "In Progress"),
-            AppointmentStatus::Completed => write!(f, "Completed"),
-            AppointmentStatus::NoShow => write!(f, "No Show"),
-            AppointmentStatus::Cancelled => write!(f, "Cancelled"),
-            AppointmentStatus::Rescheduled => write!(f, "Rescheduled"),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -478,7 +444,9 @@ pub struct WaitlistEntry {
     pub resolved_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Display, EnumString,
+)]
 pub enum WaitlistPriority {
     Low,
     Normal,
@@ -486,7 +454,7 @@ pub enum WaitlistPriority {
     Urgent,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Display, EnumString)]
 pub enum TimeSlot {
     Morning,   // 8am-12pm
     Afternoon, // 12pm-5pm

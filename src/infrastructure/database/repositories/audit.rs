@@ -4,6 +4,25 @@ use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
 use crate::domain::audit::{AuditAction, AuditEntry, AuditRepository, RepositoryError};
+use crate::infrastructure::database::helpers as db_helpers;
+
+fn bytes_to_uuid(bytes: &[u8]) -> Result<Uuid, RepositoryError> {
+    db_helpers::bytes_to_uuid(bytes).map_err(|_| {
+        RepositoryError::ConstraintViolation("Invalid UUID bytes".to_string())
+    })
+}
+
+fn string_to_datetime(s: &str) -> DateTime<Utc> {
+    db_helpers::string_to_datetime(s)
+}
+
+const AUDIT_SELECT_QUERY: &str = r#"
+    SELECT
+        id, entity_type, entity_id, action,
+        old_value, new_value,
+        changed_by, changed_at
+    FROM audit_logs
+"#;
 
 #[derive(Debug, FromRow)]
 struct AuditLogRow {
@@ -27,22 +46,14 @@ impl AuditLogRow {
         })?;
 
         Ok(AuditEntry {
-            id: Uuid::from_slice(&self.id).map_err(|e| {
-                RepositoryError::ConstraintViolation(format!("Invalid UUID: {}", e))
-            })?,
+            id: bytes_to_uuid(&self.id)?,
             entity_type: self.entity_type,
-            entity_id: Uuid::from_slice(&self.entity_id).map_err(|e| {
-                RepositoryError::ConstraintViolation(format!("Invalid entity UUID: {}", e))
-            })?,
+            entity_id: bytes_to_uuid(&self.entity_id)?,
             action,
             old_value: self.old_value,
             new_value: self.new_value,
-            changed_by: Uuid::from_slice(&self.changed_by).map_err(|e| {
-                RepositoryError::ConstraintViolation(format!("Invalid user UUID: {}", e))
-            })?,
-            changed_at: DateTime::parse_from_rfc3339(&self.changed_at)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now()),
+            changed_by: bytes_to_uuid(&self.changed_by)?,
+            changed_at: string_to_datetime(&self.changed_at),
         })
     }
 }
@@ -116,17 +127,10 @@ impl AuditRepository for SqlxAuditRepository {
     ) -> Result<Vec<AuditEntry>, RepositoryError> {
         let entity_id_bytes = entity_id.as_bytes().to_vec();
 
-        let rows = sqlx::query_as::<_, AuditLogRow>(
-            r#"
-            SELECT
-                id, entity_type, entity_id, action,
-                old_value, new_value,
-                changed_by, changed_at
-            FROM audit_logs
-            WHERE entity_type = ? AND entity_id = ?
-            ORDER BY changed_at ASC
-            "#,
-        )
+        let rows = sqlx::query_as::<_, AuditLogRow>(&format!(
+            "{}WHERE entity_type = ? AND entity_id = ? ORDER BY changed_at ASC",
+            AUDIT_SELECT_QUERY
+        ))
         .bind(entity_type)
         .bind(entity_id_bytes)
         .fetch_all(&self.pool)
@@ -138,17 +142,10 @@ impl AuditRepository for SqlxAuditRepository {
     async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<AuditEntry>, RepositoryError> {
         let user_id_bytes = user_id.as_bytes().to_vec();
 
-        let rows = sqlx::query_as::<_, AuditLogRow>(
-            r#"
-            SELECT
-                id, entity_type, entity_id, action,
-                old_value, new_value,
-                changed_by, changed_at
-            FROM audit_logs
-            WHERE changed_by = ?
-            ORDER BY changed_at DESC
-            "#,
-        )
+        let rows = sqlx::query_as::<_, AuditLogRow>(&format!(
+            "{}WHERE changed_by = ? ORDER BY changed_at DESC",
+            AUDIT_SELECT_QUERY
+        ))
         .bind(user_id_bytes)
         .fetch_all(&self.pool)
         .await?;
@@ -164,17 +161,10 @@ impl AuditRepository for SqlxAuditRepository {
         let start_time_str = start_time.to_rfc3339();
         let end_time_str = end_time.to_rfc3339();
 
-        let rows = sqlx::query_as::<_, AuditLogRow>(
-            r#"
-            SELECT
-                id, entity_type, entity_id, action,
-                old_value, new_value,
-                changed_by, changed_at
-            FROM audit_logs
-            WHERE changed_at >= ? AND changed_at <= ?
-            ORDER BY changed_at ASC
-            "#,
-        )
+        let rows = sqlx::query_as::<_, AuditLogRow>(&format!(
+            "{}WHERE changed_at >= ? AND changed_at <= ? ORDER BY changed_at ASC",
+            AUDIT_SELECT_QUERY
+        ))
         .bind(start_time_str)
         .bind(end_time_str)
         .fetch_all(&self.pool)
@@ -195,18 +185,10 @@ impl AuditRepository for SqlxAuditRepository {
         let end_time_str = end_time.to_rfc3339();
 
         let rows = sqlx::query_as::<_, AuditLogRow>(
-            r#"
-            SELECT
-                id, entity_type, entity_id, action,
-                old_value, new_value,
-                changed_by, changed_at
-            FROM audit_logs
-            WHERE entity_type = ? 
-              AND entity_id = ? 
-              AND changed_at >= ? 
-              AND changed_at <= ?
-            ORDER BY changed_at ASC
-            "#,
+            &format!(
+                "{}WHERE entity_type = ? AND entity_id = ? AND changed_at >= ? AND changed_at <= ? ORDER BY changed_at ASC",
+                AUDIT_SELECT_QUERY
+            ),
         )
         .bind(entity_type)
         .bind(entity_id_bytes)

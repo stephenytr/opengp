@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,7 +64,7 @@ pub struct InvoiceItem {
     pub amount: f64,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum InvoiceStatus {
     Draft,
     Issued,
@@ -74,21 +75,7 @@ pub enum InvoiceStatus {
     Refunded,
 }
 
-impl std::fmt::Display for InvoiceStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InvoiceStatus::Draft => write!(f, "Draft"),
-            InvoiceStatus::Issued => write!(f, "Issued"),
-            InvoiceStatus::PartiallyPaid => write!(f, "Partially Paid"),
-            InvoiceStatus::Paid => write!(f, "Paid"),
-            InvoiceStatus::Overdue => write!(f, "Overdue"),
-            InvoiceStatus::Cancelled => write!(f, "Cancelled"),
-            InvoiceStatus::Refunded => write!(f, "Refunded"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum BillingType {
     BulkBilling,
     PrivateBilling,
@@ -96,19 +83,6 @@ pub enum BillingType {
     WorkCover,
     DVA,
     ThirdParty,
-}
-
-impl std::fmt::Display for BillingType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BillingType::BulkBilling => write!(f, "Bulk Billing"),
-            BillingType::PrivateBilling => write!(f, "Private Billing"),
-            BillingType::MixedBilling => write!(f, "Mixed Billing"),
-            BillingType::WorkCover => write!(f, "WorkCover"),
-            BillingType::DVA => write!(f, "DVA"),
-            BillingType::ThirdParty => write!(f, "Third Party"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,24 +122,14 @@ pub struct MBSItem {
     pub quantity: u32,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ClaimType {
     BulkBill,
     PatientClaim,
     Assignment,
 }
 
-impl std::fmt::Display for ClaimType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ClaimType::BulkBill => write!(f, "Bulk Bill"),
-            ClaimType::PatientClaim => write!(f, "Patient Claim"),
-            ClaimType::Assignment => write!(f, "Assignment"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ClaimStatus {
     Draft,
     Submitted,
@@ -173,19 +137,6 @@ pub enum ClaimStatus {
     Paid,
     Rejected,
     PartiallyPaid,
-}
-
-impl std::fmt::Display for ClaimStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ClaimStatus::Draft => write!(f, "Draft"),
-            ClaimStatus::Submitted => write!(f, "Submitted"),
-            ClaimStatus::Processing => write!(f, "Processing"),
-            ClaimStatus::Paid => write!(f, "Paid"),
-            ClaimStatus::Rejected => write!(f, "Rejected"),
-            ClaimStatus::PartiallyPaid => write!(f, "Partially Paid"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,7 +155,7 @@ pub struct Payment {
     pub created_by: Uuid,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum PaymentMethod {
     Cash,
     EFTPOS,
@@ -215,22 +166,6 @@ pub enum PaymentMethod {
     MedicareBenefit,
     DVABenefit,
     Other,
-}
-
-impl std::fmt::Display for PaymentMethod {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PaymentMethod::Cash => write!(f, "Cash"),
-            PaymentMethod::EFTPOS => write!(f, "EFTPOS"),
-            PaymentMethod::CreditCard => write!(f, "Credit Card"),
-            PaymentMethod::DebitCard => write!(f, "Debit Card"),
-            PaymentMethod::BankTransfer => write!(f, "Bank Transfer"),
-            PaymentMethod::Cheque => write!(f, "Cheque"),
-            PaymentMethod::MedicareBenefit => write!(f, "Medicare Benefit"),
-            PaymentMethod::DVABenefit => write!(f, "DVA Benefit"),
-            PaymentMethod::Other => write!(f, "Other"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -255,21 +190,11 @@ pub struct DVAClaim {
     pub created_by: Uuid,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum DVACardType {
     Gold,
     White,
     Orange,
-}
-
-impl std::fmt::Display for DVACardType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DVACardType::Gold => write!(f, "Gold Card"),
-            DVACardType::White => write!(f, "White Card"),
-            DVACardType::Orange => write!(f, "Orange Card"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -307,7 +232,7 @@ pub struct WorkCoverClaim {
     pub created_by: Uuid,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AustralianState {
     NSW,
     VIC,
@@ -317,19 +242,4 @@ pub enum AustralianState {
     TAS,
     NT,
     ACT,
-}
-
-impl std::fmt::Display for AustralianState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AustralianState::NSW => write!(f, "NSW"),
-            AustralianState::VIC => write!(f, "VIC"),
-            AustralianState::QLD => write!(f, "QLD"),
-            AustralianState::SA => write!(f, "SA"),
-            AustralianState::WA => write!(f, "WA"),
-            AustralianState::TAS => write!(f, "TAS"),
-            AustralianState::NT => write!(f, "NT"),
-            AustralianState::ACT => write!(f, "ACT"),
-        }
-    }
 }

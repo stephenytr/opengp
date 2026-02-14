@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,7 +84,7 @@ pub struct MedicalHistory {
     pub updated_by: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ConditionStatus {
     Active,
     Resolved,
@@ -92,33 +93,11 @@ pub enum ConditionStatus {
     InRemission,
 }
 
-impl std::fmt::Display for ConditionStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConditionStatus::Active => write!(f, "Active"),
-            ConditionStatus::Resolved => write!(f, "Resolved"),
-            ConditionStatus::Chronic => write!(f, "Chronic"),
-            ConditionStatus::Recurring => write!(f, "Recurring"),
-            ConditionStatus::InRemission => write!(f, "In Remission"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum Severity {
     Mild,
     Moderate,
     Severe,
-}
-
-impl std::fmt::Display for Severity {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Severity::Mild => write!(f, "Mild"),
-            Severity::Moderate => write!(f, "Moderate"),
-            Severity::Severe => write!(f, "Severe"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,23 +120,12 @@ pub struct Allergy {
     pub updated_by: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AllergyType {
     Drug,
     Food,
     Environmental,
     Other,
-}
-
-impl std::fmt::Display for AllergyType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AllergyType::Drug => write!(f, "Drug"),
-            AllergyType::Food => write!(f, "Food"),
-            AllergyType::Environmental => write!(f, "Environmental"),
-            AllergyType::Other => write!(f, "Other"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -223,24 +191,14 @@ pub struct SocialHistory {
     pub updated_by: Uuid,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum SmokingStatus {
     NeverSmoked,
     CurrentSmoker,
     ExSmoker,
 }
 
-impl std::fmt::Display for SmokingStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SmokingStatus::NeverSmoked => write!(f, "Never Smoked"),
-            SmokingStatus::CurrentSmoker => write!(f, "Current Smoker"),
-            SmokingStatus::ExSmoker => write!(f, "Ex-Smoker"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AlcoholStatus {
     None,
     Occasional,
@@ -248,36 +206,13 @@ pub enum AlcoholStatus {
     Heavy,
 }
 
-impl std::fmt::Display for AlcoholStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AlcoholStatus::None => write!(f, "None"),
-            AlcoholStatus::Occasional => write!(f, "Occasional"),
-            AlcoholStatus::Moderate => write!(f, "Moderate"),
-            AlcoholStatus::Heavy => write!(f, "Heavy"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ExerciseFrequency {
     None,
     Rarely,
     OnceOrTwicePerWeek,
     ThreeToFiveTimes,
     Daily,
-}
-
-impl std::fmt::Display for ExerciseFrequency {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExerciseFrequency::None => write!(f, "None"),
-            ExerciseFrequency::Rarely => write!(f, "Rarely"),
-            ExerciseFrequency::OnceOrTwicePerWeek => write!(f, "1-2 times per week"),
-            ExerciseFrequency::ThreeToFiveTimes => write!(f, "3-5 times per week"),
-            ExerciseFrequency::Daily => write!(f, "Daily"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,7 +104,7 @@ impl Referral {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ReferralType {
     Specialist,
     AlliedHealth,
@@ -113,20 +114,9 @@ pub enum ReferralType {
     Diagnostic,
 }
 
-impl std::fmt::Display for ReferralType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ReferralType::Specialist => write!(f, "Specialist"),
-            ReferralType::AlliedHealth => write!(f, "Allied Health"),
-            ReferralType::Hospital => write!(f, "Hospital"),
-            ReferralType::EmergencyDepartment => write!(f, "Emergency Department"),
-            ReferralType::MentalHealth => write!(f, "Mental Health"),
-            ReferralType::Diagnostic => write!(f, "Diagnostic"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Display, EnumString,
+)]
 pub enum ReferralUrgency {
     Routine,
     SemiUrgent,
@@ -134,18 +124,7 @@ pub enum ReferralUrgency {
     Emergency,
 }
 
-impl std::fmt::Display for ReferralUrgency {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ReferralUrgency::Routine => write!(f, "Routine"),
-            ReferralUrgency::SemiUrgent => write!(f, "Semi-Urgent"),
-            ReferralUrgency::Urgent => write!(f, "Urgent"),
-            ReferralUrgency::Emergency => write!(f, "Emergency"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ReferralStatus {
     Draft,
     Sent,
@@ -156,39 +135,13 @@ pub enum ReferralStatus {
     Cancelled,
 }
 
-impl std::fmt::Display for ReferralStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ReferralStatus::Draft => write!(f, "Draft"),
-            ReferralStatus::Sent => write!(f, "Sent"),
-            ReferralStatus::Acknowledged => write!(f, "Acknowledged"),
-            ReferralStatus::AppointmentBooked => write!(f, "Appointment Booked"),
-            ReferralStatus::Completed => write!(f, "Completed"),
-            ReferralStatus::Expired => write!(f, "Expired"),
-            ReferralStatus::Cancelled => write!(f, "Cancelled"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ReferralDeliveryMethod {
     SecureMessaging,
     Fax,
     Email,
     Post,
     HandDelivered,
-}
-
-impl std::fmt::Display for ReferralDeliveryMethod {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ReferralDeliveryMethod::SecureMessaging => write!(f, "Secure Messaging"),
-            ReferralDeliveryMethod::Fax => write!(f, "Fax"),
-            ReferralDeliveryMethod::Email => write!(f, "Email"),
-            ReferralDeliveryMethod::Post => write!(f, "Post"),
-            ReferralDeliveryMethod::HandDelivered => write!(f, "Hand Delivered"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

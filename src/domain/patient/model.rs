@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 use super::dto::NewPatientData;
@@ -139,7 +140,7 @@ pub struct EmergencyContact {
     pub relationship: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
 pub enum Gender {
     Male,
     Female,
@@ -147,18 +148,7 @@ pub enum Gender {
     PreferNotToSay,
 }
 
-impl std::fmt::Display for Gender {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Gender::Male => write!(f, "Male"),
-            Gender::Female => write!(f, "Female"),
-            Gender::Other => write!(f, "Other"),
-            Gender::PreferNotToSay => write!(f, "PreferNotToSay"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Display, EnumString)]
 pub enum ConcessionType {
     DVA,
     Pensioner,
@@ -166,42 +156,11 @@ pub enum ConcessionType {
     SafetyNetCard,
 }
 
-impl std::fmt::Display for ConcessionType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConcessionType::DVA => write!(f, "DVA"),
-            ConcessionType::Pensioner => write!(f, "Pensioner"),
-            ConcessionType::HealthcareCard => write!(f, "Healthcare Card"),
-            ConcessionType::SafetyNetCard => write!(f, "Safety Net Card"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Display, EnumString)]
 pub enum AtsiStatus {
     AboriginalNotTorresStrait,
     TorresStraitNotAboriginal,
     BothAboriginalAndTorresStrait,
     NeitherAboriginalNorTorresStrait,
     NotStated,
-}
-
-impl std::fmt::Display for AtsiStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AtsiStatus::AboriginalNotTorresStrait => {
-                write!(f, "Aboriginal but not Torres Strait Islander")
-            }
-            AtsiStatus::TorresStraitNotAboriginal => {
-                write!(f, "Torres Strait Islander but not Aboriginal")
-            }
-            AtsiStatus::BothAboriginalAndTorresStrait => {
-                write!(f, "Both Aboriginal and Torres Strait Islander")
-            }
-            AtsiStatus::NeitherAboriginalNorTorresStrait => {
-                write!(f, "Neither Aboriginal nor Torres Strait Islander")
-            }
-            AtsiStatus::NotStated => write!(f, "Not Stated/Inadequately Described"),
-        }
-    }
 }

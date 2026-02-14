@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,7 +106,7 @@ pub struct Medication {
     pub amt_code: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum MedicationForm {
     Tablet,
     Capsule,
@@ -124,29 +125,7 @@ pub enum MedicationForm {
     Other,
 }
 
-impl std::fmt::Display for MedicationForm {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MedicationForm::Tablet => write!(f, "Tablet"),
-            MedicationForm::Capsule => write!(f, "Capsule"),
-            MedicationForm::Liquid => write!(f, "Liquid"),
-            MedicationForm::Syrup => write!(f, "Syrup"),
-            MedicationForm::Suspension => write!(f, "Suspension"),
-            MedicationForm::Cream => write!(f, "Cream"),
-            MedicationForm::Ointment => write!(f, "Ointment"),
-            MedicationForm::Gel => write!(f, "Gel"),
-            MedicationForm::Patch => write!(f, "Patch"),
-            MedicationForm::Inhaler => write!(f, "Inhaler"),
-            MedicationForm::Injection => write!(f, "Injection"),
-            MedicationForm::Drops => write!(f, "Drops"),
-            MedicationForm::Spray => write!(f, "Spray"),
-            MedicationForm::Suppository => write!(f, "Suppository"),
-            MedicationForm::Other => write!(f, "Other"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum PBSStatus {
     GeneralSchedule,
     RestrictedBenefit,
@@ -155,19 +134,7 @@ pub enum PBSStatus {
     RPBS,
 }
 
-impl std::fmt::Display for PBSStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PBSStatus::GeneralSchedule => write!(f, "PBS General"),
-            PBSStatus::RestrictedBenefit => write!(f, "PBS Restricted"),
-            PBSStatus::AuthorityRequired => write!(f, "PBS Authority Required"),
-            PBSStatus::Private => write!(f, "Private"),
-            PBSStatus::RPBS => write!(f, "RPBS"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AuthorityType {
     Streamlined,
     Complex,
@@ -175,34 +142,12 @@ pub enum AuthorityType {
     Written,
 }
 
-impl std::fmt::Display for AuthorityType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AuthorityType::Streamlined => write!(f, "Streamlined Authority"),
-            AuthorityType::Complex => write!(f, "Complex Authority"),
-            AuthorityType::Telephone => write!(f, "Telephone Authority"),
-            AuthorityType::Written => write!(f, "Written Authority"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum PrescriptionType {
     Paper,
     Electronic,
     Verbal,
     Fax,
-}
-
-impl std::fmt::Display for PrescriptionType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PrescriptionType::Paper => write!(f, "Paper"),
-            PrescriptionType::Electronic => write!(f, "Electronic"),
-            PrescriptionType::Verbal => write!(f, "Verbal"),
-            PrescriptionType::Fax => write!(f, "Fax"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

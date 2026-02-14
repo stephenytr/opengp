@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +43,7 @@ impl User {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum Role {
     Admin,
     Doctor,
@@ -111,19 +112,7 @@ impl Role {
     }
 }
 
-impl std::fmt::Display for Role {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Role::Admin => write!(f, "Admin"),
-            Role::Doctor => write!(f, "Doctor"),
-            Role::Nurse => write!(f, "Nurse"),
-            Role::Receptionist => write!(f, "Receptionist"),
-            Role::Billing => write!(f, "Billing"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum Permission {
     PatientRead,
     PatientCreate,
@@ -148,32 +137,6 @@ pub enum Permission {
     UserManage,
     SystemConfig,
     AuditView,
-}
-
-impl std::fmt::Display for Permission {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Permission::PatientRead => write!(f, "Patient Read"),
-            Permission::PatientCreate => write!(f, "Patient Create"),
-            Permission::PatientUpdate => write!(f, "Patient Update"),
-            Permission::PatientDelete => write!(f, "Patient Delete"),
-            Permission::PatientSearch => write!(f, "Patient Search"),
-            Permission::PatientExport => write!(f, "Patient Export"),
-            Permission::ClinicalRead => write!(f, "Clinical Read"),
-            Permission::ClinicalWrite => write!(f, "Clinical Write"),
-            Permission::ClinicalSign => write!(f, "Clinical Sign"),
-            Permission::ClinicalDelete => write!(f, "Clinical Delete"),
-            Permission::PrescriptionCreate => write!(f, "Prescription Create"),
-            Permission::PrescriptionCancel => write!(f, "Prescription Cancel"),
-            Permission::PrescriptionAuthority => write!(f, "Prescription Authority"),
-            Permission::BillingRead => write!(f, "Billing Read"),
-            Permission::BillingCreate => write!(f, "Billing Create"),
-            Permission::BillingProcess => write!(f, "Billing Process"),
-            Permission::UserManage => write!(f, "User Management"),
-            Permission::SystemConfig => write!(f, "System Configuration"),
-            Permission::AuditView => write!(f, "Audit View"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

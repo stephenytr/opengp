@@ -4,8 +4,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState};
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
+use std::collections::HashSet;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -13,314 +14,179 @@ use crate::components::{Action, Component};
 use crate::domain::appointment::{
     AppointmentSearchCriteria, AppointmentService, AppointmentStatus, CalendarAppointment,
 };
-use crate::domain::audit::{AuditAction, AuditEntry};
-use crate::domain::patient::{Patient, PatientService};
+use crate::domain::audit::AuditAction;
+use crate::domain::patient::PatientService;
 use crate::domain::user::{Practitioner, PractitionerService};
 use crate::error::Result;
 use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
-use crate::ui::widgets::HelpModal;
-use std::collections::HashSet;
+use crate::ui::widgets::{HelpModal, ModalState, ModalType};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FocusArea {
-    MonthView,
-    DayView,
-}
-
-/// View mode for the day schedule (single day or week view)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ViewMode {
-    Day,
-    Week,
-}
+use super::renderers::{CalendarRenderer, ModalRenderer};
+use super::state::{
+    AuditModalData, BatchModalData, CalendarState, ConfirmationModalData, DetailModalData,
+    ErrorModalData, FilterState, FocusArea, HistoryState, RescheduleModalData, SearchModalData,
+    ViewMode,
+};
 
 pub struct AppointmentCalendarComponent {
     appointment_service: Arc<AppointmentService>,
     practitioner_service: Arc<PractitionerService>,
     patient_service: Arc<PatientService>,
 
-    current_date: NaiveDate,
-    current_month_start: NaiveDate,
-    practitioners: Vec<Practitioner>,
-    appointments: Vec<CalendarAppointment>,
+    calendar_state: CalendarState,
+    filter_state: FilterState,
+    history_state: HistoryState,
 
-    focus_area: FocusArea,
-    time_slot_state: TableState,
-    selected_month_day: u32,
-    view_mode: ViewMode,
-    week_start_date: NaiveDate,
-
-    // Modal state for appointment details
-    selected_appointment: Option<Uuid>,
-    showing_detail_modal: bool,
-    modal_patient: Option<Patient>,
-
-    // Reschedule modal state
-    showing_reschedule_modal: bool,
-    reschedule_new_start_time: Option<chrono::DateTime<Utc>>,
-    reschedule_new_duration: i64, // in minutes
-    reschedule_conflict_warning: Option<String>,
-
-    // Search modal state
-    showing_search_modal: bool,
-    search_query: String,
-    search_results: Vec<CalendarAppointment>,
-    search_selected_index: usize,
-
-    // Filter state
-    active_status_filters: HashSet<AppointmentStatus>,
-    showing_filter_menu: bool,
-
-    // Practitioner filter state
-    active_practitioner_filters: HashSet<Uuid>,
-    showing_practitioner_menu: bool,
-
-    // Error modal state
-    showing_error_modal: bool,
-    error_message: String,
-
-    // Direct status update state
-    showing_confirmation: bool,
-    confirmation_message: String,
-    pending_status: Option<AppointmentStatus>,
-    pending_appointment_id: Option<Uuid>,
-
-    // Undo stack (max 5 recent status changes)
-    recent_status_changes: Vec<(Uuid, AppointmentStatus)>,
-    undo_timestamp: Option<chrono::DateTime<Utc>>,
-
-    // Audit history modal state
-    showing_audit_modal: bool,
-    audit_entries: Vec<AuditEntry>,
-    audit_selected_index: usize,
-
-    // Multi-select mode (basic implementation)
-    multi_select_mode: bool,
-    selected_appointments: HashSet<Uuid>,
-
-    // Batch operations modal state
-    showing_batch_menu: bool,
-    batch_operation_in_progress: bool,
-    batch_progress_current: usize,
-    batch_progress_total: usize,
-    batch_progress_message: String,
-
-    // Help modal state
-    showing_help_modal: bool,
+    modal_state: ModalState,
+    detail_data: DetailModalData,
+    reschedule_data: RescheduleModalData,
+    search_data: SearchModalData,
+    confirmation_data: ConfirmationModalData,
+    audit_data: AuditModalData,
+    batch_data: BatchModalData,
+    error_data: ErrorModalData,
 }
 
 impl AppointmentCalendarComponent {
+    #[allow(dead_code)]
     pub fn new(
         appointment_service: Arc<AppointmentService>,
         practitioner_service: Arc<PractitionerService>,
         patient_service: Arc<PatientService>,
     ) -> Self {
-        let mut table_state = TableState::default();
-        table_state.select(Some(0));
-
-        let today = Local::now().date_naive();
-        let month_start = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
-            .expect("first day of month is always valid");
-
-        // Calculate week start date (Monday of current week)
-        let weekday = today.weekday();
-        let days_from_monday = weekday.num_days_from_monday();
-        let week_start = today - chrono::Duration::days(days_from_monday as i64);
-
         Self {
             appointment_service,
             practitioner_service,
             patient_service,
-            current_date: today,
-            current_month_start: month_start,
-            practitioners: Vec::new(),
-            appointments: Vec::new(),
-            focus_area: FocusArea::MonthView,
-            time_slot_state: table_state,
-            selected_month_day: today.day(),
-            view_mode: ViewMode::Day,
-            week_start_date: week_start,
-            selected_appointment: None,
-            showing_detail_modal: false,
-            modal_patient: None,
-            showing_reschedule_modal: false,
-            reschedule_new_start_time: None,
-            reschedule_new_duration: 15,
-            reschedule_conflict_warning: None,
-            showing_search_modal: false,
-            search_query: String::new(),
-            search_results: Vec::new(),
-            search_selected_index: 0,
-            active_status_filters: HashSet::new(),
-            showing_filter_menu: false,
-            active_practitioner_filters: HashSet::new(),
-            showing_practitioner_menu: false,
-            showing_error_modal: false,
-            error_message: String::new(),
-            showing_confirmation: false,
-            confirmation_message: String::new(),
-            pending_status: None,
-            pending_appointment_id: None,
-            recent_status_changes: Vec::new(),
-            undo_timestamp: None,
-            showing_audit_modal: false,
-            audit_entries: Vec::new(),
-            audit_selected_index: 0,
-            multi_select_mode: false,
-            selected_appointments: HashSet::new(),
-            showing_batch_menu: false,
-            batch_operation_in_progress: false,
-            batch_progress_current: 0,
-            batch_progress_total: 0,
-            batch_progress_message: String::new(),
-            showing_help_modal: false,
+            calendar_state: CalendarState::new(),
+            filter_state: FilterState::new(),
+            history_state: HistoryState::new(),
+            modal_state: ModalState::none(),
+            detail_data: DetailModalData::default(),
+            reschedule_data: RescheduleModalData::default(),
+            search_data: SearchModalData::default(),
+            confirmation_data: ConfirmationModalData::default(),
+            audit_data: AuditModalData::default(),
+            batch_data: BatchModalData::default(),
+            error_data: ErrorModalData::default(),
         }
     }
 
-    fn generate_time_slots() -> Vec<String> {
-        let mut slots = Vec::new();
-        for hour in 8..18 {
-            for minute in [0, 15, 30, 45] {
-                slots.push(format!("{:02}:{:02}", hour, minute));
-            }
-        }
-        slots
+    fn days_in_current_month(&self) -> u32 {
+        CalendarRenderer::days_in_month(
+            self.calendar_state.current_month_start.year(),
+            self.calendar_state.current_month_start.month(),
+        )
     }
 
     fn previous_day(&mut self) {
-        if self.selected_month_day > 1 {
-            self.selected_month_day -= 1;
+        if self.calendar_state.selected_month_day > 1 {
+            self.calendar_state.selected_month_day -= 1;
         }
     }
 
     fn next_day(&mut self) {
-        let days_in_month = self.days_in_current_month();
-        if self.selected_month_day < days_in_month {
-            self.selected_month_day += 1;
+        let days_in_month = CalendarRenderer::days_in_month(
+            self.calendar_state.current_month_start.year(),
+            self.calendar_state.current_month_start.month(),
+        );
+        if self.calendar_state.selected_month_day < days_in_month {
+            self.calendar_state.selected_month_day += 1;
         }
     }
 
     fn previous_week(&mut self) {
-        if self.selected_month_day > 7 {
-            self.selected_month_day -= 7;
+        if self.calendar_state.selected_month_day > 7 {
+            self.calendar_state.selected_month_day -= 7;
         } else {
-            self.selected_month_day = 1;
+            self.calendar_state.selected_month_day = 1;
         }
     }
 
     fn next_week(&mut self) {
-        let days_in_month = self.days_in_current_month();
-        if self.selected_month_day + 7 <= days_in_month {
-            self.selected_month_day += 7;
+        let days_in_month = CalendarRenderer::days_in_month(
+            self.calendar_state.current_month_start.year(),
+            self.calendar_state.current_month_start.month(),
+        );
+        if self.calendar_state.selected_month_day + 7 <= days_in_month {
+            self.calendar_state.selected_month_day += 7;
         } else {
-            self.selected_month_day = days_in_month;
+            self.calendar_state.selected_month_day = days_in_month;
         }
     }
 
     fn previous_month(&mut self) {
-        if self.current_month_start.month() == 1 {
-            self.current_month_start =
-                NaiveDate::from_ymd_opt(self.current_month_start.year() - 1, 12, 1)
+        if self.calendar_state.current_month_start.month() == 1 {
+            self.calendar_state.current_month_start =
+                NaiveDate::from_ymd_opt(self.calendar_state.current_month_start.year() - 1, 12, 1)
                     .expect("first day of month is always valid");
         } else {
-            self.current_month_start = NaiveDate::from_ymd_opt(
-                self.current_month_start.year(),
-                self.current_month_start.month() - 1,
+            self.calendar_state.current_month_start = NaiveDate::from_ymd_opt(
+                self.calendar_state.current_month_start.year(),
+                self.calendar_state.current_month_start.month() - 1,
                 1,
             )
             .expect("first day of month is always valid");
         }
 
-        let days_in_month = self.days_in_current_month();
-        if self.selected_month_day > days_in_month {
-            self.selected_month_day = days_in_month;
+        let days_in_month = CalendarRenderer::days_in_month(
+            self.calendar_state.current_month_start.year(),
+            self.calendar_state.current_month_start.month(),
+        );
+        if self.calendar_state.selected_month_day > days_in_month {
+            self.calendar_state.selected_month_day = days_in_month;
         }
     }
 
     fn next_month(&mut self) {
-        if self.current_month_start.month() == 12 {
-            self.current_month_start =
-                NaiveDate::from_ymd_opt(self.current_month_start.year() + 1, 1, 1)
+        if self.calendar_state.current_month_start.month() == 12 {
+            self.calendar_state.current_month_start =
+                NaiveDate::from_ymd_opt(self.calendar_state.current_month_start.year() + 1, 1, 1)
                     .expect("first day of month is always valid");
         } else {
-            self.current_month_start = NaiveDate::from_ymd_opt(
-                self.current_month_start.year(),
-                self.current_month_start.month() + 1,
+            self.calendar_state.current_month_start = NaiveDate::from_ymd_opt(
+                self.calendar_state.current_month_start.year(),
+                self.calendar_state.current_month_start.month() + 1,
                 1,
             )
             .expect("first day of month is always valid");
         }
 
         let days_in_month = self.days_in_current_month();
-        if self.selected_month_day > days_in_month {
-            self.selected_month_day = days_in_month;
+        if self.calendar_state.selected_month_day > days_in_month {
+            self.calendar_state.selected_month_day = days_in_month;
         }
     }
 
     fn jump_to_today(&mut self) {
         let today = Local::now().date_naive();
-        self.current_date = today;
-        self.current_month_start = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
+        self.calendar_state.current_date = today;
+        self.calendar_state.current_month_start = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
             .expect("first day of month is always valid");
-        self.selected_month_day = today.day();
-    }
-
-    fn days_in_current_month(&self) -> u32 {
-        let month = self.current_month_start.month();
-        let year = self.current_month_start.year();
-
-        match month {
-            2 => {
-                if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
-                    29
-                } else {
-                    28
-                }
-            }
-            4 | 6 | 9 | 11 => 30,
-            _ => 31,
-        }
+        self.calendar_state.selected_month_day = today.day();
     }
 
     fn toggle_status_filter(&mut self, status: AppointmentStatus) {
-        if self.active_status_filters.contains(&status) {
-            self.active_status_filters.remove(&status);
+        if self.filter_state.active_status_filters.contains(&status) {
+            self.filter_state.active_status_filters.remove(&status);
         } else {
-            self.active_status_filters.insert(status);
+            self.filter_state.active_status_filters.insert(status);
         }
     }
 
     fn toggle_practitioner_filter(&mut self, practitioner_id: Uuid) {
-        if self.active_practitioner_filters.contains(&practitioner_id) {
-            self.active_practitioner_filters.remove(&practitioner_id);
+        if self.filter_state.active_practitioner_filters.contains(&practitioner_id) {
+            self.filter_state.active_practitioner_filters.remove(&practitioner_id);
         } else {
-            self.active_practitioner_filters.insert(practitioner_id);
-        }
-    }
-
-    fn get_month_name(&self) -> &'static str {
-        match self.current_month_start.month() {
-            1 => "January",
-            2 => "February",
-            3 => "March",
-            4 => "April",
-            5 => "May",
-            6 => "June",
-            7 => "July",
-            8 => "August",
-            9 => "September",
-            10 => "October",
-            11 => "November",
-            12 => "December",
-            _ => "Unknown",
+            self.filter_state.active_practitioner_filters.insert(practitioner_id);
         }
     }
 
     async fn load_appointments_for_date(&mut self) -> Result<()> {
         let date = NaiveDate::from_ymd_opt(
-            self.current_month_start.year(),
-            self.current_month_start.month(),
-            self.selected_month_day,
+            self.calendar_state.current_month_start.year(),
+            self.calendar_state.current_month_start.month(),
+            self.calendar_state.selected_month_day,
         )
         .expect("valid date from selected day");
 
@@ -349,12 +215,12 @@ impl AppointmentCalendarComponent {
             .await
         {
             Ok(appointments) => {
-                self.appointments = appointments;
+                self.calendar_state.appointments = appointments;
                 Ok(())
             }
             Err(e) => {
                 tracing::error!("Failed to load appointments: {}", e);
-                self.appointments = Vec::new();
+                self.calendar_state.appointments = Vec::new();
                 Ok(())
             }
         }
@@ -366,7 +232,7 @@ impl AppointmentCalendarComponent {
         let mut all_appointments = Vec::new();
 
         for i in 0..7 {
-            let date = self.week_start_date + chrono::Duration::days(i);
+            let date = self.calendar_state.week_start_date + chrono::Duration::days(i);
             let start_of_day = chrono::Utc
                 .from_utc_datetime(&date.and_hms_opt(0, 0, 0).expect("00:00:00 is always valid"));
             let end_of_day = chrono::Utc.from_utc_datetime(
@@ -400,7 +266,7 @@ impl AppointmentCalendarComponent {
             }
         }
 
-        self.appointments = all_appointments;
+        self.calendar_state.appointments = all_appointments;
         Ok(())
     }
 
@@ -409,7 +275,7 @@ impl AppointmentCalendarComponent {
         practitioner_id: uuid::Uuid,
         slot_index: usize,
     ) -> Option<&CalendarAppointment> {
-        let time_slots = Self::generate_time_slots();
+        let time_slots = CalendarRenderer::generate_time_slots();
         if slot_index >= time_slots.len() {
             return None;
         }
@@ -422,9 +288,9 @@ impl AppointmentCalendarComponent {
         })?;
 
         let date = NaiveDate::from_ymd_opt(
-            self.current_month_start.year(),
-            self.current_month_start.month(),
-            self.selected_month_day,
+            self.calendar_state.current_month_start.year(),
+            self.calendar_state.current_month_start.month(),
+            self.calendar_state.selected_month_day,
         )
         .expect("valid date");
 
@@ -434,12 +300,12 @@ impl AppointmentCalendarComponent {
             .and_utc();
 
         // Find appointment that starts at or before this slot and ends after it
-        self.appointments.iter().find(|appt| {
+        self.calendar_state.appointments.iter().find(|appt| {
             appt.practitioner_id == practitioner_id
                 && appt.start_time <= slot_datetime
                 && appt.end_time > slot_datetime
-                && (self.active_status_filters.is_empty()
-                    || self.active_status_filters.contains(&appt.status))
+                && (self.filter_state.active_status_filters.is_empty()
+                    || self.filter_state.active_status_filters.contains(&appt.status))
         })
     }
 
@@ -450,7 +316,7 @@ impl AppointmentCalendarComponent {
         practitioner_id: uuid::Uuid,
         slot_index: usize,
     ) -> Vec<&CalendarAppointment> {
-        let time_slots = Self::generate_time_slots();
+        let time_slots = CalendarRenderer::generate_time_slots();
         if slot_index >= time_slots.len() {
             return Vec::new();
         }
@@ -466,9 +332,9 @@ impl AppointmentCalendarComponent {
             .unwrap_or((0, 0));
 
         let date = NaiveDate::from_ymd_opt(
-            self.current_month_start.year(),
-            self.current_month_start.month(),
-            self.selected_month_day,
+            self.calendar_state.current_month_start.year(),
+            self.calendar_state.current_month_start.month(),
+            self.calendar_state.selected_month_day,
         )
         .expect("valid date");
 
@@ -478,36 +344,36 @@ impl AppointmentCalendarComponent {
             .and_utc();
 
         // Find ALL appointments that overlap at this slot
-        self.appointments
+        self.calendar_state.appointments
             .iter()
             .filter(|appt| {
                 appt.practitioner_id == practitioner_id
                     && appt.start_time <= slot_datetime
                     && appt.end_time > slot_datetime
-                    && (self.active_status_filters.is_empty()
-                        || self.active_status_filters.contains(&appt.status))
+                    && (self.filter_state.active_status_filters.is_empty()
+                        || self.filter_state.active_status_filters.contains(&appt.status))
             })
             .collect()
     }
 
     fn previous_time_slot(&mut self) {
-        let time_slots = Self::generate_time_slots();
-        if let Some(selected) = self.time_slot_state.selected() {
+        let time_slots = CalendarRenderer::generate_time_slots();
+        if let Some(selected) = self.calendar_state.time_slot_state.selected() {
             if selected > 0 {
-                self.time_slot_state.select(Some(selected - 1));
+                self.calendar_state.time_slot_state.select(Some(selected - 1));
             } else {
-                self.time_slot_state.select(Some(time_slots.len() - 1));
+                self.calendar_state.time_slot_state.select(Some(time_slots.len() - 1));
             }
         }
     }
 
     fn next_time_slot(&mut self) {
-        let time_slots = Self::generate_time_slots();
-        if let Some(selected) = self.time_slot_state.selected() {
+        let time_slots = CalendarRenderer::generate_time_slots();
+        if let Some(selected) = self.calendar_state.time_slot_state.selected() {
             if selected < time_slots.len() - 1 {
-                self.time_slot_state.select(Some(selected + 1));
+                self.calendar_state.time_slot_state.select(Some(selected + 1));
             } else {
-                self.time_slot_state.select(Some(0));
+                self.calendar_state.time_slot_state.select(Some(0));
             }
         }
     }
@@ -515,11 +381,11 @@ impl AppointmentCalendarComponent {
     fn render_month_calendar(&self, frame: &mut Frame, area: Rect) {
         let month_year = format!(
             "{} {}",
-            self.get_month_name(),
-            self.current_month_start.year()
+            CalendarRenderer::get_month_name(self.calendar_state.current_month_start.month()),
+            self.calendar_state.current_month_start.year()
         );
 
-        let first_weekday = self.current_month_start.weekday();
+        let first_weekday = self.calendar_state.current_month_start.weekday();
         let days_in_month = self.days_in_current_month();
 
         let mut lines = vec![Line::from(vec![
@@ -586,11 +452,11 @@ impl AppointmentCalendarComponent {
                 {
                     day_cells.push(Span::raw("   "));
                 } else {
-                    let is_today = self.current_date.year() == self.current_month_start.year()
-                        && self.current_date.month() == self.current_month_start.month()
-                        && self.current_date.day() == current_day;
+                    let is_today = self.calendar_state.current_date.year() == self.calendar_state.current_month_start.year()
+                        && self.calendar_state.current_date.month() == self.calendar_state.current_month_start.month()
+                        && self.calendar_state.current_date.day() == current_day;
 
-                    let is_selected = current_day == self.selected_month_day;
+                    let is_selected = current_day == self.calendar_state.selected_month_day;
                     let is_weekend = day_of_week >= 5;
 
                     let style = if is_selected {
@@ -642,7 +508,7 @@ impl AppointmentCalendarComponent {
                     month_year,
                     help
                 ))
-                .border_style(if self.focus_area == FocusArea::MonthView {
+                .border_style(if self.calendar_state.focus_area == FocusArea::MonthView {
                     Style::default().fg(Color::Yellow)
                 } else {
                     Style::default().fg(Color::White)
@@ -674,7 +540,7 @@ impl AppointmentCalendarComponent {
 
     fn render_week_header(&self, frame: &mut Frame, area: Rect) {
         let dates: Vec<NaiveDate> = (0..7)
-            .map(|i| self.week_start_date + chrono::Duration::days(i))
+            .map(|i| self.calendar_state.week_start_date + chrono::Duration::days(i))
             .collect();
 
         fn get_day_name(weekday: Weekday) -> &'static str {
@@ -699,7 +565,7 @@ impl AppointmentCalendarComponent {
             let day_name = get_day_name(date.weekday());
             let date_str = format!("{} {}", day_name, date.day());
 
-            let style = if *date == self.current_date {
+            let style = if *date == self.calendar_state.current_date {
                 Style::default()
                     .fg(Color::Green)
                     .add_modifier(Modifier::BOLD)
@@ -727,8 +593,8 @@ impl AppointmentCalendarComponent {
             Constraint::Length(10),
         ];
 
-        let week_start_str = self.week_start_date.format("%b %d").to_string();
-        let week_end_str = (self.week_start_date + chrono::Duration::days(6))
+        let week_start_str = self.calendar_state.week_start_date.format("%b %d").to_string();
+        let week_end_str = (self.calendar_state.week_start_date + chrono::Duration::days(6))
             .format("%b %d")
             .to_string();
         let title = format!(" Week: {}-{} ", week_start_str, week_end_str);
@@ -737,7 +603,7 @@ impl AppointmentCalendarComponent {
             Block::default()
                 .borders(Borders::ALL)
                 .title(title)
-                .border_style(if self.focus_area == FocusArea::DayView {
+                .border_style(if self.calendar_state.focus_area == FocusArea::DayView {
                     Style::default().fg(Color::Yellow)
                 } else {
                     Style::default().fg(Color::White)
@@ -748,9 +614,9 @@ impl AppointmentCalendarComponent {
     }
 
     fn render_week_time_slots_grid(&mut self, frame: &mut Frame, area: Rect) {
-        let time_slots = Self::generate_time_slots();
+        let time_slots = CalendarRenderer::generate_time_slots();
         let dates: Vec<NaiveDate> = (0..7)
-            .map(|i| self.week_start_date + chrono::Duration::days(i))
+            .map(|i| self.calendar_state.week_start_date + chrono::Duration::days(i))
             .collect();
         let mut rows = Vec::new();
 
@@ -773,6 +639,7 @@ impl AppointmentCalendarComponent {
                     .and_utc();
 
                 let appts_at_slot: Vec<&CalendarAppointment> = self
+                    .calendar_state
                     .appointments
                     .iter()
                     .filter(|a| {
@@ -858,16 +725,16 @@ impl AppointmentCalendarComponent {
             )
             .highlight_symbol(">> ");
 
-        frame.render_stateful_widget(table, area, &mut self.time_slot_state);
+        frame.render_stateful_widget(table, area, &mut self.calendar_state.time_slot_state);
     }
 
     fn render_practitioner_header(&self, frame: &mut Frame, area: Rect) {
         let visible_practitioners: Vec<_> = self
-            .practitioners
+            .calendar_state.practitioners
             .iter()
             .filter(|p| {
-                self.active_practitioner_filters.is_empty()
-                    || self.active_practitioner_filters.contains(&p.id)
+                self.filter_state.active_practitioner_filters.is_empty()
+                    || self.filter_state.active_practitioner_filters.contains(&p.id)
             })
             .collect();
 
@@ -898,10 +765,10 @@ impl AppointmentCalendarComponent {
         }
 
         let mut title = " Schedule ".to_string();
-        if !self.active_status_filters.is_empty() {
-            title = format!(" Schedule [Status: {}] ", self.active_status_filters.len());
+        if !self.filter_state.active_status_filters.is_empty() {
+            title = format!(" Schedule [Status: {}] ", self.filter_state.active_status_filters.len());
         }
-        if !self.active_practitioner_filters.is_empty() {
+        if !self.filter_state.active_practitioner_filters.is_empty() {
             let practitioner_names: Vec<String> = visible_practitioners
                 .iter()
                 .map(|p| format!("Dr. {}", p.last_name))
@@ -913,7 +780,7 @@ impl AppointmentCalendarComponent {
             Block::default()
                 .borders(Borders::ALL)
                 .title(title)
-                .border_style(if self.focus_area == FocusArea::DayView {
+                .border_style(if self.calendar_state.focus_area == FocusArea::DayView {
                     Style::default().fg(Color::Yellow)
                 } else {
                     Style::default().fg(Color::White)
@@ -925,15 +792,15 @@ impl AppointmentCalendarComponent {
 
     fn render_time_slots_grid(&mut self, frame: &mut Frame, area: Rect) {
         let visible_practitioners: Vec<_> = self
-            .practitioners
+            .calendar_state.practitioners
             .iter()
             .filter(|p| {
-                self.active_practitioner_filters.is_empty()
-                    || self.active_practitioner_filters.contains(&p.id)
+                self.filter_state.active_practitioner_filters.is_empty()
+                    || self.filter_state.active_practitioner_filters.contains(&p.id)
             })
             .collect();
 
-        let time_slots = Self::generate_time_slots();
+        let time_slots = CalendarRenderer::generate_time_slots();
         let mut rows = Vec::new();
         let mut rendered_appointments = HashSet::new();
 
@@ -972,11 +839,11 @@ impl AppointmentCalendarComponent {
 
                         let patient_name = &appt.patient_name;
 
-                        let mut appt_text = if self.multi_select_mode
-                            && self.selected_appointments.contains(&appt.id)
+                        let mut appt_text = if self.history_state.multi_select_mode
+                            && self.history_state.selected_appointments.contains(&appt.id)
                         {
                             format!("☑ {}\n{}", patient_name, appt.appointment_type)
-                        } else if self.multi_select_mode {
+                        } else if self.history_state.multi_select_mode {
                             format!("☐ {}\n{}", patient_name, appt.appointment_type)
                         } else {
                             format!("{}\n{}", patient_name, appt.appointment_type)
@@ -1013,7 +880,7 @@ impl AppointmentCalendarComponent {
                             AppointmentStatus::Cancelled => Style::default().fg(Color::Gray),
                         };
 
-                        if self.multi_select_mode && self.selected_appointments.contains(&appt.id) {
+                        if self.history_state.multi_select_mode && self.history_state.selected_appointments.contains(&appt.id) {
                             style = style.add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
                         }
 
@@ -1039,9 +906,9 @@ impl AppointmentCalendarComponent {
             widths.push(Constraint::Min(15));
         }
 
-        let title = if self.multi_select_mode {
+        let title = if self.history_state.multi_select_mode {
             let help = KeybindRegistry::get_help_text(KeybindContext::CalendarMultiSelect);
-            let count = self.selected_appointments.len();
+            let count = self.history_state.selected_appointments.len();
             format!(" Multi-Select: {} selected - {} ", count, help)
         } else {
             let help = KeybindRegistry::get_help_text(KeybindContext::CalendarDayView);
@@ -1057,16 +924,16 @@ impl AppointmentCalendarComponent {
             )
             .highlight_symbol(">> ");
 
-        frame.render_stateful_widget(table, area, &mut self.time_slot_state);
+        frame.render_stateful_widget(table, area, &mut self.calendar_state.time_slot_state);
     }
 
     /// Handle key events when appointment detail modal is open
     fn handle_modal_key_events(&mut self, key: KeyEvent) -> Action {
         match key.code {
             KeyCode::Esc => {
-                self.showing_detail_modal = false;
-                self.selected_appointment = None;
-                self.modal_patient = None;
+                self.detail_data.showing = false;
+                self.detail_data.appointment_id = None;
+                self.detail_data.patient = None;
                 Action::Render
             }
             KeyCode::Char('a') | KeyCode::Char('A') => Action::AppointmentMarkArrived,
@@ -1074,24 +941,24 @@ impl AppointmentCalendarComponent {
             KeyCode::Char('x') | KeyCode::Char('X') => Action::AppointmentMarkNoShow,
             KeyCode::Char('h') | KeyCode::Char('H') => {
                 // Open audit history modal
-                if let Some(_appt_id) = self.selected_appointment {
-                    self.showing_detail_modal = false;
-                    self.showing_audit_modal = true;
-                    self.audit_entries.clear();
-                    self.audit_selected_index = 0;
+                if let Some(_appt_id) = self.detail_data.appointment_id {
+                    self.detail_data.showing = false;
+                    self.audit_data.showing = true;
+                    self.audit_data.entries.clear();
+                    self.audit_data.selected_index = 0;
                     // TODO: Fetch audit history from service
                     return Action::Render;
                 }
                 Action::None
             }
             KeyCode::Char('r') | KeyCode::Char('R') => {
-                if let Some(appt_id) = self.selected_appointment {
-                    if let Some(appt) = self.appointments.iter().find(|a| a.id == appt_id) {
-                        self.reschedule_new_start_time = Some(appt.start_time);
-                        self.reschedule_new_duration = appt.duration_minutes();
-                        self.showing_detail_modal = false;
-                        self.showing_reschedule_modal = true;
-                        self.reschedule_conflict_warning = None;
+                if let Some(appt_id) = self.detail_data.appointment_id {
+                    if let Some(appt) = self.calendar_state.appointments.iter().find(|a| a.id == appt_id) {
+                        self.reschedule_data.new_start_time = Some(appt.start_time);
+                        self.reschedule_data.new_duration = appt.duration_minutes();
+                        self.detail_data.showing = false;
+                        self.reschedule_data.showing = true;
+                        self.reschedule_data.conflict_warning = None;
                         return Action::Render;
                     }
                 }
@@ -1104,23 +971,23 @@ impl AppointmentCalendarComponent {
     fn handle_audit_modal_key_events(&mut self, key: KeyEvent) -> Action {
         match key.code {
             KeyCode::Esc => {
-                self.showing_audit_modal = false;
-                self.audit_entries.clear();
-                self.audit_selected_index = 0;
-                self.showing_detail_modal = true;
+                self.audit_data.showing = false;
+                self.audit_data.entries.clear();
+                self.audit_data.selected_index = 0;
+                self.detail_data.showing = true;
                 Action::Render
             }
             KeyCode::Up => {
-                if self.audit_selected_index > 0 {
-                    self.audit_selected_index -= 1;
+                if self.audit_data.selected_index > 0 {
+                    self.audit_data.selected_index -= 1;
                 }
                 Action::Render
             }
             KeyCode::Down => {
-                if !self.audit_entries.is_empty()
-                    && self.audit_selected_index < self.audit_entries.len() - 1
+                if !self.audit_data.entries.is_empty()
+                    && self.audit_data.selected_index < self.audit_data.entries.len() - 1
                 {
-                    self.audit_selected_index += 1;
+                    self.audit_data.selected_index += 1;
                 }
                 Action::Render
             }
@@ -1131,23 +998,23 @@ impl AppointmentCalendarComponent {
     fn handle_batch_menu_key_events(&mut self, key: KeyEvent) -> Action {
         match key.code {
             KeyCode::Esc => {
-                self.showing_batch_menu = false;
+                self.batch_data.showing_menu = false;
                 Action::Render
             }
             KeyCode::Char('1') => {
-                self.showing_batch_menu = false;
+                self.batch_data.showing_menu = false;
                 Action::AppointmentBatchMarkArrived
             }
             KeyCode::Char('2') => {
-                self.showing_batch_menu = false;
+                self.batch_data.showing_menu = false;
                 Action::AppointmentBatchMarkCompleted
             }
             KeyCode::Char('3') => {
-                self.showing_batch_menu = false;
-                self.error_message =
+                self.batch_data.showing_menu = false;
+                self.error_data.message =
                     "Batch cancel with reason not yet implemented. Use individual cancellation."
                         .to_string();
-                self.showing_error_modal = true;
+                self.error_data.showing = true;
                 Action::Render
             }
             _ => Action::None,
@@ -1157,15 +1024,15 @@ impl AppointmentCalendarComponent {
     fn handle_reschedule_modal_key_events(&mut self, key: KeyEvent) -> Action {
         match key.code {
             KeyCode::Esc => {
-                self.showing_reschedule_modal = false;
-                self.reschedule_new_start_time = None;
-                self.reschedule_conflict_warning = None;
-                self.showing_detail_modal = true;
+                self.reschedule_data.showing = false;
+                self.reschedule_data.new_start_time = None;
+                self.reschedule_data.conflict_warning = None;
+                self.detail_data.showing = true;
                 Action::Render
             }
             KeyCode::Up => {
-                if let Some(current_time) = self.reschedule_new_start_time {
-                    self.reschedule_new_start_time =
+                if let Some(current_time) = self.reschedule_data.new_start_time {
+                    self.reschedule_data.new_start_time =
                         Some(current_time - chrono::Duration::minutes(15));
                     Action::Render
                 } else {
@@ -1173,8 +1040,8 @@ impl AppointmentCalendarComponent {
                 }
             }
             KeyCode::Down => {
-                if let Some(current_time) = self.reschedule_new_start_time {
-                    self.reschedule_new_start_time =
+                if let Some(current_time) = self.reschedule_data.new_start_time {
+                    self.reschedule_data.new_start_time =
                         Some(current_time + chrono::Duration::minutes(15));
                     Action::Render
                 } else {
@@ -1182,12 +1049,12 @@ impl AppointmentCalendarComponent {
                 }
             }
             KeyCode::Char('+') => {
-                self.reschedule_new_duration += 15;
+                self.reschedule_data.new_duration += 15;
                 Action::Render
             }
             KeyCode::Char('-') => {
-                if self.reschedule_new_duration > 15 {
-                    self.reschedule_new_duration -= 15;
+                if self.reschedule_data.new_duration > 15 {
+                    self.reschedule_data.new_duration -= 15;
                 }
                 Action::Render
             }
@@ -1199,46 +1066,46 @@ impl AppointmentCalendarComponent {
     fn handle_search_key_events(&mut self, key: KeyEvent) -> Action {
         match key.code {
             KeyCode::Esc => {
-                self.showing_search_modal = false;
-                self.search_query.clear();
-                self.search_results.clear();
-                self.search_selected_index = 0;
+                self.search_data.showing = false;
+                self.search_data.query.clear();
+                self.search_data.results.clear();
+                self.search_data.selected_index = 0;
                 Action::Render
             }
             KeyCode::Up => {
-                if self.search_selected_index > 0 {
-                    self.search_selected_index -= 1;
+                if self.search_data.selected_index > 0 {
+                    self.search_data.selected_index -= 1;
                 }
                 Action::Render
             }
             KeyCode::Down => {
-                if !self.search_results.is_empty()
-                    && self.search_selected_index < self.search_results.len() - 1
+                if !self.search_data.results.is_empty()
+                    && self.search_data.selected_index < self.search_data.results.len() - 1
                 {
-                    self.search_selected_index += 1;
+                    self.search_data.selected_index += 1;
                 }
                 Action::Render
             }
             KeyCode::Enter => {
-                if let Some(appt) = self.search_results.get(self.search_selected_index).cloned() {
+                if let Some(appt) = self.search_data.results.get(self.search_data.selected_index).cloned() {
                     self.navigate_to_appointment(&appt);
-                    self.showing_search_modal = false;
-                    self.search_query.clear();
-                    self.search_results.clear();
-                    self.search_selected_index = 0;
+                    self.search_data.showing = false;
+                    self.search_data.query.clear();
+                    self.search_data.results.clear();
+                    self.search_data.selected_index = 0;
                 }
                 Action::Render
             }
             KeyCode::Char(c) => {
-                self.search_query.push(c);
+                self.search_data.query.push(c);
                 self.filter_appointments_by_query();
-                self.search_selected_index = 0;
+                self.search_data.selected_index = 0;
                 Action::Render
             }
             KeyCode::Backspace => {
-                self.search_query.pop();
+                self.search_data.query.pop();
                 self.filter_appointments_by_query();
-                self.search_selected_index = 0;
+                self.search_data.selected_index = 0;
                 Action::Render
             }
             _ => Action::None,
@@ -1246,14 +1113,15 @@ impl AppointmentCalendarComponent {
     }
 
     fn filter_appointments_by_query(&mut self) {
-        if self.search_query.is_empty() {
-            self.search_results.clear();
+        if self.search_data.query.is_empty() {
+            self.search_data.results.clear();
             return;
         }
 
-        let query_lower = self.search_query.to_lowercase();
+        let query_lower = self.search_data.query.to_lowercase();
 
-        self.search_results = self
+        self.search_data.results = self
+            .calendar_state
             .appointments
             .iter()
             .filter(|appt| {
@@ -1273,11 +1141,11 @@ impl AppointmentCalendarComponent {
     fn handle_filter_menu_key_events(&mut self, key: KeyEvent) -> Action {
         match key.code {
             KeyCode::Esc => {
-                self.showing_filter_menu = false;
+                self.filter_state.showing_filter_menu = false;
                 Action::Render
             }
             KeyCode::Char('0') => {
-                self.active_status_filters.clear();
+                self.filter_state.active_status_filters.clear();
                 Action::Render
             }
             KeyCode::Char('1') => {
@@ -1319,17 +1187,17 @@ impl AppointmentCalendarComponent {
     fn handle_practitioner_menu_key_events(&mut self, key: KeyEvent) -> Action {
         match key.code {
             KeyCode::Esc => {
-                self.showing_practitioner_menu = false;
+                self.filter_state.showing_practitioner_menu = false;
                 Action::Render
             }
             KeyCode::Char('0') => {
-                self.active_practitioner_filters.clear();
+                self.filter_state.active_practitioner_filters.clear();
                 Action::Render
             }
             KeyCode::Char(c) if c.is_ascii_digit() => {
                 let digit = c.to_digit(10).unwrap() as usize;
-                if digit > 0 && digit <= self.practitioners.len() {
-                    let practitioner_id = self.practitioners[digit - 1].id;
+                if digit > 0 && digit <= self.calendar_state.practitioners.len() {
+                    let practitioner_id = self.calendar_state.practitioners[digit - 1].id;
                     self.toggle_practitioner_filter(practitioner_id);
                 }
                 Action::Render
@@ -1341,26 +1209,26 @@ impl AppointmentCalendarComponent {
     fn navigate_to_appointment(&mut self, appt: &CalendarAppointment) {
         let appt_date = appt.start_time.date_naive();
 
-        self.current_month_start = NaiveDate::from_ymd_opt(appt_date.year(), appt_date.month(), 1)
+        self.calendar_state.current_month_start = NaiveDate::from_ymd_opt(appt_date.year(), appt_date.month(), 1)
             .expect("valid month start");
 
-        self.selected_month_day = appt_date.day();
+        self.calendar_state.selected_month_day = appt_date.day();
 
         let hour = appt.start_time.hour();
         let minute = appt.start_time.minute();
         let slot_index = ((hour - 8) * 4 + minute / 15) as usize;
 
         if slot_index < 40 {
-            self.time_slot_state.select(Some(slot_index));
+            self.calendar_state.time_slot_state.select(Some(slot_index));
         }
 
-        self.focus_area = FocusArea::DayView;
-        self.view_mode = ViewMode::Day;
+        self.calendar_state.focus_area = FocusArea::DayView;
+        self.calendar_state.view_mode = ViewMode::Day;
     }
 
     fn get_user_display_name(&self, user_id: Uuid) -> String {
         if let Some(practitioner) = self
-            .practitioners
+            .calendar_state.practitioners
             .iter()
             .find(|p| p.user_id.is_some_and(|uid| uid == user_id))
         {
@@ -1383,10 +1251,10 @@ impl AppointmentCalendarComponent {
         // Get appointment and patient data
         let mut lines = Vec::new();
 
-        if let Some(appt_id) = self.selected_appointment {
-            if let Some(appt) = self.appointments.iter().find(|a| a.id == appt_id) {
+        if let Some(appt_id) = self.detail_data.appointment_id {
+            if let Some(appt) = self.calendar_state.appointments.iter().find(|a| a.id == appt_id) {
                 // Header: Patient name and appointment type
-                let patient_name = if let Some(ref patient) = self.modal_patient {
+                let patient_name = if let Some(ref patient) = self.detail_data.patient {
                     format!("{} {}", patient.first_name, patient.last_name)
                 } else {
                     "Loading...".to_string()
@@ -1497,7 +1365,7 @@ impl AppointmentCalendarComponent {
 
                 // Practitioner
                 if let Some(practitioner) = self
-                    .practitioners
+                    .calendar_state.practitioners
                     .iter()
                     .find(|p| p.id == appt.practitioner_id)
                 {
@@ -1605,7 +1473,7 @@ impl AppointmentCalendarComponent {
 
         let mut lines = Vec::new();
 
-        if self.audit_entries.is_empty() {
+        if self.audit_data.entries.is_empty() {
             lines.push(Line::from(vec![Span::styled(
                 "No audit history available",
                 Style::default().fg(Color::Gray),
@@ -1635,7 +1503,7 @@ impl AppointmentCalendarComponent {
             ]));
             lines.push(Line::from("")); // Empty line for spacing
 
-            for (index, entry) in self.audit_entries.iter().enumerate() {
+            for (index, entry) in self.audit_data.entries.iter().enumerate() {
                 let timestamp = entry.changed_at.format("%Y-%m-%d %H:%M:%S").to_string();
 
                 // Try to find practitioner name, fall back to UUID
@@ -1656,7 +1524,7 @@ impl AppointmentCalendarComponent {
                     }
                 };
 
-                let is_selected = index == self.audit_selected_index;
+                let is_selected = index == self.audit_data.selected_index;
                 let base_style = if is_selected {
                     Style::default()
                         .bg(Color::DarkGray)
@@ -1731,7 +1599,7 @@ impl AppointmentCalendarComponent {
         lines.push(Line::from(vec![
             Span::styled("Query: ", Style::default().fg(Color::Cyan)),
             Span::styled(
-                &self.search_query,
+                &self.search_data.query,
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
@@ -1741,12 +1609,12 @@ impl AppointmentCalendarComponent {
 
         lines.push(Line::from(""));
 
-        if self.search_query.is_empty() {
+        if self.search_data.query.is_empty() {
             lines.push(Line::from(vec![Span::styled(
                 "Start typing to search...",
                 Style::default().fg(Color::DarkGray),
             )]));
-        } else if self.search_results.is_empty() {
+        } else if self.search_data.results.is_empty() {
             lines.push(Line::from(vec![Span::styled(
                 "No appointments found",
                 Style::default().fg(Color::Red),
@@ -1755,14 +1623,14 @@ impl AppointmentCalendarComponent {
             lines.push(Line::from(vec![Span::styled(
                 format!(
                     "Found {} result(s) (showing up to 50)",
-                    self.search_results.len()
+                    self.search_data.results.len()
                 ),
                 Style::default().fg(Color::Green),
             )]));
             lines.push(Line::from(""));
 
-            for (idx, appt) in self.search_results.iter().enumerate() {
-                let is_selected = idx == self.search_selected_index;
+            for (idx, appt) in self.search_data.results.iter().enumerate() {
+                let is_selected = idx == self.search_data.selected_index;
                 let prefix = if is_selected { "→ " } else { "  " };
 
                 let patient_id_short = &appt.patient_id.to_string()[..8];
@@ -1836,9 +1704,9 @@ impl AppointmentCalendarComponent {
 
         let mut lines = Vec::new();
 
-        if let Some(appt_id) = self.selected_appointment {
-            if let Some(appt) = self.appointments.iter().find(|a| a.id == appt_id) {
-                let patient_name = if let Some(ref patient) = self.modal_patient {
+        if let Some(appt_id) = self.detail_data.appointment_id {
+            if let Some(appt) = self.calendar_state.appointments.iter().find(|a| a.id == appt_id) {
+                let patient_name = if let Some(ref patient) = self.detail_data.patient {
                     format!("{} {}", patient.first_name, patient.last_name)
                 } else {
                     "Loading...".to_string()
@@ -1878,7 +1746,7 @@ impl AppointmentCalendarComponent {
                 lines.push(Line::from(vec![
                     Span::styled("New Time: ", Style::default().fg(Color::Yellow)),
                     Span::styled(
-                        if let Some(new_time) = self.reschedule_new_start_time {
+                        if let Some(new_time) = self.reschedule_data.new_start_time {
                             format!("{}", new_time.format("%Y-%m-%d %H:%M"))
                         } else {
                             current_time_str
@@ -1892,14 +1760,14 @@ impl AppointmentCalendarComponent {
                 lines.push(Line::from(vec![
                     Span::styled("New Duration: ", Style::default().fg(Color::Yellow)),
                     Span::styled(
-                        format!("{} minutes", self.reschedule_new_duration),
+                        format!("{} minutes", self.reschedule_data.new_duration),
                         Style::default()
                             .fg(Color::Cyan)
                             .add_modifier(Modifier::BOLD),
                     ),
                 ]));
 
-                if let Some(ref warning) = self.reschedule_conflict_warning {
+                if let Some(ref warning) = self.reschedule_data.conflict_warning {
                     lines.push(Line::from(""));
                     lines.push(Line::from(vec![
                         Span::styled(
@@ -1988,7 +1856,7 @@ impl AppointmentCalendarComponent {
         ];
 
         for (status, key, label) in statuses {
-            let is_active = self.active_status_filters.contains(&status);
+            let is_active = self.filter_state.active_status_filters.contains(&status);
             let checkbox = if is_active { "☑" } else { "☐" };
             let color = if is_active {
                 Color::Green
@@ -2027,7 +1895,7 @@ impl AppointmentCalendarComponent {
             Span::styled(": Close", Style::default().fg(Color::White)),
         ]));
 
-        let filter_count = self.active_status_filters.len();
+        let filter_count = self.filter_state.active_status_filters.len();
         let title = if filter_count == 0 {
             " Status Filter (All) ".to_string()
         } else {
@@ -2064,9 +1932,9 @@ impl AppointmentCalendarComponent {
         )]));
         lines.push(Line::from(""));
 
-        for (idx, practitioner) in self.practitioners.iter().enumerate() {
+        for (idx, practitioner) in self.calendar_state.practitioners.iter().enumerate() {
             let key = (idx + 1).to_string();
-            let is_active = self.active_practitioner_filters.contains(&practitioner.id);
+            let is_active = self.filter_state.active_practitioner_filters.contains(&practitioner.id);
             let checkbox = if is_active { "☑" } else { "☐" };
             let color = if is_active {
                 Color::Green
@@ -2106,7 +1974,7 @@ impl AppointmentCalendarComponent {
             Span::styled(": Close", Style::default().fg(Color::White)),
         ]));
 
-        let filter_count = self.active_practitioner_filters.len();
+        let filter_count = self.filter_state.active_practitioner_filters.len();
         let title = if filter_count == 0 {
             " Practitioner Filter (All) ".to_string()
         } else {
@@ -2126,8 +1994,8 @@ impl AppointmentCalendarComponent {
     }
 
     fn initiate_status_change(&mut self, new_status: AppointmentStatus) -> Action {
-        if let Some(selected_slot) = self.time_slot_state.selected() {
-            if let Some(practitioner) = self.practitioners.first() {
+        if let Some(selected_slot) = self.calendar_state.time_slot_state.selected() {
+            if let Some(practitioner) = self.calendar_state.practitioners.first() {
                 let practitioner_id = practitioner.id;
                 if let Some(appt) = self.find_appointment_for_slot(practitioner_id, selected_slot) {
                     let appt_id = appt.id;
@@ -2144,16 +2012,16 @@ impl AppointmentCalendarComponent {
                     let needs_confirmation = matches!(new_status, AppointmentStatus::NoShow);
 
                     if needs_confirmation {
-                        self.confirmation_message = format!(
+                        self.confirmation_data.message = format!(
                             "Mark {} as {}?\n\nThis is a serious status change.\nPress 'y' to confirm or 'n' to cancel.",
                             patient_text, status_text
                         );
-                        self.pending_status = Some(new_status);
-                        self.pending_appointment_id = Some(appt_id);
-                        self.showing_confirmation = true;
+                        self.confirmation_data.pending_status = Some(new_status);
+                        self.confirmation_data.pending_appointment_id = Some(appt_id);
+                        self.confirmation_data.showing = true;
                         return Action::Render;
                     } else {
-                        self.pending_appointment_id = Some(appt_id);
+                        self.confirmation_data.pending_appointment_id = Some(appt_id);
                         return self.execute_status_change(appt_id, new_status);
                     }
                 }
@@ -2163,7 +2031,7 @@ impl AppointmentCalendarComponent {
     }
 
     fn execute_status_change(&mut self, appt_id: Uuid, new_status: AppointmentStatus) -> Action {
-        if let Some(appt) = self.appointments.iter().find(|a| a.id == appt_id) {
+        if let Some(appt) = self.calendar_state.appointments.iter().find(|a| a.id == appt_id) {
             let old_status = appt.status;
             self.add_to_undo_stack(appt_id, old_status);
         }
@@ -2179,20 +2047,20 @@ impl AppointmentCalendarComponent {
     fn handle_confirmation_key_events(&mut self, key: KeyEvent) -> Action {
         match key.code {
             KeyCode::Char('y') | KeyCode::Char('Y') => {
-                self.showing_confirmation = false;
+                self.confirmation_data.showing = false;
                 if let (Some(appt_id), Some(status)) =
-                    (self.pending_appointment_id, self.pending_status)
+                    (self.confirmation_data.pending_appointment_id, self.confirmation_data.pending_status)
                 {
-                    self.pending_appointment_id = None;
-                    self.pending_status = None;
+                    self.confirmation_data.pending_appointment_id = None;
+                    self.confirmation_data.pending_status = None;
                     return self.execute_status_change(appt_id, status);
                 }
                 Action::None
             }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-                self.showing_confirmation = false;
-                self.pending_appointment_id = None;
-                self.pending_status = None;
+                self.confirmation_data.showing = false;
+                self.confirmation_data.pending_appointment_id = None;
+                self.confirmation_data.pending_status = None;
                 Action::Render
             }
             _ => Action::None,
@@ -2200,29 +2068,29 @@ impl AppointmentCalendarComponent {
     }
 
     fn add_to_undo_stack(&mut self, appt_id: Uuid, old_status: AppointmentStatus) {
-        self.recent_status_changes.push((appt_id, old_status));
-        if self.recent_status_changes.len() > 5 {
-            self.recent_status_changes.remove(0);
+        self.history_state.recent_status_changes.push((appt_id, old_status));
+        if self.history_state.recent_status_changes.len() > 5 {
+            self.history_state.recent_status_changes.remove(0);
         }
-        self.undo_timestamp = Some(Utc::now());
+        self.history_state.undo_timestamp = Some(Utc::now());
     }
 
     fn handle_undo(&mut self) -> Action {
         self.clear_undo_if_expired();
 
-        if self.recent_status_changes.is_empty() {
+        if self.history_state.recent_status_changes.is_empty() {
             return Action::None;
         }
 
-        if let Some((appt_id, old_status)) = self.recent_status_changes.pop() {
+        if let Some((appt_id, old_status)) = self.history_state.recent_status_changes.pop() {
             tracing::info!(
                 "Undoing status change for appointment {}, restoring to {:?}",
                 appt_id,
                 old_status
             );
 
-            self.selected_appointment = Some(appt_id);
-            self.undo_timestamp = None;
+            self.detail_data.appointment_id = Some(appt_id);
+            self.history_state.undo_timestamp = None;
 
             match old_status {
                 AppointmentStatus::Arrived => Action::AppointmentMarkArrived,
@@ -2239,7 +2107,7 @@ impl AppointmentCalendarComponent {
     }
 
     fn clear_undo_if_expired(&mut self) {
-        if let Some(timestamp) = self.undo_timestamp {
+        if let Some(timestamp) = self.history_state.undo_timestamp {
             let elapsed = Utc::now().signed_duration_since(timestamp);
             if elapsed.num_seconds() > 30 {
                 self.clear_undo_stack();
@@ -2248,8 +2116,8 @@ impl AppointmentCalendarComponent {
     }
 
     fn clear_undo_stack(&mut self) {
-        self.recent_status_changes.clear();
-        self.undo_timestamp = None;
+        self.history_state.recent_status_changes.clear();
+        self.history_state.undo_timestamp = None;
     }
 
     fn render_confirmation_overlay(&self, frame: &mut Frame, area: Rect) {
@@ -2260,7 +2128,7 @@ impl AppointmentCalendarComponent {
             height: area.height / 3,
         };
 
-        let message = self.confirmation_message.clone();
+        let message = self.confirmation_data.message.clone();
 
         let lines = vec![
             Line::from(vec![Span::styled(
@@ -2326,7 +2194,7 @@ impl AppointmentCalendarComponent {
             )]),
             Line::from(""),
             Line::from(vec![Span::styled(
-                &self.error_message,
+                &self.error_data.message,
                 Style::default().fg(Color::White),
             )]),
             Line::from(""),
@@ -2370,7 +2238,7 @@ impl AppointmentCalendarComponent {
             height: area.height / 3,
         };
 
-        let selection_count = self.selected_appointments.len();
+        let selection_count = self.history_state.selected_appointments.len();
 
         let lines = vec![
             Line::from(vec![Span::styled(
@@ -2447,8 +2315,8 @@ impl AppointmentCalendarComponent {
             height: area.height / 4,
         };
 
-        let progress_percent = if self.batch_progress_total > 0 {
-            (self.batch_progress_current as f64 / self.batch_progress_total as f64 * 100.0) as usize
+        let progress_percent = if self.batch_data.progress_total > 0 {
+            (self.batch_data.progress_current as f64 / self.batch_data.progress_total as f64 * 100.0) as usize
         } else {
             0
         };
@@ -2471,7 +2339,7 @@ impl AppointmentCalendarComponent {
             )]),
             Line::from(""),
             Line::from(vec![Span::styled(
-                &self.batch_progress_message,
+                &self.batch_data.progress_message,
                 Style::default().fg(Color::White),
             )]),
             Line::from(""),
@@ -2483,7 +2351,7 @@ impl AppointmentCalendarComponent {
             Line::from(vec![Span::styled(
                 format!(
                     "Processing {} of {}",
-                    self.batch_progress_current, self.batch_progress_total
+                    self.batch_data.progress_current, self.batch_data.progress_total
                 ),
                 Style::default().fg(Color::DarkGray),
             )]),
@@ -2500,6 +2368,194 @@ impl AppointmentCalendarComponent {
 
         frame.render_widget(modal_content, modal_area);
     }
+
+    fn handle_help_keys(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('?') => {
+                self.modal_state.hide();
+                Action::Render
+            }
+            _ => Action::None,
+        }
+    }
+
+    fn handle_error_modal_keys(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Esc | KeyCode::Enter => {
+                self.error_data.showing = false;
+                self.error_data.message.clear();
+                Action::Render
+            }
+            _ => Action::None,
+        }
+    }
+
+    fn handle_multi_select_keys(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Esc => {
+                self.history_state.multi_select_mode = false;
+                self.history_state.selected_appointments.clear();
+                tracing::info!("Exiting multi-select mode");
+                Action::Render
+            }
+            KeyCode::Char(' ') if self.calendar_state.focus_area == FocusArea::DayView => {
+                if let Some(selected_slot) = self.calendar_state.time_slot_state.selected() {
+                    let visible_practitioners: Vec<_> = self
+                        .calendar_state.practitioners
+                        .iter()
+                        .filter(|p| {
+                            self.filter_state.active_practitioner_filters.is_empty()
+                                || self.filter_state.active_practitioner_filters.contains(&p.id)
+                        })
+                        .collect();
+
+                    if let Some(practitioner) = visible_practitioners.first() {
+                        if let Some(appt) =
+                            self.find_appointment_for_slot(practitioner.id, selected_slot)
+                        {
+                            let appt_id = appt.id;
+                            if self.history_state.selected_appointments.contains(&appt_id) {
+                                self.history_state.selected_appointments.remove(&appt_id);
+                                tracing::info!("Deselected appointment {}", appt_id);
+                            } else {
+                                self.history_state.selected_appointments.insert(appt_id);
+                                tracing::info!("Selected appointment {}", appt_id);
+                            }
+                        }
+                    }
+                }
+                Action::Render
+            }
+            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.history_state.selected_appointments.clear();
+                for appt in &self.calendar_state.appointments {
+                    if (self.filter_state.active_status_filters.is_empty()
+                        || self.filter_state.active_status_filters.contains(&appt.status))
+                        && (self.filter_state.active_practitioner_filters.is_empty()
+                            || self
+                                .filter_state.active_practitioner_filters
+                                .contains(&appt.practitioner_id))
+                    {
+                        self.history_state.selected_appointments.insert(appt.id);
+                    }
+                }
+                tracing::info!(
+                    "Selected all {} visible appointments",
+                    self.history_state.selected_appointments.len()
+                );
+                Action::Render
+            }
+            KeyCode::Char('b') if !self.history_state.selected_appointments.is_empty() => {
+                self.batch_data.showing_menu = true;
+                tracing::info!(
+                    "Batch operations menu requested for {} appointments",
+                    self.history_state.selected_appointments.len()
+                );
+                Action::Render
+            }
+            _ => Action::None,
+        }
+    }
+
+    fn handle_month_view_keys(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Left => {
+                self.previous_day();
+                Action::Render
+            }
+            KeyCode::Right => {
+                self.next_day();
+                Action::Render
+            }
+            KeyCode::Up => {
+                self.previous_week();
+                Action::Render
+            }
+            KeyCode::Down => {
+                self.next_week();
+                Action::Render
+            }
+            KeyCode::Char('h') => {
+                self.previous_month();
+                Action::Render
+            }
+            KeyCode::Char('l') => {
+                self.next_month();
+                Action::Render
+            }
+            KeyCode::Char('t') => {
+                self.jump_to_today();
+                Action::Render
+            }
+            KeyCode::Enter | KeyCode::Tab => {
+                self.calendar_state.focus_area = FocusArea::DayView;
+                Action::Render
+            }
+            KeyCode::Char('n') => Action::AppointmentCreate,
+            _ => Action::None,
+        }
+    }
+
+    fn handle_day_view_keys(&mut self, key: KeyEvent) -> Action {
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.clear_undo_if_expired();
+                self.previous_time_slot();
+                Action::Render
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.clear_undo_if_expired();
+                self.next_time_slot();
+                Action::Render
+            }
+            KeyCode::Tab => {
+                self.clear_undo_stack();
+                self.calendar_state.focus_area = FocusArea::MonthView;
+                Action::Render
+            }
+            KeyCode::Esc => {
+                self.clear_undo_stack();
+                self.calendar_state.focus_area = FocusArea::MonthView;
+                Action::Render
+            }
+            KeyCode::Enter => {
+                if let Some(selected_slot) = self.calendar_state.time_slot_state.selected() {
+                    if let Some(practitioner) = self.calendar_state.practitioners.first() {
+                        if let Some(appt) =
+                            self.find_appointment_for_slot(practitioner.id, selected_slot)
+                        {
+                            self.detail_data.appointment_id = Some(appt.id);
+                            self.detail_data.showing = true;
+                            return Action::Render;
+                        }
+                    }
+                }
+                Action::None
+            }
+            KeyCode::Char('a') => self.initiate_status_change(AppointmentStatus::Arrived),
+            KeyCode::Char('c') => self.initiate_status_change(AppointmentStatus::Completed),
+            KeyCode::Char('x') | KeyCode::Char('X') => {
+                self.initiate_status_change(AppointmentStatus::NoShow)
+            }
+            KeyCode::Char('n') => Action::AppointmentCreate,
+            KeyCode::Char('v') => {
+                self.calendar_state.view_mode = match self.calendar_state.view_mode {
+                    ViewMode::Day => ViewMode::Week,
+                    ViewMode::Week => ViewMode::Day,
+                };
+                Action::Render
+            }
+            KeyCode::Left if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                self.calendar_state.week_start_date -= chrono::Duration::days(7);
+                Action::Render
+            }
+            KeyCode::Right if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                self.calendar_state.week_start_date += chrono::Duration::days(7);
+                Action::Render
+            }
+            _ => Action::None,
+        }
+    }
 }
 
 #[async_trait]
@@ -2507,10 +2563,10 @@ impl Component for AppointmentCalendarComponent {
     async fn init(&mut self) -> Result<()> {
         match self.practitioner_service.get_active_practitioners().await {
             Ok(practitioners) => {
-                self.practitioners = practitioners;
+                self.calendar_state.practitioners = practitioners;
             }
             Err(_e) => {
-                self.practitioners = vec![
+                self.calendar_state.practitioners = vec![
                     Practitioner {
                         id: Uuid::new_v4(),
                         user_id: None,
@@ -2559,289 +2615,102 @@ impl Component for AppointmentCalendarComponent {
     }
 
     fn handle_key_events(&mut self, key: KeyEvent) -> Action {
-        if self.showing_help_modal {
-            return match key.code {
-                KeyCode::Esc | KeyCode::Char('?') => {
-                    self.showing_help_modal = false;
-                    Action::Render
-                }
-                _ => Action::None,
-            };
+        // Modal handlers - check in priority order
+        if self.modal_state.is_showing(ModalType::Help) {
+            return self.handle_help_keys(key);
         }
-
-        if self.showing_confirmation {
+        if self.confirmation_data.showing {
             return self.handle_confirmation_key_events(key);
         }
-
-        if self.showing_error_modal {
-            return match key.code {
-                KeyCode::Esc | KeyCode::Enter => {
-                    self.showing_error_modal = false;
-                    self.error_message.clear();
-                    Action::Render
-                }
-                _ => Action::None,
-            };
+        if self.error_data.showing {
+            return self.handle_error_modal_keys(key);
         }
-
-        if self.showing_filter_menu {
+        if self.filter_state.showing_filter_menu {
             return self.handle_filter_menu_key_events(key);
         }
-
-        if self.showing_practitioner_menu {
+        if self.filter_state.showing_practitioner_menu {
             return self.handle_practitioner_menu_key_events(key);
         }
-
-        if self.showing_search_modal {
+        if self.search_data.showing {
             return self.handle_search_key_events(key);
         }
-
-        if self.showing_reschedule_modal {
+        if self.reschedule_data.showing {
             return self.handle_reschedule_modal_key_events(key);
         }
-
-        if self.showing_detail_modal {
+        if self.detail_data.showing {
             return self.handle_modal_key_events(key);
         }
-
-        if self.showing_audit_modal {
+        if self.audit_data.showing {
             return self.handle_audit_modal_key_events(key);
         }
-
-        if self.showing_batch_menu {
+        if self.batch_data.showing_menu {
             return self.handle_batch_menu_key_events(key);
         }
 
+        // Global shortcuts
         if key.code == KeyCode::Char('z') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return self.handle_undo();
         }
-
         if key.code == KeyCode::Char('?') {
-            self.showing_help_modal = true;
+            self.modal_state.show(ModalType::Help);
             return Action::Render;
         }
-
         if key.code == KeyCode::Char('/') {
-            self.showing_search_modal = true;
-            self.search_query.clear();
-            self.search_results.clear();
-            self.search_selected_index = 0;
+            self.search_data.showing = true;
+            self.search_data.query.clear();
+            self.search_data.results.clear();
+            self.search_data.selected_index = 0;
             return Action::Render;
         }
-
         if key.code == KeyCode::Char('f') {
-            self.showing_filter_menu = true;
+            self.filter_state.showing_filter_menu = true;
             return Action::Render;
         }
-
         if key.code == KeyCode::Char('p') {
-            self.showing_practitioner_menu = true;
+            self.filter_state.showing_practitioner_menu = true;
             return Action::Render;
         }
 
-        // Multi-select mode toggle (m key)
+        // Multi-select mode toggle
         if key.code == KeyCode::Char('m') {
-            self.multi_select_mode = !self.multi_select_mode;
-            if !self.multi_select_mode {
-                self.selected_appointments.clear();
+            self.history_state.multi_select_mode = !self.history_state.multi_select_mode;
+            if !self.history_state.multi_select_mode {
+                self.history_state.selected_appointments.clear();
             }
             tracing::info!(
                 "Multi-select mode: {}",
-                if self.multi_select_mode { "ON" } else { "OFF" }
+                if self.history_state.multi_select_mode { "ON" } else { "OFF" }
             );
             return Action::Render;
         }
 
-        // Handle multi-select mode keyboard shortcuts
-        if self.multi_select_mode {
-            match key.code {
-                // Esc exits multi-select mode
-                KeyCode::Esc => {
-                    self.multi_select_mode = false;
-                    self.selected_appointments.clear();
-                    tracing::info!("Exiting multi-select mode");
-                    return Action::Render;
-                }
-                // Space toggles selection on current appointment
-                KeyCode::Char(' ') if self.focus_area == FocusArea::DayView => {
-                    if let Some(selected_slot) = self.time_slot_state.selected() {
-                        let visible_practitioners: Vec<_> = self
-                            .practitioners
-                            .iter()
-                            .filter(|p| {
-                                self.active_practitioner_filters.is_empty()
-                                    || self.active_practitioner_filters.contains(&p.id)
-                            })
-                            .collect();
-
-                        if let Some(practitioner) = visible_practitioners.first() {
-                            if let Some(appt) =
-                                self.find_appointment_for_slot(practitioner.id, selected_slot)
-                            {
-                                let appt_id = appt.id;
-                                if self.selected_appointments.contains(&appt_id) {
-                                    self.selected_appointments.remove(&appt_id);
-                                    tracing::info!("Deselected appointment {}", appt_id);
-                                } else {
-                                    self.selected_appointments.insert(appt_id);
-                                    tracing::info!("Selected appointment {}", appt_id);
-                                }
-                            }
-                        }
-                    }
-                    return Action::Render;
-                }
-                // Ctrl+A selects all visible appointments
-                KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.selected_appointments.clear();
-                    for appt in &self.appointments {
-                        // Only select appointments matching current filters
-                        if (self.active_status_filters.is_empty()
-                            || self.active_status_filters.contains(&appt.status))
-                            && (self.active_practitioner_filters.is_empty()
-                                || self
-                                    .active_practitioner_filters
-                                    .contains(&appt.practitioner_id))
-                        {
-                            self.selected_appointments.insert(appt.id);
-                        }
-                    }
-                    tracing::info!(
-                        "Selected all {} visible appointments",
-                        self.selected_appointments.len()
-                    );
-                    return Action::Render;
-                }
-                // B key opens batch operations menu
-                KeyCode::Char('b') if !self.selected_appointments.is_empty() => {
-                    self.showing_batch_menu = true;
-                    tracing::info!(
-                        "Batch operations menu requested for {} appointments",
-                        self.selected_appointments.len()
-                    );
-                    return Action::Render;
-                }
-                _ => {}
-            }
+        // Multi-select mode handlers
+        if self.history_state.multi_select_mode {
+            return self.handle_multi_select_keys(key);
         }
 
-        match self.focus_area {
-            FocusArea::MonthView => match key.code {
-                KeyCode::Left => {
-                    self.previous_day();
-                    Action::Render
-                }
-                KeyCode::Right => {
-                    self.next_day();
-                    Action::Render
-                }
-                KeyCode::Up => {
-                    self.previous_week();
-                    Action::Render
-                }
-                KeyCode::Down => {
-                    self.next_week();
-                    Action::Render
-                }
-                KeyCode::Char('h') => {
-                    self.previous_month();
-                    Action::Render
-                }
-                KeyCode::Char('l') => {
-                    self.next_month();
-                    Action::Render
-                }
-                KeyCode::Char('t') => {
-                    self.jump_to_today();
-                    Action::Render
-                }
-                KeyCode::Enter => {
-                    self.focus_area = FocusArea::DayView;
-                    Action::Render
-                }
-                KeyCode::Tab => {
-                    self.focus_area = FocusArea::DayView;
-                    Action::Render
-                }
-                KeyCode::Char('n') => Action::AppointmentCreate,
-                _ => Action::None,
-            },
-            FocusArea::DayView => match key.code {
-                KeyCode::Up | KeyCode::Char('k') => {
-                    self.clear_undo_if_expired();
-                    self.previous_time_slot();
-                    Action::Render
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    self.clear_undo_if_expired();
-                    self.next_time_slot();
-                    Action::Render
-                }
-                KeyCode::Tab => {
-                    self.clear_undo_stack();
-                    self.focus_area = FocusArea::MonthView;
-                    Action::Render
-                }
-                KeyCode::Esc => {
-                    self.clear_undo_stack();
-                    self.focus_area = FocusArea::MonthView;
-                    Action::Render
-                }
-                KeyCode::Enter => {
-                    if let Some(selected_slot) = self.time_slot_state.selected() {
-                        if let Some(practitioner) = self.practitioners.first() {
-                            if let Some(appt) =
-                                self.find_appointment_for_slot(practitioner.id, selected_slot)
-                            {
-                                self.selected_appointment = Some(appt.id);
-                                self.showing_detail_modal = true;
-                                return Action::Render;
-                            }
-                        }
-                    }
-                    Action::None
-                }
-                KeyCode::Char('a') => self.initiate_status_change(AppointmentStatus::Arrived),
-                KeyCode::Char('c') => self.initiate_status_change(AppointmentStatus::Completed),
-                KeyCode::Char('x') | KeyCode::Char('X') => {
-                    self.initiate_status_change(AppointmentStatus::NoShow)
-                },
-                KeyCode::Char('n') => Action::AppointmentCreate,
-                KeyCode::Char('v') => {
-                    self.view_mode = match self.view_mode {
-                        ViewMode::Day => ViewMode::Week,
-                        ViewMode::Week => ViewMode::Day,
-                    };
-                    Action::Render
-                }
-                KeyCode::Left if key.modifiers.contains(KeyModifiers::SHIFT) => {
-                    self.week_start_date -= chrono::Duration::days(7);
-                    Action::Render
-                }
-                KeyCode::Right if key.modifiers.contains(KeyModifiers::SHIFT) => {
-                    self.week_start_date += chrono::Duration::days(7);
-                    Action::Render
-                }
-                _ => Action::None,
-            },
+        // Navigation based on focus area
+        match self.calendar_state.focus_area {
+            FocusArea::MonthView => self.handle_month_view_keys(key),
+            FocusArea::DayView => self.handle_day_view_keys(key),
         }
     }
 
     async fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::Render => {
-                match self.view_mode {
+                match self.calendar_state.view_mode {
                     ViewMode::Day => self.load_appointments_for_date().await?,
                     ViewMode::Week => self.load_appointments_for_week().await?,
                 }
 
                 // Load patient data when modal opens
-                if self.showing_detail_modal && self.modal_patient.is_none() {
-                    if let Some(appt_id) = self.selected_appointment {
-                        if let Some(appt) = self.appointments.iter().find(|a| a.id == appt_id) {
+                if self.detail_data.showing && self.detail_data.patient.is_none() {
+                    if let Some(appt_id) = self.detail_data.appointment_id {
+                        if let Some(appt) = self.calendar_state.appointments.iter().find(|a| a.id == appt_id) {
                             match self.patient_service.find_patient(appt.patient_id).await {
                                 Ok(Some(patient)) => {
-                                    self.modal_patient = Some(patient);
+                                    self.detail_data.patient = Some(patient);
                                 }
                                 Ok(None) => {
                                     tracing::warn!("Patient not found: {}", appt.patient_id);
@@ -2855,7 +2724,7 @@ impl Component for AppointmentCalendarComponent {
                 }
             }
             Action::AppointmentMarkArrived => {
-                if let Some(appt_id) = self.selected_appointment {
+                if let Some(appt_id) = self.detail_data.appointment_id {
                     let user_id = Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789")
                         .expect("valid UUID");
 
@@ -2866,20 +2735,20 @@ impl Component for AppointmentCalendarComponent {
                     {
                         Ok(_) => {
                             tracing::info!("Appointment {} marked as arrived", appt_id);
-                            self.showing_detail_modal = false;
+                            self.detail_data.showing = false;
                             self.load_appointments_for_date().await?;
                         }
                         Err(e) => {
                             tracing::error!("Failed to mark appointment as arrived: {}", e);
-                            self.error_message = e.to_string();
-                            self.showing_error_modal = true;
-                            self.showing_detail_modal = false;
+                            self.error_data.message = e.to_string();
+                            self.error_data.showing = true;
+                            self.detail_data.showing = false;
                         }
                     }
                 }
             }
             Action::AppointmentMarkCompleted => {
-                if let Some(appt_id) = self.selected_appointment {
+                if let Some(appt_id) = self.detail_data.appointment_id {
                     let user_id = Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789")
                         .expect("valid UUID");
 
@@ -2890,20 +2759,20 @@ impl Component for AppointmentCalendarComponent {
                     {
                         Ok(_) => {
                             tracing::info!("Appointment {} marked as completed", appt_id);
-                            self.showing_detail_modal = false;
+                            self.detail_data.showing = false;
                             self.load_appointments_for_date().await?;
                         }
                         Err(e) => {
                             tracing::error!("Failed to mark appointment as completed: {}", e);
-                            self.error_message = e.to_string();
-                            self.showing_error_modal = true;
-                            self.showing_detail_modal = false;
+                            self.error_data.message = e.to_string();
+                            self.error_data.showing = true;
+                            self.detail_data.showing = false;
                         }
                     }
                 }
             }
             Action::AppointmentMarkNoShow => {
-                if let Some(appt_id) = self.selected_appointment {
+                if let Some(appt_id) = self.detail_data.appointment_id {
                     let user_id = Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789")
                         .expect("valid UUID");
 
@@ -2914,21 +2783,21 @@ impl Component for AppointmentCalendarComponent {
                     {
                         Ok(_) => {
                             tracing::info!("Appointment {} marked as no show", appt_id);
-                            self.showing_detail_modal = false;
+                            self.detail_data.showing = false;
                             self.load_appointments_for_date().await?;
                         }
                         Err(e) => {
                             tracing::error!("Failed to mark appointment as no show: {}", e);
-                            self.error_message = e.to_string();
-                            self.showing_error_modal = true;
-                            self.showing_detail_modal = false;
+                            self.error_data.message = e.to_string();
+                            self.error_data.showing = true;
+                            self.detail_data.showing = false;
                         }
                     }
                 }
             }
             Action::AppointmentReschedule => {
-                if let Some(appt_id) = self.selected_appointment {
-                    if let Some(new_start_time) = self.reschedule_new_start_time {
+                if let Some(appt_id) = self.detail_data.appointment_id {
+                    if let Some(new_start_time) = self.reschedule_data.new_start_time {
                         let user_id = Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789")
                             .expect("valid UUID");
 
@@ -2937,24 +2806,24 @@ impl Component for AppointmentCalendarComponent {
                             .reschedule_appointment(
                                 appt_id,
                                 new_start_time,
-                                self.reschedule_new_duration,
+                                self.reschedule_data.new_duration,
                                 user_id,
                             )
                             .await
                         {
                             Ok(_) => {
                                 tracing::info!("Appointment {} rescheduled successfully", appt_id);
-                                self.showing_reschedule_modal = false;
-                                self.reschedule_new_start_time = None;
-                                self.reschedule_conflict_warning = None;
-                                match self.view_mode {
+                                self.reschedule_data.showing = false;
+                                self.reschedule_data.new_start_time = None;
+                                self.reschedule_data.conflict_warning = None;
+                                match self.calendar_state.view_mode {
                                     ViewMode::Day => self.load_appointments_for_date().await?,
                                     ViewMode::Week => self.load_appointments_for_week().await?,
                                 }
                             }
                             Err(e) => {
                                 tracing::error!("Failed to reschedule appointment: {}", e);
-                                self.reschedule_conflict_warning = Some(e.to_string());
+                                self.reschedule_data.conflict_warning = Some(e.to_string());
                             }
                         }
                     }
@@ -2965,12 +2834,12 @@ impl Component for AppointmentCalendarComponent {
                     Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789").expect("valid UUID");
 
                 let appointment_ids: Vec<Uuid> =
-                    self.selected_appointments.iter().copied().collect();
+                    self.history_state.selected_appointments.iter().copied().collect();
                 let total = appointment_ids.len();
 
-                self.batch_operation_in_progress = true;
-                self.batch_progress_total = total;
-                self.batch_progress_current = 0;
+                self.batch_data.operation_in_progress = true;
+                self.batch_data.progress_total = total;
+                self.batch_data.progress_current = 0;
 
                 let mut success_count = 0;
                 let mut error_count = 0;
@@ -2978,8 +2847,8 @@ impl Component for AppointmentCalendarComponent {
                 tracing::info!("Starting batch mark arrived for {} appointments", total);
 
                 for (idx, appt_id) in appointment_ids.iter().enumerate() {
-                    self.batch_progress_current = idx + 1;
-                    self.batch_progress_message =
+                    self.batch_data.progress_current = idx + 1;
+                    self.batch_data.progress_message =
                         format!("Marking appointment {} as arrived...", idx + 1);
 
                     match self
@@ -3002,9 +2871,9 @@ impl Component for AppointmentCalendarComponent {
                     }
                 }
 
-                self.batch_operation_in_progress = false;
-                self.multi_select_mode = false;
-                self.selected_appointments.clear();
+                self.batch_data.operation_in_progress = false;
+                self.history_state.multi_select_mode = false;
+                self.history_state.selected_appointments.clear();
 
                 tracing::info!(
                     "Batch mark arrived completed: {} succeeded, {} failed",
@@ -3013,14 +2882,14 @@ impl Component for AppointmentCalendarComponent {
                 );
 
                 if error_count > 0 {
-                    self.error_message = format!(
+                    self.error_data.message = format!(
                         "Batch operation completed with errors:\n{} succeeded, {} failed\n\nCheck logs for details.",
                         success_count, error_count
                     );
-                    self.showing_error_modal = true;
+                    self.error_data.showing = true;
                 }
 
-                match self.view_mode {
+                match self.calendar_state.view_mode {
                     ViewMode::Day => self.load_appointments_for_date().await?,
                     ViewMode::Week => self.load_appointments_for_week().await?,
                 }
@@ -3030,12 +2899,12 @@ impl Component for AppointmentCalendarComponent {
                     Uuid::parse_str("a1b2c3d4-e5f6-4789-a1b2-c3d4e5f64789").expect("valid UUID");
 
                 let appointment_ids: Vec<Uuid> =
-                    self.selected_appointments.iter().copied().collect();
+                    self.history_state.selected_appointments.iter().copied().collect();
                 let total = appointment_ids.len();
 
-                self.batch_operation_in_progress = true;
-                self.batch_progress_total = total;
-                self.batch_progress_current = 0;
+                self.batch_data.operation_in_progress = true;
+                self.batch_data.progress_total = total;
+                self.batch_data.progress_current = 0;
 
                 let mut success_count = 0;
                 let mut error_count = 0;
@@ -3043,8 +2912,8 @@ impl Component for AppointmentCalendarComponent {
                 tracing::info!("Starting batch mark completed for {} appointments", total);
 
                 for (idx, appt_id) in appointment_ids.iter().enumerate() {
-                    self.batch_progress_current = idx + 1;
-                    self.batch_progress_message =
+                    self.batch_data.progress_current = idx + 1;
+                    self.batch_data.progress_message =
                         format!("Marking appointment {} as completed...", idx + 1);
 
                     match self
@@ -3067,9 +2936,9 @@ impl Component for AppointmentCalendarComponent {
                     }
                 }
 
-                self.batch_operation_in_progress = false;
-                self.multi_select_mode = false;
-                self.selected_appointments.clear();
+                self.batch_data.operation_in_progress = false;
+                self.history_state.multi_select_mode = false;
+                self.history_state.selected_appointments.clear();
 
                 tracing::info!(
                     "Batch mark completed: {} succeeded, {} failed",
@@ -3078,14 +2947,14 @@ impl Component for AppointmentCalendarComponent {
                 );
 
                 if error_count > 0 {
-                    self.error_message = format!(
+                    self.error_data.message = format!(
                         "Batch operation completed with errors:\n{} succeeded, {} failed\n\nCheck logs for details.",
                         success_count, error_count
                     );
-                    self.showing_error_modal = true;
+                    self.error_data.showing = true;
                 }
 
-                match self.view_mode {
+                match self.calendar_state.view_mode {
                     ViewMode::Day => self.load_appointments_for_date().await?,
                     ViewMode::Week => self.load_appointments_for_week().await?,
                 }
@@ -3101,58 +2970,90 @@ impl Component for AppointmentCalendarComponent {
             .constraints([Constraint::Length(30), Constraint::Min(50)])
             .split(area);
 
-        self.render_month_calendar(frame, chunks[0]);
-        match self.view_mode {
-            ViewMode::Day => self.render_day_schedule(frame, chunks[1]),
-            ViewMode::Week => self.render_week_schedule(frame, chunks[1]),
+        CalendarRenderer::render_month_calendar(&self.calendar_state, frame, chunks[0]);
+        match self.calendar_state.view_mode {
+            ViewMode::Day => CalendarRenderer::render_day_schedule(
+                &mut self.calendar_state,
+                &self.filter_state,
+                &self.history_state,
+                frame,
+                chunks[1],
+            ),
+            ViewMode::Week => CalendarRenderer::render_week_schedule(
+                &mut self.calendar_state,
+                frame,
+                chunks[1],
+            ),
         }
 
-        if self.showing_detail_modal {
-            self.render_appointment_detail_modal(frame, area);
+        if self.detail_data.showing {
+            ModalRenderer::render_appointment_detail_modal(
+                &self.detail_data,
+                &self.calendar_state,
+                &self.calendar_state.practitioners,
+                frame,
+                area,
+            );
         }
 
-        if self.showing_audit_modal {
-            self.render_audit_history_modal(frame, area);
+        if self.audit_data.showing {
+            ModalRenderer::render_audit_history_modal(
+                &self.audit_data,
+                &self.calendar_state.practitioners,
+                frame,
+                area,
+            );
         }
 
-        if self.showing_reschedule_modal {
-            self.render_reschedule_modal(frame, area);
+        if self.reschedule_data.showing {
+            ModalRenderer::render_reschedule_modal(
+                &self.reschedule_data,
+                &self.detail_data,
+                &self.calendar_state,
+                frame,
+                area,
+            );
         }
 
-        if self.showing_search_modal {
-            self.render_search_modal(frame, area);
+        if self.search_data.showing {
+            ModalRenderer::render_search_modal(&self.search_data, frame, area);
         }
 
-        if self.showing_filter_menu {
-            self.render_filter_menu(frame, area);
+        if self.filter_state.showing_filter_menu {
+            ModalRenderer::render_filter_menu(&self.filter_state, frame, area);
         }
 
-        if self.showing_practitioner_menu {
-            self.render_practitioner_menu(frame, area);
+        if self.filter_state.showing_practitioner_menu {
+            ModalRenderer::render_practitioner_menu(
+                &self.filter_state,
+                &self.calendar_state,
+                frame,
+                area,
+            );
         }
 
-        if self.showing_error_modal {
-            self.render_error_modal(frame, area);
+        if self.error_data.showing {
+            ModalRenderer::render_error_modal(&self.error_data, frame, area);
         }
 
-        if self.showing_confirmation {
-            self.render_confirmation_overlay(frame, area);
+        if self.confirmation_data.showing {
+            ModalRenderer::render_confirmation_overlay(&self.confirmation_data, frame, area);
         }
 
-        if self.showing_batch_menu {
-            self.render_batch_menu(frame, area);
+        if self.batch_data.showing_menu {
+            ModalRenderer::render_batch_menu(&self.history_state, frame, area);
         }
 
-        if self.batch_operation_in_progress {
-            self.render_batch_progress(frame, area);
+        if self.batch_data.operation_in_progress {
+            ModalRenderer::render_batch_progress(&self.batch_data, frame, area);
         }
 
-        if self.showing_help_modal {
-            let context = if self.focus_area == FocusArea::MonthView {
+        if self.modal_state.is_showing(ModalType::Help) {
+            let context = if self.calendar_state.focus_area == FocusArea::MonthView {
                 KeybindContext::CalendarMonthView
-            } else if self.view_mode == ViewMode::Week {
+            } else if self.calendar_state.view_mode == ViewMode::Week {
                 KeybindContext::CalendarWeekView
-            } else if self.multi_select_mode {
+            } else if self.history_state.multi_select_mode {
                 KeybindContext::CalendarMultiSelect
             } else {
                 KeybindContext::CalendarDayView

@@ -35,6 +35,90 @@ impl AppointmentService {
         }
     }
 
+    /// Check for overlapping appointments for a practitioner
+    ///
+    /// # Arguments
+    /// * `practitioner_id` - ID of the practitioner
+    /// * `start_time` - Start time of the appointment slot
+    /// * `end_time` - End time of the appointment slot
+    /// * `exclude_id` - Optional appointment ID to exclude from overlap check (used for rescheduling)
+    ///
+    /// # Returns
+    /// * `Ok(())` - No overlapping appointments found
+    /// * `Err(ServiceError::Conflict)` - Overlapping appointment(s) found
+    /// * `Err(ServiceError::Repository)` - Database error
+    async fn check_no_overlap(
+        &self,
+        practitioner_id: Uuid,
+        start_time: chrono::DateTime<Utc>,
+        end_time: chrono::DateTime<Utc>,
+        exclude_id: Option<Uuid>,
+    ) -> Result<(), ServiceError> {
+        info!(
+            "Checking for overlapping appointments for practitioner {} between {:?} and {:?}",
+            practitioner_id, start_time, end_time
+        );
+
+        let overlapping = self
+            .repository
+            .find_overlapping(practitioner_id, start_time, end_time)
+            .await?;
+
+        let conflicts: Vec<&Appointment> = overlapping
+            .iter()
+            .filter(|a| exclude_id.is_none() || a.id != exclude_id.unwrap())
+            .collect();
+
+        if !conflicts.is_empty() {
+            error!(
+                "Overlapping appointment(s) found for practitioner {}: {} conflict(s)",
+                practitioner_id,
+                conflicts.len()
+            );
+            return Err(ServiceError::Conflict(format!(
+                "Practitioner has {} overlapping appointment(s) during this time",
+                conflicts.len()
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Validate status transition using state machine rules
+    ///
+    /// Checks if the appointment can transition from its current status to the target status.
+    /// Uses the domain model's `can_transition_to()` method to enforce business rules.
+    ///
+    /// # Arguments
+    /// * `appointment` - The appointment to validate
+    /// * `target_status` - The target status to transition to
+    ///
+    /// # Returns
+    /// * `Ok(())` - Transition is valid
+    /// * `Err(ServiceError::InvalidTransition)` - Transition is not allowed
+    fn validate_transition(
+        &self,
+        appointment: &Appointment,
+        target_status: AppointmentStatus,
+    ) -> Result<(), ServiceError> {
+        appointment.can_transition_to(target_status).map_err(|e| {
+            tracing::warn!("Invalid transition blocked: {}", e);
+            ServiceError::InvalidTransition(e)
+        })
+    }
+
+    /// Log an audit entry for appointment operations
+    ///
+    /// # Arguments
+    /// * `entry` - The audit entry to log
+    ///
+    /// # Returns
+    /// * `Ok(())` - Successfully logged
+    /// * `Err(ServiceError)` - Failed to log audit entry
+    async fn audit_log(&self, entry: AuditEntry) -> Result<(), ServiceError> {
+        self.audit_service.log(entry).await?;
+        Ok(())
+    }
     /// Create a new appointment with overlap checking
     ///
     /// # Arguments
@@ -60,27 +144,8 @@ impl AppointmentService {
         let end_time = data.start_time + data.duration;
 
         // Critical: Check for overlapping appointments (prevent double-booking)
-        info!(
-            "Checking for overlapping appointments for practitioner {} between {:?} and {:?}",
-            data.practitioner_id, data.start_time, end_time
-        );
-
-        let overlapping = self
-            .repository
-            .find_overlapping(data.practitioner_id, data.start_time, end_time)
+        self.check_no_overlap(data.practitioner_id, data.start_time, end_time, None)
             .await?;
-
-        if !overlapping.is_empty() {
-            error!(
-                "Overlapping appointment(s) found for practitioner {}: {} conflict(s)",
-                data.practitioner_id,
-                overlapping.len()
-            );
-            return Err(ServiceError::Conflict(format!(
-                "Practitioner has {} overlapping appointment(s) during this time",
-                overlapping.len()
-            )));
-        }
 
         info!("No conflicts found, creating appointment domain model");
 
@@ -390,12 +455,7 @@ impl AppointmentService {
 
         let old_status = appointment.status;
 
-        appointment
-            .can_transition_to(AppointmentStatus::Arrived)
-            .map_err(|e| {
-                tracing::warn!("Invalid transition blocked: {}", e);
-                ServiceError::InvalidTransition(e)
-            })?;
+        self.validate_transition(&appointment, AppointmentStatus::Arrived)?;
 
         appointment.mark_arrived(user_id);
 
@@ -409,7 +469,7 @@ impl AppointmentService {
             format!("{:?}", updated.status),
             user_id,
         );
-        self.audit_service.log(audit_entry).await?;
+        self.audit_log(audit_entry).await?;
 
         Ok(updated)
     }
@@ -443,12 +503,7 @@ impl AppointmentService {
 
         let old_status = appointment.status;
 
-        appointment
-            .can_transition_to(AppointmentStatus::Completed)
-            .map_err(|e| {
-                tracing::warn!("Invalid transition blocked: {}", e);
-                ServiceError::InvalidTransition(e)
-            })?;
+        self.validate_transition(&appointment, AppointmentStatus::Completed)?;
 
         appointment.mark_completed(user_id);
 
@@ -462,7 +517,7 @@ impl AppointmentService {
             format!("{:?}", updated.status),
             user_id,
         );
-        self.audit_service.log(audit_entry).await?;
+        self.audit_log(audit_entry).await?;
 
         Ok(updated)
     }
@@ -496,12 +551,7 @@ impl AppointmentService {
 
         let old_status = appointment.status;
 
-        appointment
-            .can_transition_to(AppointmentStatus::NoShow)
-            .map_err(|e| {
-                tracing::warn!("Invalid transition blocked: {}", e);
-                ServiceError::InvalidTransition(e)
-            })?;
+        self.validate_transition(&appointment, AppointmentStatus::NoShow)?;
 
         appointment.status = AppointmentStatus::NoShow;
         appointment.updated_at = Utc::now();
@@ -517,7 +567,7 @@ impl AppointmentService {
             format!("{:?}", updated.status),
             user_id,
         );
-        self.audit_service.log(audit_entry).await?;
+        self.audit_log(audit_entry).await?;
 
         Ok(updated)
     }
@@ -543,26 +593,14 @@ impl AppointmentService {
         let old_start_time = appointment.start_time;
         let new_end_time = new_start_time + chrono::Duration::minutes(new_duration_minutes);
 
-        let overlapping = self
-            .repository
-            .find_overlapping(appointment.practitioner_id, new_start_time, new_end_time)
-            .await?;
-
-        let conflicts: Vec<&Appointment> = overlapping
-            .iter()
-            .filter(|a| a.id != appointment_id)
-            .collect();
-
-        if !conflicts.is_empty() {
-            error!(
-                "Overlapping appointment(s) found during reschedule: {} conflict(s)",
-                conflicts.len()
-            );
-            return Err(ServiceError::Conflict(format!(
-                "Practitioner has {} overlapping appointment(s) during this time",
-                conflicts.len()
-            )));
-        }
+        // Check for overlapping appointments, excluding the current appointment being rescheduled
+        self.check_no_overlap(
+            appointment.practitioner_id,
+            new_start_time,
+            new_end_time,
+            Some(appointment_id),
+        )
+        .await?;
 
         appointment.start_time = new_start_time;
         appointment.end_time = new_end_time;
@@ -574,7 +612,7 @@ impl AppointmentService {
 
         let audit_entry =
             AuditEntry::new_rescheduled(appointment_id, old_start_time, new_start_time, user_id);
-        self.audit_service.log(audit_entry).await?;
+        self.audit_log(audit_entry).await?;
 
         Ok(updated)
     }

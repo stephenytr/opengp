@@ -186,11 +186,7 @@ impl Component for AppointmentListComponent {
 
         let table = Table::new(rows, widths)
             .header(header)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(title),
-            )
+            .block(Block::default().borders(Borders::ALL).title(title))
             .row_highlight_style(
                 Style::default()
                     .bg(Color::DarkGray)

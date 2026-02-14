@@ -7,6 +7,17 @@ use crate::domain::appointment::{
     Appointment, AppointmentCalendarQuery, AppointmentRepository, AppointmentSearchCriteria,
     AppointmentStatus, AppointmentType, CalendarAppointment, RepositoryError,
 };
+use crate::infrastructure::database::helpers as db_helpers;
+
+fn bytes_to_uuid(bytes: &[u8]) -> Result<Uuid, RepositoryError> {
+    db_helpers::bytes_to_uuid(bytes).map_err(|_| {
+        RepositoryError::ConstraintViolation("Invalid UUID bytes".to_string())
+    })
+}
+
+fn string_to_datetime(s: &str) -> DateTime<Utc> {
+    db_helpers::string_to_datetime(s)
+}
 
 #[derive(Debug, FromRow)]
 struct AppointmentRow {
@@ -32,66 +43,29 @@ struct AppointmentRow {
 impl AppointmentRow {
     fn into_appointment(self) -> Result<Appointment, RepositoryError> {
         Ok(Appointment {
-            id: Uuid::from_slice(&self.id).map_err(|e| {
-                RepositoryError::ConstraintViolation(format!("Invalid UUID: {}", e))
-            })?,
-            patient_id: Uuid::from_slice(&self.patient_id).map_err(|e| {
-                RepositoryError::ConstraintViolation(format!("Invalid patient UUID: {}", e))
-            })?,
-            practitioner_id: Uuid::from_slice(&self.practitioner_id).map_err(|e| {
-                RepositoryError::ConstraintViolation(format!("Invalid practitioner UUID: {}", e))
-            })?,
-            start_time: DateTime::parse_from_rfc3339(&self.start_time)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now()),
-            end_time: DateTime::parse_from_rfc3339(&self.end_time)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now()),
-            appointment_type: match self.appointment_type.as_str() {
-                "Standard" => AppointmentType::Standard,
-                "Long" => AppointmentType::Long,
-                "Brief" => AppointmentType::Brief,
-                "NewPatient" => AppointmentType::NewPatient,
-                "HealthAssessment" => AppointmentType::HealthAssessment,
-                "ChronicDiseaseReview" => AppointmentType::ChronicDiseaseReview,
-                "MentalHealthPlan" => AppointmentType::MentalHealthPlan,
-                "Immunisation" => AppointmentType::Immunisation,
-                "Procedure" => AppointmentType::Procedure,
-                "Telephone" => AppointmentType::Telephone,
-                "Telehealth" => AppointmentType::Telehealth,
-                "HomeVisit" => AppointmentType::HomeVisit,
-                "Emergency" => AppointmentType::Emergency,
-                _ => AppointmentType::Standard,
-            },
-            status: match self.status.as_str() {
-                "Scheduled" => AppointmentStatus::Scheduled,
-                "Confirmed" => AppointmentStatus::Confirmed,
-                "Arrived" => AppointmentStatus::Arrived,
-                "InProgress" => AppointmentStatus::InProgress,
-                "Completed" => AppointmentStatus::Completed,
-                "NoShow" => AppointmentStatus::NoShow,
-                "Cancelled" => AppointmentStatus::Cancelled,
-                "Rescheduled" => AppointmentStatus::Rescheduled,
-                _ => AppointmentStatus::Scheduled,
-            },
+            id: bytes_to_uuid(&self.id)?,
+            patient_id: bytes_to_uuid(&self.patient_id)?,
+            practitioner_id: bytes_to_uuid(&self.practitioner_id)?,
+            start_time: string_to_datetime(&self.start_time),
+            end_time: string_to_datetime(&self.end_time),
+            appointment_type: self
+                .appointment_type
+                .parse::<AppointmentType>()
+                .unwrap_or(AppointmentType::Standard),
+            status: self
+                .status
+                .parse::<AppointmentStatus>()
+                .unwrap_or(AppointmentStatus::Scheduled),
             reason: self.reason,
             notes: self.notes,
             is_urgent: self.is_urgent,
             reminder_sent: self.reminder_sent,
             confirmed: self.confirmed,
             cancellation_reason: self.cancellation_reason,
-            created_at: DateTime::parse_from_rfc3339(&self.created_at)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now()),
-            updated_at: DateTime::parse_from_rfc3339(&self.updated_at)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now()),
-            created_by: self
-                .created_by
-                .and_then(|bytes| Uuid::from_slice(&bytes).ok()),
-            updated_by: self
-                .updated_by
-                .and_then(|bytes| Uuid::from_slice(&bytes).ok()),
+            created_at: string_to_datetime(&self.created_at),
+            updated_at: string_to_datetime(&self.updated_at),
+            created_by: self.created_by.and_then(|bytes| bytes_to_uuid(&bytes).ok()),
+            updated_by: self.updated_by.and_then(|bytes| bytes_to_uuid(&bytes).ok()),
         })
     }
 }
@@ -114,64 +88,30 @@ struct CalendarAppointmentRow {
 
 impl CalendarAppointmentRow {
     fn into_calendar_appointment(self) -> Result<CalendarAppointment, RepositoryError> {
-        let start_time = DateTime::parse_from_rfc3339(&self.start_time)
-            .map(|dt| dt.with_timezone(&Utc))
-            .map_err(|e| {
-                RepositoryError::ConstraintViolation(format!("Invalid start_time: {}", e))
-            })?;
-
-        let end_time = DateTime::parse_from_rfc3339(&self.end_time)
-            .map(|dt| dt.with_timezone(&Utc))
-            .map_err(|e| {
-                RepositoryError::ConstraintViolation(format!("Invalid end_time: {}", e))
-            })?;
+        let start_time = string_to_datetime(&self.start_time);
+        let end_time = string_to_datetime(&self.end_time);
 
         // Calculate slot_span: number of 15-minute slots
         let duration_minutes = (end_time - start_time).num_minutes();
         let slot_span = ((duration_minutes as f64 / 15.0).ceil() as u8).max(1);
 
         Ok(CalendarAppointment {
-            id: Uuid::from_slice(&self.id).map_err(|e| {
-                RepositoryError::ConstraintViolation(format!("Invalid UUID: {}", e))
-            })?,
-            patient_id: Uuid::from_slice(&self.patient_id).map_err(|e| {
-                RepositoryError::ConstraintViolation(format!("Invalid patient UUID: {}", e))
-            })?,
-            practitioner_id: Uuid::from_slice(&self.practitioner_id).map_err(|e| {
-                RepositoryError::ConstraintViolation(format!("Invalid practitioner UUID: {}", e))
-            })?,
+            id: bytes_to_uuid(&self.id)?,
+            patient_id: bytes_to_uuid(&self.patient_id)?,
+            practitioner_id: bytes_to_uuid(&self.practitioner_id)?,
             patient_name: self
                 .patient_name
                 .unwrap_or_else(|| "Unknown Patient".to_string()),
             start_time,
             end_time,
-            appointment_type: match self.appointment_type.as_str() {
-                "Standard" => AppointmentType::Standard,
-                "Long" => AppointmentType::Long,
-                "Brief" => AppointmentType::Brief,
-                "NewPatient" => AppointmentType::NewPatient,
-                "HealthAssessment" => AppointmentType::HealthAssessment,
-                "ChronicDiseaseReview" => AppointmentType::ChronicDiseaseReview,
-                "MentalHealthPlan" => AppointmentType::MentalHealthPlan,
-                "Immunisation" => AppointmentType::Immunisation,
-                "Procedure" => AppointmentType::Procedure,
-                "Telephone" => AppointmentType::Telephone,
-                "Telehealth" => AppointmentType::Telehealth,
-                "HomeVisit" => AppointmentType::HomeVisit,
-                "Emergency" => AppointmentType::Emergency,
-                _ => AppointmentType::Standard,
-            },
-            status: match self.status.as_str() {
-                "Scheduled" => AppointmentStatus::Scheduled,
-                "Confirmed" => AppointmentStatus::Confirmed,
-                "Arrived" => AppointmentStatus::Arrived,
-                "InProgress" => AppointmentStatus::InProgress,
-                "Completed" => AppointmentStatus::Completed,
-                "NoShow" => AppointmentStatus::NoShow,
-                "Cancelled" => AppointmentStatus::Cancelled,
-                "Rescheduled" => AppointmentStatus::Rescheduled,
-                _ => AppointmentStatus::Scheduled,
-            },
+            appointment_type: self
+                .appointment_type
+                .parse::<AppointmentType>()
+                .unwrap_or(AppointmentType::Standard),
+            status: self
+                .status
+                .parse::<AppointmentStatus>()
+                .unwrap_or(AppointmentStatus::Scheduled),
             is_urgent: self.is_urgent,
             slot_span,
             reason: self.reason,
@@ -179,6 +119,37 @@ impl CalendarAppointmentRow {
         })
     }
 }
+
+const APPOINTMENT_SELECT_QUERY: &str = r#"
+SELECT 
+    id, patient_id, practitioner_id,
+    start_time, end_time,
+    appointment_type, status,
+    reason, notes,
+    is_urgent, reminder_sent, confirmed,
+    cancellation_reason,
+    created_at, updated_at,
+    created_by, updated_by
+FROM appointments
+"#;
+
+const CALENDAR_APPOINTMENT_SELECT_QUERY: &str = r#"
+SELECT 
+    a.id,
+    a.patient_id,
+    a.practitioner_id,
+    COALESCE(p.preferred_name, p.first_name) || ' ' || p.last_name as patient_name,
+    a.start_time,
+    a.end_time,
+    a.appointment_type,
+    a.status,
+    a.is_urgent,
+    a.confirmed,
+    a.reason,
+    a.notes
+FROM appointments a
+LEFT JOIN patients p ON a.patient_id = p.id
+"#;
 
 pub struct SqlxAppointmentRepository {
     pool: SqlitePool,
@@ -195,21 +166,10 @@ impl AppointmentRepository for SqlxAppointmentRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Appointment>, RepositoryError> {
         let id_bytes = id.as_bytes().to_vec();
 
-        let row = sqlx::query_as::<_, AppointmentRow>(
-            r#"
-            SELECT 
-                id, patient_id, practitioner_id,
-                start_time, end_time,
-                appointment_type, status,
-                reason, notes,
-                is_urgent, reminder_sent, confirmed,
-                cancellation_reason,
-                created_at, updated_at,
-                created_by, updated_by
-            FROM appointments
-            WHERE id = ?
-            "#,
-        )
+        let row = sqlx::query_as::<_, AppointmentRow>(&format!(
+            "{}WHERE id = ?",
+            APPOINTMENT_SELECT_QUERY
+        ))
         .bind(id_bytes)
         .fetch_optional(&self.pool)
         .await?;
@@ -518,21 +478,10 @@ impl AppointmentRepository for SqlxAppointmentRepository {
             let date_from_str = criteria.date_from.map(|dt| dt.to_rfc3339());
             let date_to_str = criteria.date_to.map(|dt| dt.to_rfc3339());
 
-            let all_rows = sqlx::query_as::<_, AppointmentRow>(
-                r#"
-                SELECT 
-                    id, patient_id, practitioner_id,
-                    start_time, end_time,
-                    appointment_type, status,
-                    reason, notes,
-                    is_urgent, reminder_sent, confirmed,
-                    cancellation_reason,
-                    created_at, updated_at,
-                    created_by, updated_by
-                FROM appointments
-                ORDER BY start_time
-                "#,
-            )
+            let all_rows = sqlx::query_as::<_, AppointmentRow>(&format!(
+                "{}ORDER BY start_time",
+                APPOINTMENT_SELECT_QUERY
+            ))
             .fetch_all(&self.pool)
             .await?;
 
@@ -598,21 +547,10 @@ impl AppointmentRepository for SqlxAppointmentRepository {
                 })
                 .collect()
         } else {
-            sqlx::query_as::<_, AppointmentRow>(
-                r#"
-                SELECT 
-                    id, patient_id, practitioner_id,
-                    start_time, end_time,
-                    appointment_type, status,
-                    reason, notes,
-                    is_urgent, reminder_sent, confirmed,
-                    cancellation_reason,
-                    created_at, updated_at,
-                    created_by, updated_by
-                FROM appointments
-                ORDER BY start_time
-                "#,
-            )
+            sqlx::query_as::<_, AppointmentRow>(&format!(
+                "{}ORDER BY start_time",
+                APPOINTMENT_SELECT_QUERY
+            ))
             .fetch_all(&self.pool)
             .await?
         };
@@ -631,23 +569,10 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         let end_time_str = end_time.to_rfc3339();
 
         let rows = sqlx::query_as::<_, AppointmentRow>(
-            r#"
-            SELECT 
-                id, patient_id, practitioner_id,
-                start_time, end_time,
-                appointment_type, status,
-                reason, notes,
-                is_urgent, reminder_sent, confirmed,
-                cancellation_reason,
-                created_at, updated_at,
-                created_by, updated_by
-            FROM appointments
-            WHERE practitioner_id = ?
-              AND start_time < ?
-              AND end_time > ?
-              AND status NOT IN ('Cancelled', 'NoShow')
-            ORDER BY start_time
-            "#,
+            &format!(
+                "{}WHERE practitioner_id = ? AND start_time < ? AND end_time > ? AND status NOT IN ('Cancelled', 'NoShow') ORDER BY start_time",
+                APPOINTMENT_SELECT_QUERY
+            ),
         )
         .bind(practitioner_id_bytes)
         .bind(end_time_str)
@@ -769,26 +694,10 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
             let date_from_str = criteria.date_from.map(|dt| dt.to_rfc3339());
             let date_to_str = criteria.date_to.map(|dt| dt.to_rfc3339());
 
-            let all_rows = sqlx::query_as::<_, CalendarAppointmentRow>(
-                r#"
-                SELECT 
-                    a.id,
-                    a.patient_id,
-                    a.practitioner_id,
-                    COALESCE(p.preferred_name, p.first_name) || ' ' || p.last_name as patient_name,
-                    a.start_time,
-                    a.end_time,
-                    a.appointment_type,
-                    a.status,
-                    a.is_urgent,
-                    a.confirmed,
-                    a.reason,
-                    a.notes
-                FROM appointments a
-                LEFT JOIN patients p ON a.patient_id = p.id
-                ORDER BY a.start_time
-                "#,
-            )
+            let all_rows = sqlx::query_as::<_, CalendarAppointmentRow>(&format!(
+                "{}ORDER BY a.start_time",
+                CALENDAR_APPOINTMENT_SELECT_QUERY
+            ))
             .fetch_all(&self.pool)
             .await?;
 
@@ -864,26 +773,10 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
                 })
                 .collect()
         } else {
-            sqlx::query_as::<_, CalendarAppointmentRow>(
-                r#"
-                SELECT 
-                    a.id,
-                    a.patient_id,
-                    a.practitioner_id,
-                    COALESCE(p.preferred_name, p.first_name) || ' ' || p.last_name as patient_name,
-                    a.start_time,
-                    a.end_time,
-                    a.appointment_type,
-                    a.status,
-                    a.is_urgent,
-                    a.confirmed,
-                    a.reason,
-                    a.notes
-                FROM appointments a
-                LEFT JOIN patients p ON a.patient_id = p.id
-                ORDER BY a.start_time
-                "#,
-            )
+            sqlx::query_as::<_, CalendarAppointmentRow>(&format!(
+                "{}ORDER BY a.start_time",
+                CALENDAR_APPOINTMENT_SELECT_QUERY
+            ))
             .fetch_all(&self.pool)
             .await?
         };

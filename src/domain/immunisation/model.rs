@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,7 +98,7 @@ pub struct Vaccine {
     pub amt_code: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum VaccineType {
     COVID19,
     Influenza,
@@ -126,39 +127,7 @@ pub enum VaccineType {
     Other,
 }
 
-impl std::fmt::Display for VaccineType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            VaccineType::COVID19 => write!(f, "COVID-19"),
-            VaccineType::Influenza => write!(f, "Influenza"),
-            VaccineType::Pneumococcal => write!(f, "Pneumococcal"),
-            VaccineType::Shingles => write!(f, "Shingles (Zoster)"),
-            VaccineType::MMR => write!(f, "MMR"),
-            VaccineType::DTPa => write!(f, "DTPa (Diphtheria/Tetanus/Pertussis)"),
-            VaccineType::Polio => write!(f, "Polio"),
-            VaccineType::HepB => write!(f, "Hepatitis B"),
-            VaccineType::HepA => write!(f, "Hepatitis A"),
-            VaccineType::HepAB => write!(f, "Hepatitis A/B"),
-            VaccineType::Hib => write!(f, "Hib (Haemophilus influenzae type b)"),
-            VaccineType::MenC => write!(f, "Meningococcal C"),
-            VaccineType::MenB => write!(f, "Meningococcal B"),
-            VaccineType::MenACWY => write!(f, "Meningococcal ACWY"),
-            VaccineType::Rotavirus => write!(f, "Rotavirus"),
-            VaccineType::Varicella => write!(f, "Varicella (Chickenpox)"),
-            VaccineType::HPV => write!(f, "HPV"),
-            VaccineType::BCG => write!(f, "BCG"),
-            VaccineType::Rabies => write!(f, "Rabies"),
-            VaccineType::YellowFever => write!(f, "Yellow Fever"),
-            VaccineType::JapaneseEncephalitis => write!(f, "Japanese Encephalitis"),
-            VaccineType::TyphoidOral => write!(f, "Typhoid (Oral)"),
-            VaccineType::TyphoidInjectable => write!(f, "Typhoid (Injectable)"),
-            VaccineType::Cholera => write!(f, "Cholera"),
-            VaccineType::Other => write!(f, "Other"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AdministrationRoute {
     Intramuscular,
     Subcutaneous,
@@ -167,19 +136,7 @@ pub enum AdministrationRoute {
     Intranasal,
 }
 
-impl std::fmt::Display for AdministrationRoute {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AdministrationRoute::Intramuscular => write!(f, "Intramuscular (IM)"),
-            AdministrationRoute::Subcutaneous => write!(f, "Subcutaneous (SC)"),
-            AdministrationRoute::Intradermal => write!(f, "Intradermal (ID)"),
-            AdministrationRoute::Oral => write!(f, "Oral"),
-            AdministrationRoute::Intranasal => write!(f, "Intranasal"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AnatomicalSite {
     LeftDeltoid,
     RightDeltoid,
@@ -194,39 +151,11 @@ pub enum AnatomicalSite {
     Other,
 }
 
-impl std::fmt::Display for AnatomicalSite {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AnatomicalSite::LeftDeltoid => write!(f, "Left Deltoid"),
-            AnatomicalSite::RightDeltoid => write!(f, "Right Deltoid"),
-            AnatomicalSite::LeftThigh => write!(f, "Left Thigh"),
-            AnatomicalSite::RightThigh => write!(f, "Right Thigh"),
-            AnatomicalSite::LeftUpperArm => write!(f, "Left Upper Arm"),
-            AnatomicalSite::RightUpperArm => write!(f, "Right Upper Arm"),
-            AnatomicalSite::LeftGluteal => write!(f, "Left Gluteal"),
-            AnatomicalSite::RightGluteal => write!(f, "Right Gluteal"),
-            AnatomicalSite::Oral => write!(f, "Oral"),
-            AnatomicalSite::Intranasal => write!(f, "Intranasal"),
-            AnatomicalSite::Other => write!(f, "Other"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ConsentType {
     Written,
     Verbal,
     Implied,
-}
-
-impl std::fmt::Display for ConsentType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConsentType::Written => write!(f, "Written"),
-            ConsentType::Verbal => write!(f, "Verbal"),
-            ConsentType::Implied => write!(f, "Implied"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -239,23 +168,11 @@ pub struct VaccinationSchedule {
     pub completed_immunisation_id: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ScheduleStatus {
     Due,
     Overdue,
     Completed,
     Deferred,
     Contraindicated,
-}
-
-impl std::fmt::Display for ScheduleStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ScheduleStatus::Due => write!(f, "Due"),
-            ScheduleStatus::Overdue => write!(f, "Overdue"),
-            ScheduleStatus::Completed => write!(f, "Completed"),
-            ScheduleStatus::Deferred => write!(f, "Deferred"),
-            ScheduleStatus::Contraindicated => write!(f, "Contraindicated"),
-        }
-    }
 }

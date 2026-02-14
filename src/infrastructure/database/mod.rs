@@ -2,7 +2,13 @@
 //!
 //! This module manages database connections, connection pooling, and migrations.
 
+pub mod helpers;
 pub mod repositories;
+
+pub use helpers::*;
+
+#[cfg(test)]
+pub mod test_utils;
 
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};

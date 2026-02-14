@@ -1,11 +1,12 @@
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::NaiveDate;
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
 use crate::domain::patient::{
     Address, EmergencyContact, Gender, Patient, PatientRepository, RepositoryError,
 };
+use crate::infrastructure::database::helpers::*;
 
 #[derive(Debug, FromRow)]
 struct PatientRow {
@@ -42,9 +43,7 @@ struct PatientRow {
 impl PatientRow {
     fn into_patient(self) -> Result<Patient, RepositoryError> {
         Ok(Patient {
-            id: Uuid::from_slice(&self.id).map_err(|e| {
-                RepositoryError::ConstraintViolation(format!("Invalid UUID: {}", e))
-            })?,
+            id: bytes_to_uuid(&self.id)?,
             ihi: self.ihi,
             medicare_number: self.medicare_number,
             medicare_irn: self.medicare_irn.map(|i| i as u8),
@@ -55,12 +54,8 @@ impl PatientRow {
             last_name: self.last_name,
             preferred_name: self.preferred_name,
             date_of_birth: self.date_of_birth,
-            gender: match self.gender.as_str() {
-                "Male" => Gender::Male,
-                "Female" => Gender::Female,
-                "Other" => Gender::Other,
-                _ => Gender::PreferNotToSay,
-            },
+            gender: self.gender.parse::<Gender>()
+                .unwrap_or(Gender::PreferNotToSay),
             address: Address {
                 line1: self.address_line1,
                 line2: self.address_line2,
@@ -89,15 +84,24 @@ impl PatientRow {
             is_active: self.is_active,
             is_deceased: self.is_deceased,
             deceased_date: None,
-            created_at: DateTime::parse_from_rfc3339(&self.created_at)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now()),
-            updated_at: DateTime::parse_from_rfc3339(&self.updated_at)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now()),
+            created_at: string_to_datetime(&self.created_at),
+            updated_at: string_to_datetime(&self.updated_at),
         })
     }
 }
+
+const PATIENT_SELECT_QUERY: &str = r#"
+SELECT 
+    id, ihi, medicare_number, medicare_irn, medicare_expiry,
+    title, first_name, middle_name, last_name, preferred_name,
+    date_of_birth, gender,
+    address_line1, address_line2, suburb, state, postcode, country,
+    phone_home, phone_mobile, email,
+    emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+    is_active, is_deceased,
+    created_at, updated_at
+FROM patients
+"#;
 
 pub struct SqlxPatientRepository {
     pool: SqlitePool,
@@ -112,23 +116,12 @@ impl SqlxPatientRepository {
 #[async_trait]
 impl PatientRepository for SqlxPatientRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Patient>, RepositoryError> {
-        let id_bytes = id.as_bytes().to_vec();
+        let id_bytes = uuid_to_bytes(&id);
 
-        let row = sqlx::query_as::<_, PatientRow>(
-            r#"
-            SELECT 
-                id, ihi, medicare_number, medicare_irn, medicare_expiry,
-                title, first_name, middle_name, last_name, preferred_name,
-                date_of_birth, gender,
-                address_line1, address_line2, suburb, state, postcode, country,
-                phone_home, phone_mobile, email,
-                emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
-                is_active, is_deceased,
-                created_at, updated_at
-            FROM patients
-            WHERE id = ? AND is_active = TRUE
-            "#,
-        )
+        let row = sqlx::query_as::<_, PatientRow>(&format!(
+            "{} WHERE id = ? AND is_active = TRUE",
+            PATIENT_SELECT_QUERY
+        ))
         .bind(id_bytes)
         .fetch_optional(&self.pool)
         .await?;
@@ -140,21 +133,10 @@ impl PatientRepository for SqlxPatientRepository {
     }
 
     async fn find_by_medicare(&self, medicare: &str) -> Result<Option<Patient>, RepositoryError> {
-        let row = sqlx::query_as::<_, PatientRow>(
-            r#"
-            SELECT 
-                id, ihi, medicare_number, medicare_irn, medicare_expiry,
-                title, first_name, middle_name, last_name, preferred_name,
-                date_of_birth, gender,
-                address_line1, address_line2, suburb, state, postcode, country,
-                phone_home, phone_mobile, email,
-                emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
-                is_active, is_deceased,
-                created_at, updated_at
-            FROM patients
-            WHERE medicare_number = ? AND is_active = TRUE
-            "#,
-        )
+        let row = sqlx::query_as::<_, PatientRow>(&format!(
+            "{} WHERE medicare_number = ? AND is_active = TRUE",
+            PATIENT_SELECT_QUERY
+        ))
         .bind(medicare)
         .fetch_optional(&self.pool)
         .await?;
@@ -166,22 +148,10 @@ impl PatientRepository for SqlxPatientRepository {
     }
 
     async fn list_active(&self) -> Result<Vec<Patient>, RepositoryError> {
-        let rows = sqlx::query_as::<_, PatientRow>(
-            r#"
-            SELECT 
-                id, ihi, medicare_number, medicare_irn, medicare_expiry,
-                title, first_name, middle_name, last_name, preferred_name,
-                date_of_birth, gender,
-                address_line1, address_line2, suburb, state, postcode, country,
-                phone_home, phone_mobile, email,
-                emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
-                is_active, is_deceased,
-                created_at, updated_at
-            FROM patients
-            WHERE is_active = TRUE
-            ORDER BY last_name, first_name
-            "#,
-        )
+        let rows = sqlx::query_as::<_, PatientRow>(&format!(
+            "{} WHERE is_active = TRUE ORDER BY last_name, first_name",
+            PATIENT_SELECT_QUERY
+        ))
         .fetch_all(&self.pool)
         .await?;
 
@@ -189,12 +159,12 @@ impl PatientRepository for SqlxPatientRepository {
     }
 
     async fn create(&self, patient: Patient) -> Result<Patient, RepositoryError> {
-        let id_bytes = patient.id.as_bytes().to_vec();
+        let id_bytes = uuid_to_bytes(&patient.id);
         let gender_str = patient.gender.to_string();
         let dob = patient.date_of_birth;
         let medicare_expiry = patient.medicare_expiry;
-        let created_at_str = patient.created_at.to_rfc3339();
-        let updated_at_str = patient.updated_at.to_rfc3339();
+        let created_at_str = datetime_to_string(&patient.created_at);
+        let updated_at_str = datetime_to_string(&patient.updated_at);
         let medicare_irn_i64 = patient.medicare_irn.map(|i| i as i64);
 
         let emergency_contact_name = patient.emergency_contact.as_ref().map(|ec| ec.name.clone());
@@ -254,24 +224,7 @@ impl PatientRepository for SqlxPatientRepository {
 
         match result {
             Ok(_) => Ok(patient),
-            Err(sqlx::Error::Database(db_err)) => {
-                let err_msg = db_err.message();
-                if err_msg.contains("UNIQUE constraint") && err_msg.contains("medicare_number") {
-                    Err(RepositoryError::ConstraintViolation(
-                        "Medicare number already exists in the system".to_string(),
-                    ))
-                } else if err_msg.contains("NOT NULL constraint") {
-                    Err(RepositoryError::ConstraintViolation(
-                        "Required field is missing".to_string(),
-                    ))
-                } else if err_msg.contains("CHECK constraint") {
-                    Err(RepositoryError::ConstraintViolation(
-                        "Invalid value for field".to_string(),
-                    ))
-                } else {
-                    Err(RepositoryError::Database(sqlx::Error::Database(db_err)))
-                }
-            }
+            Err(sqlx::Error::Database(db_err)) => Err(map_db_error(db_err)),
             Err(e) => Err(RepositoryError::Database(e)),
         }
     }

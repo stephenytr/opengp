@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,7 +37,7 @@ pub struct TestRequest {
     pub loinc_code: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum OrderStatus {
     Draft,
     Ordered,
@@ -44,19 +45,6 @@ pub enum OrderStatus {
     InProgress,
     Completed,
     Cancelled,
-}
-
-impl std::fmt::Display for OrderStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            OrderStatus::Draft => write!(f, "Draft"),
-            OrderStatus::Ordered => write!(f, "Ordered"),
-            OrderStatus::Collected => write!(f, "Collected"),
-            OrderStatus::InProgress => write!(f, "In Progress"),
-            OrderStatus::Completed => write!(f, "Completed"),
-            OrderStatus::Cancelled => write!(f, "Cancelled"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,7 +109,7 @@ pub struct TestResult {
     pub comment: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ResultFlag {
     Normal,
     High,
@@ -132,21 +120,7 @@ pub enum ResultFlag {
     Abnormal,
 }
 
-impl std::fmt::Display for ResultFlag {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ResultFlag::Normal => write!(f, "Normal"),
-            ResultFlag::High => write!(f, "High"),
-            ResultFlag::Low => write!(f, "Low"),
-            ResultFlag::CriticalHigh => write!(f, "Critical High"),
-            ResultFlag::CriticalLow => write!(f, "Critical Low"),
-            ResultFlag::Critical => write!(f, "Critical"),
-            ResultFlag::Abnormal => write!(f, "Abnormal"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ResultStatus {
     Final,
     Preliminary,
@@ -154,18 +128,7 @@ pub enum ResultStatus {
     Cancelled,
 }
 
-impl std::fmt::Display for ResultStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ResultStatus::Final => write!(f, "Final"),
-            ResultStatus::Preliminary => write!(f, "Preliminary"),
-            ResultStatus::Corrected => write!(f, "Corrected"),
-            ResultStatus::Cancelled => write!(f, "Cancelled"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum Laboratory {
     ACL,
     Sonic,
@@ -173,19 +136,6 @@ pub enum Laboratory {
     QML,
     DouglassHanlyMoir,
     Other,
-}
-
-impl std::fmt::Display for Laboratory {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Laboratory::ACL => write!(f, "Australian Clinical Labs"),
-            Laboratory::Sonic => write!(f, "Sonic Healthcare"),
-            Laboratory::Healius => write!(f, "Healius (Laverty)"),
-            Laboratory::QML => write!(f, "QML Pathology"),
-            Laboratory::DouglassHanlyMoir => write!(f, "Douglass Hanly Moir"),
-            Laboratory::Other => write!(f, "Other"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -213,7 +163,7 @@ pub struct ImagingOrder {
     pub created_by: Uuid,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ImagingModality {
     XRay,
     CT,
@@ -223,21 +173,6 @@ pub enum ImagingModality {
     PET,
     Mammography,
     DXA,
-}
-
-impl std::fmt::Display for ImagingModality {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ImagingModality::XRay => write!(f, "X-Ray"),
-            ImagingModality::CT => write!(f, "CT Scan"),
-            ImagingModality::MRI => write!(f, "MRI"),
-            ImagingModality::Ultrasound => write!(f, "Ultrasound"),
-            ImagingModality::NuclearMedicine => write!(f, "Nuclear Medicine"),
-            ImagingModality::PET => write!(f, "PET Scan"),
-            ImagingModality::Mammography => write!(f, "Mammography"),
-            ImagingModality::DXA => write!(f, "DXA (Bone Density)"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
