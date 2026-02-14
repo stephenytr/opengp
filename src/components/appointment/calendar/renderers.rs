@@ -498,7 +498,7 @@ impl CalendarRenderer {
         for (slot_index, time_slot) in time_slots.iter().enumerate() {
             let mut cells = vec![Cell::from(time_slot.as_str())];
 
-            for practitioner in &visible_practitioners {
+            for (practitioner_index, practitioner) in visible_practitioners.iter().enumerate() {
                 let overlaps = Self::detect_overlaps(
                     &calendar_state.appointments,
                     practitioner.id,
@@ -571,8 +571,10 @@ impl CalendarRenderer {
                     {
                         style = Style::default().fg(Color::Black).bg(Color::Yellow);
                     } else if let Some(selected_row) = calendar_state.time_slot_state.selected() {
-                        if selected_row == slot_index {
-                            style = Style::default().fg(Color::Black).bg(Color::Yellow);
+                        if selected_row == slot_index
+                            && practitioner_index == calendar_state.selected_practitioner_column
+                        {
+                            style = style.add_modifier(Modifier::REVERSED);
                         }
                     }
 

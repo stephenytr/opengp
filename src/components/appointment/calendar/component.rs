@@ -2663,6 +2663,63 @@ impl AppointmentCalendarComponent {
             FocusArea::DayView => self.handle_day_view_keys(key),
         }
     }
+
+    fn find_appointment_at_position(&self, col: u16, row: u16) -> Option<Uuid> {
+        if col < 30 {
+            return None;
+        }
+
+        let grid_col = col - 30;
+        let visible_practitioners: Vec<_> = self
+            .calendar_state
+            .practitioners
+            .iter()
+            .filter(|p| {
+                self.filter_state.active_practitioner_filters.is_empty()
+                    || self
+                        .filter_state
+                        .active_practitioner_filters
+                        .contains(&p.id)
+            })
+            .collect();
+
+        if visible_practitioners.is_empty() {
+            return None;
+        }
+
+        if row < 6 {
+            return None;
+        }
+
+        let grid_row = row - 6;
+        let slot_index = (grid_row / 2) as usize;
+
+        let practitioner_index = if grid_col < 8 {
+            return None;
+        } else {
+            ((grid_col - 8) / 15) as usize
+        };
+
+        if practitioner_index >= visible_practitioners.len() {
+            return None;
+        }
+
+        let practitioner = visible_practitioners.get(practitioner_index)?;
+
+        let time_slots = CalendarRenderer::generate_time_slots();
+        if slot_index >= time_slots.len() {
+            return None;
+        }
+
+        let appt = CalendarRenderer::find_appointment_for_slot(
+            &self.calendar_state.appointments,
+            practitioner.id,
+            slot_index,
+            &self.filter_state.active_status_filters,
+        )?;
+
+        Some(appt.id)
+    }
 }
 
 #[async_trait]
@@ -2746,6 +2803,40 @@ impl Component for AppointmentCalendarComponent {
         }
 
         self.handle_calendar_events(key)
+    }
+
+    fn handle_mouse_events(&mut self, mouse: crossterm::event::MouseEvent) -> Action {
+        use crossterm::event::{MouseButton, MouseEventKind};
+
+        let hovered = self.find_appointment_at_position(mouse.column, mouse.row);
+        
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                if let Some(appt_id) = hovered {
+                    if let Some(appt) = self
+                        .calendar_state
+                        .appointments
+                        .iter()
+                        .find(|a| a.id == appt_id)
+                        .cloned()
+                    {
+                        self.detail_data.showing = true;
+                        self.detail_data.appointment_id = Some(appt.id);
+                        self.detail_data.patient = None;
+                        return Action::AppointmentSelect;
+                    }
+                }
+            }
+            MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Moved => {
+                if hovered != self.calendar_state.hovered_appointment {
+                    self.calendar_state.hovered_appointment = hovered;
+                    return Action::Render;
+                }
+            }
+            _ => {}
+        }
+
+        Action::None
     }
 
     async fn update(&mut self, action: Action) -> Result<Option<Action>> {

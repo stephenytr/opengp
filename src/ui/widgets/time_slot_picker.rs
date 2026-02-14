@@ -249,16 +249,12 @@ impl TimeSlotPicker {
 
         // Calculate visible slots (show ~10-15 slots at a time)
         let visible_height = (area.height as usize).saturating_sub(2); // Account for borders
-        let scroll_offset = if self.state.selected_index >= visible_height / 2 {
-            self.state.selected_index - visible_height / 2
-        } else {
-            0
-        };
+        let scroll_offset = self.state.selected_index.saturating_sub(visible_height / 2);
 
         let mut lines = Vec::new();
 
         // Render visible time slots
-        for (display_idx, slot_idx) in (scroll_offset..self.state.time_slots.len())
+        for (_display_idx, slot_idx) in (scroll_offset..self.state.time_slots.len())
             .enumerate()
             .take(visible_height)
         {

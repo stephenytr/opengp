@@ -136,7 +136,9 @@ impl AppointmentFormComponent {
         let time_input = "09:00".to_string();
         let initial_date = now.date_naive();
 
-        let component = Self {
+        
+
+        Self {
             appointment_service,
             patient_service,
             practitioner_service,
@@ -161,9 +163,7 @@ impl AppointmentFormComponent {
             validation_errors: HashMap::new(),
             error_message: None,
             is_submitting: false,
-        };
-
-        component
+        }
     }
 
     fn apply_patient_filter(&mut self) {
@@ -1100,12 +1100,36 @@ impl Component for AppointmentFormComponent {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3),
-                Constraint::Min(if self.current_field == FormField::Patient { 12 } else { 3 }),
-                Constraint::Min(if self.current_field == FormField::Practitioner { 8 } else { 3 }),
-                Constraint::Min(if self.current_field == FormField::Date { 15 } else { 3 }),
-                Constraint::Min(if self.current_field == FormField::Time { 12 } else { 3 }),
-                Constraint::Min(if self.current_field == FormField::Type { 16 } else { 3 }),
-                Constraint::Min(if self.current_field == FormField::Reason { 8 } else { 3 }),
+                Constraint::Min(if self.current_field == FormField::Patient {
+                    12
+                } else {
+                    3
+                }),
+                Constraint::Min(if self.current_field == FormField::Practitioner {
+                    8
+                } else {
+                    3
+                }),
+                Constraint::Min(if self.current_field == FormField::Date {
+                    15
+                } else {
+                    3
+                }),
+                Constraint::Min(if self.current_field == FormField::Time {
+                    12
+                } else {
+                    3
+                }),
+                Constraint::Min(if self.current_field == FormField::Type {
+                    16
+                } else {
+                    3
+                }),
+                Constraint::Min(if self.current_field == FormField::Reason {
+                    8
+                } else {
+                    3
+                }),
                 Constraint::Length(3),
             ])
             .split(inner_area);

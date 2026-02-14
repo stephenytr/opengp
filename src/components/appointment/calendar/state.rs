@@ -45,6 +45,8 @@ pub struct CalendarState {
     pub appointments: Vec<CalendarAppointment>,
     /// Currently selected practitioner column index (0-based)
     pub selected_practitioner_column: usize,
+    /// Currently hovered appointment ID (for mouse hover highlighting)
+    pub hovered_appointment: Option<Uuid>,
 }
 
 impl CalendarState {
@@ -73,6 +75,7 @@ impl CalendarState {
             practitioners: Vec::new(),
             appointments: Vec::new(),
             selected_practitioner_column: 0,
+            hovered_appointment: None,
         }
     }
 }
