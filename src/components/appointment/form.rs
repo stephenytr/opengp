@@ -1001,7 +1001,7 @@ impl Component for AppointmentFormComponent {
             .constraints([
                 Constraint::Length(3),  // Title
                 Constraint::Length(12), // Patient (increased for 8 results)
-                Constraint::Length(3),  // Practitioner
+                Constraint::Length(10), // Practitioner (increased for dropdown)
                 Constraint::Length(3),  // Date
                 Constraint::Length(3),  // Time
                 Constraint::Length(3),  // Type
