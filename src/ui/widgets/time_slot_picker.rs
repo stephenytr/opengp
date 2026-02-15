@@ -231,6 +231,13 @@ impl TimeSlotPicker {
         self.state.set_availability(availability);
     }
 
+    /// Returns all time slots.
+    ///
+    /// Returns a slice of all time slot strings in "HH:MM" format.
+    pub fn time_slots(&self) -> &[String] {
+        self.state.time_slots()
+    }
+
     /// Renders the time slot picker widget.
     ///
     /// Displays a scrollable list of time slots with:
