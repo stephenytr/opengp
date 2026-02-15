@@ -905,11 +905,11 @@ impl AppointmentCalendarComponent {
                         .iter()
                         .find(|a| a.id == appt_id)
                     {
-                        self.reschedule_data.new_start_time = Some(appt.start_time);
+                        self.reschedule_data =
+                            RescheduleModalData::with_datetime(appt.start_time);
                         self.reschedule_data.new_duration = appt.duration_minutes();
-                        self.detail_data.showing = false;
                         self.reschedule_data.showing = true;
-                        self.reschedule_data.conflict_warning = None;
+                        self.detail_data.showing = false;
                         return Action::Render;
                     }
                 }
@@ -973,6 +973,8 @@ impl AppointmentCalendarComponent {
     }
 
     fn handle_reschedule_modal_key_events(&mut self, key: KeyEvent) -> Action {
+        use super::state::RescheduleFocus;
+
         match key.code {
             KeyCode::Esc => {
                 self.reschedule_data.showing = false;
@@ -981,23 +983,9 @@ impl AppointmentCalendarComponent {
                 self.detail_data.showing = true;
                 Action::Render
             }
-            KeyCode::Up => {
-                if let Some(current_time) = self.reschedule_data.new_start_time {
-                    self.reschedule_data.new_start_time =
-                        Some(current_time - chrono::Duration::minutes(15));
-                    Action::Render
-                } else {
-                    Action::None
-                }
-            }
-            KeyCode::Down => {
-                if let Some(current_time) = self.reschedule_data.new_start_time {
-                    self.reschedule_data.new_start_time =
-                        Some(current_time + chrono::Duration::minutes(15));
-                    Action::Render
-                } else {
-                    Action::None
-                }
+            KeyCode::Tab => {
+                self.reschedule_data.toggle_focus();
+                Action::Render
             }
             KeyCode::Char('+') => {
                 self.reschedule_data.new_duration += 15;
@@ -1009,8 +997,37 @@ impl AppointmentCalendarComponent {
                 }
                 Action::Render
             }
-            KeyCode::Enter => Action::AppointmentReschedule,
-            _ => Action::None,
+            KeyCode::Enter => {
+                self.reschedule_data.update_start_time_from_widgets();
+                Action::AppointmentReschedule
+            }
+            _ => {
+                match self.reschedule_data.focus {
+                    RescheduleFocus::Date => {
+                        if self.reschedule_data.calendar.handle_key_event(key) {
+                            self.reschedule_data.update_start_time_from_widgets();
+                            Action::Render
+                        } else {
+                            Action::None
+                        }
+                    }
+                    RescheduleFocus::Time => {
+                        match key.code {
+                            KeyCode::Up => {
+                                self.reschedule_data.time_picker.prev();
+                                self.reschedule_data.update_start_time_from_widgets();
+                                Action::Render
+                            }
+                            KeyCode::Down => {
+                                self.reschedule_data.time_picker.next();
+                                self.reschedule_data.update_start_time_from_widgets();
+                                Action::Render
+                            }
+                            _ => Action::None,
+                        }
+                    }
+                }
+            }
         }
     }
 

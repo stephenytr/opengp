@@ -6,7 +6,7 @@
 //! - `FilterState`: Status and practitioner filter state
 //! - `HistoryState`: Undo/redo and multi-select state
 
-use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
 use ratatui::layout::Rect;
 use ratatui::widgets::TableState;
 use std::collections::HashSet;
@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::domain::appointment::{AppointmentStatus, CalendarAppointment};
 use crate::domain::patient::Patient;
 use crate::domain::user::Practitioner;
+use crate::ui::widgets::{MonthCalendar, TimeSlotPicker};
 
 /// Calendar navigation and view state
 ///
@@ -209,8 +210,18 @@ pub struct DetailModalData {
     pub patient: Option<Patient>,
 }
 
+/// Focus area for reschedule modal
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RescheduleFocus {
+    /// Date selection is active
+    #[default]
+    Date,
+    /// Time selection is active
+    Time,
+}
+
 /// Data associated with reschedule modals
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct RescheduleModalData {
     /// Whether the reschedule modal is currently showing
     pub showing: bool,
@@ -220,17 +231,87 @@ pub struct RescheduleModalData {
     pub new_duration: i64,
     /// Conflict warning message if any
     pub conflict_warning: Option<String>,
+    /// Calendar widget for date selection
+    pub calendar: MonthCalendar,
+    /// Time slot picker for time selection
+    pub time_picker: TimeSlotPicker,
+    /// Current focus area (date or time)
+    pub focus: RescheduleFocus,
 }
 
 impl RescheduleModalData {
     /// Create new reschedule modal data with defaults
     pub fn new() -> Self {
+        let today = chrono::Local::now().date_naive();
         Self {
             showing: false,
             new_start_time: None,
             new_duration: 15,
             conflict_warning: None,
+            calendar: MonthCalendar::new(today),
+            time_picker: TimeSlotPicker::new(),
+            focus: RescheduleFocus::Date,
         }
+    }
+
+    /// Create new reschedule modal data initialized with a specific datetime
+    pub fn with_datetime(start_time: DateTime<Utc>) -> Self {
+        let date = start_time.date_naive();
+        let time_str = format!("{:02}:{:02}", start_time.hour(), start_time.minute());
+
+        let mut time_picker = TimeSlotPicker::new();
+        let slots = time_picker.time_slots().to_vec();
+        if let Some(index) = slots.iter().position(|slot| slot == &time_str) {
+            while time_picker.selected_index() != index {
+                time_picker.next();
+            }
+        }
+
+        Self {
+            showing: false,
+            new_start_time: Some(start_time),
+            new_duration: 15,
+            conflict_warning: None,
+            calendar: MonthCalendar::new(date),
+            time_picker,
+            focus: RescheduleFocus::Date,
+        }
+    }
+
+    /// Get the selected datetime from calendar and time picker
+    pub fn selected_datetime(&self) -> Option<DateTime<Utc>> {
+        let date = self.calendar.selected_date();
+        let time_str = self.time_picker.selected_time();
+
+        let parts: Vec<&str> = time_str.split(':').collect();
+        if parts.len() != 2 {
+            return None;
+        }
+
+        let hour: u32 = parts[0].parse().ok()?;
+        let minute: u32 = parts[1].parse().ok()?;
+
+        date.and_hms_opt(hour, minute, 0)
+            .map(|naive| naive.and_utc())
+    }
+
+    /// Update the new_start_time from the current widget selections
+    pub fn update_start_time_from_widgets(&mut self) {
+        self.new_start_time = self.selected_datetime();
+    }
+
+    /// Toggle focus between date and time
+    pub fn toggle_focus(&mut self) {
+        self.focus = match self.focus {
+            RescheduleFocus::Date => RescheduleFocus::Time,
+            RescheduleFocus::Time => RescheduleFocus::Date,
+        };
+    }
+}
+
+impl Default for RescheduleModalData {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

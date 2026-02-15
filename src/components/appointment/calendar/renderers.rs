@@ -26,7 +26,8 @@ use crate::ui::Theme;
 
 use super::state::{
     AuditModalData, BatchModalData, CalendarState, ConfirmationModalData, DetailModalData,
-    ErrorModalData, FilterState, FocusArea, HistoryState, RescheduleModalData, SearchModalData,
+    ErrorModalData, FilterState, FocusArea, HistoryState, RescheduleFocus, RescheduleModalData,
+    SearchModalData,
 };
 
 /// Renderer for calendar views (month, day, week)
@@ -1169,9 +1170,7 @@ impl ModalRenderer {
         frame: &mut Frame,
         area: Rect,
     ) {
-        let inner_area = Self::render_modal_background(frame, area, 60, 50);
-
-        let mut lines = Vec::new();
+        let inner_area = Self::render_modal_background(frame, area, 80, 60);
 
         if let Some(appt_id) = detail_data.appointment_id {
             if let Some(appt) = calendar_state.appointments.iter().find(|a| a.id == appt_id) {
@@ -1181,117 +1180,121 @@ impl ModalRenderer {
                     "Loading...".to_string()
                 };
 
-                lines.push(Line::from(vec![Span::styled(
+                let main_layout = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Length(3),
+                        Constraint::Length(3),
+                        Constraint::Length(3),
+                        Constraint::Length(3),
+                        Constraint::Min(20),
+                        Constraint::Length(3),
+                        Constraint::Length(3),
+                    ])
+                    .split(inner_area);
+
+                let title = Paragraph::new(vec![Line::from(vec![Span::styled(
                     "Reschedule Appointment",
                     Style::default()
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
-                )]));
-                lines.push(Line::from(""));
+                )])]);
+                frame.render_widget(title, main_layout[0]);
 
-                lines.push(Line::from(vec![
+                let patient_info = Paragraph::new(vec![Line::from(vec![
                     Span::styled("Patient: ", Style::default().fg(Color::Yellow)),
                     Span::styled(patient_name, Style::default().fg(Color::White)),
-                ]));
-
-                lines.push(Line::from(""));
+                ])]);
+                frame.render_widget(patient_info, main_layout[1]);
 
                 let current_time_str = format!("{}", appt.start_time.format("%Y-%m-%d %H:%M"));
-                lines.push(Line::from(vec![
-                    Span::styled("Current Time: ", Style::default().fg(Color::Yellow)),
-                    Span::styled(current_time_str.clone(), Style::default().fg(Color::White)),
-                ]));
-
-                let current_duration = appt.duration_minutes();
-                lines.push(Line::from(vec![
-                    Span::styled("Current Duration: ", Style::default().fg(Color::Yellow)),
+                let current_info = Paragraph::new(vec![Line::from(vec![
+                    Span::styled("Current: ", Style::default().fg(Color::Yellow)),
                     Span::styled(
-                        format!("{} minutes", current_duration),
+                        format!("{} ({} min)", current_time_str, appt.duration_minutes()),
                         Style::default().fg(Color::White),
                     ),
-                ]));
+                ])]);
+                frame.render_widget(current_info, main_layout[2]);
 
-                lines.push(Line::from(""));
-                lines.push(Line::from(vec![
-                    Span::styled("New Time: ", Style::default().fg(Color::Yellow)),
+                let new_time_str = reschedule_data
+                    .new_start_time
+                    .map(|t| format!("{}", t.format("%Y-%m-%d %H:%M")))
+                    .unwrap_or_else(|| "Select date and time".to_string());
+                let new_info = Paragraph::new(vec![Line::from(vec![
+                    Span::styled("New: ", Style::default().fg(Color::Yellow)),
                     Span::styled(
-                        if let Some(new_time) = reschedule_data.new_start_time {
-                            format!("{}", new_time.format("%Y-%m-%d %H:%M"))
-                        } else {
-                            current_time_str
-                        },
+                        format!("{} ({} min)", new_time_str, reschedule_data.new_duration),
                         Style::default()
                             .fg(Color::Cyan)
                             .add_modifier(Modifier::BOLD),
                     ),
-                ]));
+                ])]);
+                frame.render_widget(new_info, main_layout[3]);
 
-                lines.push(Line::from(vec![
-                    Span::styled("New Duration: ", Style::default().fg(Color::Yellow)),
-                    Span::styled(
-                        format!("{} minutes", reschedule_data.new_duration),
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ]));
+                let widgets_layout = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                    .split(main_layout[4]);
+
+                reschedule_data.calendar.render(
+                    frame,
+                    widgets_layout[0],
+                    reschedule_data.focus == RescheduleFocus::Date,
+                );
+                reschedule_data.time_picker.render(frame, widgets_layout[1]);
 
                 if let Some(ref warning) = reschedule_data.conflict_warning {
-                    lines.push(Line::from(""));
-                    lines.push(Line::from(vec![
+                    let warning_text = Paragraph::new(vec![Line::from(vec![
                         Span::styled(
                             "⚠ ",
                             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
                         ),
                         Span::styled(warning, Style::default().fg(Color::Red)),
-                    ]));
+                    ])]);
+                    frame.render_widget(warning_text, main_layout[5]);
                 }
+
+                let help_text = Paragraph::new(vec![Line::from(vec![
+                    Span::styled(
+                        "Tab",
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(": Switch  ", Style::default().fg(Color::White)),
+                    Span::styled(
+                        "↑↓",
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(": Navigate  ", Style::default().fg(Color::White)),
+                    Span::styled(
+                        "+/-",
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(": Duration  ", Style::default().fg(Color::White)),
+                    Span::styled(
+                        "Enter",
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(": Save  ", Style::default().fg(Color::White)),
+                    Span::styled(
+                        "Esc",
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(": Cancel", Style::default().fg(Color::White)),
+                ])]);
+                frame.render_widget(help_text, main_layout[6]);
             }
         }
-
-        lines.push(Line::from(""));
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled(
-                "↑↓",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(": Time  ", Style::default().fg(Color::White)),
-            Span::styled(
-                "+/-",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(": Duration  ", Style::default().fg(Color::White)),
-            Span::styled(
-                "Enter",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(": Save  ", Style::default().fg(Color::White)),
-            Span::styled(
-                "Esc",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(": Cancel", Style::default().fg(Color::White)),
-        ]));
-
-        let modal_content = Paragraph::new(lines)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" Reschedule Appointment ")
-                    .border_style(Style::default().fg(Color::Yellow)),
-            )
-            .wrap(ratatui::widgets::Wrap { trim: true });
-
-        frame.render_widget(modal_content, inner_area);
     }
 
     /// Render filter menu modal
