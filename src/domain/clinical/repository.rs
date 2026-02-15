@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::domain::error::RepositoryError as BaseRepositoryError;
 use super::model::{Consultation, SocialHistory};
 
 /// Repository errors for clinical domain
@@ -19,6 +20,18 @@ pub enum RepositoryError {
 
     #[error("Decryption error: {0}")]
     Decryption(String),
+}
+
+impl From<BaseRepositoryError> for RepositoryError {
+    fn from(err: BaseRepositoryError) -> Self {
+        match err {
+            BaseRepositoryError::Database(e) => RepositoryError::Database(e),
+            BaseRepositoryError::NotFound => RepositoryError::NotFound(Uuid::nil()),
+            BaseRepositoryError::ConstraintViolation(s) => {
+                RepositoryError::Database(sqlx::Error::ColumnNotFound(s))
+            }
+        }
+    }
 }
 
 /// Repository trait for Consultation entities

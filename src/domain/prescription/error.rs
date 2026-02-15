@@ -1,6 +1,8 @@
 use thiserror::Error;
 use uuid::Uuid;
 
+pub use crate::domain::error::RepositoryError;
+
 #[derive(Debug, Error)]
 pub enum ValidationError {
     #[error("Empty field: {0}")]
@@ -44,16 +46,4 @@ pub enum ServiceError {
 
     #[error("Audit error: {0}")]
     Audit(String),
-}
-
-#[derive(Debug, Error)]
-pub enum RepositoryError {
-    #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
-
-    #[error("Not found")]
-    NotFound,
-
-    #[error("Constraint violation: {0}")]
-    ConstraintViolation(String),
 }

@@ -1,17 +1,9 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
+pub use crate::domain::error::RepositoryError;
 use super::error::UserRepositoryError;
 use super::model::{Practitioner, Role, User};
-
-#[derive(Debug, thiserror::Error)]
-pub enum RepositoryError {
-    #[error("Database error: {0}")]
-    Database(String),
-
-    #[error("Not found")]
-    NotFound,
-}
 
 /// Repository trait for practitioner persistence
 #[async_trait]

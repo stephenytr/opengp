@@ -1,6 +1,8 @@
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::domain::error::RepositoryError as BaseRepositoryError;
+
 #[derive(Debug, Error)]
 pub enum ValidationError {
     #[error("Empty name: {0}")]
@@ -41,4 +43,14 @@ pub enum RepositoryError {
 
     #[error("Encryption error: {0}")]
     Encryption(String),
+}
+
+impl From<BaseRepositoryError> for RepositoryError {
+    fn from(err: BaseRepositoryError) -> Self {
+        match err {
+            BaseRepositoryError::Database(e) => RepositoryError::Database(e),
+            BaseRepositoryError::NotFound => RepositoryError::NotFound,
+            BaseRepositoryError::ConstraintViolation(s) => RepositoryError::ConstraintViolation(s),
+        }
+    }
 }

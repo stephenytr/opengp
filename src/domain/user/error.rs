@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+pub use crate::domain::error::RepositoryError as UserRepositoryError;
+
 #[derive(Debug, Error)]
 pub enum UserError {
     #[error("Validation error: {0}")]
@@ -19,16 +21,4 @@ pub enum UserError {
 
     #[error("Repository error: {0}")]
     Repository(#[from] UserRepositoryError),
-}
-
-#[derive(Debug, Error)]
-pub enum UserRepositoryError {
-    #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
-
-    #[error("Not found")]
-    NotFound,
-
-    #[error("Constraint violation: {0}")]
-    ConstraintViolation(String),
 }

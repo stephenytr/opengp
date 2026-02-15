@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow, SqlitePool, error::Error as SqlxError};
 use uuid::Uuid;
 
 use crate::domain::user::{Practitioner, PractitionerRepository, RepositoryError};
@@ -18,7 +18,7 @@ struct PractitionerQueryRow {
 impl PractitionerQueryRow {
     fn into_practitioner(self) -> Result<Practitioner, RepositoryError> {
         let user_id = bytes_to_uuid(&self.id)
-            .map_err(|_| RepositoryError::Database("Invalid UUID bytes".to_string()))?;
+            .map_err(|_| SqlxError::Protocol("Invalid UUID bytes".to_string()))?;
 
         let (title, speciality, qualifications) = match self.role.as_str() {
             "Doctor" => (
@@ -79,7 +79,7 @@ impl PractitionerRepository for SqlxPractitionerRepository {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+        .map_err(RepositoryError::Database)?;
 
         let practitioners = rows
             .into_iter()
@@ -102,7 +102,7 @@ impl PractitionerRepository for SqlxPractitionerRepository {
         .bind(id_bytes)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+        .map_err(RepositoryError::Database)?;
 
         Ok(row.map(|r| r.into_practitioner()).transpose()?)
     }
