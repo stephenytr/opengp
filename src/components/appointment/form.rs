@@ -16,7 +16,6 @@ use crate::domain::appointment::{AppointmentService, AppointmentType, NewAppoint
 use crate::domain::patient::{Patient, PatientService};
 use crate::domain::user::{Practitioner, PractitionerService};
 use crate::error::Result;
-use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
 use crate::ui::widgets::{MonthCalendar, TimeSlotPicker};
 use crate::ui::Theme;
 
@@ -923,15 +922,11 @@ impl AppointmentFormComponent {
             )));
         }
 
-        let help_text = if self.current_field == FormField::Patient {
-            KeybindRegistry::get_help_text(KeybindContext::AppointmentFormPatient)
-        } else {
-            KeybindRegistry::get_help_text(KeybindContext::AppointmentForm)
-        };
-        lines.push(Line::from(help_text));
+        let field_indicator = format!("Field: {:?}", self.current_field);
+        lines.push(Line::from(field_indicator));
 
         let paragraph = Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title(" Help "))
+            .block(Block::default().borders(Borders::ALL).title(" Info "))
             .wrap(Wrap { trim: false });
 
         frame.render_widget(paragraph, area);

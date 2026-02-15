@@ -20,7 +20,6 @@ use std::collections::HashSet;
 use crate::domain::appointment::{AppointmentStatus, CalendarAppointment};
 use crate::domain::audit::AuditAction;
 use crate::domain::user::Practitioner;
-use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
 use crate::ui::widgets::MonthCalendar;
 use crate::ui::Theme;
 
@@ -381,12 +380,11 @@ impl CalendarRenderer {
             Constraint::Length(10),
         ];
 
-        let help = KeybindRegistry::get_help_text(KeybindContext::CalendarWeekView);
         let table = Table::new(rows, widths)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(format!(" Week View - {} ", help)),
+                    .title(" Week View ".to_string()),
             )
             .row_highlight_style(
                 Style::default()
@@ -627,12 +625,10 @@ impl CalendarRenderer {
         }
 
         let title = if history_state.multi_select_mode {
-            let help = KeybindRegistry::get_help_text(KeybindContext::CalendarMultiSelect);
             let count = history_state.selected_appointments.len();
-            format!(" Multi-Select: {} selected - {} ", count, help)
+            format!(" Multi-Select: {} selected ", count)
         } else {
-            let help = KeybindRegistry::get_help_text(KeybindContext::CalendarDayView);
-            format!(" Day View - {} ", help)
+            " Day View ".to_string()
         };
 
         let table = Table::new(rows, widths)

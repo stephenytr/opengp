@@ -17,8 +17,8 @@ use crate::domain::audit::AuditAction;
 use crate::domain::patient::PatientService;
 use crate::domain::user::{Practitioner, PractitionerService};
 use crate::error::Result;
-use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
-use crate::ui::widgets::{HelpModal, ModalState, ModalType};
+use crate::ui::keybinds::KeybindContext;
+use crate::ui::widgets::{HelpModal, ModalKeyHandler, ModalKeyResult, ModalState, ModalType};
 
 use super::layout::CalendarLayout;
 use super::renderers::{CalendarRenderer, ModalRenderer};
@@ -558,11 +558,10 @@ impl AppointmentCalendarComponent {
             Span::raw(": Day View"),
         ]));
 
-        let help = KeybindRegistry::get_help_text(KeybindContext::CalendarMonthView);
         let paragraph = Paragraph::new(lines).block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!(" {} - {} ", month_year, help))
+                .title(format!(" {} ", month_year))
                 .border_style(if self.calendar_state.focus_area == FocusArea::MonthView {
                     Style::default().fg(Color::Yellow)
                 } else {
@@ -774,12 +773,11 @@ impl AppointmentCalendarComponent {
             Constraint::Length(10),
         ];
 
-        let help = KeybindRegistry::get_help_text(KeybindContext::CalendarWeekView);
         let table = Table::new(rows, widths)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(format!(" Week View - {} ", help)),
+                    .title(" Week View ".to_string()),
             )
             .row_highlight_style(
                 Style::default()
@@ -905,8 +903,7 @@ impl AppointmentCalendarComponent {
                         .iter()
                         .find(|a| a.id == appt_id)
                     {
-                        self.reschedule_data =
-                            RescheduleModalData::with_datetime(appt.start_time);
+                        self.reschedule_data = RescheduleModalData::with_datetime(appt.start_time);
                         self.reschedule_data.new_duration = appt.duration_minutes();
                         self.reschedule_data.showing = true;
                         self.detail_data.showing = false;
@@ -920,28 +917,12 @@ impl AppointmentCalendarComponent {
     }
 
     fn handle_audit_modal_key_events(&mut self, key: KeyEvent) -> Action {
-        match key.code {
-            KeyCode::Esc => {
-                self.audit_data.showing = false;
-                self.audit_data.entries.clear();
-                self.audit_data.selected_index = 0;
+        match self.audit_data.handle_key_event(key) {
+            ModalKeyResult::Close => {
                 self.detail_data.showing = true;
                 Action::Render
             }
-            KeyCode::Up => {
-                if self.audit_data.selected_index > 0 {
-                    self.audit_data.selected_index -= 1;
-                }
-                Action::Render
-            }
-            KeyCode::Down => {
-                if !self.audit_data.entries.is_empty()
-                    && self.audit_data.selected_index < self.audit_data.entries.len() - 1
-                {
-                    self.audit_data.selected_index += 1;
-                }
-                Action::Render
-            }
+            ModalKeyResult::Render => Action::Render,
             _ => Action::None,
         }
     }
@@ -1001,87 +982,58 @@ impl AppointmentCalendarComponent {
                 self.reschedule_data.update_start_time_from_widgets();
                 Action::AppointmentReschedule
             }
-            _ => {
-                match self.reschedule_data.focus {
-                    RescheduleFocus::Date => {
-                        if self.reschedule_data.calendar.handle_key_event(key) {
-                            self.reschedule_data.update_start_time_from_widgets();
-                            Action::Render
-                        } else {
-                            Action::None
-                        }
-                    }
-                    RescheduleFocus::Time => {
-                        match key.code {
-                            KeyCode::Up => {
-                                self.reschedule_data.time_picker.prev();
-                                self.reschedule_data.update_start_time_from_widgets();
-                                Action::Render
-                            }
-                            KeyCode::Down => {
-                                self.reschedule_data.time_picker.next();
-                                self.reschedule_data.update_start_time_from_widgets();
-                                Action::Render
-                            }
-                            _ => Action::None,
-                        }
+            _ => match self.reschedule_data.focus {
+                RescheduleFocus::Date => {
+                    if self.reschedule_data.calendar.handle_key_event(key) {
+                        self.reschedule_data.update_start_time_from_widgets();
+                        Action::Render
+                    } else {
+                        Action::None
                     }
                 }
-            }
+                RescheduleFocus::Time => match key.code {
+                    KeyCode::Up => {
+                        self.reschedule_data.time_picker.prev();
+                        self.reschedule_data.update_start_time_from_widgets();
+                        Action::Render
+                    }
+                    KeyCode::Down => {
+                        self.reschedule_data.time_picker.next();
+                        self.reschedule_data.update_start_time_from_widgets();
+                        Action::Render
+                    }
+                    _ => Action::None,
+                },
+            },
         }
     }
 
     fn handle_search_key_events(&mut self, key: KeyEvent) -> Action {
-        match key.code {
-            KeyCode::Esc => {
-                self.search_data.showing = false;
-                self.search_data.query.clear();
-                self.search_data.results.clear();
-                self.search_data.selected_index = 0;
-                Action::Render
-            }
-            KeyCode::Up => {
-                if self.search_data.selected_index > 0 {
-                    self.search_data.selected_index -= 1;
-                }
-                Action::Render
-            }
-            KeyCode::Down => {
-                if !self.search_data.results.is_empty()
-                    && self.search_data.selected_index < self.search_data.results.len() - 1
-                {
-                    self.search_data.selected_index += 1;
-                }
-                Action::Render
-            }
-            KeyCode::Enter => {
-                if let Some(appt) = self
-                    .search_data
-                    .results
-                    .get(self.search_data.selected_index)
-                    .cloned()
-                {
+        match self.search_data.handle_key_event(key) {
+            ModalKeyResult::Close => Action::Render,
+            ModalKeyResult::Select(index) => {
+                if let Some(appt) = self.search_data.results.get(index).cloned() {
                     self.navigate_to_appointment(&appt);
-                    self.search_data.showing = false;
-                    self.search_data.query.clear();
-                    self.search_data.results.clear();
-                    self.search_data.selected_index = 0;
+                    self.search_data.hide();
                 }
                 Action::Render
             }
-            KeyCode::Char(c) => {
-                self.search_data.query.push(c);
-                self.filter_appointments_by_query();
-                self.search_data.selected_index = 0;
-                Action::Render
-            }
-            KeyCode::Backspace => {
-                self.search_data.query.pop();
-                self.filter_appointments_by_query();
-                self.search_data.selected_index = 0;
-                Action::Render
-            }
-            _ => Action::None,
+            ModalKeyResult::Render => Action::Render,
+            ModalKeyResult::None => match key.code {
+                KeyCode::Char(c) => {
+                    self.search_data.query.push(c);
+                    self.filter_appointments_by_query();
+                    self.search_data.selected_index = 0;
+                    Action::Render
+                }
+                KeyCode::Backspace => {
+                    self.search_data.query.pop();
+                    self.filter_appointments_by_query();
+                    self.search_data.selected_index = 0;
+                    Action::Render
+                }
+                _ => Action::None,
+            },
         }
     }
 

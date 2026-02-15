@@ -12,7 +12,7 @@ use crate::domain::appointment::{
     AppointmentSearchCriteria, AppointmentService, CalendarAppointment,
 };
 use crate::error::Result;
-use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
+use crate::ui::keybinds::KeybindContext;
 use crate::ui::widgets::HelpModal;
 
 pub struct AppointmentListComponent {
@@ -181,8 +181,7 @@ impl Component for AppointmentListComponent {
             Constraint::Length(12), // Status
         ];
 
-        let help = KeybindRegistry::get_help_text(KeybindContext::AppointmentList);
-        let title = format!(" Appointments - {} ", help);
+        let title = " Appointments ".to_string();
 
         let table = Table::new(rows, widths)
             .header(header)

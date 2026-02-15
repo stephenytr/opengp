@@ -11,7 +11,6 @@ use uuid::Uuid;
 use crate::components::{Action, Component};
 use crate::domain::patient::{Address, Gender, NewPatientData, Patient, PatientService, UpdatePatientData};
 use crate::error::Result;
-use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
 use crate::ui::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -578,8 +577,7 @@ impl Component for PatientFormComponent {
         } else if !self.validation_errors.is_empty() {
             format!("Fix errors above | {}", field_indicator)
         } else {
-            let help = KeybindRegistry::get_help_text(KeybindContext::PatientForm);
-            format!("{} | {}", help, field_indicator)
+            field_indicator
         };
 
         let help_style = if !self.validation_errors.is_empty() {

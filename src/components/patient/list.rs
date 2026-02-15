@@ -8,7 +8,7 @@ use ratatui::Frame;
 use crate::components::{Action, Component};
 use crate::domain::patient::{Patient, PatientService};
 use crate::error::Result;
-use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
+use crate::ui::keybinds::KeybindContext;
 use crate::ui::widgets::HelpModal;
 use std::sync::Arc;
 
@@ -362,8 +362,7 @@ impl Component for PatientListComponent {
         ];
 
         let title = if self.search_query.is_empty() {
-            let help = KeybindRegistry::get_help_text(KeybindContext::PatientList);
-            format!(" Patients - {} ", help)
+            " Patients ".to_string()
         } else {
             format!(
                 " Patients - {} results (n: New, Esc: Clear) ",
