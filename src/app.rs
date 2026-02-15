@@ -276,6 +276,22 @@ impl App {
                 self.patient_form_component = Some(Box::new(form));
                 self.showing_form = true;
             }
+            Action::PatientEdit(patient_id) => {
+                info!("Opening patient edit form for ID: {}", patient_id);
+                match self.patient_service.find_patient(patient_id).await {
+                    Ok(Some(patient)) => {
+                        let form = PatientFormComponent::edit(self.patient_service.clone(), patient);
+                        self.patient_form_component = Some(Box::new(form));
+                        self.showing_form = true;
+                    }
+                    Ok(None) => {
+                        info!("Patient not found: {}", patient_id);
+                    }
+                    Err(e) => {
+                        info!("Error loading patient: {}", e);
+                    }
+                }
+            }
             Action::AppointmentCreate => {
                 info!("Opening appointment creation form");
                 let mut form = AppointmentFormComponent::new(

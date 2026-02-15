@@ -269,8 +269,106 @@ impl PatientRepository for SqlxPatientRepository {
         }
     }
 
-    async fn update(&self, _patient: Patient) -> Result<Patient, RepositoryError> {
-        todo!("Implement update")
+    async fn update(&self, patient: Patient) -> Result<Patient, RepositoryError> {
+        let id_bytes = uuid_to_bytes(&patient.id);
+        let gender_str = patient.gender.to_string();
+        let dob = patient.date_of_birth;
+        let medicare_expiry = patient.medicare_expiry;
+        let updated_at_str = datetime_to_string(&patient.updated_at);
+        let medicare_irn_i64 = patient.medicare_irn.map(|i| i as i64);
+
+        // Encrypt sensitive fields
+        let ihi_encrypted: Option<Vec<u8>> = match &patient.ihi {
+            Some(ihi) => Some(self.crypto.encrypt(ihi).map_err(|e| {
+                RepositoryError::Encryption(format!("Failed to encrypt IHI: {}", e))
+            })?),
+            None => None,
+        };
+
+        let medicare_encrypted: Option<Vec<u8>> = match &patient.medicare_number {
+            Some(num) => Some(self.crypto.encrypt(num).map_err(|e| {
+                RepositoryError::Encryption(format!("Failed to encrypt Medicare number: {}", e))
+            })?),
+            None => None,
+        };
+
+        let emergency_contact_name = patient.emergency_contact.as_ref().map(|ec| ec.name.clone());
+        let emergency_contact_phone = patient
+            .emergency_contact
+            .as_ref()
+            .map(|ec| ec.phone.clone());
+        let emergency_contact_relationship = patient
+            .emergency_contact
+            .as_ref()
+            .map(|ec| ec.relationship.clone());
+
+        let result = sqlx::query(
+            r#"
+            UPDATE patients SET
+                ihi = ?,
+                medicare_number = ?,
+                medicare_irn = ?,
+                medicare_expiry = ?,
+                title = ?,
+                first_name = ?,
+                middle_name = ?,
+                last_name = ?,
+                preferred_name = ?,
+                date_of_birth = ?,
+                gender = ?,
+                address_line1 = ?,
+                address_line2 = ?,
+                suburb = ?,
+                state = ?,
+                postcode = ?,
+                country = ?,
+                phone_home = ?,
+                phone_mobile = ?,
+                email = ?,
+                emergency_contact_name = ?,
+                emergency_contact_phone = ?,
+                emergency_contact_relationship = ?,
+                is_active = ?,
+                is_deceased = ?,
+                updated_at = ?
+            WHERE id = ?
+            "#
+        )
+        .bind(ihi_encrypted)
+        .bind(medicare_encrypted)
+        .bind(medicare_irn_i64)
+        .bind(medicare_expiry)
+        .bind(&patient.title)
+        .bind(&patient.first_name)
+        .bind(&patient.middle_name)
+        .bind(&patient.last_name)
+        .bind(&patient.preferred_name)
+        .bind(dob)
+        .bind(gender_str)
+        .bind(&patient.address.line1)
+        .bind(&patient.address.line2)
+        .bind(&patient.address.suburb)
+        .bind(&patient.address.state)
+        .bind(&patient.address.postcode)
+        .bind(&patient.address.country)
+        .bind(&patient.phone_home)
+        .bind(&patient.phone_mobile)
+        .bind(&patient.email)
+        .bind(emergency_contact_name)
+        .bind(emergency_contact_phone)
+        .bind(emergency_contact_relationship)
+        .bind(patient.is_active)
+        .bind(patient.is_deceased)
+        .bind(updated_at_str)
+        .bind(id_bytes)
+        .execute(&self.pool)
+        .await;
+
+        match result {
+            Ok(_) => Ok(patient),
+            Err(sqlx::Error::Database(db_err)) => Err(map_db_error(db_err)),
+            Err(e) => Err(RepositoryError::Database(e)),
+        }
     }
 
     async fn deactivate(&self, _id: Uuid) -> Result<(), RepositoryError> {

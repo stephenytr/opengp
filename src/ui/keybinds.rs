@@ -263,6 +263,7 @@ impl KeybindRegistry {
             Keybind::new(KeyCode::Char('g'), "First", "First patient"),
             Keybind::new(KeyCode::Char('G'), "Last", "Last patient"),
             Keybind::unimplemented(KeyCode::Enter, "View", "View details (not implemented)"),
+            Keybind::new(KeyCode::Char('e'), "Edit", "Edit patient"),
             Keybind::new(KeyCode::Char('n'), "New", "New patient"),
             Keybind::new(KeyCode::Char('/'), "Search", "Enter search"),
             Keybind::new(KeyCode::Esc, "Clear", "Clear search"),
@@ -282,8 +283,13 @@ impl KeybindRegistry {
     fn patient_form_keybinds() -> Vec<Keybind> {
         vec![
             Keybind::new(KeyCode::Esc, "Cancel", "Cancel form"),
-            Keybind::new(KeyCode::Enter, "Submit", "Submit form"),
             Keybind::new(KeyCode::F(10), "Submit", "Submit form"),
+            Keybind::with_modifiers(
+                KeyCode::Char('s'),
+                KeyModifiers::CONTROL,
+                "Submit",
+                "Submit form (Ctrl+S)",
+            ),
             Keybind::new(KeyCode::Tab, "Next", "Next field"),
             Keybind::with_modifiers(
                 KeyCode::Tab,
@@ -592,7 +598,7 @@ mod tests {
     #[test]
     fn test_get_keybinds_patient_list() {
         let keybinds = KeybindRegistry::get_keybinds(KeybindContext::PatientList);
-        assert_eq!(keybinds.len(), 10);
+        assert_eq!(keybinds.len(), 11);
     }
 
     #[test]

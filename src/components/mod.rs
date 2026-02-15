@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use crossterm::event::{KeyEvent, MouseEvent};
 use ratatui::layout::Rect;
 use ratatui::Frame;
+use uuid::Uuid;
 
 use crate::ui::event::Event;
 
@@ -22,6 +23,7 @@ pub enum Action {
     NavigateToBilling,
 
     PatientCreate,
+    PatientEdit(Uuid),
     PatientFormSubmit,
     PatientFormCancel,
 

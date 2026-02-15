@@ -1,14 +1,15 @@
 use async_trait::async_trait;
 use chrono::NaiveDate;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
 use ratatui::Frame;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use crate::components::{Action, Component};
-use crate::domain::patient::{Address, Gender, NewPatientData, PatientService};
+use crate::domain::patient::{Address, Gender, NewPatientData, Patient, PatientService, UpdatePatientData};
 use crate::error::Result;
 use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
 use crate::ui::Theme;
@@ -55,6 +56,7 @@ impl FormField {
 
 pub struct PatientFormComponent {
     patient_service: Arc<PatientService>,
+    editing_patient_id: Option<Uuid>,
     current_field: usize,
     scroll_offset: usize,
     first_name: String,
@@ -73,6 +75,7 @@ impl PatientFormComponent {
     pub fn new(patient_service: Arc<PatientService>) -> Self {
         Self {
             patient_service,
+            editing_patient_id: None,
             current_field: 0,
             scroll_offset: 0,
             first_name: String::new(),
@@ -86,6 +89,36 @@ impl PatientFormComponent {
             validation_errors: Vec::new(),
             is_submitting: false,
         }
+    }
+
+    pub fn edit(patient_service: Arc<PatientService>, patient: Patient) -> Self {
+        let gender_index = match patient.gender {
+            Gender::Male => 0,
+            Gender::Female => 1,
+            Gender::Other => 2,
+            Gender::PreferNotToSay => 3,
+        };
+
+        Self {
+            patient_service,
+            editing_patient_id: Some(patient.id),
+            current_field: 0,
+            scroll_offset: 0,
+            first_name: patient.first_name,
+            last_name: patient.last_name,
+            date_of_birth: patient.date_of_birth.format("%d/%m/%Y").to_string(),
+            gender_index,
+            medicare_number: patient.medicare_number.unwrap_or_default(),
+            medicare_irn: patient.medicare_irn.map(|i| i.to_string()).unwrap_or_default(),
+            phone_mobile: patient.phone_mobile.unwrap_or_default(),
+            email: patient.email.unwrap_or_default(),
+            validation_errors: Vec::new(),
+            is_submitting: false,
+        }
+    }
+
+    pub fn is_edit_mode(&self) -> bool {
+        self.editing_patient_id.is_some()
     }
 
     fn validate(&mut self) -> bool {
@@ -282,6 +315,57 @@ impl PatientFormComponent {
             self.medicare_irn.parse::<u8>().ok()
         };
 
+        if let Some(patient_id) = self.editing_patient_id {
+            let data = UpdatePatientData {
+                ihi: None,
+                medicare_number: if self.medicare_number.is_empty() {
+                    None
+                } else {
+                    Some(self.medicare_number.clone())
+                },
+                medicare_irn,
+                medicare_expiry: None,
+                title: None,
+                first_name: Some(self.first_name.clone()),
+                middle_name: None,
+                last_name: Some(self.last_name.clone()),
+                preferred_name: None,
+                date_of_birth: Some(dob),
+                gender: Some(self.get_selected_gender()),
+                address: None,
+                phone_home: None,
+                phone_mobile: if self.phone_mobile.is_empty() {
+                    None
+                } else {
+                    Some(self.phone_mobile.clone())
+                },
+                email: if self.email.is_empty() {
+                    None
+                } else {
+                    Some(self.email.clone())
+                },
+                emergency_contact: None,
+                concession_type: None,
+                concession_number: None,
+                preferred_language: None,
+                interpreter_required: None,
+                aboriginal_torres_strait_islander: None,
+            };
+
+            match self.patient_service.update_patient(patient_id, data).await {
+                Ok(_patient) => {
+                    self.is_submitting = false;
+                    return Ok(Some(Action::PatientFormSubmit));
+                }
+                Err(e) => {
+                    self.is_submitting = false;
+                    self.validation_errors
+                        .push(format!("Failed to update patient: {}", e));
+                    return Ok(Some(Action::Render));
+                }
+            }
+        }
+
         let data = NewPatientData {
             ihi: None,
             medicare_number: if self.medicare_number.is_empty() {
@@ -344,9 +428,15 @@ impl Component for PatientFormComponent {
             return Action::None;
         }
 
+        // Handle Ctrl+S or F10 to submit
+        if (key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL))
+            || key.code == KeyCode::F(10)
+        {
+            return Action::PatientFormSubmit;
+        }
+
         match key.code {
             KeyCode::Esc => Action::PatientFormCancel,
-            KeyCode::Enter | KeyCode::F(10) => Action::PatientFormSubmit,
             KeyCode::Tab => {
                 self.next_field();
                 Action::Render
@@ -415,8 +505,10 @@ impl Component for PatientFormComponent {
         let modal_area = horizontal[1];
         frame.render_widget(Clear, modal_area);
 
+        let title = if self.is_edit_mode() { " Edit Patient " } else { " New Patient " };
         let modal_block = Block::default()
             .borders(Borders::ALL)
+            .title(title)
             .style(theme.modal_background)
             .border_style(theme.normal);
         let inner_area = modal_block.inner(modal_area);

@@ -247,6 +247,13 @@ impl Component for PatientListComponent {
                 }
             }
             KeyCode::Char('n') => Action::PatientCreate,
+            KeyCode::Char('e') => {
+                if let Some(patient) = self.selected_patient() {
+                    Action::PatientEdit(patient.id)
+                } else {
+                    Action::None
+                }
+            }
             KeyCode::Char('/') => {
                 self.enter_search_mode();
                 Action::Render

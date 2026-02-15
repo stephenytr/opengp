@@ -1,4 +1,5 @@
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -16,6 +17,9 @@ pub enum ValidationError {
 pub enum ServiceError {
     #[error("Duplicate patient found")]
     DuplicatePatient,
+
+    #[error("Patient not found: {0}")]
+    NotFound(Uuid),
 
     #[error("Validation error: {0}")]
     Validation(#[from] ValidationError),
