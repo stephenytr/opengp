@@ -21,6 +21,7 @@ pub struct AppointmentListComponent {
     appointment_service: Arc<AppointmentService>,
     appointments: Vec<CalendarAppointment>,
     table_state: TableState,
+    scroll_offset: usize,
     showing_help_modal: bool,
     table_area: Option<Rect>,
 }
@@ -34,6 +35,7 @@ impl AppointmentListComponent {
             appointment_service,
             appointments: Vec::new(),
             table_state,
+            scroll_offset: 0,
             showing_help_modal: false,
             table_area: None,
         }
@@ -54,6 +56,7 @@ impl AppointmentListComponent {
             None => 0,
         };
         self.table_state.select(Some(i));
+        self.update_scroll_offset();
     }
 
     fn previous(&mut self) {
@@ -71,17 +74,35 @@ impl AppointmentListComponent {
             None => 0,
         };
         self.table_state.select(Some(i));
+        self.update_scroll_offset();
+    }
+
+    fn update_scroll_offset(&mut self) {
+        if let Some(area) = self.table_area {
+            let selected = self.table_state.selected().unwrap_or(0);
+            let visible_rows = area.height.saturating_sub(3) as usize; // 1 for header, 2 for borders
+            if visible_rows > 0 {
+                if selected < self.scroll_offset {
+                    self.scroll_offset = selected;
+                } else if selected >= self.scroll_offset + visible_rows {
+                    self.scroll_offset = selected.saturating_sub(visible_rows - 1).min(self.appointments.len().saturating_sub(1));
+                }
+            }
+        }
     }
 
     fn select_first(&mut self) {
         if !self.appointments.is_empty() {
             self.table_state.select(Some(0));
+            self.scroll_offset = 0;
         }
     }
 
     fn select_last(&mut self) {
         if !self.appointments.is_empty() {
-            self.table_state.select(Some(self.appointments.len() - 1));
+            let last = self.appointments.len() - 1;
+            self.table_state.select(Some(last));
+            self.update_scroll_offset();
         }
     }
 
@@ -123,8 +144,12 @@ impl AppointmentListComponent {
         if let Some(row_index) =
             table_row_from_click(&mouse, table_area, 1, self.appointments.len())
         {
-            tracing::debug!("AppointmentList: selected row {}", row_index);
-            self.table_state.select(Some(row_index));
+            let actual_index = row_index + self.scroll_offset;
+            tracing::debug!("AppointmentList: clicked visual row {}, actual data index {}", row_index, actual_index);
+            if actual_index < self.appointments.len() {
+                self.table_state.select(Some(actual_index));
+                self.update_scroll_offset();
+            }
             return Action::Render;
         }
 
