@@ -160,7 +160,6 @@ impl AppointmentListComponent {
             tracing::debug!("AppointmentList: clicked visual row {}, actual data index {}", row_index, actual_index);
             if actual_index < self.appointments.len() {
                 self.table_state.select(Some(actual_index));
-                self.update_scroll_offset();
             }
             return Action::Render;
         }

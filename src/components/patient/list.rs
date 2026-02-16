@@ -19,7 +19,6 @@ pub struct PatientListComponent {
     all_patients: Vec<Patient>,
     filtered_patients: Vec<Patient>,
     table_state: TableState,
-    scroll_offset: usize,
     #[allow(dead_code)]
     is_loading: bool,
     error_message: Option<String>,
@@ -43,7 +42,6 @@ impl PatientListComponent {
             all_patients: Vec::new(),
             filtered_patients: Vec::new(),
             table_state,
-            scroll_offset: 0,
             is_loading: false,
             error_message: None,
             search_query: String::new(),
@@ -63,7 +61,6 @@ impl PatientListComponent {
         let current = self.table_state.selected().unwrap_or(0);
         let next = (current + 1).min(self.filtered_patients.len() - 1);
         self.table_state.select(Some(next));
-        self.scroll_to_selected();
     }
 
     fn select_previous(&mut self) {
@@ -74,46 +71,18 @@ impl PatientListComponent {
         let current = self.table_state.selected().unwrap_or(0);
         let prev = current.saturating_sub(1);
         self.table_state.select(Some(prev));
-        self.scroll_to_selected();
-    }
-
-    fn scroll_to_selected(&mut self) {
-        if let Some(area) = self.table_area {
-            let selected = self.table_state.selected().unwrap_or(0);
-            let visible_rows = area.height.saturating_sub(2) as usize;
-            if visible_rows > 0 {
-                let ideal_offset = selected.saturating_sub(visible_rows / 2);
-                self.scroll_offset = ideal_offset.min(self.filtered_patients.len().saturating_sub(visible_rows)).max(0);
-            }
-        }
-    }
-
-    fn update_scroll_offset(&mut self) {
-        if let Some(area) = self.table_area {
-            let selected = self.table_state.selected().unwrap_or(0);
-            let visible_rows = area.height.saturating_sub(2) as usize;
-            if visible_rows > 0 {
-                if selected < self.scroll_offset {
-                    self.scroll_offset = selected;
-                } else if selected >= self.scroll_offset + visible_rows {
-                    self.scroll_offset = selected.saturating_sub(visible_rows - 1);
-                }
-            }
-        }
     }
 
     fn select_first(&mut self) {
         if !self.filtered_patients.is_empty() {
             self.table_state.select(Some(0));
-            self.scroll_offset = 0;
         }
     }
 
     fn select_last(&mut self) {
         if !self.filtered_patients.is_empty() {
-            let last = self.filtered_patients.len() - 1;
-            self.table_state.select(Some(last));
-            self.update_scroll_offset();
+            self.table_state
+                .select(Some(self.filtered_patients.len() - 1));
         }
     }
 
@@ -337,11 +306,7 @@ impl Component for PatientListComponent {
         if let Some(row_index) =
             table_row_from_click(&mouse, table_area, 1, self.filtered_patients.len())
         {
-            let actual_index = row_index + self.scroll_offset;
-            if actual_index < self.filtered_patients.len() {
-                self.table_state.select(Some(actual_index));
-                self.update_scroll_offset();
-            }
+            self.table_state.select(Some(row_index));
             return Action::Render;
         }
 
