@@ -56,7 +56,7 @@ impl AppointmentListComponent {
             None => 0,
         };
         self.table_state.select(Some(i));
-        self.update_scroll_offset();
+        self.scroll_to_selected();
     }
 
     fn previous(&mut self) {
@@ -74,18 +74,30 @@ impl AppointmentListComponent {
             None => 0,
         };
         self.table_state.select(Some(i));
-        self.update_scroll_offset();
+        self.scroll_to_selected();
+    }
+
+    fn scroll_to_selected(&mut self) {
+        if let Some(area) = self.table_area {
+            let selected = self.table_state.selected().unwrap_or(0);
+            let visible_rows = area.height.saturating_sub(2) as usize;
+            if visible_rows > 0 {
+                let ideal_offset = selected.saturating_sub(visible_rows / 2);
+                self.scroll_offset = ideal_offset.min(self.appointments.len().saturating_sub(visible_rows)).max(0);
+            }
+        }
     }
 
     fn update_scroll_offset(&mut self) {
         if let Some(area) = self.table_area {
             let selected = self.table_state.selected().unwrap_or(0);
-            let visible_rows = area.height.saturating_sub(3) as usize; // 1 for header, 2 for borders
+            let visible_rows = area.height.saturating_sub(2) as usize;
             if visible_rows > 0 {
+                // Ensure selected is always visible
                 if selected < self.scroll_offset {
                     self.scroll_offset = selected;
                 } else if selected >= self.scroll_offset + visible_rows {
-                    self.scroll_offset = selected.saturating_sub(visible_rows - 1).min(self.appointments.len().saturating_sub(1));
+                    self.scroll_offset = selected.saturating_sub(visible_rows - 1);
                 }
             }
         }
