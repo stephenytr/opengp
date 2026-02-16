@@ -101,7 +101,29 @@ pub fn create_test_patient() -> Patient {
         aboriginal_torres_strait_islander: None,
     };
 
-    Patient::new(data).expect("Failed to create test patient")
+    Patient::new(
+        data.first_name,
+        data.last_name,
+        data.date_of_birth,
+        data.gender,
+        data.ihi,
+        data.medicare_number,
+        data.medicare_irn,
+        data.medicare_expiry,
+        data.title,
+        data.middle_name,
+        data.preferred_name,
+        data.address,
+        data.phone_home,
+        data.phone_mobile,
+        data.email,
+        data.emergency_contact,
+        data.concession_type,
+        data.concession_number,
+        data.preferred_language,
+        data.interpreter_required,
+        data.aboriginal_torres_strait_islander,
+    ).expect("Failed to create test patient")
 }
 
 /// Create a test appointment fixture with default values

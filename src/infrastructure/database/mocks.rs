@@ -467,7 +467,29 @@ mod tests {
             aboriginal_torres_strait_islander: None,
         };
 
-        let patient = Patient::new(patient_data).unwrap();
+        let patient = Patient::new(
+            patient_data.first_name,
+            patient_data.last_name,
+            patient_data.date_of_birth,
+            patient_data.gender,
+            patient_data.ihi,
+            patient_data.medicare_number,
+            patient_data.medicare_irn,
+            patient_data.medicare_expiry,
+            patient_data.title,
+            patient_data.middle_name,
+            patient_data.preferred_name,
+            patient_data.address,
+            patient_data.phone_home,
+            patient_data.phone_mobile,
+            patient_data.email,
+            patient_data.emergency_contact,
+            patient_data.concession_type,
+            patient_data.concession_number,
+            patient_data.preferred_language,
+            patient_data.interpreter_required,
+            patient_data.aboriginal_torres_strait_islander,
+        ).unwrap();
         let patient_id = patient.id;
 
         // Create patient
@@ -515,7 +537,29 @@ mod tests {
             aboriginal_torres_strait_islander: None,
         };
 
-        let patient = Patient::new(patient_data).unwrap();
+        let patient = Patient::new(
+            patient_data.first_name,
+            patient_data.last_name,
+            patient_data.date_of_birth,
+            patient_data.gender,
+            patient_data.ihi,
+            patient_data.medicare_number,
+            patient_data.medicare_irn,
+            patient_data.medicare_expiry,
+            patient_data.title,
+            patient_data.middle_name,
+            patient_data.preferred_name,
+            patient_data.address,
+            patient_data.phone_home,
+            patient_data.phone_mobile,
+            patient_data.email,
+            patient_data.emergency_contact,
+            patient_data.concession_type,
+            patient_data.concession_number,
+            patient_data.preferred_language,
+            patient_data.interpreter_required,
+            patient_data.aboriginal_torres_strait_islander,
+        ).unwrap();
         repo.create(patient).await.unwrap();
 
         // Find by Medicare number

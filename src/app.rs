@@ -258,16 +258,28 @@ impl App {
                         && row >= tabs_area.y
                         && row < tabs_area.y + tabs_area.height
                     {
-                        let tab_width = tabs_area.width / 4;
-                        let tab_index = ((col - tabs_area.x) / tab_width) as usize;
+                        let titles = ["Patients", "Appointments", "Clinical", "Billing"];
+                        let block_padding = 1;
+                        let inner_x = tabs_area.x + block_padding;
+                        let inner_width = tabs_area.width.saturating_sub(2 * block_padding);
 
-                        return match tab_index {
-                            0 => Action::NavigateToPatients,
-                            1 => Action::NavigateToAppointments,
-                            2 => Action::NavigateToClinical,
-                            3 => Action::NavigateToBilling,
-                            _ => Action::None,
-                        };
+                        let mut cumulative = 0;
+                        for (i, title) in titles.iter().enumerate() {
+                            let title_len = title.len() as u16;
+                            let tab_start = inner_x + (cumulative * inner_width / 35);
+                            let tab_end = inner_x + ((cumulative + title_len) * inner_width / 35) + 2;
+
+                            if col >= tab_start && col < tab_end {
+                                return match i {
+                                    0 => Action::NavigateToPatients,
+                                    1 => Action::NavigateToAppointments,
+                                    2 => Action::NavigateToClinical,
+                                    3 => Action::NavigateToBilling,
+                                    _ => Action::None,
+                                };
+                            }
+                            cumulative += title_len + 2;
+                        }
                     }
                 }
                 Action::None

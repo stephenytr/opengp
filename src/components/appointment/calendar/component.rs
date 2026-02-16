@@ -2891,7 +2891,8 @@ impl Component for AppointmentCalendarComponent {
                 // Simple proportional hit test - no complex layout calculations
                 // Layout: [3-row header][time slots grid with 1-char border]
                 // Grid inside: x+1, y+4, w-2, h-4 (y+4 = 3 for header + 1 for top border)
-                let grid_x = schedule_area.x + 1;
+                // Time column also has 1-char left border
+                let grid_x = schedule_area.x + 2;  // +2 = outer border + time column border
                 let grid_y = schedule_area.y + 4;
                 let grid_w = schedule_area.width.saturating_sub(2);
                 let grid_h = schedule_area.height.saturating_sub(4);

@@ -181,7 +181,7 @@ impl Appointment {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Display, EnumString)]
 pub enum AppointmentType {
     /// Standard 15-minute consultation
     Standard,

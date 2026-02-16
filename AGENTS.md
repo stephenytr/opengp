@@ -101,10 +101,14 @@ src/
 │   ├── tui.rs              # Terminal setup
 │   ├── event.rs            # Event handling
 │   ├── theme.rs            # Styling
+│   ├── keybinds.rs         # Keyboard bindings
 │   └── widgets/            # Custom widgets
 ├── components/              # UI Components (trait-based)
 │   ├── patient/            # Patient UI components
 │   ├── appointment/        # Appointment UI components
+│   │   ├── calendar/       # Calendar view
+│   │   ├── list.rs         # List view
+│   │   └── form.rs         # Form view
 │   └── clinical/           # Clinical UI components
 ├── domain/                  # Domain Layer (business logic)
 │   ├── patient/            # Patient domain
@@ -112,13 +116,29 @@ src/
 │   │   ├── service.rs      # Business logic
 │   │   ├── repository.rs   # Persistence interface (trait)
 │   │   ├── dto.rs          # Data transfer objects
-│   │   └── error.rs        # Domain errors
-│   ├── appointment/
-│   ├── clinical/
-│   └── billing/
+│   │   ├── error.rs        # Domain errors
+│   │   └── query.rs        # Query objects
+│   ├── appointment/        # Appointment domain
+│   ├── clinical/           # Clinical notes domain
+│   ├── billing/            # Billing domain
+│   ├── prescription/       # Prescription domain
+│   ├── immunisation/       # Immunisation domain
+│   ├── pathology/          # Pathology results domain
+│   ├── referral/           # Referral domain
+│   ├── audit/              # Audit logging domain
+│   └── user/               # User management domain
 ├── infrastructure/          # Infrastructure Layer
 │   ├── database/           # Database implementation
-│   │   └── repositories/   # Repository implementations
+│   │   ├── repositories/   # Repository implementations
+│   │   ├── mocks.rs        # In-memory test mocks
+│   │   ├── helpers.rs      # Database helpers
+│   │   └── test_utils.rs   # Test utilities
+│   ├── fixtures/           # Test data generators
+│   │   ├── patient_generator.rs
+│   │   ├── appointment_generator.rs
+│   │   ├── prescription_generator.rs
+│   │   ├── immunisation_generator.rs
+│   │   └── audit_generator.rs
 │   ├── crypto/             # Encryption/hashing
 │   ├── audit/              # Audit logging
 │   └── auth/               # Authentication
@@ -1062,6 +1082,6 @@ impl HistoryState {
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2026-02-11  
+**Document Version**: 1.1  
+**Last Updated**: 2026-02-16  
 **Maintainer**: OpenGP Development Team

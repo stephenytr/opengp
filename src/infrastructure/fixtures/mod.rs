@@ -9,7 +9,9 @@ pub mod immunisation_generator;
 pub mod patient_generator;
 pub mod prescription_generator;
 
-pub use appointment_generator::{AppointmentGenerator, AppointmentGeneratorConfig};
+pub use appointment_generator::{
+    AppointmentGenerator, AppointmentGeneratorConfig, GenerationStats,
+};
 pub use audit_generator::{AuditGenerator, AuditGeneratorConfig};
 pub use immunisation_generator::{ImmunisationGenerator, ImmunisationGeneratorConfig};
 pub use patient_generator::{PatientGenerator, PatientGeneratorConfig};

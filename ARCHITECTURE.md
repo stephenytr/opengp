@@ -1,7 +1,7 @@
 # OpenGP Architecture Documentation
 
-**Version**: 1.0  
-**Last Updated**: 2026-02-14  
+**Version**: 1.1  
+**Last Updated**: 2026-02-16  
 **Status**: Living Document
 
 ---
@@ -130,6 +130,11 @@ impl PatientRepository for SqlitePatientRepository { ... }
 │  │  Module  │ │  Module   │ │  Module  │ │  Module  │ │ Module  │ │
 │  └────┬─────┘ └─────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬────┘ │
 │       │             │             │             │             │      │
+│  ┌──────────┐ ┌───────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+│  │Prescription│ │Immunisatn│ │Pathology │ │  Referral │ │   Audit  │ │
+│  │  Module   │ │  Module   │ │  Module  │ │  Module   │ │  Module  │ │
+│  └────┬─────┘ └─────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ │
+│       │             │             │             │             │      │
 │  ┌────┴─────────────┴─────────────┴─────────────┴─────────────┴───┐ │
 │  │             Domain Services & Business Logic                    │ │
 │  └──────────────────────────────────────────────────────────────────┘ │
@@ -140,7 +145,8 @@ impl PatientRepository for SqlitePatientRepository { ... }
 │  ┌────────────────────────────────────────────────────────────────┐ │
 │  │         Repository Implementations (Trait-based)                │ │
 │  │  • PatientRepository    • AppointmentRepository                 │ │
-│  │  • ClinicalRepository   • BillingRepository                     │ │
+│  │  • ClinicalRepository   • UserRepository                        │ │
+│  │  • AuditRepository      • PractitionerRepository                │ │
 │  └────────────────┬───────────────────────────┬───────────────────┘ │
 │                   │                           │                      │
 │          ┌────────┴────────┐         ┌───────┴────────┐            │
