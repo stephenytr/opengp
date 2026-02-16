@@ -146,19 +146,24 @@ impl AppointmentListComponent {
         };
 
         tracing::debug!(
-            "AppointmentList: click at ({}, {}), table_area={:?}, num_rows={}",
+            "AppointmentList: click at ({}, {}), table_area={:?}, num_rows={}, scroll_offset={}, selected_before={:?}",
             mouse.column,
             mouse.row,
             table_area,
-            self.appointments.len()
+            self.appointments.len(),
+            self.scroll_offset,
+            self.table_state.selected()
         );
 
         if let Some(row_index) =
             table_row_from_click(&mouse, table_area, 1, self.appointments.len())
         {
-            tracing::debug!("AppointmentList: selected row {}", row_index);
-            self.table_state.select(Some(row_index));
-            return Action::Render;
+            let actual_index = row_index + self.scroll_offset;
+            if actual_index < self.appointments.len() {
+                tracing::debug!("AppointmentList: selected row {} (clicked {} + offset {})", actual_index, row_index, self.scroll_offset);
+                self.table_state.select(Some(actual_index));
+                return Action::Render;
+            }
         }
 
         Action::None
