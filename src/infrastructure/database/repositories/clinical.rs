@@ -6,9 +6,12 @@ use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
 use crate::domain::clinical::{
-    Consultation, ConsultationRepository, RepositoryError, SOAPNotes, SocialHistory,
-    SocialHistoryRepository,
+    Allergy, AllergyRepository, AllergyType, Consultation, ConsultationRepository,
+    ConditionStatus, FamilyHistory, FamilyHistoryRepository, MedicalHistory,
+    MedicalHistoryRepository, Severity, SOAPNotes, SocialHistory,
+    SocialHistoryRepository, VitalSigns, VitalSignsRepository,
 };
+use crate::domain::clinical::RepositoryError;
 use crate::infrastructure::crypto::EncryptionService;
 
 fn uuid_to_bytes(id: &Uuid) -> Vec<u8> {
@@ -530,5 +533,654 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
         .await?;
 
         Ok(history)
+    }
+}
+
+// ============================================================================
+// Allergy Repository
+// ============================================================================
+
+#[derive(Debug, FromRow)]
+struct AllergyRow {
+    id: Vec<u8>,
+    patient_id: Vec<u8>,
+    allergen: String,
+    allergy_type: String,
+    severity: String,
+    reaction: Option<Vec<u8>>,
+    onset_date: Option<chrono::NaiveDate>,
+    notes: Option<Vec<u8>>,
+    is_active: bool,
+    created_at: String,
+    updated_at: String,
+    created_by: Vec<u8>,
+    updated_by: Option<Vec<u8>>,
+}
+
+impl AllergyRow {
+    fn into_allergy(self, crypto: &EncryptionService) -> Result<Allergy, RepositoryError> {
+        let reaction = match self.reaction {
+            Some(encrypted) => {
+                let decrypted = crypto.decrypt(&encrypted).map_err(|e| {
+                    RepositoryError::Decryption(format!("Failed to decrypt allergy reaction: {}", e))
+                })?;
+                Some(decrypted)
+            }
+            None => None,
+        };
+
+        let notes = match self.notes {
+            Some(encrypted) => {
+                let decrypted = crypto.decrypt(&encrypted).map_err(|e| {
+                    RepositoryError::Decryption(format!("Failed to decrypt allergy notes: {}", e))
+                })?;
+                Some(decrypted)
+            }
+            None => None,
+        };
+
+        Ok(Allergy {
+            id: bytes_to_uuid(&self.id)?,
+            patient_id: bytes_to_uuid(&self.patient_id)?,
+            allergen: self.allergen,
+            allergy_type: self.allergy_type.parse().unwrap_or(AllergyType::Other),
+            severity: self.severity.parse().unwrap_or(Severity::Mild),
+            reaction,
+            onset_date: self.onset_date,
+            notes,
+            is_active: self.is_active,
+            created_at: string_to_datetime(&self.created_at),
+            updated_at: string_to_datetime(&self.updated_at),
+            created_by: bytes_to_uuid(&self.created_by)?,
+            updated_by: self.updated_by.as_ref().map(|b| bytes_to_uuid(b)).transpose()?,
+        })
+    }
+}
+
+pub struct SqlxAllergyRepository {
+    pool: SqlitePool,
+    crypto: Arc<EncryptionService>,
+}
+
+impl SqlxAllergyRepository {
+    pub fn new(pool: SqlitePool, crypto: Arc<EncryptionService>) -> Self {
+        Self { pool, crypto }
+    }
+}
+
+#[async_trait]
+impl AllergyRepository for SqlxAllergyRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<Allergy>, RepositoryError> {
+        let row = sqlx::query_as::<_, AllergyRow>(
+            "SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE id = ?"
+        )
+        .bind(uuid_to_bytes(&id))
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(r) => Ok(Some(r.into_allergy(&self.crypto)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn find_by_patient(&self, patient_id: Uuid) -> Result<Vec<Allergy>, RepositoryError> {
+        let rows = sqlx::query_as::<_, AllergyRow>(
+            "SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE patient_id = ? ORDER BY created_at DESC"
+        )
+        .bind(uuid_to_bytes(&patient_id))
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|r| r.into_allergy(&self.crypto))
+            .collect()
+    }
+
+    async fn find_active_by_patient(&self, patient_id: Uuid) -> Result<Vec<Allergy>, RepositoryError> {
+        let rows = sqlx::query_as::<_, AllergyRow>(
+            "SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE patient_id = ? AND is_active = TRUE ORDER BY created_at DESC"
+        )
+        .bind(uuid_to_bytes(&patient_id))
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|r| r.into_allergy(&self.crypto))
+            .collect()
+    }
+
+    async fn create(&self, allergy: Allergy) -> Result<Allergy, RepositoryError> {
+        let id_bytes = uuid_to_bytes(&allergy.id);
+        let patient_bytes = uuid_to_bytes(&allergy.patient_id);
+        let created_by_bytes = uuid_to_bytes(&allergy.created_by);
+        let updated_by_bytes = allergy.updated_by.as_ref().map(uuid_to_bytes);
+        let created_at_str = datetime_to_string(&allergy.created_at);
+        let updated_at_str = datetime_to_string(&allergy.updated_at);
+
+        let reaction_encrypted: Option<Vec<u8>> = allergy.reaction.as_ref()
+            .map(|r| self.crypto.encrypt(r))
+            .transpose()
+            .map_err(|e| RepositoryError::Encryption(format!("Failed to encrypt allergy reaction: {}", e)))?;
+
+        let notes_encrypted: Option<Vec<u8>> = allergy.notes.as_ref()
+            .map(|n| self.crypto.encrypt(n))
+            .transpose()
+            .map_err(|e| RepositoryError::Encryption(format!("Failed to encrypt allergy notes: {}", e)))?;
+
+        sqlx::query(
+            "INSERT INTO allergies (id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(id_bytes)
+        .bind(patient_bytes)
+        .bind(&allergy.allergen)
+        .bind(allergy.allergy_type.to_string())
+        .bind(allergy.severity.to_string())
+        .bind(reaction_encrypted)
+        .bind(allergy.onset_date)
+        .bind(notes_encrypted)
+        .bind(allergy.is_active)
+        .bind(&created_at_str)
+        .bind(&updated_at_str)
+        .bind(created_by_bytes)
+        .bind(updated_by_bytes)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(allergy)
+    }
+
+    async fn update(&self, allergy: Allergy) -> Result<Allergy, RepositoryError> {
+        let id_bytes = uuid_to_bytes(&allergy.id);
+        let updated_at_str = datetime_to_string(&allergy.updated_at);
+        let updated_by_bytes = allergy.updated_by.as_ref().map(uuid_to_bytes);
+
+        let reaction_encrypted: Option<Vec<u8>> = allergy.reaction.as_ref()
+            .map(|r| self.crypto.encrypt(r))
+            .transpose()
+            .map_err(|e| RepositoryError::Encryption(format!("Failed to encrypt allergy reaction: {}", e)))?;
+
+        let notes_encrypted: Option<Vec<u8>> = allergy.notes.as_ref()
+            .map(|n| self.crypto.encrypt(n))
+            .transpose()
+            .map_err(|e| RepositoryError::Encryption(format!("Failed to encrypt allergy notes: {}", e)))?;
+
+        sqlx::query(
+            "UPDATE allergies SET allergen = ?, allergy_type = ?, severity = ?, reaction = ?, onset_date = ?, notes = ?, is_active = ?, updated_at = ?, updated_by = ? WHERE id = ?"
+        )
+        .bind(&allergy.allergen)
+        .bind(allergy.allergy_type.to_string())
+        .bind(allergy.severity.to_string())
+        .bind(reaction_encrypted)
+        .bind(allergy.onset_date)
+        .bind(notes_encrypted)
+        .bind(allergy.is_active)
+        .bind(&updated_at_str)
+        .bind(updated_by_bytes)
+        .bind(id_bytes)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(allergy)
+    }
+
+    async fn deactivate(&self, id: Uuid) -> Result<(), RepositoryError> {
+        let id_bytes = uuid_to_bytes(&id);
+        let updated_at_str = datetime_to_string(&Utc::now());
+
+        sqlx::query(
+            "UPDATE allergies SET is_active = FALSE, updated_at = ? WHERE id = ?"
+        )
+        .bind(&updated_at_str)
+        .bind(id_bytes)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+}
+
+// ============================================================================
+// Medical History Repository
+// ============================================================================
+
+#[derive(Debug, FromRow)]
+struct MedicalHistoryRow {
+    id: Vec<u8>,
+    patient_id: Vec<u8>,
+    condition: String,
+    diagnosis_date: Option<chrono::NaiveDate>,
+    status: String,
+    severity: Option<String>,
+    notes: Option<Vec<u8>>,
+    is_active: bool,
+    created_at: String,
+    updated_at: String,
+    created_by: Vec<u8>,
+    updated_by: Option<Vec<u8>>,
+}
+
+impl MedicalHistoryRow {
+    fn into_medical_history(self, crypto: &EncryptionService) -> Result<MedicalHistory, RepositoryError> {
+        let notes = match self.notes {
+            Some(encrypted) => {
+                let decrypted = crypto.decrypt(&encrypted).map_err(|e| {
+                    RepositoryError::Decryption(format!("Failed to decrypt medical history notes: {}", e))
+                })?;
+                Some(decrypted)
+            }
+            None => None,
+        };
+
+        Ok(MedicalHistory {
+            id: bytes_to_uuid(&self.id)?,
+            patient_id: bytes_to_uuid(&self.patient_id)?,
+            condition: self.condition,
+            diagnosis_date: self.diagnosis_date,
+            status: self.status.parse().unwrap_or(ConditionStatus::Active),
+            severity: self.severity.and_then(|s| s.parse().ok()),
+            notes,
+            is_active: self.is_active,
+            created_at: string_to_datetime(&self.created_at),
+            updated_at: string_to_datetime(&self.updated_at),
+            created_by: bytes_to_uuid(&self.created_by)?,
+            updated_by: self.updated_by.as_ref().map(|b| bytes_to_uuid(b)).transpose()?,
+        })
+    }
+}
+
+pub struct SqlxMedicalHistoryRepository {
+    pool: SqlitePool,
+    crypto: Arc<EncryptionService>,
+}
+
+impl SqlxMedicalHistoryRepository {
+    pub fn new(pool: SqlitePool, crypto: Arc<EncryptionService>) -> Self {
+        Self { pool, crypto }
+    }
+}
+
+#[async_trait]
+impl MedicalHistoryRepository for SqlxMedicalHistoryRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<MedicalHistory>, RepositoryError> {
+        let row = sqlx::query_as::<_, MedicalHistoryRow>(
+            "SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE id = ?"
+        )
+        .bind(uuid_to_bytes(&id))
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(r) => Ok(Some(r.into_medical_history(&self.crypto)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn find_by_patient(&self, patient_id: Uuid) -> Result<Vec<MedicalHistory>, RepositoryError> {
+        let rows = sqlx::query_as::<_, MedicalHistoryRow>(
+            "SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE patient_id = ? ORDER BY created_at DESC"
+        )
+        .bind(uuid_to_bytes(&patient_id))
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|r| r.into_medical_history(&self.crypto))
+            .collect()
+    }
+
+    async fn find_active_by_patient(&self, patient_id: Uuid) -> Result<Vec<MedicalHistory>, RepositoryError> {
+        let rows = sqlx::query_as::<_, MedicalHistoryRow>(
+            "SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE patient_id = ? AND is_active = TRUE ORDER BY created_at DESC"
+        )
+        .bind(uuid_to_bytes(&patient_id))
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|r| r.into_medical_history(&self.crypto))
+            .collect()
+    }
+
+    async fn create(&self, history: MedicalHistory) -> Result<MedicalHistory, RepositoryError> {
+        let id_bytes = uuid_to_bytes(&history.id);
+        let patient_bytes = uuid_to_bytes(&history.patient_id);
+        let created_by_bytes = uuid_to_bytes(&history.created_by);
+        let updated_by_bytes = history.updated_by.as_ref().map(uuid_to_bytes);
+        let created_at_str = datetime_to_string(&history.created_at);
+        let updated_at_str = datetime_to_string(&history.updated_at);
+
+        let notes_encrypted: Option<Vec<u8>> = history.notes.as_ref()
+            .map(|n| self.crypto.encrypt(n))
+            .transpose()
+            .map_err(|e| RepositoryError::Encryption(format!("Failed to encrypt medical history notes: {}", e)))?;
+
+        sqlx::query(
+            "INSERT INTO medical_history (id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(id_bytes)
+        .bind(patient_bytes)
+        .bind(&history.condition)
+        .bind(history.diagnosis_date)
+        .bind(history.status.to_string())
+        .bind(history.severity.as_ref().map(|s| s.to_string()))
+        .bind(notes_encrypted)
+        .bind(history.is_active)
+        .bind(&created_at_str)
+        .bind(&updated_at_str)
+        .bind(created_by_bytes)
+        .bind(updated_by_bytes)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(history)
+    }
+
+    async fn update(&self, history: MedicalHistory) -> Result<MedicalHistory, RepositoryError> {
+        let id_bytes = uuid_to_bytes(&history.id);
+        let updated_at_str = datetime_to_string(&history.updated_at);
+        let updated_by_bytes = history.updated_by.as_ref().map(uuid_to_bytes);
+
+        let notes_encrypted: Option<Vec<u8>> = history.notes.as_ref()
+            .map(|n| self.crypto.encrypt(n))
+            .transpose()
+            .map_err(|e| RepositoryError::Encryption(format!("Failed to encrypt medical history notes: {}", e)))?;
+
+        sqlx::query(
+            "UPDATE medical_history SET condition = ?, diagnosis_date = ?, status = ?, severity = ?, notes = ?, is_active = ?, updated_at = ?, updated_by = ? WHERE id = ?"
+        )
+        .bind(&history.condition)
+        .bind(history.diagnosis_date)
+        .bind(history.status.to_string())
+        .bind(history.severity.as_ref().map(|s| s.to_string()))
+        .bind(notes_encrypted)
+        .bind(history.is_active)
+        .bind(&updated_at_str)
+        .bind(updated_by_bytes)
+        .bind(id_bytes)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(history)
+    }
+}
+
+// ============================================================================
+// Vital Signs Repository
+// ============================================================================
+
+#[derive(Debug, FromRow)]
+struct VitalSignsRow {
+    id: Vec<u8>,
+    patient_id: Vec<u8>,
+    consultation_id: Option<Vec<u8>>,
+    measured_at: String,
+    systolic_bp: Option<i64>,
+    diastolic_bp: Option<i64>,
+    heart_rate: Option<i64>,
+    respiratory_rate: Option<i64>,
+    temperature: Option<f32>,
+    oxygen_saturation: Option<i64>,
+    height_cm: Option<i64>,
+    weight_kg: Option<f32>,
+    bmi: Option<f32>,
+    notes: Option<String>,
+    created_at: String,
+    created_by: Vec<u8>,
+}
+
+impl VitalSignsRow {
+    fn into_vital_signs(self) -> Result<VitalSigns, RepositoryError> {
+        Ok(VitalSigns {
+            id: bytes_to_uuid(&self.id)?,
+            patient_id: bytes_to_uuid(&self.patient_id)?,
+            consultation_id: self.consultation_id.as_ref().map(|b| bytes_to_uuid(b)).transpose()?,
+            measured_at: string_to_datetime(&self.measured_at),
+            systolic_bp: self.systolic_bp.map(|v| v as u16),
+            diastolic_bp: self.diastolic_bp.map(|v| v as u16),
+            heart_rate: self.heart_rate.map(|v| v as u16),
+            respiratory_rate: self.respiratory_rate.map(|v| v as u16),
+            temperature: self.temperature,
+            oxygen_saturation: self.oxygen_saturation.map(|v| v as u8),
+            height_cm: self.height_cm.map(|v| v as u16),
+            weight_kg: self.weight_kg,
+            bmi: self.bmi,
+            notes: self.notes,
+            created_at: string_to_datetime(&self.created_at),
+            created_by: bytes_to_uuid(&self.created_by)?,
+        })
+    }
+}
+
+pub struct SqlxVitalSignsRepository {
+    pool: SqlitePool,
+    #[allow(dead_code)]
+    crypto: Arc<EncryptionService>,
+}
+
+impl SqlxVitalSignsRepository {
+    pub fn new(pool: SqlitePool, crypto: Arc<EncryptionService>) -> Self {
+        Self { pool, crypto }
+    }
+}
+
+#[async_trait]
+impl VitalSignsRepository for SqlxVitalSignsRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<VitalSigns>, RepositoryError> {
+        let row = sqlx::query_as::<_, VitalSignsRow>(
+            "SELECT id, patient_id, consultation_id, measured_at, systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, oxygen_saturation, height_cm, weight_kg, bmi, notes, created_at, created_by FROM vital_signs WHERE id = ?"
+        )
+        .bind(uuid_to_bytes(&id))
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(r) => Ok(Some(r.into_vital_signs()?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn find_by_patient(&self, patient_id: Uuid, limit: usize) -> Result<Vec<VitalSigns>, RepositoryError> {
+        let rows = sqlx::query_as::<_, VitalSignsRow>(
+            "SELECT id, patient_id, consultation_id, measured_at, systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, oxygen_saturation, height_cm, weight_kg, bmi, notes, created_at, created_by FROM vital_signs WHERE patient_id = ? ORDER BY measured_at DESC LIMIT ?"
+        )
+        .bind(uuid_to_bytes(&patient_id))
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|r| r.into_vital_signs())
+            .collect()
+    }
+
+    async fn find_latest_by_patient(&self, patient_id: Uuid) -> Result<Option<VitalSigns>, RepositoryError> {
+        let row = sqlx::query_as::<_, VitalSignsRow>(
+            "SELECT id, patient_id, consultation_id, measured_at, systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, oxygen_saturation, height_cm, weight_kg, bmi, notes, created_at, created_by FROM vital_signs WHERE patient_id = ? ORDER BY measured_at DESC LIMIT 1"
+        )
+        .bind(uuid_to_bytes(&patient_id))
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(r) => Ok(Some(r.into_vital_signs()?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn create(&self, vitals: VitalSigns) -> Result<VitalSigns, RepositoryError> {
+        let id_bytes = uuid_to_bytes(&vitals.id);
+        let patient_bytes = uuid_to_bytes(&vitals.patient_id);
+        let consultation_bytes = vitals.consultation_id.as_ref().map(uuid_to_bytes);
+        let created_by_bytes = uuid_to_bytes(&vitals.created_by);
+        let measured_at_str = datetime_to_string(&vitals.measured_at);
+        let created_at_str = datetime_to_string(&vitals.created_at);
+
+        sqlx::query(
+            "INSERT INTO vital_signs (id, patient_id, consultation_id, measured_at, systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, oxygen_saturation, height_cm, weight_kg, bmi, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(id_bytes)
+        .bind(patient_bytes)
+        .bind(consultation_bytes)
+        .bind(&measured_at_str)
+        .bind(vitals.systolic_bp.map(|v| v as i64))
+        .bind(vitals.diastolic_bp.map(|v| v as i64))
+        .bind(vitals.heart_rate.map(|v| v as i64))
+        .bind(vitals.respiratory_rate.map(|v| v as i64))
+        .bind(vitals.temperature)
+        .bind(vitals.oxygen_saturation.map(|v| v as i64))
+        .bind(vitals.height_cm.map(|v| v as i64))
+        .bind(vitals.weight_kg)
+        .bind(vitals.bmi)
+        .bind(&vitals.notes)
+        .bind(&created_at_str)
+        .bind(created_by_bytes)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(vitals)
+    }
+}
+
+// ============================================================================
+// Family History Repository
+// ============================================================================
+
+#[derive(Debug, FromRow)]
+struct FamilyHistoryRow {
+    id: Vec<u8>,
+    patient_id: Vec<u8>,
+    relative_relationship: String,
+    condition: String,
+    age_at_diagnosis: Option<i64>,
+    notes: Option<Vec<u8>>,
+    created_at: String,
+    created_by: Vec<u8>,
+}
+
+impl FamilyHistoryRow {
+    fn into_family_history(self, crypto: &EncryptionService) -> Result<FamilyHistory, RepositoryError> {
+        let notes = match self.notes {
+            Some(encrypted) => {
+                let decrypted = crypto.decrypt(&encrypted).map_err(|e| {
+                    RepositoryError::Decryption(format!("Failed to decrypt family history notes: {}", e))
+                })?;
+                Some(decrypted)
+            }
+            None => None,
+        };
+
+        Ok(FamilyHistory {
+            id: bytes_to_uuid(&self.id)?,
+            patient_id: bytes_to_uuid(&self.patient_id)?,
+            relative_relationship: self.relative_relationship,
+            condition: self.condition,
+            age_at_diagnosis: self.age_at_diagnosis.map(|v| v as u8),
+            notes,
+            created_at: string_to_datetime(&self.created_at),
+            created_by: bytes_to_uuid(&self.created_by)?,
+        })
+    }
+}
+
+pub struct SqlxFamilyHistoryRepository {
+    pool: SqlitePool,
+    crypto: Arc<EncryptionService>,
+}
+
+impl SqlxFamilyHistoryRepository {
+    pub fn new(pool: SqlitePool, crypto: Arc<EncryptionService>) -> Self {
+        Self { pool, crypto }
+    }
+}
+
+#[async_trait]
+impl FamilyHistoryRepository for SqlxFamilyHistoryRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<FamilyHistory>, RepositoryError> {
+        let row = sqlx::query_as::<_, FamilyHistoryRow>(
+            "SELECT id, patient_id, relative_relationship, condition, age_at_diagnosis, notes, created_at, created_by FROM family_history WHERE id = ?"
+        )
+        .bind(uuid_to_bytes(&id))
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(r) => Ok(Some(r.into_family_history(&self.crypto)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn find_by_patient(&self, patient_id: Uuid) -> Result<Vec<FamilyHistory>, RepositoryError> {
+        let rows = sqlx::query_as::<_, FamilyHistoryRow>(
+            "SELECT id, patient_id, relative_relationship, condition, age_at_diagnosis, notes, created_at, created_by FROM family_history WHERE patient_id = ? ORDER BY created_at DESC"
+        )
+        .bind(uuid_to_bytes(&patient_id))
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|r| r.into_family_history(&self.crypto))
+            .collect()
+    }
+
+    async fn create(&self, history: FamilyHistory) -> Result<FamilyHistory, RepositoryError> {
+        let id_bytes = uuid_to_bytes(&history.id);
+        let patient_bytes = uuid_to_bytes(&history.patient_id);
+        let created_by_bytes = uuid_to_bytes(&history.created_by);
+        let created_at_str = datetime_to_string(&history.created_at);
+
+        let notes_encrypted: Option<Vec<u8>> = history.notes.as_ref()
+            .map(|n| self.crypto.encrypt(n))
+            .transpose()
+            .map_err(|e| RepositoryError::Encryption(format!("Failed to encrypt family history notes: {}", e)))?;
+
+        sqlx::query(
+            "INSERT INTO family_history (id, patient_id, relative_relationship, condition, age_at_diagnosis, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(id_bytes)
+        .bind(patient_bytes)
+        .bind(&history.relative_relationship)
+        .bind(&history.condition)
+        .bind(history.age_at_diagnosis.map(|v| v as i64))
+        .bind(notes_encrypted)
+        .bind(&created_at_str)
+        .bind(created_by_bytes)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(history)
+    }
+
+    async fn update(&self, history: FamilyHistory) -> Result<FamilyHistory, RepositoryError> {
+        let id_bytes = uuid_to_bytes(&history.id);
+
+        let notes_encrypted: Option<Vec<u8>> = history.notes.as_ref()
+            .map(|n| self.crypto.encrypt(n))
+            .transpose()
+            .map_err(|e| RepositoryError::Encryption(format!("Failed to encrypt family history notes: {}", e)))?;
+
+        sqlx::query(
+            "UPDATE family_history SET relative_relationship = ?, condition = ?, age_at_diagnosis = ?, notes = ? WHERE id = ?"
+        )
+        .bind(&history.relative_relationship)
+        .bind(&history.condition)
+        .bind(history.age_at_diagnosis.map(|v| v as i64))
+        .bind(notes_encrypted)
+        .bind(id_bytes)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(history)
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
+        let id_bytes = uuid_to_bytes(&id);
+
+        sqlx::query("DELETE FROM family_history WHERE id = ?")
+            .bind(id_bytes)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
     }
 }
