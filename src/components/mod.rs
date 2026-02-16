@@ -38,6 +38,53 @@ pub enum Action {
     AppointmentReschedule,
     AppointmentBatchMarkArrived,
     AppointmentBatchMarkCompleted,
+
+    // Clinical navigation
+    ClinicalPatientSelect(Uuid),
+    ClinicalPatientClear,
+
+    // Consultation actions
+    ClinicalConsultationCreate(Uuid), // patient_id
+    ClinicalConsultationEdit(Uuid),   // consultation_id
+    ClinicalConsultationSign(Uuid),   // consultation_id
+    ClinicalConsultationSave(Uuid),   // Save draft
+    ClinicalConsultationCancel,
+
+    // Allergy actions
+    ClinicalAllergyAdd(Uuid),     // patient_id
+    ClinicalAllergyEdit(Uuid),    // allergy_id
+    ClinicalAllergyDeactivate(Uuid), // allergy_id
+    ClinicalAllergySave,
+    ClinicalAllergyCancel,
+
+    // Vital signs actions
+    ClinicalVitalSignsRecord(Uuid), // patient_id
+    ClinicalVitalSignsSave,
+    ClinicalVitalSignsCancel,
+
+    // History actions
+    ClinicalMedicalHistoryAdd(Uuid),
+    ClinicalMedicalHistoryEdit(Uuid),
+    ClinicalMedicalHistorySave,
+    ClinicalMedicalHistoryCancel,
+
+    ClinicalFamilyHistoryAdd(Uuid),
+    ClinicalFamilyHistoryEdit(Uuid),
+    ClinicalFamilyHistoryDelete(Uuid),
+    ClinicalFamilyHistorySave,
+    ClinicalFamilyHistoryCancel,
+
+    ClinicalSocialHistoryEdit(Uuid),
+    ClinicalSocialHistorySave,
+    ClinicalSocialHistoryCancel,
+
+    // View mode actions
+    ClinicalShowOverview,
+    ClinicalShowConsultations,
+    ClinicalShowAllergies,
+    ClinicalShowMedicalHistory,
+    ClinicalShowFamilyHistory,
+    ClinicalShowSocialHistory,
 }
 
 #[async_trait]

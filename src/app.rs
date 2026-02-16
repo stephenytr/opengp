@@ -4,6 +4,7 @@
 //! and handles the main event loop.
 
 use crate::components::appointment::{AppointmentCalendarComponent, AppointmentFormComponent};
+use crate::components::clinical::ClinicalComponent;
 use crate::components::patient::{PatientFormComponent, PatientListComponent};
 use crate::components::{Action, Component};
 use crate::config::Config;
@@ -11,13 +12,15 @@ use crate::domain::appointment::{
     AppointmentCalendarQuery, AppointmentRepository, AppointmentService,
 };
 use crate::domain::audit::{AuditRepository, AuditService};
+use crate::domain::clinical::ClinicalService;
 use crate::domain::patient::{PatientRepository, PatientService};
 use crate::domain::user::{PractitionerRepository, PractitionerService};
 use crate::error::Result;
 use crate::infrastructure::crypto::EncryptionService;
 use crate::infrastructure::database::repositories::{
-    SqlxAppointmentRepository, SqlxAuditRepository, SqlxPatientRepository,
-    SqlxPractitionerRepository,
+    SqlxAllergyRepository, SqlxAppointmentRepository, SqlxAuditRepository, SqlxClinicalRepository,
+    SqlxFamilyHistoryRepository, SqlxMedicalHistoryRepository, SqlxPatientRepository,
+    SqlxPractitionerRepository, SqlxSocialHistoryRepository, SqlxVitalSignsRepository,
 };
 use crate::ui::event::EventHandler;
 use crate::ui::tui::Tui;
@@ -72,6 +75,7 @@ pub struct App {
     patient_service: Arc<PatientService>,
     appointment_service: Arc<AppointmentService>,
     practitioner_service: Arc<crate::domain::user::PractitionerService>,
+    clinical_service: Arc<ClinicalService>,
     should_quit: bool,
     active_screen: Screen,
     patient_component: Option<Box<dyn Component>>,
@@ -96,7 +100,7 @@ impl App {
         let crypto = Arc::new(EncryptionService::new()?);
 
         let patient_repository: Arc<dyn PatientRepository> =
-            Arc::new(SqlxPatientRepository::new(db_pool.clone(), crypto));
+            Arc::new(SqlxPatientRepository::new(db_pool.clone(), crypto.clone()));
         let patient_service = Arc::new(PatientService::new(patient_repository));
 
         let audit_repository: Arc<dyn AuditRepository> =
@@ -108,7 +112,7 @@ impl App {
         let appointment_calendar_query: Arc<dyn AppointmentCalendarQuery> = appointment_repo;
         let appointment_service = Arc::new(AppointmentService::new(
             appointment_repository,
-            audit_service,
+            audit_service.clone(),
             appointment_calendar_query,
         ));
 
@@ -117,12 +121,39 @@ impl App {
             Arc::new(SqlxPractitionerRepository::new(db_pool.clone()));
         let practitioner_service = Arc::new(PractitionerService::new(practitioner_repository));
 
+        // Initialize clinical repositories and service
+        let consultation_repo: Arc<dyn crate::domain::clinical::ConsultationRepository> =
+            Arc::new(SqlxClinicalRepository::new(db_pool.clone(), crypto.clone()));
+        let allergy_repo: Arc<dyn crate::domain::clinical::AllergyRepository> =
+            Arc::new(SqlxAllergyRepository::new(db_pool.clone(), crypto.clone()));
+        let medical_history_repo: Arc<dyn crate::domain::clinical::MedicalHistoryRepository> =
+            Arc::new(SqlxMedicalHistoryRepository::new(db_pool.clone(), crypto.clone()));
+        let vital_signs_repo: Arc<dyn crate::domain::clinical::VitalSignsRepository> =
+            Arc::new(SqlxVitalSignsRepository::new(db_pool.clone(), crypto.clone()));
+        let social_history_repo: Arc<dyn crate::domain::clinical::SocialHistoryRepository> =
+            Arc::new(SqlxSocialHistoryRepository::new(db_pool.clone(), crypto.clone()));
+        let family_history_repo: Arc<dyn crate::domain::clinical::FamilyHistoryRepository> =
+            Arc::new(SqlxFamilyHistoryRepository::new(db_pool.clone(), crypto.clone()));
+
+        let clinical_service = Arc::new(ClinicalService::new(
+            consultation_repo,
+            allergy_repo,
+            medical_history_repo,
+            vital_signs_repo,
+            social_history_repo,
+            family_history_repo,
+            patient_service.clone(),
+            audit_service,
+            crypto,
+        ));
+
         Ok(Self {
             config,
             db_pool,
             patient_service,
             appointment_service,
             practitioner_service,
+            clinical_service,
             should_quit: false,
             active_screen: Screen::Patients,
             patient_component: None,
@@ -207,6 +238,13 @@ impl App {
         );
         appointment_calendar.init().await?;
         self.appointment_component = Some(Box::new(appointment_calendar));
+
+        let mut clinical = ClinicalComponent::new(
+            self.clinical_service.clone(),
+            self.patient_service.clone(),
+        );
+        clinical.init().await?;
+        self.clinical_component = Some(Box::new(clinical));
 
         Ok(())
     }
