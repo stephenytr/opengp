@@ -2,20 +2,20 @@ use std::sync::Arc;
 use tracing::{error, info};
 use uuid::Uuid;
 
+use crate::service;
+
 use super::dto::{NewPatientData, UpdatePatientData};
 use super::error::ServiceError;
 use super::model::Patient;
 use super::repository::PatientRepository;
 
-pub struct PatientService {
-    repository: Arc<dyn PatientRepository>,
+service! {
+    PatientService {
+        repository: Arc<dyn PatientRepository>,
+    }
 }
 
 impl PatientService {
-    pub fn new(repository: Arc<dyn PatientRepository>) -> Self {
-        Self { repository }
-    }
-
     pub async fn register_patient(&self, data: NewPatientData) -> Result<Patient, ServiceError> {
         info!(
             "Registering new patient: {} {}",

@@ -2,6 +2,8 @@ use std::sync::Arc;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
+use crate::service;
+
 use super::dto::NewUserData;
 use super::error::UserError;
 use super::model::{Practitioner, Role, User};
@@ -16,16 +18,14 @@ pub enum ServiceError {
     NotFound(Uuid),
 }
 
-/// Service layer for practitioner business logic
-pub struct PractitionerService {
-    repository: Arc<dyn PractitionerRepository>,
+service! {
+    PractitionerService {
+        repository: Arc<dyn PractitionerRepository>,
+    }
 }
 
+/// Service layer for practitioner business logic
 impl PractitionerService {
-    pub fn new(repository: Arc<dyn PractitionerRepository>) -> Self {
-        Self { repository }
-    }
-
     /// Get all active practitioners
     ///
     /// # Returns
@@ -47,18 +47,13 @@ impl PractitionerService {
     }
 }
 
-/// Service layer for user business logic
-///
-/// Handles user creation, updates, retrieval, and deactivation with
-/// comprehensive validation and duplicate checking.
-pub struct UserService {
-    repository: Arc<dyn UserRepository>,
+service! {
+    UserService {
+        repository: Arc<dyn UserRepository>,
+    }
 }
 
 impl UserService {
-    pub fn new(repository: Arc<dyn UserRepository>) -> Self {
-        Self { repository }
-    }
 
     /// Create a new user
     ///

@@ -3,6 +3,8 @@ use std::sync::Arc;
 use tracing::{error, info};
 use uuid::Uuid;
 
+use crate::service;
+
 use super::dto::{
     AppointmentSearchCriteria, CalendarAppointment, NewAppointmentData, UpdateAppointmentData,
 };
@@ -12,28 +14,15 @@ use super::query::AppointmentCalendarQuery;
 use super::repository::AppointmentRepository;
 use crate::domain::audit::{AuditEntry, AuditService};
 
-/// Service layer for appointment business logic
-///
-/// Handles appointment creation, updates, cancellations, and searches.
-/// Enforces business rules such as overlap checking to prevent double-booking.
-pub struct AppointmentService {
-    repository: Arc<dyn AppointmentRepository>,
-    audit_service: Arc<AuditService>,
-    calendar_query: Arc<dyn AppointmentCalendarQuery>,
-}
-
-impl AppointmentService {
-    pub fn new(
+service! {
+    AppointmentService {
         repository: Arc<dyn AppointmentRepository>,
         audit_service: Arc<AuditService>,
         calendar_query: Arc<dyn AppointmentCalendarQuery>,
-    ) -> Self {
-        Self {
-            repository,
-            audit_service,
-            calendar_query,
-        }
     }
+}
+
+impl AppointmentService {
 
     /// Check for overlapping appointments for a practitioner
     ///

@@ -4,6 +4,7 @@ pub mod billing;
 pub mod clinical;
 pub mod error;
 pub mod immunisation;
+pub mod macros;
 pub mod pathology;
 pub mod patient;
 pub mod prescription;

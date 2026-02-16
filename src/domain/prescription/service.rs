@@ -3,31 +3,22 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+use crate::service;
+
 use super::dto::NewPrescriptionData;
 use super::error::ServiceError;
 use super::model::{Medication, PBSStatus, Prescription};
 use super::repository::PrescriptionRepository;
 use crate::domain::audit::{AuditEntry, AuditService};
 
-/// Service layer for prescription business logic
-///
-/// Handles prescription creation, cancellations, and validation.
-/// Enforces business rules such as PBS authority validation and drug interaction checking.
-pub struct PrescriptionService {
-    repository: Arc<dyn PrescriptionRepository>,
-    audit_service: Arc<AuditService>,
+service! {
+    PrescriptionService {
+        repository: Arc<dyn PrescriptionRepository>,
+        audit_service: Arc<AuditService>,
+    }
 }
 
 impl PrescriptionService {
-    pub fn new(
-        repository: Arc<dyn PrescriptionRepository>,
-        audit_service: Arc<AuditService>,
-    ) -> Self {
-        Self {
-            repository,
-            audit_service,
-        }
-    }
 
     /// Validate PBS status and authority requirements
     ///

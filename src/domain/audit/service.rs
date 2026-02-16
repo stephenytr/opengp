@@ -2,43 +2,19 @@ use std::sync::Arc;
 use tracing::{error, info};
 use uuid::Uuid;
 
+use crate::service;
+
 use super::error::ServiceError;
 use super::model::AuditEntry;
 use super::repository::AuditRepository;
 
-/// Service layer for audit business logic
-///
-/// Provides high-level methods for audit logging and history retrieval.
-/// Acts as a facade over the audit repository, providing business-logic-level operations.
-///
-/// # Example
-/// ```ignore
-/// use opengp::domain::audit::{AuditEntry, AuditService};
-/// use std::sync::Arc;
-/// use uuid::Uuid;
-///
-/// // Create service with a repository implementation
-/// let repository = Arc::new(SqlxAuditRepository::new(pool));
-/// let audit_service = AuditService::new(repository);
-///
-/// // Log an appointment creation
-/// let entry = AuditEntry::new_created(
-///     "appointment",
-///     appointment_id,
-///     r#"{"patient_id": "123", "practitioner_id": "456"}"#,
-///     user_id,
-/// );
-///
-/// let saved = audit_service.log(entry).await?;
-/// ```
-pub struct AuditService {
-    repository: Arc<dyn AuditRepository>,
+service! {
+    AuditService {
+        repository: Arc<dyn AuditRepository>,
+    }
 }
 
 impl AuditService {
-    pub fn new(repository: Arc<dyn AuditRepository>) -> Self {
-        Self { repository }
-    }
 
     /// Log a new audit entry
     ///
