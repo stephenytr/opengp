@@ -156,11 +156,8 @@ impl AppointmentListComponent {
         if let Some(row_index) =
             table_row_from_click(&mouse, table_area, 1, self.appointments.len())
         {
-            let actual_index = row_index + self.scroll_offset;
-            tracing::debug!("AppointmentList: clicked visual row {}, actual data index {}", row_index, actual_index);
-            if actual_index < self.appointments.len() {
-                self.table_state.select(Some(actual_index));
-            }
+            tracing::debug!("AppointmentList: selected row {}", row_index);
+            self.table_state.select(Some(row_index));
             return Action::Render;
         }
 
