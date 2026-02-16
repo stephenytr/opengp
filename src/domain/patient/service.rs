@@ -97,4 +97,9 @@ impl PatientService {
         let patients = self.repository.list_active().await?;
         Ok(patients)
     }
+
+    pub async fn search_patients(&self, query: &str) -> Result<Vec<Patient>, ServiceError> {
+        let patients = self.repository.search(query).await?;
+        Ok(patients)
+    }
 }

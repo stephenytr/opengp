@@ -183,6 +183,51 @@ impl PatientRepository for SqlxPatientRepository {
             .collect()
     }
 
+    async fn search(&self, query: &str) -> Result<Vec<Patient>, RepositoryError> {
+        let all_patients = self.list_active().await?;
+
+        if query.is_empty() {
+            return Ok(all_patients);
+        }
+
+        let query_lower = query.to_lowercase();
+        let filtered: Vec<Patient> = all_patients
+            .into_iter()
+            .filter(|p| {
+                let full_name = format!("{} {}", p.first_name, p.last_name).to_lowercase();
+                let preferred = p
+                    .preferred_name
+                    .as_ref()
+                    .map(|n| n.to_lowercase())
+                    .unwrap_or_default();
+                let medicare = p
+                    .medicare_number
+                    .as_ref()
+                    .map(|m| m.to_lowercase())
+                    .unwrap_or_default();
+                let email = p
+                    .email
+                    .as_ref()
+                    .map(|e| e.to_lowercase())
+                    .unwrap_or_default();
+                let phone = p
+                    .phone_mobile
+                    .as_ref()
+                    .or(p.phone_home.as_ref())
+                    .map(|p| p.to_lowercase())
+                    .unwrap_or_default();
+
+                full_name.contains(&query_lower)
+                    || preferred.contains(&query_lower)
+                    || medicare.contains(&query_lower)
+                    || email.contains(&query_lower)
+                    || phone.contains(&query_lower)
+            })
+            .collect();
+
+        Ok(filtered)
+    }
+
     async fn create(&self, patient: Patient) -> Result<Patient, RepositoryError> {
         let id_bytes = uuid_to_bytes(&patient.id);
         let gender_str = patient.gender.to_string();

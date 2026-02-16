@@ -95,6 +95,30 @@ impl PatientRepository for MockPatientRepository {
         Ok(storage.iter().filter(|p| p.is_active).cloned().collect())
     }
 
+    async fn search(&self, query: &str) -> Result<Vec<Patient>, PatientRepositoryError> {
+        let storage = self.storage.lock().await;
+        if query.is_empty() {
+            return Ok(storage.iter().filter(|p| p.is_active).cloned().collect());
+        }
+        let query_lower = query.to_lowercase();
+        Ok(storage
+            .iter()
+            .filter(|p| {
+                if !p.is_active {
+                    return false;
+                }
+                let full_name = format!("{} {}", p.first_name, p.last_name).to_lowercase();
+                let preferred = p
+                    .preferred_name
+                    .as_ref()
+                    .map(|n| n.to_lowercase())
+                    .unwrap_or_default();
+                full_name.contains(&query_lower) || preferred.contains(&query_lower)
+            })
+            .cloned()
+            .collect())
+    }
+
     async fn create(&self, patient: Patient) -> Result<Patient, PatientRepositoryError> {
         let mut storage = self.storage.lock().await;
         storage.push(patient.clone());

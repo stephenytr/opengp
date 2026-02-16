@@ -186,6 +186,20 @@ impl Component for ClinicalComponent {
                 self.current_view = ClinicalView::PatientSelector;
                 Ok(Some(Action::Render))
             }
+            Action::ClinicalSearchPatients(query) => {
+                match self.patient_service.search_patients(&query).await {
+                    Ok(results) => {
+                        self.patient_search.results = results;
+                        if !self.patient_search.results.is_empty() {
+                            self.patient_search.selected_index = 0;
+                        }
+                    }
+                    Err(e) => {
+                        self.error_message = Some(format!("Search failed: {}", e));
+                    }
+                }
+                Ok(Some(Action::Render))
+            }
             Action::ClinicalShowOverview => {
                 self.current_view = ClinicalView::PatientOverview;
                 Ok(Some(Action::Render))
@@ -265,15 +279,15 @@ impl ClinicalComponent {
         match key.code {
             KeyCode::Char('/') => {
                 self.patient_search.is_open = true;
-                Action::Render
+                Action::ClinicalSearchPatients(String::new())
             }
             KeyCode::Char(c) if self.patient_search.is_open => {
                 self.patient_search.query.push(c);
-                Action::Render
+                Action::ClinicalSearchPatients(self.patient_search.query.clone())
             }
             KeyCode::Backspace if self.patient_search.is_open => {
                 self.patient_search.query.pop();
-                Action::Render
+                Action::ClinicalSearchPatients(self.patient_search.query.clone())
             }
             KeyCode::Esc if self.patient_search.is_open => {
                 self.patient_search.is_open = false;

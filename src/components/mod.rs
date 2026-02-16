@@ -42,6 +42,7 @@ pub enum Action {
     // Clinical navigation
     ClinicalPatientSelect(Uuid),
     ClinicalPatientClear,
+    ClinicalSearchPatients(String),
 
     // Consultation actions
     ClinicalConsultationCreate(Uuid), // patient_id
