@@ -336,7 +336,7 @@ impl App {
     }
 
     /// Update application state based on action
-    async fn update(&mut self, action: Action) -> Result<()> {
+    async fn update(&mut self, action: Action) -> Result<Option<Action>> {
         debug!("Processing action: {:?}", action);
 
         match action {
@@ -358,6 +358,12 @@ impl App {
                 info!("Navigating to Clinical");
                 self.active_screen = Screen::Clinical;
                 self.showing_form = false;
+            }
+            Action::NavigateToClinicalWithPatient(patient_id) => {
+                info!("Navigating to Clinical with patient: {}", patient_id);
+                self.active_screen = Screen::Clinical;
+                self.showing_form = false;
+                return Ok(Some(Action::ClinicalPatientSelect(patient_id)));
             }
             Action::NavigateToBilling => {
                 info!("Navigating to Billing");
@@ -444,7 +450,7 @@ impl App {
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     /// Render the application UI

@@ -922,6 +922,12 @@ impl AppointmentCalendarComponent {
                 }
                 Action::None
             }
+            KeyCode::Char('o') | KeyCode::Char('O') => {
+                if let Some(patient_id) = self.detail_data.patient.as_ref().map(|p| p.id) {
+                    return Action::NavigateToClinicalWithPatient(patient_id);
+                }
+                Action::None
+            }
             _ => Action::None,
         }
     }

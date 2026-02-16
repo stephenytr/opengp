@@ -1281,6 +1281,13 @@ impl ModalRenderer {
                     ),
                     Span::styled(": Duration  ", Style::default().fg(Color::White)),
                     Span::styled(
+                        "o",
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(": Open Patient  ", Style::default().fg(Color::White)),
+                    Span::styled(
                         "Enter",
                         Style::default()
                             .fg(Color::Cyan)
