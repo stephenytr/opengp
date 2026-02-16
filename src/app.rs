@@ -219,7 +219,9 @@ impl App {
             }
 
             while let Ok(action) = self.action_rx.try_recv() {
-                self.update(action).await?;
+                if let Some(new_action) = self.update(action).await? {
+                    self.action_tx.send(new_action)?;
+                }
             }
 
             if self.should_quit {
