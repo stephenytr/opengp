@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{Datelike, Local, NaiveDate, TimeZone, Timelike, Utc, Weekday};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -17,10 +17,11 @@ use crate::domain::audit::AuditAction;
 use crate::domain::patient::PatientService;
 use crate::domain::user::{Practitioner, PractitionerService};
 use crate::error::Result;
-use crate::ui::keybinds::KeybindContext;
-use crate::ui::widgets::{HelpModal, ModalKeyHandler, ModalKeyResult, ModalState, ModalType};
+use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
+use crate::ui::widgets::{
+    is_click, is_scroll_down, is_scroll_up, HelpModal, ModalState, ModalType,
+};
 
-use super::layout::CalendarLayout;
 use super::renderers::{CalendarRenderer, ModalRenderer};
 use super::state::{
     AuditModalData, BatchModalData, CalendarState, ConfirmationModalData, DetailModalData,
@@ -45,6 +46,10 @@ pub struct AppointmentCalendarComponent {
     audit_data: AuditModalData,
     batch_data: BatchModalData,
     error_data: ErrorModalData,
+
+    // Mouse interaction areas
+    month_calendar_area: Option<Rect>,
+    schedule_area: Option<Rect>,
 }
 
 impl AppointmentCalendarComponent {
@@ -69,6 +74,8 @@ impl AppointmentCalendarComponent {
             audit_data: AuditModalData::default(),
             batch_data: BatchModalData::default(),
             error_data: ErrorModalData::default(),
+            month_calendar_area: None,
+            schedule_area: None,
         }
     }
 
@@ -558,10 +565,11 @@ impl AppointmentCalendarComponent {
             Span::raw(": Day View"),
         ]));
 
+        let help = KeybindRegistry::get_help_text(KeybindContext::CalendarMonthView);
         let paragraph = Paragraph::new(lines).block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!(" {} ", month_year))
+                .title(format!(" {} - {} ", month_year, help))
                 .border_style(if self.calendar_state.focus_area == FocusArea::MonthView {
                     Style::default().fg(Color::Yellow)
                 } else {
@@ -773,11 +781,12 @@ impl AppointmentCalendarComponent {
             Constraint::Length(10),
         ];
 
+        let help = KeybindRegistry::get_help_text(KeybindContext::CalendarWeekView);
         let table = Table::new(rows, widths)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" Week View ".to_string()),
+                    .title(format!(" Week View - {} ", help)),
             )
             .row_highlight_style(
                 Style::default()
@@ -903,10 +912,11 @@ impl AppointmentCalendarComponent {
                         .iter()
                         .find(|a| a.id == appt_id)
                     {
-                        self.reschedule_data = RescheduleModalData::with_datetime(appt.start_time);
+                        self.reschedule_data.new_start_time = Some(appt.start_time);
                         self.reschedule_data.new_duration = appt.duration_minutes();
-                        self.reschedule_data.showing = true;
                         self.detail_data.showing = false;
+                        self.reschedule_data.showing = true;
+                        self.reschedule_data.conflict_warning = None;
                         return Action::Render;
                     }
                 }
@@ -917,12 +927,28 @@ impl AppointmentCalendarComponent {
     }
 
     fn handle_audit_modal_key_events(&mut self, key: KeyEvent) -> Action {
-        match self.audit_data.handle_key_event(key) {
-            ModalKeyResult::Close => {
+        match key.code {
+            KeyCode::Esc => {
+                self.audit_data.showing = false;
+                self.audit_data.entries.clear();
+                self.audit_data.selected_index = 0;
                 self.detail_data.showing = true;
                 Action::Render
             }
-            ModalKeyResult::Render => Action::Render,
+            KeyCode::Up => {
+                if self.audit_data.selected_index > 0 {
+                    self.audit_data.selected_index -= 1;
+                }
+                Action::Render
+            }
+            KeyCode::Down => {
+                if !self.audit_data.entries.is_empty()
+                    && self.audit_data.selected_index < self.audit_data.entries.len() - 1
+                {
+                    self.audit_data.selected_index += 1;
+                }
+                Action::Render
+            }
             _ => Action::None,
         }
     }
@@ -954,8 +980,6 @@ impl AppointmentCalendarComponent {
     }
 
     fn handle_reschedule_modal_key_events(&mut self, key: KeyEvent) -> Action {
-        use super::state::RescheduleFocus;
-
         match key.code {
             KeyCode::Esc => {
                 self.reschedule_data.showing = false;
@@ -964,9 +988,23 @@ impl AppointmentCalendarComponent {
                 self.detail_data.showing = true;
                 Action::Render
             }
-            KeyCode::Tab => {
-                self.reschedule_data.toggle_focus();
-                Action::Render
+            KeyCode::Up => {
+                if let Some(current_time) = self.reschedule_data.new_start_time {
+                    self.reschedule_data.new_start_time =
+                        Some(current_time - chrono::Duration::minutes(15));
+                    Action::Render
+                } else {
+                    Action::None
+                }
+            }
+            KeyCode::Down => {
+                if let Some(current_time) = self.reschedule_data.new_start_time {
+                    self.reschedule_data.new_start_time =
+                        Some(current_time + chrono::Duration::minutes(15));
+                    Action::Render
+                } else {
+                    Action::None
+                }
             }
             KeyCode::Char('+') => {
                 self.reschedule_data.new_duration += 15;
@@ -978,62 +1016,62 @@ impl AppointmentCalendarComponent {
                 }
                 Action::Render
             }
-            KeyCode::Enter => {
-                self.reschedule_data.update_start_time_from_widgets();
-                Action::AppointmentReschedule
-            }
-            _ => match self.reschedule_data.focus {
-                RescheduleFocus::Date => {
-                    if self.reschedule_data.calendar.handle_key_event(key) {
-                        self.reschedule_data.update_start_time_from_widgets();
-                        Action::Render
-                    } else {
-                        Action::None
-                    }
-                }
-                RescheduleFocus::Time => match key.code {
-                    KeyCode::Up => {
-                        self.reschedule_data.time_picker.prev();
-                        self.reschedule_data.update_start_time_from_widgets();
-                        Action::Render
-                    }
-                    KeyCode::Down => {
-                        self.reschedule_data.time_picker.next();
-                        self.reschedule_data.update_start_time_from_widgets();
-                        Action::Render
-                    }
-                    _ => Action::None,
-                },
-            },
+            KeyCode::Enter => Action::AppointmentReschedule,
+            _ => Action::None,
         }
     }
 
     fn handle_search_key_events(&mut self, key: KeyEvent) -> Action {
-        match self.search_data.handle_key_event(key) {
-            ModalKeyResult::Close => Action::Render,
-            ModalKeyResult::Select(index) => {
-                if let Some(appt) = self.search_data.results.get(index).cloned() {
-                    self.navigate_to_appointment(&appt);
-                    self.search_data.hide();
+        match key.code {
+            KeyCode::Esc => {
+                self.search_data.showing = false;
+                self.search_data.query.clear();
+                self.search_data.results.clear();
+                self.search_data.selected_index = 0;
+                Action::Render
+            }
+            KeyCode::Up => {
+                if self.search_data.selected_index > 0 {
+                    self.search_data.selected_index -= 1;
                 }
                 Action::Render
             }
-            ModalKeyResult::Render => Action::Render,
-            ModalKeyResult::None => match key.code {
-                KeyCode::Char(c) => {
-                    self.search_data.query.push(c);
-                    self.filter_appointments_by_query();
-                    self.search_data.selected_index = 0;
-                    Action::Render
+            KeyCode::Down => {
+                if !self.search_data.results.is_empty()
+                    && self.search_data.selected_index < self.search_data.results.len() - 1
+                {
+                    self.search_data.selected_index += 1;
                 }
-                KeyCode::Backspace => {
-                    self.search_data.query.pop();
-                    self.filter_appointments_by_query();
+                Action::Render
+            }
+            KeyCode::Enter => {
+                if let Some(appt) = self
+                    .search_data
+                    .results
+                    .get(self.search_data.selected_index)
+                    .cloned()
+                {
+                    self.navigate_to_appointment(&appt);
+                    self.search_data.showing = false;
+                    self.search_data.query.clear();
+                    self.search_data.results.clear();
                     self.search_data.selected_index = 0;
-                    Action::Render
                 }
-                _ => Action::None,
-            },
+                Action::Render
+            }
+            KeyCode::Char(c) => {
+                self.search_data.query.push(c);
+                self.filter_appointments_by_query();
+                self.search_data.selected_index = 0;
+                Action::Render
+            }
+            KeyCode::Backspace => {
+                self.search_data.query.pop();
+                self.filter_appointments_by_query();
+                self.search_data.selected_index = 0;
+                Action::Render
+            }
+            _ => Action::None,
         }
     }
 
@@ -2634,41 +2672,71 @@ impl AppointmentCalendarComponent {
         }
     }
 
-    fn find_appointment_at_position(&self, col: u16, row: u16) -> Option<Uuid> {
-        let visible_practitioners: Vec<_> = self
-            .calendar_state
+    fn calculate_day_from_click(&self, col: u16, row: u16, area: Rect) -> Option<u32> {
+        let relative_col = col.saturating_sub(area.x);
+        let relative_row = row.saturating_sub(area.y);
+
+        tracing::debug!(
+            "Day calc: col={}, row={}, relative_col={}, relative_row={}, area={:?}",
+            col, row, relative_col, relative_row, area
+        );
+
+        if relative_row < 2 || relative_col < 1 {
+            return None;
+        }
+
+        let content_row = relative_row.saturating_sub(2);
+        let content_col = relative_col.saturating_sub(1);
+
+        tracing::debug!("Content: row={}, col={}", content_row, content_col);
+
+        if content_row > 5 {
+            return None;
+        }
+
+        let day_of_week = (content_col / 3) as usize;
+        if day_of_week >= 7 {
+            return None;
+        }
+
+        let week = content_row as usize;
+        tracing::debug!("Week={}, day_of_week={}", week, day_of_week);
+
+        let first_weekday = self.calendar_state.current_month_start.weekday();
+        let first_day_offset = first_weekday.num_days_from_monday() as usize;
+
+        let day_number = week * 7 + day_of_week;
+        if day_number < first_day_offset {
+            tracing::debug!("Before month start: day_number={} < offset={}", day_number, first_day_offset);
+            return None;
+        }
+
+        let day = (day_number - first_day_offset + 1) as u32;
+        let days_in_month = CalendarRenderer::days_in_month(
+            self.calendar_state.current_month_start.year(),
+            self.calendar_state.current_month_start.month(),
+        );
+
+        tracing::debug!("Calculated day={} (max={})", day, days_in_month);
+
+        if day > 0 && day <= days_in_month {
+            Some(day)
+        } else {
+            None
+        }
+    }
+
+    fn get_filtered_practitioners(&self) -> Vec<&Practitioner> {
+        self.calendar_state
             .practitioners
             .iter()
             .filter(|p| {
-                self.filter_state.active_practitioner_filters.is_empty()
-                    || self
-                        .filter_state
-                        .active_practitioner_filters
-                        .contains(&p.id)
+                self.filter_state
+                    .active_practitioner_filters
+                    .is_empty()
+                    || self.filter_state.active_practitioner_filters.contains(&p.id)
             })
-            .collect();
-
-        if visible_practitioners.is_empty() {
-            return None;
-        }
-
-        let layout = CalendarLayout::new(
-            self.calendar_state.last_rendered_area,
-            visible_practitioners.len(),
-        );
-
-        let (practitioner_index, slot_index) = layout.hit_test(col, row)?;
-
-        let practitioner = visible_practitioners.get(practitioner_index)?;
-
-        let time_slots = CalendarRenderer::generate_time_slots();
-        if slot_index >= time_slots.len() {
-            return None;
-        }
-
-        let appt = self.find_appointment_for_slot(practitioner.id, slot_index)?;
-
-        Some(appt.id)
+            .collect()
     }
 }
 
@@ -2755,35 +2823,108 @@ impl Component for AppointmentCalendarComponent {
         self.handle_calendar_events(key)
     }
 
-    fn handle_mouse_events(&mut self, mouse: crossterm::event::MouseEvent) -> Action {
-        use crossterm::event::{MouseButton, MouseEventKind};
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> Action {
+        use crate::ui::widgets::mouse_debug::log_mouse_event;
 
-        let hovered = self.find_appointment_at_position(mouse.column, mouse.row);
+        log_mouse_event(&mouse, "AppointmentCalendar");
 
-        match mouse.kind {
-            MouseEventKind::Down(MouseButton::Left) => {
-                if let Some(appt_id) = hovered {
-                    if let Some(appt) = self
-                        .calendar_state
-                        .appointments
-                        .iter()
-                        .find(|a| a.id == appt_id)
-                        .cloned()
-                    {
-                        self.detail_data.showing = true;
-                        self.detail_data.appointment_id = Some(appt.id);
-                        self.detail_data.patient = None;
-                        return Action::AppointmentSelect;
-                    }
+        if self.is_any_modal_active() {
+            return Action::None;
+        }
+
+        if is_scroll_down(&mouse) {
+            match self.calendar_state.focus_area {
+                FocusArea::MonthView => self.next_day(),
+                FocusArea::DayView => {
+                    let current = self.calendar_state.time_slot_state.selected().unwrap_or(0);
+                    let next = (current + 1).min(39);
+                    self.calendar_state.time_slot_state.select(Some(next));
                 }
             }
-            MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Moved => {
-                if hovered != self.calendar_state.hovered_appointment {
-                    self.calendar_state.hovered_appointment = hovered;
+            return Action::Render;
+        }
+
+        if is_scroll_up(&mouse) {
+            match self.calendar_state.focus_area {
+                FocusArea::MonthView => self.previous_day(),
+                FocusArea::DayView => {
+                    let current = self.calendar_state.time_slot_state.selected().unwrap_or(0);
+                    let prev = current.saturating_sub(1);
+                    self.calendar_state.time_slot_state.select(Some(prev));
+                }
+            }
+            return Action::Render;
+        }
+
+        if !is_click(&mouse) {
+            return Action::None;
+        }
+
+        let col = mouse.column;
+        let row = mouse.row;
+
+        if let Some(month_area) = self.month_calendar_area {
+            if col >= month_area.x
+                && col < month_area.x + month_area.width
+                && row >= month_area.y
+                && row < month_area.y + month_area.height
+            {
+                if let Some(day) = self.calculate_day_from_click(col, row, month_area) {
+                    self.calendar_state.selected_month_day = day;
+                    self.calendar_state.focus_area = FocusArea::MonthView;
                     return Action::Render;
                 }
             }
-            _ => {}
+        }
+
+        if let Some(schedule_area) = self.schedule_area {
+            tracing::debug!(
+                "Schedule area: x={}, y={}, w={}, h={}",
+                schedule_area.x, schedule_area.y, schedule_area.width, schedule_area.height
+            );
+
+            if col >= schedule_area.x
+                && col < schedule_area.x + schedule_area.width
+                && row >= schedule_area.y
+                && row < schedule_area.y + schedule_area.height
+            {
+                // Simple proportional hit test - no complex layout calculations
+                // Layout: [3-row header][time slots grid with 1-char border]
+                // Grid inside: x+1, y+4, w-2, h-4 (y+4 = 3 for header + 1 for top border)
+                let grid_x = schedule_area.x + 1;
+                let grid_y = schedule_area.y + 4;
+                let grid_w = schedule_area.width.saturating_sub(2);
+                let grid_h = schedule_area.height.saturating_sub(4);
+
+                // Check if click is in the grid area (not in header or time column)
+                if col >= grid_x && col < grid_x + grid_w && row >= grid_y && row < grid_y + grid_h {
+                    let rel_col = col - grid_x;
+                    let rel_row = row - grid_y;
+
+                    let num_practitioners = self.get_filtered_practitioners().len();
+                    if num_practitioners > 0 {
+                        // Time column is 8 chars, rest is divided among practitioners
+                        let time_col_width = 8u16;
+                        let practitioner_area_width = grid_w.saturating_sub(time_col_width);
+                        let practitioner_col_width = practitioner_area_width / num_practitioners as u16;
+
+                        // Check if click is past the time column
+                        if rel_col > time_col_width {
+                            let practitioner_idx = ((rel_col - time_col_width) / practitioner_col_width) as usize;
+                            let slot_idx = (rel_row / 2) as usize;
+
+                            if practitioner_idx < num_practitioners && slot_idx < 40 {
+                                tracing::debug!("HIT: practitioner={}, slot={}", practitioner_idx, slot_idx);
+                                self.calendar_state.selected_practitioner_column = practitioner_idx;
+                                self.calendar_state.time_slot_state.select(Some(slot_idx));
+                                self.calendar_state.focus_area = FocusArea::DayView;
+                                return Action::Render;
+                            }
+                        }
+                    }
+                }
+                tracing::debug!("No hit at ({}, {})", col, row);
+            }
         }
 
         Action::None
@@ -3095,12 +3236,13 @@ impl Component for AppointmentCalendarComponent {
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {
-        self.calendar_state.last_rendered_area = area;
-
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(30), Constraint::Min(50)])
             .split(area);
+
+        self.month_calendar_area = Some(chunks[0]);
+        self.schedule_area = Some(chunks[1]);
 
         CalendarRenderer::render_month_calendar(&self.calendar_state, frame, chunks[0]);
         match self.calendar_state.view_mode {

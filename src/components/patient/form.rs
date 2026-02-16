@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::NaiveDate;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
@@ -68,6 +68,7 @@ pub struct PatientFormComponent {
     email: String,
     validation_errors: Vec<String>,
     is_submitting: bool,
+    form_area: Option<Rect>,
 }
 
 impl PatientFormComponent {
@@ -87,6 +88,7 @@ impl PatientFormComponent {
             email: String::new(),
             validation_errors: Vec::new(),
             is_submitting: false,
+            form_area: None,
         }
     }
 
@@ -113,6 +115,7 @@ impl PatientFormComponent {
             email: patient.email.unwrap_or_default(),
             validation_errors: Vec::new(),
             is_submitting: false,
+            form_area: None,
         }
     }
 
@@ -474,6 +477,89 @@ impl Component for PatientFormComponent {
         }
     }
 
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> Action {
+        use crate::ui::widgets::is_click;
+
+        if !is_click(&mouse) {
+            return Action::None;
+        }
+
+        let Some(area) = self.form_area else {
+            return Action::None;
+        };
+
+        let col = mouse.column;
+        let row = mouse.row;
+
+        let vertical = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(10),
+                Constraint::Percentage(80),
+                Constraint::Percentage(10),
+            ])
+            .split(area);
+
+        let horizontal = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(15),
+                Constraint::Percentage(70),
+                Constraint::Percentage(15),
+            ])
+            .split(vertical[1]);
+
+        let modal_area = horizontal[1];
+        let modal_block = Block::default()
+            .borders(Borders::ALL)
+            .title(if self.is_edit_mode() { " Edit Patient " } else { " New Patient " })
+            .border_style(Theme::default().normal);
+        let inner_area = modal_block.inner(modal_area);
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(3)])
+            .split(inner_area);
+
+        let available_height = chunks[0].height.saturating_sub(4);
+        let max_visible_fields = (available_height / 3).min(8) as usize;
+
+        let all_fields = FormField::all();
+        let visible_fields: Vec<(usize, FormField)> = all_fields
+            .iter()
+            .enumerate()
+            .skip(self.scroll_offset)
+            .take(max_visible_fields)
+            .map(|(idx, field)| (idx, *field))
+            .collect();
+
+        let form_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(2)
+            .constraints(
+                visible_fields
+                    .iter()
+                    .map(|_| Constraint::Length(3))
+                    .collect::<Vec<_>>(),
+            )
+            .split(chunks[0]);
+
+        for (render_idx, (field_idx, _)) in visible_fields.iter().enumerate() {
+            if let Some(field_area) = form_chunks.get(render_idx) {
+                if col >= field_area.x
+                    && col < field_area.x + field_area.width
+                    && row >= field_area.y
+                    && row < field_area.y + field_area.height
+                {
+                    self.current_field = *field_idx;
+                    return Action::Render;
+                }
+            }
+        }
+
+        Action::None
+    }
+
     async fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::PatientFormSubmit => self.submit_form().await,
@@ -482,6 +568,8 @@ impl Component for PatientFormComponent {
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {
+        self.form_area = Some(area);
+
         let theme = Theme::default();
         let vertical = Layout::default()
             .direction(Direction::Vertical)

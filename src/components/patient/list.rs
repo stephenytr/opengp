@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Cell, Row, Table, TableState};
@@ -9,7 +9,9 @@ use crate::components::{Action, Component};
 use crate::domain::patient::{Patient, PatientService};
 use crate::error::Result;
 use crate::ui::keybinds::KeybindContext;
-use crate::ui::widgets::HelpModal;
+use crate::ui::widgets::{
+    is_click, is_scroll_down, is_scroll_up, table_row_from_click, HelpModal,
+};
 use std::sync::Arc;
 
 pub struct PatientListComponent {
@@ -27,6 +29,7 @@ pub struct PatientListComponent {
     #[allow(dead_code)]
     page_size: usize,
     showing_help_modal: bool,
+    table_area: Option<Rect>,
 }
 
 impl PatientListComponent {
@@ -46,6 +49,7 @@ impl PatientListComponent {
             page: 0,
             page_size: 20,
             showing_help_modal: false,
+            table_area: None,
         }
     }
 
@@ -275,6 +279,40 @@ impl Component for PatientListComponent {
         }
     }
 
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> Action {
+        use crate::ui::widgets::mouse_debug::log_mouse_event;
+
+        log_mouse_event(&mouse, "PatientList");
+
+        if is_scroll_down(&mouse) {
+            self.select_next();
+            return Action::Render;
+        }
+
+        if is_scroll_up(&mouse) {
+            self.select_previous();
+            return Action::Render;
+        }
+
+        if !is_click(&mouse) {
+            return Action::None;
+        }
+
+        let table_area = match self.table_area {
+            Some(area) => area,
+            None => return Action::None,
+        };
+
+        if let Some(row_index) =
+            table_row_from_click(&mouse, table_area, 1, self.filtered_patients.len())
+        {
+            self.table_state.select(Some(row_index));
+            return Action::Render;
+        }
+
+        Action::None
+    }
+
     async fn update(&mut self, action: Action) -> Result<Option<Action>> {
         match action {
             Action::Tick => Ok(None),
@@ -285,7 +323,7 @@ impl Component for PatientListComponent {
     fn render(&mut self, frame: &mut Frame, area: Rect) {
         use ratatui::layout::{Constraint as LayoutConstraint, Direction, Layout};
 
-        let table_area = if self.search_mode || !self.search_query.is_empty() {
+        self.table_area = Some(if self.search_mode || !self.search_query.is_empty() {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([LayoutConstraint::Length(3), LayoutConstraint::Min(0)])
@@ -294,7 +332,9 @@ impl Component for PatientListComponent {
             chunks[1]
         } else {
             area
-        };
+        });
+
+        let table_area = self.table_area.unwrap_or(area);
 
         let header_style = Style::default()
             .fg(Color::Cyan)

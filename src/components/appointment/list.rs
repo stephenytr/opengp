@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Cell, Row, Table, TableState};
@@ -13,13 +13,16 @@ use crate::domain::appointment::{
 };
 use crate::error::Result;
 use crate::ui::keybinds::KeybindContext;
-use crate::ui::widgets::HelpModal;
+use crate::ui::widgets::{
+    is_click, is_scroll_down, is_scroll_up, table_row_from_click, HelpModal,
+};
 
 pub struct AppointmentListComponent {
     appointment_service: Arc<AppointmentService>,
     appointments: Vec<CalendarAppointment>,
     table_state: TableState,
     showing_help_modal: bool,
+    table_area: Option<Rect>,
 }
 
 impl AppointmentListComponent {
@@ -32,6 +35,7 @@ impl AppointmentListComponent {
             appointments: Vec::new(),
             table_state,
             showing_help_modal: false,
+            table_area: None,
         }
     }
 
@@ -80,6 +84,52 @@ impl AppointmentListComponent {
             self.table_state.select(Some(self.appointments.len() - 1));
         }
     }
+
+    fn process_mouse_event(&mut self, mouse: MouseEvent) -> Action {
+        use crate::ui::widgets::mouse_debug::log_mouse_event;
+
+        log_mouse_event(&mouse, "AppointmentList");
+
+        if is_scroll_down(&mouse) {
+            self.next();
+            return Action::Render;
+        }
+
+        if is_scroll_up(&mouse) {
+            self.previous();
+            return Action::Render;
+        }
+
+        if !is_click(&mouse) {
+            return Action::None;
+        }
+
+        let table_area = match self.table_area {
+            Some(area) => area,
+            None => {
+                tracing::debug!("AppointmentList: no table_area set");
+                return Action::None;
+            }
+        };
+
+        tracing::debug!(
+            "AppointmentList: click at ({}, {}), table_area={:?}, num_rows={}",
+            mouse.column,
+            mouse.row,
+            table_area,
+            self.appointments.len()
+        );
+
+        if let Some(row_index) =
+            table_row_from_click(&mouse, table_area, 1, self.appointments.len())
+        {
+            tracing::debug!("AppointmentList: selected row {}", row_index);
+            self.table_state.select(Some(row_index));
+            return Action::Render;
+        }
+
+        Action::None
+    }
 }
 
 #[async_trait]
@@ -119,11 +169,11 @@ impl Component for AppointmentListComponent {
         match key.code {
             KeyCode::Down | KeyCode::Char('j') => {
                 self.next();
-                Action::None
+                Action::Render
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 self.previous();
-                Action::None
+                Action::Render
             }
             KeyCode::Char('g') => {
                 self.select_first();
@@ -142,7 +192,13 @@ impl Component for AppointmentListComponent {
         }
     }
 
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> Action {
+        self.process_mouse_event(mouse)
+    }
+
     fn render(&mut self, frame: &mut Frame, area: Rect) {
+        self.table_area = Some(area);
+
         let header_cells = ["Date", "Time", "Patient", "Type", "Status"]
             .iter()
             .map(|h| {

@@ -31,6 +31,8 @@ use std::sync::Arc;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::{debug, info};
 
+use crate::ui::widgets::is_click;
+
 /// Active screen in the application
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
@@ -81,6 +83,7 @@ pub struct App {
     action_tx: UnboundedSender<Action>,
     action_rx: UnboundedReceiver<Action>,
     showing_form: bool,
+    tabs_area: Option<Rect>,
 }
 
 impl App {
@@ -131,6 +134,7 @@ impl App {
             action_tx,
             action_rx,
             showing_form: false,
+            tabs_area: None,
         })
     }
 
@@ -213,7 +217,7 @@ impl App {
     }
 
     /// Handle global key events (navigation, quit)
-    fn handle_global_events(&self, event: &crate::ui::event::Event) -> Action {
+    fn handle_global_events(&mut self, event: &crate::ui::event::Event) -> Action {
         use crate::ui::event::Event;
 
         match event {
@@ -235,6 +239,38 @@ impl App {
                     KeyCode::Char('4') => Action::NavigateToBilling,
                     _ => Action::None,
                 }
+            }
+            Event::Mouse(mouse) => {
+                if !is_click(mouse) {
+                    return Action::None;
+                }
+
+                if self.showing_form {
+                    return Action::None;
+                }
+
+                if let Some(tabs_area) = self.tabs_area {
+                    let col = mouse.column;
+                    let row = mouse.row;
+
+                    if col >= tabs_area.x
+                        && col < tabs_area.x + tabs_area.width
+                        && row >= tabs_area.y
+                        && row < tabs_area.y + tabs_area.height
+                    {
+                        let tab_width = tabs_area.width / 4;
+                        let tab_index = ((col - tabs_area.x) / tab_width) as usize;
+
+                        return match tab_index {
+                            0 => Action::NavigateToPatients,
+                            1 => Action::NavigateToAppointments,
+                            2 => Action::NavigateToClinical,
+                            3 => Action::NavigateToBilling,
+                            _ => Action::None,
+                        };
+                    }
+                }
+                Action::None
             }
             _ => Action::None,
         }
@@ -365,7 +401,9 @@ impl App {
     }
 
     /// Render header with navigation tabs
-    fn render_header(&self, frame: &mut Frame, area: Rect) {
+    fn render_header(&mut self, frame: &mut Frame, area: Rect) {
+        self.tabs_area = Some(area);
+
         let screens = Screen::all();
         let titles: Vec<&str> = screens.iter().map(|s| s.as_str()).collect();
 

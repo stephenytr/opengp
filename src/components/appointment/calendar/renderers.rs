@@ -611,7 +611,14 @@ impl CalendarRenderer {
                         cells.push(Cell::from("│").style(style));
                     }
                 } else {
-                    cells.push(Cell::from(""));
+                    let is_selected = calendar_state.time_slot_state.selected() == Some(slot_index)
+                        && practitioner_index == calendar_state.selected_practitioner_column;
+                    let style = if is_selected {
+                        Style::default().add_modifier(Modifier::REVERSED)
+                    } else {
+                        Style::default()
+                    };
+                    cells.push(Cell::from("").style(style));
                 }
             }
 
