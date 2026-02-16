@@ -127,13 +127,23 @@ impl App {
         let allergy_repo: Arc<dyn crate::domain::clinical::AllergyRepository> =
             Arc::new(SqlxAllergyRepository::new(db_pool.clone(), crypto.clone()));
         let medical_history_repo: Arc<dyn crate::domain::clinical::MedicalHistoryRepository> =
-            Arc::new(SqlxMedicalHistoryRepository::new(db_pool.clone(), crypto.clone()));
-        let vital_signs_repo: Arc<dyn crate::domain::clinical::VitalSignsRepository> =
-            Arc::new(SqlxVitalSignsRepository::new(db_pool.clone(), crypto.clone()));
+            Arc::new(SqlxMedicalHistoryRepository::new(
+                db_pool.clone(),
+                crypto.clone(),
+            ));
+        let vital_signs_repo: Arc<dyn crate::domain::clinical::VitalSignsRepository> = Arc::new(
+            SqlxVitalSignsRepository::new(db_pool.clone(), crypto.clone()),
+        );
         let social_history_repo: Arc<dyn crate::domain::clinical::SocialHistoryRepository> =
-            Arc::new(SqlxSocialHistoryRepository::new(db_pool.clone(), crypto.clone()));
+            Arc::new(SqlxSocialHistoryRepository::new(
+                db_pool.clone(),
+                crypto.clone(),
+            ));
         let family_history_repo: Arc<dyn crate::domain::clinical::FamilyHistoryRepository> =
-            Arc::new(SqlxFamilyHistoryRepository::new(db_pool.clone(), crypto.clone()));
+            Arc::new(SqlxFamilyHistoryRepository::new(
+                db_pool.clone(),
+                crypto.clone(),
+            ));
 
         let clinical_service = Arc::new(ClinicalService::new(
             consultation_repo,
@@ -239,10 +249,8 @@ impl App {
         appointment_calendar.init().await?;
         self.appointment_component = Some(Box::new(appointment_calendar));
 
-        let mut clinical = ClinicalComponent::new(
-            self.clinical_service.clone(),
-            self.patient_service.clone(),
-        );
+        let mut clinical =
+            ClinicalComponent::new(self.clinical_service.clone(), self.patient_service.clone());
         clinical.init().await?;
         self.clinical_component = Some(Box::new(clinical));
 
@@ -305,7 +313,8 @@ impl App {
                         for (i, title) in titles.iter().enumerate() {
                             let title_len = title.len() as u16;
                             let tab_start = inner_x + (cumulative * inner_width / 35);
-                            let tab_end = inner_x + ((cumulative + title_len) * inner_width / 35) + 2;
+                            let tab_end =
+                                inner_x + ((cumulative + title_len) * inner_width / 35) + 2;
 
                             if col >= tab_start && col < tab_end {
                                 return match i {
@@ -366,7 +375,8 @@ impl App {
                 info!("Opening patient edit form for ID: {}", patient_id);
                 match self.patient_service.find_patient(patient_id).await {
                     Ok(Some(patient)) => {
-                        let form = PatientFormComponent::edit(self.patient_service.clone(), patient);
+                        let form =
+                            PatientFormComponent::edit(self.patient_service.clone(), patient);
                         self.patient_form_component = Some(Box::new(form));
                         self.showing_form = true;
                     }

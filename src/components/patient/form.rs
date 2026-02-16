@@ -9,7 +9,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::components::{Action, Component};
-use crate::domain::patient::{Address, Gender, NewPatientData, Patient, PatientService, UpdatePatientData};
+use crate::domain::patient::{
+    Address, Gender, NewPatientData, Patient, PatientService, UpdatePatientData,
+};
 use crate::error::Result;
 use crate::ui::Theme;
 
@@ -110,7 +112,10 @@ impl PatientFormComponent {
             date_of_birth: patient.date_of_birth.format("%d/%m/%Y").to_string(),
             gender_index,
             medicare_number: patient.medicare_number.unwrap_or_default(),
-            medicare_irn: patient.medicare_irn.map(|i| i.to_string()).unwrap_or_default(),
+            medicare_irn: patient
+                .medicare_irn
+                .map(|i| i.to_string())
+                .unwrap_or_default(),
             phone_mobile: patient.phone_mobile.unwrap_or_default(),
             email: patient.email.unwrap_or_default(),
             validation_errors: Vec::new(),
@@ -512,7 +517,11 @@ impl Component for PatientFormComponent {
         let modal_area = horizontal[1];
         let modal_block = Block::default()
             .borders(Borders::ALL)
-            .title(if self.is_edit_mode() { " Edit Patient " } else { " New Patient " })
+            .title(if self.is_edit_mode() {
+                " Edit Patient "
+            } else {
+                " New Patient "
+            })
             .border_style(Theme::default().normal);
         let inner_area = modal_block.inner(modal_area);
 
@@ -592,7 +601,11 @@ impl Component for PatientFormComponent {
         let modal_area = horizontal[1];
         frame.render_widget(Clear, modal_area);
 
-        let title = if self.is_edit_mode() { " Edit Patient " } else { " New Patient " };
+        let title = if self.is_edit_mode() {
+            " Edit Patient "
+        } else {
+            " New Patient "
+        };
         let modal_block = Block::default()
             .borders(Borders::ALL)
             .title(title)

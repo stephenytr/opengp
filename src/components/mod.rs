@@ -51,8 +51,8 @@ pub enum Action {
     ClinicalConsultationCancel,
 
     // Allergy actions
-    ClinicalAllergyAdd(Uuid),     // patient_id
-    ClinicalAllergyEdit(Uuid),    // allergy_id
+    ClinicalAllergyAdd(Uuid),        // patient_id
+    ClinicalAllergyEdit(Uuid),       // allergy_id
     ClinicalAllergyDeactivate(Uuid), // allergy_id
     ClinicalAllergySave,
     ClinicalAllergyCancel,

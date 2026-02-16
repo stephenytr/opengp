@@ -185,7 +185,10 @@ fn print_sample_appointments(
     );
     println!(
         "  {:-<20}-+-{:-<20}-+-{:-<15}-+-{}",
-        "", "", "", "-".repeat(15)
+        "",
+        "",
+        "",
+        "-".repeat(15)
     );
 
     for appt in appointments.iter().take(to_show) {
@@ -211,13 +214,12 @@ fn print_sample_appointments(
             "  {:20} | {:20} | {:15} | {:?}",
             appt.start_time.format("%Y-%m-%d %H:%M"),
             patient_display,
-            format!("{:?}", appt.appointment_type).chars().take(15).collect::<String>(),
+            format!("{:?}", appt.appointment_type)
+                .chars()
+                .take(15)
+                .collect::<String>(),
             appt.status
         );
-        println!(
-            "  {:20} | Practitioner: {}\n",
-            "",
-            practitioner_name
-        );
+        println!("  {:20} | Practitioner: {}\n", "", practitioner_name);
     }
 }

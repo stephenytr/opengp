@@ -123,7 +123,8 @@ pub fn create_test_patient() -> Patient {
         data.preferred_language,
         data.interpreter_required,
         data.aboriginal_torres_strait_islander,
-    ).expect("Failed to create test patient")
+    )
+    .expect("Failed to create test patient")
 }
 
 /// Create a test appointment fixture with default values

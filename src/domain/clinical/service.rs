@@ -52,9 +52,7 @@ impl ClinicalService {
             .find_patient(data.patient_id)
             .await
             .map_err(|e| match e {
-                PatientServiceError::NotFound(_) => {
-                    ServiceError::PatientNotFound(data.patient_id)
-                }
+                PatientServiceError::NotFound(_) => ServiceError::PatientNotFound(data.patient_id),
                 _ => ServiceError::Validation(format!("Patient lookup error: {}", e)),
             })?
             .ok_or_else(|| ServiceError::PatientNotFound(data.patient_id))?;
@@ -245,7 +243,10 @@ impl ClinicalService {
             .await
             .ok();
 
-        info!("Allergy added: {} for patient {}", saved.id, saved.patient_id);
+        info!(
+            "Allergy added: {} for patient {}",
+            saved.id, saved.patient_id
+        );
         Ok(saved)
     }
 
@@ -279,11 +280,7 @@ impl ClinicalService {
         // Audit log
         self.audit_logger
             .log(AuditEntry::new_status_changed(
-                "allergy",
-                allergy_id,
-                "Active",
-                "Inactive",
-                user_id,
+                "allergy", allergy_id, "Active", "Inactive", user_id,
             ))
             .await
             .ok();
@@ -363,7 +360,9 @@ impl ClinicalService {
                 .find_active_by_patient(patient_id)
                 .await?
         } else {
-            self.medical_history_repo.find_by_patient(patient_id).await?
+            self.medical_history_repo
+                .find_by_patient(patient_id)
+                .await?
         };
 
         Ok(history)
@@ -474,7 +473,10 @@ impl ClinicalService {
         &self,
         patient_id: Uuid,
     ) -> Result<Option<VitalSigns>, ServiceError> {
-        let vitals = self.vital_signs_repo.find_latest_by_patient(patient_id).await?;
+        let vitals = self
+            .vital_signs_repo
+            .find_latest_by_patient(patient_id)
+            .await?;
         Ok(vitals)
     }
 
@@ -485,7 +487,10 @@ impl ClinicalService {
         limit: usize,
     ) -> Result<Vec<VitalSigns>, ServiceError> {
         info!("Listing vital signs history for patient: {}", patient_id);
-        let vitals = self.vital_signs_repo.find_by_patient(patient_id, limit).await?;
+        let vitals = self
+            .vital_signs_repo
+            .find_by_patient(patient_id, limit)
+            .await?;
         Ok(vitals)
     }
 
@@ -669,9 +674,6 @@ impl ClinicalService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::clinical::model::{
-        AllergyType, ConditionStatus, Severity, SmokingStatus,
-    };
 
     // Mock implementations would go here for unit tests
     // For now, tests are implemented in the mocks.rs file

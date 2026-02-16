@@ -15,7 +15,6 @@ service! {
 }
 
 impl AuditService {
-
     /// Log a new audit entry
     ///
     /// # Arguments

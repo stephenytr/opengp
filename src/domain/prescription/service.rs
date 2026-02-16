@@ -19,7 +19,6 @@ service! {
 }
 
 impl PrescriptionService {
-
     /// Validate PBS status and authority requirements
     ///
     /// # Arguments

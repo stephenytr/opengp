@@ -54,7 +54,6 @@ service! {
 }
 
 impl UserService {
-
     /// Create a new user
     ///
     /// Validates user data and checks for duplicate usernames before creation.

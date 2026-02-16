@@ -14,10 +14,8 @@ pub trait ConsultationRepository: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Consultation>, RepositoryError>;
 
     /// Find all consultations for a patient
-    async fn find_by_patient(
-        &self,
-        patient_id: Uuid,
-    ) -> Result<Vec<Consultation>, RepositoryError>;
+    async fn find_by_patient(&self, patient_id: Uuid)
+        -> Result<Vec<Consultation>, RepositoryError>;
 
     /// Find consultations within a date range
     async fn find_by_date_range(
@@ -62,7 +60,10 @@ pub trait AllergyRepository: Send + Sync {
     async fn find_by_patient(&self, patient_id: Uuid) -> Result<Vec<Allergy>, RepositoryError>;
 
     /// Find active allergies for a patient
-    async fn find_active_by_patient(&self, patient_id: Uuid) -> Result<Vec<Allergy>, RepositoryError>;
+    async fn find_active_by_patient(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<Vec<Allergy>, RepositoryError>;
 
     /// Create a new allergy
     async fn create(&self, allergy: Allergy) -> Result<Allergy, RepositoryError>;
@@ -81,7 +82,10 @@ pub trait MedicalHistoryRepository: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<MedicalHistory>, RepositoryError>;
 
     /// Find all medical history entries for a patient
-    async fn find_by_patient(&self, patient_id: Uuid) -> Result<Vec<MedicalHistory>, RepositoryError>;
+    async fn find_by_patient(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<Vec<MedicalHistory>, RepositoryError>;
 
     /// Find active medical history entries for a patient
     async fn find_active_by_patient(
@@ -126,7 +130,10 @@ pub trait FamilyHistoryRepository: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<FamilyHistory>, RepositoryError>;
 
     /// Find all family history entries for a patient
-    async fn find_by_patient(&self, patient_id: Uuid) -> Result<Vec<FamilyHistory>, RepositoryError>;
+    async fn find_by_patient(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<Vec<FamilyHistory>, RepositoryError>;
 
     /// Create a new family history entry
     async fn create(&self, history: FamilyHistory) -> Result<FamilyHistory, RepositoryError>;

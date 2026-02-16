@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-pub use crate::domain::error::RepositoryError;
 use super::error::UserRepositoryError;
 use super::model::{Practitioner, Role, User};
+pub use crate::domain::error::RepositoryError;
 
 /// Repository trait for practitioner persistence
 #[async_trait]

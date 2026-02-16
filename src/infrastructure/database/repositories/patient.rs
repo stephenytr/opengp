@@ -332,7 +332,7 @@ impl PatientRepository for SqlxPatientRepository {
                 is_deceased = ?,
                 updated_at = ?
             WHERE id = ?
-            "#
+            "#,
         )
         .bind(ihi_encrypted)
         .bind(medicare_encrypted)

@@ -23,7 +23,6 @@ service! {
 }
 
 impl AppointmentService {
-
     /// Check for overlapping appointments for a practitioner
     ///
     /// # Arguments

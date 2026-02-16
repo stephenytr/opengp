@@ -9,9 +9,7 @@ use crate::components::{Action, Component};
 use crate::domain::patient::{Patient, PatientService};
 use crate::error::Result;
 use crate::ui::keybinds::KeybindContext;
-use crate::ui::widgets::{
-    is_click, is_scroll_down, is_scroll_up, table_row_from_click, HelpModal,
-};
+use crate::ui::widgets::{is_click, is_scroll_down, is_scroll_up, table_row_from_click, HelpModal};
 use std::sync::Arc;
 
 pub struct PatientListComponent {

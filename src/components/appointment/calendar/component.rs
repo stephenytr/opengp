@@ -2678,7 +2678,11 @@ impl AppointmentCalendarComponent {
 
         tracing::debug!(
             "Day calc: col={}, row={}, relative_col={}, relative_row={}, area={:?}",
-            col, row, relative_col, relative_row, area
+            col,
+            row,
+            relative_col,
+            relative_row,
+            area
         );
 
         if relative_row < 2 || relative_col < 1 {
@@ -2707,7 +2711,11 @@ impl AppointmentCalendarComponent {
 
         let day_number = week * 7 + day_of_week;
         if day_number < first_day_offset {
-            tracing::debug!("Before month start: day_number={} < offset={}", day_number, first_day_offset);
+            tracing::debug!(
+                "Before month start: day_number={} < offset={}",
+                day_number,
+                first_day_offset
+            );
             return None;
         }
 
@@ -2731,10 +2739,11 @@ impl AppointmentCalendarComponent {
             .practitioners
             .iter()
             .filter(|p| {
-                self.filter_state
-                    .active_practitioner_filters
-                    .is_empty()
-                    || self.filter_state.active_practitioner_filters.contains(&p.id)
+                self.filter_state.active_practitioner_filters.is_empty()
+                    || self
+                        .filter_state
+                        .active_practitioner_filters
+                        .contains(&p.id)
             })
             .collect()
     }
@@ -2880,7 +2889,10 @@ impl Component for AppointmentCalendarComponent {
         if let Some(schedule_area) = self.schedule_area {
             tracing::debug!(
                 "Schedule area: x={}, y={}, w={}, h={}",
-                schedule_area.x, schedule_area.y, schedule_area.width, schedule_area.height
+                schedule_area.x,
+                schedule_area.y,
+                schedule_area.width,
+                schedule_area.height
             );
 
             if col >= schedule_area.x
@@ -2892,13 +2904,14 @@ impl Component for AppointmentCalendarComponent {
                 // Layout: [3-row header][time slots grid with 1-char border]
                 // Grid inside: x+1, y+4, w-2, h-4 (y+4 = 3 for header + 1 for top border)
                 // Time column also has 1-char left border
-                let grid_x = schedule_area.x + 2;  // +2 = outer border + time column border
+                let grid_x = schedule_area.x + 2; // +2 = outer border + time column border
                 let grid_y = schedule_area.y + 4;
                 let grid_w = schedule_area.width.saturating_sub(2);
                 let grid_h = schedule_area.height.saturating_sub(4);
 
                 // Check if click is in the grid area (not in header or time column)
-                if col >= grid_x && col < grid_x + grid_w && row >= grid_y && row < grid_y + grid_h {
+                if col >= grid_x && col < grid_x + grid_w && row >= grid_y && row < grid_y + grid_h
+                {
                     let rel_col = col - grid_x;
                     let rel_row = row - grid_y;
 
@@ -2907,15 +2920,21 @@ impl Component for AppointmentCalendarComponent {
                         // Time column is 8 chars, rest is divided among practitioners
                         let time_col_width = 8u16;
                         let practitioner_area_width = grid_w.saturating_sub(time_col_width);
-                        let practitioner_col_width = practitioner_area_width / num_practitioners as u16;
+                        let practitioner_col_width =
+                            practitioner_area_width / num_practitioners as u16;
 
                         // Check if click is past the time column
                         if rel_col > time_col_width {
-                            let practitioner_idx = ((rel_col - time_col_width) / practitioner_col_width) as usize;
+                            let practitioner_idx =
+                                ((rel_col - time_col_width) / practitioner_col_width) as usize;
                             let slot_idx = (rel_row / 2) as usize;
 
                             if practitioner_idx < num_practitioners && slot_idx < 40 {
-                                tracing::debug!("HIT: practitioner={}, slot={}", practitioner_idx, slot_idx);
+                                tracing::debug!(
+                                    "HIT: practitioner={}, slot={}",
+                                    practitioner_idx,
+                                    slot_idx
+                                );
                                 self.calendar_state.selected_practitioner_column = practitioner_idx;
                                 self.calendar_state.time_slot_state.select(Some(slot_idx));
                                 self.calendar_state.focus_area = FocusArea::DayView;

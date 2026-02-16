@@ -489,7 +489,8 @@ mod tests {
             patient_data.preferred_language,
             patient_data.interpreter_required,
             patient_data.aboriginal_torres_strait_islander,
-        ).unwrap();
+        )
+        .unwrap();
         let patient_id = patient.id;
 
         // Create patient
@@ -559,7 +560,8 @@ mod tests {
             patient_data.preferred_language,
             patient_data.interpreter_required,
             patient_data.aboriginal_torres_strait_islander,
-        ).unwrap();
+        )
+        .unwrap();
         repo.create(patient).await.unwrap();
 
         // Find by Medicare number

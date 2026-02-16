@@ -11,23 +11,23 @@ use crate::domain::clinical::ClinicalService;
 use crate::domain::patient::PatientService;
 use crate::error::Result;
 
-use super::state::{
-    AllergyFormState, ClinicalView, FamilyHistoryFormState, MedicalHistoryFormState,
-    ModalType, PatientSearchState, SocialHistoryFormState, VitalSignsFormState,
-};
-use super::patient_selector::render_patient_selector;
-use super::patient_overview::render_patient_overview;
-use super::consultation_list::render_consultation_list;
-use super::consultation_form::render_consultation_form;
-use super::allergy_list::render_allergy_list;
 use super::allergy_form::render_allergy_form;
-use super::vital_signs_form::render_vital_signs_form;
-use super::medical_history_list::render_medical_history_list;
-use super::medical_history_form::render_medical_history_form;
-use super::family_history_list::render_family_history_list;
+use super::allergy_list::render_allergy_list;
+use super::consultation_form::render_consultation_form;
+use super::consultation_list::render_consultation_list;
 use super::family_history_form::render_family_history_form;
-use super::social_history_form::render_social_history_form;
+use super::family_history_list::render_family_history_list;
+use super::medical_history_form::render_medical_history_form;
+use super::medical_history_list::render_medical_history_list;
+use super::patient_overview::render_patient_overview;
+use super::patient_selector::render_patient_selector;
 use super::renderers::render_modal;
+use super::social_history_form::render_social_history_form;
+use super::state::{
+    AllergyFormState, ClinicalView, FamilyHistoryFormState, MedicalHistoryFormState, ModalType,
+    PatientSearchState, SocialHistoryFormState, VitalSignsFormState,
+};
+use super::vital_signs_form::render_vital_signs_form;
 
 pub struct ClinicalComponent {
     pub clinical_service: Arc<ClinicalService>,
@@ -52,7 +52,10 @@ pub struct ClinicalComponent {
 }
 
 impl ClinicalComponent {
-    pub fn new(clinical_service: Arc<ClinicalService>, patient_service: Arc<PatientService>) -> Self {
+    pub fn new(
+        clinical_service: Arc<ClinicalService>,
+        patient_service: Arc<PatientService>,
+    ) -> Self {
         Self {
             clinical_service,
             patient_service,
@@ -77,42 +80,40 @@ impl ClinicalComponent {
     }
 
     async fn load_patient_data(&mut self, patient_id: uuid::Uuid) {
-        if let Ok(consultations) = self.clinical_service
+        if let Ok(consultations) = self
+            .clinical_service
             .list_patient_consultations(patient_id)
             .await
         {
             self.consultations = consultations;
         }
 
-        if let Ok(allergies) = self.clinical_service
+        if let Ok(allergies) = self
+            .clinical_service
             .list_patient_allergies(patient_id, true)
             .await
         {
             self.allergies = allergies;
         }
 
-        if let Ok(medical_history) = self.clinical_service
+        if let Ok(medical_history) = self
+            .clinical_service
             .list_medical_history(patient_id, true)
             .await
         {
             self.medical_history = medical_history;
         }
 
-        if let Ok(family_history) = self.clinical_service
-            .list_family_history(patient_id)
-            .await
-        {
+        if let Ok(family_history) = self.clinical_service.list_family_history(patient_id).await {
             self.family_history = family_history;
         }
 
-        if let Ok(social_history) = self.clinical_service
-            .get_social_history(patient_id)
-            .await
-        {
+        if let Ok(social_history) = self.clinical_service.get_social_history(patient_id).await {
             self.social_history = social_history;
         }
 
-        if let Ok(latest_vitals) = self.clinical_service
+        if let Ok(latest_vitals) = self
+            .clinical_service
             .get_latest_vital_signs(patient_id)
             .await
         {
@@ -154,42 +155,18 @@ impl Component for ClinicalComponent {
         }
 
         match self.current_view {
-            ClinicalView::PatientSelector => {
-                self.handle_patient_selector_input(key)
-            }
-            ClinicalView::PatientOverview => {
-                self.handle_patient_overview_input(key)
-            }
-            ClinicalView::ConsultationList => {
-                self.handle_consultation_list_input(key)
-            }
-            ClinicalView::ConsultationEditor(_) => {
-                self.handle_consultation_editor_input(key)
-            }
-            ClinicalView::AllergyList => {
-                self.handle_allergy_list_input(key)
-            }
-            ClinicalView::AllergyEditor(_) => {
-                self.handle_allergy_editor_input(key)
-            }
-            ClinicalView::MedicalHistoryList => {
-                self.handle_medical_history_list_input(key)
-            }
-            ClinicalView::MedicalHistoryEditor(_) => {
-                self.handle_medical_history_editor_input(key)
-            }
-            ClinicalView::FamilyHistoryList => {
-                self.handle_family_history_list_input(key)
-            }
-            ClinicalView::FamilyHistoryEditor(_) => {
-                self.handle_family_history_editor_input(key)
-            }
-            ClinicalView::SocialHistoryEditor => {
-                self.handle_social_history_editor_input(key)
-            }
-            ClinicalView::VitalSignsEditor => {
-                self.handle_vital_signs_editor_input(key)
-            }
+            ClinicalView::PatientSelector => self.handle_patient_selector_input(key),
+            ClinicalView::PatientOverview => self.handle_patient_overview_input(key),
+            ClinicalView::ConsultationList => self.handle_consultation_list_input(key),
+            ClinicalView::ConsultationEditor(_) => self.handle_consultation_editor_input(key),
+            ClinicalView::AllergyList => self.handle_allergy_list_input(key),
+            ClinicalView::AllergyEditor(_) => self.handle_allergy_editor_input(key),
+            ClinicalView::MedicalHistoryList => self.handle_medical_history_list_input(key),
+            ClinicalView::MedicalHistoryEditor(_) => self.handle_medical_history_editor_input(key),
+            ClinicalView::FamilyHistoryList => self.handle_family_history_list_input(key),
+            ClinicalView::FamilyHistoryEditor(_) => self.handle_family_history_editor_input(key),
+            ClinicalView::SocialHistoryEditor => self.handle_social_history_editor_input(key),
+            ClinicalView::VitalSignsEditor => self.handle_vital_signs_editor_input(key),
         }
     }
 
@@ -356,9 +333,7 @@ impl ClinicalComponent {
 
     fn handle_consultation_list_input(&mut self, key: KeyEvent) -> Action {
         match key.code {
-            KeyCode::Enter => {
-                Action::None
-            }
+            KeyCode::Enter => Action::None,
             KeyCode::Esc => Action::ClinicalShowOverview,
             _ => Action::None,
         }
@@ -366,9 +341,7 @@ impl ClinicalComponent {
 
     fn handle_consultation_editor_input(&mut self, key: KeyEvent) -> Action {
         match key.code {
-            KeyCode::Tab => {
-                Action::Render
-            }
+            KeyCode::Tab => Action::Render,
             KeyCode::Esc => Action::ClinicalConsultationCancel,
             _ => Action::None,
         }
@@ -450,8 +423,7 @@ impl ClinicalComponent {
 
     fn get_help_text(&self) -> String {
         match self.current_view {
-            ClinicalView::PatientSelector => {
-                r#"Clinical Tab - Patient Selector
+            ClinicalView::PatientSelector => r#"Clinical Tab - Patient Selector
 
 Keys:
   /       Open patient search
@@ -460,10 +432,9 @@ Keys:
   Esc     Close search
   ?       Show this help
 
-Press any key to close..."#.to_string()
-            }
-            ClinicalView::PatientOverview => {
-                r#"Clinical Tab - Patient Overview
+Press any key to close..."#
+                .to_string(),
+            ClinicalView::PatientOverview => r#"Clinical Tab - Patient Overview
 
 Keys:
   F1      New Consultation
@@ -476,17 +447,16 @@ Keys:
   Esc     Clear patient / Go back
   ?       Show this help
 
-Press any key to close..."#.to_string()
-            }
-            _ => {
-                r#"Clinical Tab
+Press any key to close..."#
+                .to_string(),
+            _ => r#"Clinical Tab
 
 Keys:
   Esc     Go back
   ?       Show this help
 
-Press any key to close..."#.to_string()
-            }
+Press any key to close..."#
+                .to_string(),
         }
     }
 }
