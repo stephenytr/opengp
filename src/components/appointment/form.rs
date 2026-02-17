@@ -16,8 +16,9 @@ use crate::domain::appointment::{AppointmentService, AppointmentType, NewAppoint
 use crate::domain::patient::{Patient, PatientService};
 use crate::domain::user::{Practitioner, PractitionerService};
 use crate::error::Result;
-use crate::ui::widgets::{MonthCalendar, TimeSlotPicker};
+use crate::ui::components::{InputWrapper, SelectWrapper};
 use crate::ui::Theme;
+use crate::ui::widgets::{MonthCalendar, TimeSlotPicker};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum FormField {
@@ -69,20 +70,18 @@ pub struct AppointmentFormComponent {
     selected_patient_id: Option<Uuid>,
     patient_search_active: bool,
 
-    // Practitioner selection
+    // Data for service calls
     practitioners: Vec<Practitioner>,
-    practitioner_list_state: ListState,
-    practitioner_dropdown_open: bool,
-
-    // Appointment type selection
     appointment_types: Vec<AppointmentType>,
-    type_list_state: ListState,
-    type_dropdown_open: bool,
 
-    // Form inputs
-    date_input: String,
-    time_input: String,
-    reason_input: String,
+    // Form inputs - using tui-realm wrappers
+    date_input: InputWrapper,
+    time_input: InputWrapper,
+    reason_input: InputWrapper,
+
+    // Dropdown selections - using SelectWrapper
+    practitioner_select: SelectWrapper,
+    type_select: SelectWrapper,
 
     // Date picker widget
     date_calendar: MonthCalendar,
@@ -107,11 +106,21 @@ impl AppointmentFormComponent {
         let mut patient_list_state = ListState::default();
         patient_list_state.select(Some(0));
 
-        let mut practitioner_list_state = ListState::default();
-        practitioner_list_state.select(Some(0));
-
-        let mut type_list_state = ListState::default();
-        type_list_state.select(Some(0));
+        let appointment_type_items: Vec<String> = vec![
+            "Standard (15 min)".to_string(),
+            "Long (30 min)".to_string(),
+            "Brief (10 min)".to_string(),
+            "New Patient (30 min)".to_string(),
+            "Health Assessment (45 min)".to_string(),
+            "Chronic Disease Review (30 min)".to_string(),
+            "Mental Health Plan (60 min)".to_string(),
+            "Immunisation (15 min)".to_string(),
+            "Procedure (30 min)".to_string(),
+            "Telephone (10 min)".to_string(),
+            "Telehealth (15 min)".to_string(),
+            "Home Visit (30 min)".to_string(),
+            "Emergency (15 min)".to_string(),
+        ];
 
         let appointment_types = vec![
             AppointmentType::Standard,
@@ -129,10 +138,9 @@ impl AppointmentFormComponent {
             AppointmentType::Emergency,
         ];
 
-        // Set default date to today and time to 9:00
         let now = Utc::now();
-        let date_input = now.format("%Y-%m-%d").to_string();
-        let time_input = "09:00".to_string();
+        let date_value = now.format("%Y-%m-%d").to_string();
+        let time_value = "09:00".to_string();
         let initial_date = now.date_naive();
 
         Self {
@@ -147,14 +155,12 @@ impl AppointmentFormComponent {
             selected_patient_id: None,
             patient_search_active: true,
             practitioners: Vec::new(),
-            practitioner_list_state,
-            practitioner_dropdown_open: false,
             appointment_types,
-            type_list_state,
-            type_dropdown_open: false,
-            date_input,
-            time_input,
-            reason_input: String::new(),
+            date_input: InputWrapper::new().init_value(&date_value),
+            time_input: InputWrapper::new().init_value(&time_value),
+            reason_input: InputWrapper::new(),
+            practitioner_select: SelectWrapper::new(),
+            type_select: SelectWrapper::new().items(appointment_type_items),
             date_calendar: MonthCalendar::new(initial_date),
             time_slot_picker: TimeSlotPicker::new(),
             validation_errors: HashMap::new(),
@@ -212,11 +218,12 @@ impl AppointmentFormComponent {
     }
 
     fn validate_date(&self) -> Option<String> {
-        if self.date_input.is_empty() {
+        let date_val = self.date_input.value();
+        if date_val.is_empty() {
             return Some("Date is required".to_string());
         }
 
-        match NaiveDate::parse_from_str(&self.date_input, "%Y-%m-%d") {
+        match NaiveDate::parse_from_str(date_val, "%Y-%m-%d") {
             Ok(date) => {
                 let today = Utc::now().date_naive();
                 if date < today {
@@ -230,11 +237,12 @@ impl AppointmentFormComponent {
     }
 
     fn validate_time(&self) -> Option<String> {
-        if self.time_input.is_empty() {
+        let time_val = self.time_input.value();
+        if time_val.is_empty() {
             return Some("Time is required".to_string());
         }
 
-        match NaiveTime::parse_from_str(&self.time_input, "%H:%M") {
+        match NaiveTime::parse_from_str(time_val, "%H:%M") {
             Ok(time) => {
                 let hour = time.hour();
                 if !(8..18).contains(&hour) {
@@ -272,8 +280,8 @@ impl AppointmentFormComponent {
     async fn fetch_availability(&mut self) -> Result<()> {
         let mut availability = vec![true; 40];
 
-        if let Ok(date) = NaiveDate::parse_from_str(&self.date_input, "%Y-%m-%d") {
-            let practitioner_idx = self.practitioner_list_state.selected().unwrap_or(0);
+        if let Ok(date) = NaiveDate::parse_from_str(self.date_input.value(), "%Y-%m-%d") {
+            let practitioner_idx = self.practitioner_select.selected_index().unwrap_or(0);
             if practitioner_idx < self.practitioners.len() {
                 let practitioner_id = self.practitioners[practitioner_idx].id;
 
@@ -330,34 +338,30 @@ impl AppointmentFormComponent {
             return Ok(());
         }
 
-        // Parse date and time
-        let date = NaiveDate::parse_from_str(&self.date_input, "%Y-%m-%d")
+        let date = NaiveDate::parse_from_str(self.date_input.value(), "%Y-%m-%d")
             .map_err(|e| crate::error::Error::App(format!("Invalid date: {}", e)))?;
-        let time = NaiveTime::parse_from_str(&self.time_input, "%H:%M")
+        let time = NaiveTime::parse_from_str(self.time_input.value(), "%H:%M")
             .map_err(|e| crate::error::Error::App(format!("Invalid time: {}", e)))?;
 
         let start_time = date.and_time(time).and_utc();
 
-        // Get selected practitioner
-        let practitioner_idx = self.practitioner_list_state.selected().unwrap_or(0);
+        let practitioner_idx = self.practitioner_select.selected_index().unwrap_or(0);
         let practitioner_id = self.practitioners[practitioner_idx].id;
 
-        // Get selected appointment type
-        let type_idx = self.type_list_state.selected().unwrap_or(0);
+        let type_idx = self.type_select.selected_index().unwrap_or(0);
         let appointment_type = self.appointment_types[type_idx];
         let duration = Duration::minutes(appointment_type.default_duration_minutes());
 
-        // Create appointment data
         let data = NewAppointmentData {
             patient_id: self.selected_patient_id.unwrap(),
             practitioner_id,
             start_time,
             duration,
             appointment_type,
-            reason: if self.reason_input.is_empty() {
+            reason: if self.reason_input.value().is_empty() {
                 None
             } else {
-                Some(self.reason_input.clone())
+                Some(self.reason_input.value().to_string())
             },
             is_urgent: false,
         };
@@ -393,7 +397,7 @@ impl AppointmentFormComponent {
     }
 
     fn get_selected_practitioner_display(&self) -> String {
-        let idx = self.practitioner_list_state.selected().unwrap_or(0);
+        let idx = self.practitioner_select.selected_index().unwrap_or(0);
         if idx < self.practitioners.len() {
             self.practitioners[idx].display_name()
         } else {
@@ -402,10 +406,8 @@ impl AppointmentFormComponent {
     }
 
     fn get_selected_type_display(&self) -> String {
-        let idx = self.type_list_state.selected().unwrap_or(0);
-        if idx < self.appointment_types.len() {
-            let app_type = self.appointment_types[idx];
-            format!("{} ({} min)", app_type, app_type.default_duration_minutes())
+        if let Some(selected) = self.type_select.selected() {
+            selected.clone()
         } else {
             "Select type".to_string()
         }
@@ -492,22 +494,18 @@ impl AppointmentFormComponent {
     fn handle_practitioner_input(&mut self, key: KeyEvent) -> Action {
         match key.code {
             KeyCode::Enter | KeyCode::Char(' ') => {
-                self.practitioner_dropdown_open = !self.practitioner_dropdown_open;
+                self.practitioner_select.toggle();
                 Action::Render
             }
             KeyCode::Down => {
-                if self.practitioner_dropdown_open {
-                    let current = self.practitioner_list_state.selected().unwrap_or(0);
-                    let next = (current + 1).min(self.practitioners.len() - 1);
-                    self.practitioner_list_state.select(Some(next));
+                if self.practitioner_select.is_open() {
+                    self.practitioner_select.next();
                 }
                 Action::Render
             }
             KeyCode::Up => {
-                if self.practitioner_dropdown_open {
-                    let current = self.practitioner_list_state.selected().unwrap_or(0);
-                    let prev = current.saturating_sub(1);
-                    self.practitioner_list_state.select(Some(prev));
+                if self.practitioner_select.is_open() {
+                    self.practitioner_select.previous();
                 }
                 Action::Render
             }
@@ -528,14 +526,14 @@ impl AppointmentFormComponent {
                 Action::Render
             }
             KeyCode::Char(c) if c.is_ascii_digit() || c == '-' => {
-                if self.date_input.len() < 10 {
-                    self.date_input.push(c);
+                if self.date_input.value().len() < 10 {
+                    self.date_input.push_char(c);
                     self.validation_errors.remove(&FormField::Date);
                 }
                 Action::Render
             }
             KeyCode::Backspace => {
-                self.date_input.pop();
+                self.date_input.pop_char();
                 Action::Render
             }
             _ => Action::None,
@@ -544,20 +542,22 @@ impl AppointmentFormComponent {
 
     fn sync_calendar_to_input(&mut self) {
         let selected_date = self.date_calendar.selected_date();
-        self.date_input = selected_date.format("%Y-%m-%d").to_string();
+        self.date_input.set_value(&selected_date.format("%Y-%m-%d").to_string());
     }
 
     fn handle_time_input(&mut self, key: KeyEvent) -> Action {
         match key.code {
             KeyCode::Up => {
                 self.time_slot_picker.prev();
-                self.time_input = self.time_slot_picker.selected_time().to_string();
+                let selected = self.time_slot_picker.selected_time();
+                self.time_input.set_value(selected);
                 self.validation_errors.remove(&FormField::Time);
                 Action::Render
             }
             KeyCode::Down => {
                 self.time_slot_picker.next();
-                self.time_input = self.time_slot_picker.selected_time().to_string();
+                let selected = self.time_slot_picker.selected_time();
+                self.time_input.set_value(selected);
                 self.validation_errors.remove(&FormField::Time);
                 Action::Render
             }
@@ -566,14 +566,14 @@ impl AppointmentFormComponent {
                 Action::Render
             }
             KeyCode::Char(c) if c.is_ascii_digit() || c == ':' => {
-                if self.time_input.len() < 5 {
-                    self.time_input.push(c);
+                if self.time_input.value().len() < 5 {
+                    self.time_input.push_char(c);
                     self.validation_errors.remove(&FormField::Time);
                 }
                 Action::Render
             }
             KeyCode::Backspace => {
-                self.time_input.pop();
+                self.time_input.pop_char();
                 Action::Render
             }
             _ => Action::None,
@@ -583,22 +583,18 @@ impl AppointmentFormComponent {
     fn handle_type_input(&mut self, key: KeyEvent) -> Action {
         match key.code {
             KeyCode::Enter | KeyCode::Char(' ') => {
-                self.type_dropdown_open = !self.type_dropdown_open;
+                self.type_select.toggle();
                 Action::Render
             }
             KeyCode::Down => {
-                if self.type_dropdown_open {
-                    let current = self.type_list_state.selected().unwrap_or(0);
-                    let next = (current + 1).min(self.appointment_types.len() - 1);
-                    self.type_list_state.select(Some(next));
+                if self.type_select.is_open() {
+                    self.type_select.next();
                 }
                 Action::Render
             }
             KeyCode::Up => {
-                if self.type_dropdown_open {
-                    let current = self.type_list_state.selected().unwrap_or(0);
-                    let prev = current.saturating_sub(1);
-                    self.type_list_state.select(Some(prev));
+                if self.type_select.is_open() {
+                    self.type_select.previous();
                 }
                 Action::Render
             }
@@ -609,13 +605,13 @@ impl AppointmentFormComponent {
     fn handle_reason_input(&mut self, key: KeyEvent) -> Action {
         match key.code {
             KeyCode::Char(c) => {
-                if self.reason_input.len() < 500 {
-                    self.reason_input.push(c);
+                if self.reason_input.value().len() < 500 {
+                    self.reason_input.push_char(c);
                 }
                 Action::Render
             }
             KeyCode::Backspace => {
-                self.reason_input.pop();
+                self.reason_input.pop_char();
                 Action::Render
             }
             _ => Action::None,
@@ -718,8 +714,7 @@ impl AppointmentFormComponent {
 
         let display = self.get_selected_practitioner_display();
 
-        if self.practitioner_dropdown_open && is_focused {
-            // Show dropdown list
+        if self.practitioner_select.is_open() && is_focused {
             let items: Vec<ListItem> = self
                 .practitioners
                 .iter()
@@ -740,7 +735,11 @@ impl AppointmentFormComponent {
                 )
                 .highlight_symbol(">> ");
 
-            frame.render_stateful_widget(list, area, &mut self.practitioner_list_state);
+            let mut list_state = ListState::default();
+            if let Some(idx) = self.practitioner_select.selected_index() {
+                list_state.select(Some(idx));
+            }
+            frame.render_stateful_widget(list, area, &mut list_state);
         } else {
             let paragraph = Paragraph::new(display).block(
                 Block::default()
@@ -776,7 +775,7 @@ impl AppointmentFormComponent {
                 Color::White
             };
 
-            let display = self.date_input.clone();
+            let display = self.date_input.value().to_string();
             let mut lines = vec![Line::from(display)];
 
             if let Some(error) = self.validation_errors.get(&FormField::Date) {
@@ -821,7 +820,7 @@ impl AppointmentFormComponent {
                 Color::White
             };
 
-            let display = self.time_input.clone();
+            let display = self.time_input.value().to_string();
             let mut lines = vec![Line::from(display)];
 
             if let Some(error) = self.validation_errors.get(&FormField::Time) {
@@ -852,8 +851,7 @@ impl AppointmentFormComponent {
 
         let display = self.get_selected_type_display();
 
-        if self.type_dropdown_open && is_focused {
-            // Show dropdown list
+        if self.type_select.is_open() && is_focused {
             let items: Vec<ListItem> = self
                 .appointment_types
                 .iter()
@@ -874,7 +872,11 @@ impl AppointmentFormComponent {
                 )
                 .highlight_symbol(">> ");
 
-            frame.render_stateful_widget(list, area, &mut self.type_list_state);
+            let mut list_state = ListState::default();
+            if let Some(idx) = self.type_select.selected_index() {
+                list_state.select(Some(idx));
+            }
+            frame.render_stateful_widget(list, area, &mut list_state);
         } else {
             let paragraph = Paragraph::new(display).block(
                 Block::default()
@@ -894,10 +896,11 @@ impl AppointmentFormComponent {
             Color::White
         };
 
+        let reason_val = self.reason_input.value();
         let display = if is_focused {
-            format!("{}█", self.reason_input)
+            format!("{}█", reason_val)
         } else {
-            self.reason_input.clone()
+            reason_val.to_string()
         };
 
         let paragraph = Paragraph::new(display)
@@ -950,7 +953,7 @@ impl Component for AppointmentFormComponent {
             Ok(practitioners) => {
                 self.practitioners = practitioners;
                 if !self.practitioners.is_empty() {
-                    self.practitioner_list_state.select(Some(0));
+                    self.practitioner_select.set_selected(0);
                 }
             }
             Err(e) => {
@@ -968,12 +971,12 @@ impl Component for AppointmentFormComponent {
                 self.patient_search_active = false;
                 return Action::Render;
             }
-            if self.practitioner_dropdown_open {
-                self.practitioner_dropdown_open = false;
+            if self.practitioner_select.is_open() {
+                self.practitioner_select.toggle();
                 return Action::Render;
             }
-            if self.type_dropdown_open {
-                self.type_dropdown_open = false;
+            if self.type_select.is_open() {
+                self.type_select.toggle();
                 return Action::Render;
             }
             return Action::AppointmentFormCancel;
@@ -989,16 +992,14 @@ impl Component for AppointmentFormComponent {
         if key.code == KeyCode::Tab {
             self.current_field = self.current_field.next();
 
-            // Auto-open/close dropdowns based on field focus
-            self.practitioner_dropdown_open = self.current_field == FormField::Practitioner;
-            self.type_dropdown_open = self.current_field == FormField::Type;
+            self.practitioner_select.set_focus(self.current_field == FormField::Practitioner);
+            self.type_select.set_focus(self.current_field == FormField::Type);
 
             let moved_to_patient_field = self.current_field == FormField::Patient;
             self.patient_search_active = moved_to_patient_field;
 
-            // Sync calendar when entering date field
             if self.current_field == FormField::Date {
-                if let Ok(date) = NaiveDate::parse_from_str(&self.date_input, "%Y-%m-%d") {
+                if let Ok(date) = NaiveDate::parse_from_str(self.date_input.value(), "%Y-%m-%d") {
                     self.date_calendar = MonthCalendar::new(date);
                 }
             }
@@ -1010,16 +1011,14 @@ impl Component for AppointmentFormComponent {
         if key.code == KeyCode::BackTab {
             self.current_field = self.current_field.previous();
 
-            // Auto-open/close dropdowns based on field focus
-            self.practitioner_dropdown_open = self.current_field == FormField::Practitioner;
-            self.type_dropdown_open = self.current_field == FormField::Type;
+            self.practitioner_select.set_focus(self.current_field == FormField::Practitioner);
+            self.type_select.set_focus(self.current_field == FormField::Type);
 
             let moved_to_patient_field = self.current_field == FormField::Patient;
             self.patient_search_active = moved_to_patient_field;
 
-            // Sync calendar when entering date field
             if self.current_field == FormField::Date {
-                if let Ok(date) = NaiveDate::parse_from_str(&self.date_input, "%Y-%m-%d") {
+                if let Ok(date) = NaiveDate::parse_from_str(self.date_input.value(), "%Y-%m-%d") {
                     self.date_calendar = MonthCalendar::new(date);
                 }
             }
