@@ -4,7 +4,6 @@
 //! general practice management system designed for Australian healthcare providers.
 
 // Top-level modules
-pub mod app;
 pub mod config;
 pub mod error;
 
@@ -15,7 +14,6 @@ pub mod infrastructure;
 pub mod integrations;
 pub mod ui;
 
-// Re-exports for convenience
-pub use app::App;
+
 pub use config::Config;
 pub use error::Error;
