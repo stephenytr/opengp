@@ -4,7 +4,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Tabs as RatatuiTabs};
 use tuirealm::{
     command::{Cmd, CmdResult, Direction},
-    event::{Key, KeyEvent, KeyModifiers},
+    event::{Key, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind},
     AttrValue, Attribute, Component, Event, MockComponent, NoUserEvent, Props, State, StateValue,
 };
 
@@ -159,8 +159,42 @@ impl Component<Msg, NoUserEvent> for RealmTabs {
                     None
                 }
             }
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(_),
+                column,
+                ..
+            }) => self.handle_tab_click(column),
             _ => None,
         }
+    }
+}
+
+impl RealmTabs {
+    fn handle_tab_click(&mut self, column: u16) -> Option<Msg> {
+        if self.component.titles.is_empty() {
+            return None;
+        }
+
+        let area = self.component.last_area;
+        let tab_count = self.component.titles.len();
+
+        let available_width = area.width.saturating_sub(2);
+        let tab_width = (available_width / tab_count as u16).max(1);
+
+        let tabs_start = area.x + 1;
+
+        for i in 0..tab_count {
+            let tab_start = tabs_start + (i as u16 * tab_width);
+            let tab_end = tab_start + tab_width;
+
+            if column >= tab_start && column < tab_end {
+                if i != self.component.selected {
+                    self.component.selected = i;
+                    return Some(Msg::NavigateToTab(i));
+                }
+            }
+        }
+        None
     }
 }
 
@@ -172,6 +206,7 @@ struct TabsWidget {
     normal_style: Style,
     selected_style: Style,
     highlight_style: Style,
+    last_area: Rect,
 }
 
 impl TabsWidget {
@@ -209,6 +244,8 @@ impl TabsWidget {
 
 impl MockComponent for TabsWidget {
     fn view(&mut self, frame: &mut tuirealm::Frame, area: Rect) {
+        self.last_area = area;
+
         if self.titles.is_empty() {
             return;
         }
