@@ -5,9 +5,9 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders};
 use sqlx::SqlitePool;
-use tuirealm::{
-    Application, EventListenerCfg, Frame, NoUserEvent, PollStrategy,
-};
+use tuirealm::{Application, EventListenerCfg, Frame, NoUserEvent, PollStrategy};
+
+use crossterm::event::{Event, poll, KeyEvent, KeyCode};
 
 use crate::config::Config;
 use crate::domain::appointment::{
@@ -167,10 +167,18 @@ impl App {
         while !self.should_quit {
             tui.draw(|f| self.render(f))?;
 
-            let msgs = self.inner.tick(PollStrategy::UpTo(10));
+            // Always tick tui-realm first to process any pending component events
+            let msgs = self.inner.tick(PollStrategy::UpTo(1));
             if let Ok(msgs) = msgs {
                 for msg in msgs {
                     self.handle_msg(msg);
+                }
+            }
+
+            // Then poll for new events and handle navigation keys directly
+            if poll(Duration::ZERO).unwrap_or(false) {
+                if let Ok(Event::Key(key)) = crossterm::event::read() {
+                    self.handle_navigation_key(key);
                 }
             }
 
@@ -188,6 +196,49 @@ impl App {
         while m.is_some() {
             m = self.update(m);
         }
+    }
+
+    fn handle_navigation_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Tab => {
+                self.tabs.next();
+                self.active_screen = Screen::from_index(self.tabs.selected());
+            }
+            KeyCode::BackTab => {
+                self.tabs.previous();
+                self.active_screen = Screen::from_index(self.tabs.selected());
+            }
+            KeyCode::Right => {
+                self.tabs.next();
+                self.active_screen = Screen::from_index(self.tabs.selected());
+            }
+            KeyCode::Left => {
+                self.tabs.previous();
+                self.active_screen = Screen::from_index(self.tabs.selected());
+            }
+            KeyCode::Char('1') => {
+                self.tabs.select(0);
+                self.active_screen = Screen::Patients;
+            }
+            KeyCode::Char('2') => {
+                self.tabs.select(1);
+                self.active_screen = Screen::Appointments;
+            }
+            KeyCode::Char('3') => {
+                self.tabs.select(2);
+                self.active_screen = Screen::Clinical;
+            }
+            KeyCode::Char('4') => {
+                self.tabs.select(3);
+                self.active_screen = Screen::Billing;
+            }
+            KeyCode::Char('q') => {
+                self.should_quit = true;
+            }
+            _ => return, // Not a navigation key, ignore
+        }
+        // Navigation changed, update focus
+        self.update_focus();
     }
 
     async fn init_components(&mut self) -> Result<()> {
@@ -212,7 +263,18 @@ impl App {
     }
 
     fn update_focus(&mut self) {
-        self.inner.active(&Id::Navigation).ok();
+        match self.active_screen {
+            Screen::Patients => {
+                if self.show_patient_form {
+                    self.inner.active(&Id::PatientForm).ok();
+                } else {
+                    self.inner.active(&Id::PatientList).ok();
+                }
+            }
+            _ => {
+                self.inner.active(&Id::Navigation).ok();
+            }
+        }
     }
 
     fn update(&mut self, msg: Option<Msg>) -> Option<Msg> {

@@ -378,7 +378,7 @@ impl MockComponent for TabsWidget {
             return;
         }
 
-        let focus = self.get_focus();
+        let focus = true;
 
         let tab_titles: Vec<Line> = self
             .titles
