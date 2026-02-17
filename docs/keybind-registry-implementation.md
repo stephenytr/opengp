@@ -1,12 +1,47 @@
 # Keybind Registry Implementation
 
 **Date**: 2026-02-13  
+**Updated**: 2026-02-17  
 **Status**: Complete  
 **File**: `src/ui/keybinds.rs`
 
 ## Overview
 
-Created a centralized keybind registry module that serves as the single source of truth for all 111 keyboard bindings across the OpenGP TUI application.
+Created a centralized keybind registry module that serves as a single source of truth for all 111 keyboard bindings across the OpenGP TUI application. The registry now includes **lookup capabilities** for dispatching key events to actions.
+
+## New in Phase 1 (2026-02-17)
+
+### Lookup API Added
+
+The registry now supports key event lookup for centralized dispatch:
+
+```rust
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use opengp::ui::keybinds::{KeybindRegistry, KeybindContext};
+
+// Look up action by key event
+let key = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::empty());
+if let Some(action) = KeybindRegistry::lookup_action(&KeybindContext::CalendarDayView, key) {
+    println!("Action: {}", action); // "New"
+}
+
+// Get full details: (action, description, implemented)
+let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::empty());
+if let Some((action, desc, implemented)) = KeybindRegistry::lookup_keybind(&KeybindContext::PatientList, key) {
+    if implemented {
+        println!("{}: {}", action, desc);
+    }
+}
+
+// Check if key has a binding
+let key = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::empty());
+if KeybindRegistry::has_keybind(&KeybindContext::PatientList, key) {
+    // Handle key
+}
+
+// Get all implemented actions
+let actions = KeybindRegistry::get_implemented_actions(&KeybindContext::PatientList);
+```
 
 ## Implementation Summary
 

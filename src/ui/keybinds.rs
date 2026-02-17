@@ -27,7 +27,7 @@
 //! // Returns: "j/k/↑↓: Nav  g/G: First/Last  n: New  /: Search  Esc: Clear"
 //! ```
 
-use crossterm::event::{KeyCode, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Represents the different contexts where keybinds apply
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -238,6 +238,64 @@ impl KeybindRegistry {
     /// Format a keybind for display
     pub fn format_keybind(kb: &Keybind) -> String {
         format!("{}: {}", Self::format_key(&kb.key, kb.modifiers), kb.action)
+    }
+
+    /// Look up a keybind by key event in a specific context
+    pub fn lookup_action(context: &KeybindContext, key: KeyEvent) -> Option<&'static str> {
+        Self::lookup_keybind(context, key).map(|(action, _, _)| action)
+    }
+
+    /// Look up full keybind details: (action, description, implemented)
+    pub fn lookup_keybind(
+        context: &KeybindContext,
+        key: KeyEvent,
+    ) -> Option<(&'static str, &'static str, bool)> {
+        let keybinds = Self::get_keybinds(context.clone());
+
+        for kb in &keybinds {
+            if kb.key == key.code && kb.modifiers == key.modifiers {
+                return Some((kb.action, kb.description, kb.implemented));
+            }
+        }
+
+        if let KeyCode::Char(c) = key.code {
+            let lower_c = c.to_ascii_lowercase();
+            let upper_c = c.to_ascii_uppercase();
+
+            if !key.modifiers.contains(KeyModifiers::SHIFT) {
+                for kb in &keybinds {
+                    if let KeyCode::Char(kb_c) = kb.key {
+                        let kb_lower = kb_c.to_ascii_lowercase();
+                        let kb_upper = kb_c.to_ascii_uppercase();
+
+                        if (kb_lower == lower_c && kb_lower == kb_c)
+                            || (kb_upper == upper_c && kb_upper == kb_c)
+                        {
+                            if kb.modifiers.is_empty() || kb.modifiers == KeyModifiers::SHIFT {
+                                return Some((kb.action, kb.description, kb.implemented));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Check if a key event matches any registered keybind in a context
+    pub fn has_keybind(context: &KeybindContext, key: KeyEvent) -> bool {
+        Self::lookup_action(context, key).is_some()
+    }
+
+    /// Get all implemented action names for a context
+    pub fn get_implemented_actions(context: &KeybindContext) -> Vec<&'static str> {
+        let keybinds = Self::get_keybinds(context.clone());
+        keybinds
+            .iter()
+            .filter(|kb| kb.implemented)
+            .map(|kb| kb.action)
+            .collect()
     }
 
     // --- Context-specific keybind definitions ---
@@ -668,5 +726,90 @@ mod tests {
             !enter_keybind.implemented,
             "Enter in patient list should be marked as unimplemented"
         );
+    }
+
+    #[test]
+    fn test_lookup_action_exact_match() {
+        let key = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::empty());
+        let action = KeybindRegistry::lookup_action(&KeybindContext::PatientList, key);
+        assert_eq!(action, Some("New"));
+    }
+
+    #[test]
+    fn test_lookup_action_case_insensitive() {
+        // Lowercase should match lowercase
+        let key_lower = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::empty());
+        assert_eq!(
+            KeybindRegistry::lookup_action(&KeybindContext::PatientList, key_lower),
+            Some("New")
+        );
+
+        // Uppercase should also match (case-insensitive for letters)
+        let key_upper = KeyEvent::new(KeyCode::Char('N'), KeyModifiers::empty());
+        assert_eq!(
+            KeybindRegistry::lookup_action(&KeybindContext::PatientList, key_upper),
+            Some("New")
+        );
+    }
+
+    #[test]
+    fn test_lookup_action_with_modifiers() {
+        let key = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        let action = KeybindRegistry::lookup_action(&KeybindContext::Global, key);
+        assert_eq!(action, Some("Quit"));
+    }
+
+    #[test]
+    fn test_lookup_action_not_found() {
+        let key = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::empty());
+        let action = KeybindRegistry::lookup_action(&KeybindContext::PatientList, key);
+        assert_eq!(action, None);
+    }
+
+    #[test]
+    fn test_lookup_keybind_returns_details() {
+        let key = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::empty());
+        let result = KeybindRegistry::lookup_keybind(&KeybindContext::PatientList, key);
+
+        assert!(result.is_some());
+        let (action, description, implemented) = result.unwrap();
+        assert_eq!(action, "New");
+        assert_eq!(description, "New patient");
+        assert!(implemented);
+    }
+
+    #[test]
+    fn test_lookup_keybind_unimplemented() {
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::empty());
+        let result = KeybindRegistry::lookup_keybind(&KeybindContext::PatientList, key);
+
+        assert!(result.is_some());
+        let (action, description, implemented) = result.unwrap();
+        assert_eq!(action, "View");
+        assert!(!implemented, "Enter should be marked as unimplemented");
+    }
+
+    #[test]
+    fn test_has_keybind() {
+        let key = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::empty());
+        assert!(KeybindRegistry::has_keybind(
+            &KeybindContext::PatientList,
+            key
+        ));
+
+        let unknown_key = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::empty());
+        assert!(!KeybindRegistry::has_keybind(
+            &KeybindContext::PatientList,
+            unknown_key
+        ));
+    }
+
+    #[test]
+    fn test_get_implemented_actions() {
+        let actions = KeybindRegistry::get_implemented_actions(&KeybindContext::PatientList);
+
+        assert!(actions.contains(&"New"));
+        assert!(actions.contains(&"Edit"));
+        assert!(!actions.contains(&"View"), "View is unimplemented");
     }
 }
