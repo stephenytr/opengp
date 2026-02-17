@@ -1,6 +1,7 @@
 use color_eyre::Result;
 use opengp::infrastructure::database::{create_pool, run_migrations};
-use opengp::{App, Config};
+use opengp::ui::App;
+use opengp::Config;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
