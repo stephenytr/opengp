@@ -176,6 +176,12 @@ impl App {
                 }
             }
 
+            if poll(Duration::ZERO).unwrap_or(false) {
+                if let Ok(Event::Key(key)) = crossterm::event::read() {
+                    EventDispatcher::handle_navigation_key(self, key);
+                }
+            }
+
             if self.should_quit {
                 break;
             }
