@@ -224,6 +224,26 @@ impl Component for ClinicalComponent {
                 self.current_view = ClinicalView::SocialHistoryEditor;
                 Ok(Some(Action::Render))
             }
+            Action::ClinicalConsultationCreate(patient_id) => {
+                self.current_view = ClinicalView::ConsultationEditor(patient_id);
+                Ok(Some(Action::Render))
+            }
+            Action::ClinicalVitalSignsRecord(patient_id) => {
+                self.current_view = ClinicalView::VitalSignsEditor;
+                Ok(Some(Action::Render))
+            }
+            Action::ClinicalAllergyAdd(patient_id) => {
+                self.current_view = ClinicalView::AllergyEditor(None);
+                Ok(Some(Action::Render))
+            }
+            Action::ClinicalMedicalHistoryAdd(patient_id) => {
+                self.current_view = ClinicalView::MedicalHistoryEditor(None);
+                Ok(Some(Action::Render))
+            }
+            Action::ClinicalFamilyHistoryAdd(patient_id) => {
+                self.current_view = ClinicalView::FamilyHistoryEditor(None);
+                Ok(Some(Action::Render))
+            }
             _ => Ok(None),
         }
     }
