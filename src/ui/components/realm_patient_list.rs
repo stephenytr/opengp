@@ -1,6 +1,6 @@
-use ratatui::layout::Rect;
+use ratatui::layout::{Alignment, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::widgets::{Block, Borders, Cell, Row, Table, TableState};
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState};
 use tuirealm::{
     command::{Cmd, CmdResult, Direction},
     event::{Key, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind},
@@ -157,6 +157,10 @@ impl RealmPatientList {
         &self.search_query
     }
 
+    pub fn render(&mut self, frame: &mut tuirealm::Frame, area: Rect) {
+        self.component.view(frame, area);
+    }
+
     fn apply_filter(&mut self) {
         if self.search_query.is_empty() {
             self.filtered_patients = self.all_patients.clone();
@@ -195,7 +199,7 @@ impl Component<Msg, NoUserEvent> for RealmPatientList {
 }
 
 impl RealmPatientList {
-    fn handle_keyboard(&mut self, key_event: KeyEvent) -> Option<Msg> {
+    pub fn handle_keyboard(&mut self, key_event: KeyEvent) -> Option<Msg> {
         let key = key_event.code;
         let modifiers = key_event.modifiers;
 
@@ -422,6 +426,16 @@ impl MockComponent for PatientListWidget {
         self.last_area = area;
 
         if self.patients.is_empty() {
+            let block = Block::default().borders(Borders::ALL).title(" Patients ");
+            let inner = block.inner(area);
+            frame.render_widget(block, area);
+
+            let empty_msg = ratatui::widgets::Paragraph::new(
+                "No patients found.\n\nPress 'n' to add a new patient.",
+            )
+            .style(Style::default().fg(Color::Gray))
+            .alignment(ratatui::layout::Alignment::Center);
+            frame.render_widget(empty_msg, inner);
             return;
         }
 

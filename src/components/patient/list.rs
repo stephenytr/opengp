@@ -8,7 +8,8 @@ use ratatui::Frame;
 use crate::components::{Action, Component};
 use crate::domain::patient::{Patient, PatientService};
 use crate::error::Result;
-use crate::ui::keybinds::KeybindContext;
+use crate::ui::key_dispatcher::KeyDispatcher;
+use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
 use crate::ui::widgets::{is_click, is_scroll_down, is_scroll_up, table_row_from_click, HelpModal};
 use std::sync::Arc;
 
@@ -206,6 +207,7 @@ impl Component for PatientListComponent {
     }
 
     fn handle_key_events(&mut self, key: KeyEvent) -> Action {
+        // Handle help modal first
         if self.showing_help_modal {
             match key.code {
                 KeyCode::Esc | KeyCode::Char('?') => {
@@ -216,27 +218,58 @@ impl Component for PatientListComponent {
             }
         }
 
+        // Handle search mode separately (different from registry)
         if self.search_mode {
             return self.handle_search_input(key);
         }
 
+        // Try dispatcher first for registered keybinds
+        if let Some(action) = KeyDispatcher::dispatch(&KeybindContext::PatientList, key) {
+            // Get the action name to determine which state change to perform
+            let action_name = KeybindRegistry::lookup_action(&KeybindContext::PatientList, key);
+
+            match action_name {
+                Some("Next") => {
+                    self.select_next();
+                    return Action::Render;
+                }
+                Some("Previous") => {
+                    self.select_previous();
+                    return Action::Render;
+                }
+                Some("First") => {
+                    self.select_first();
+                    return Action::Render;
+                }
+                Some("Last") => {
+                    self.select_last();
+                    return Action::Render;
+                }
+                Some("Edit") => {
+                    if let Some(patient) = self.selected_patient() {
+                        return Action::PatientEdit(patient.id);
+                    }
+                    return Action::None;
+                }
+                Some("Search") => {
+                    self.enter_search_mode();
+                    return Action::Render;
+                }
+                Some("Clear") => {
+                    if !self.search_query.is_empty() {
+                        self.search_query.clear();
+                        self.apply_search_filter();
+                        return Action::Render;
+                    }
+                    return Action::None;
+                }
+                // "New" returns Action::PatientCreate directly from dispatcher
+                _ => return action,
+            }
+        }
+
+        // Handle special cases not in registry (like Enter key for future view)
         match key.code {
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.select_next();
-                Action::Render
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.select_previous();
-                Action::Render
-            }
-            KeyCode::Char('g') => {
-                self.select_first();
-                Action::Render
-            }
-            KeyCode::Char('G') => {
-                self.select_last();
-                Action::Render
-            }
             KeyCode::Enter => {
                 // TODO: Implement patient detail view
                 // When implemented, this will navigate to a read-only patient detail screen
@@ -244,31 +277,6 @@ impl Component for PatientListComponent {
                 // For now, this keybind is disabled to avoid confusion.
                 if let Some(_patient) = self.selected_patient() {
                     Action::None
-                } else {
-                    Action::None
-                }
-            }
-            KeyCode::Char('n') => Action::PatientCreate,
-            KeyCode::Char('e') => {
-                if let Some(patient) = self.selected_patient() {
-                    Action::PatientEdit(patient.id)
-                } else {
-                    Action::None
-                }
-            }
-            KeyCode::Char('/') => {
-                self.enter_search_mode();
-                Action::Render
-            }
-            KeyCode::Char('?') => {
-                self.showing_help_modal = true;
-                Action::Render
-            }
-            KeyCode::Esc => {
-                if !self.search_query.is_empty() {
-                    self.search_query.clear();
-                    self.apply_search_filter();
-                    Action::Render
                 } else {
                     Action::None
                 }

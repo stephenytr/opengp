@@ -95,6 +95,28 @@ impl RealmTabs {
         self.component.selected = index;
     }
 
+    pub fn next(&mut self) {
+        let count = self.component.titles.len();
+        self.component.selected = (self.component.selected + 1) % count;
+    }
+
+    pub fn previous(&mut self) {
+        let count = self.component.titles.len();
+        if count > 0 {
+            self.component.selected = if self.component.selected == 0 {
+                count - 1
+            } else {
+                self.component.selected - 1
+            };
+        }
+    }
+
+    pub fn select(&mut self, index: usize) {
+        if index < self.component.titles.len() {
+            self.component.selected = index;
+        }
+    }
+
     pub fn keybinds(&self) -> &[Keybind] {
         &self.keybinds
     }

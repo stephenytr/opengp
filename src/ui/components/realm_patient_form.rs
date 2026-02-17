@@ -138,6 +138,10 @@ impl RealmPatientForm {
         self.editing_patient_id.is_some()
     }
 
+    pub fn render(&mut self, frame: &mut tuirealm::Frame, area: Rect) {
+        self.component.view(frame, area);
+    }
+
     pub fn get_form_data(&self) -> Option<FormData> {
         let field = FormField::all()[self.current_field];
         let value = self.component.get_field_value(&field);
@@ -261,7 +265,7 @@ impl Component<Msg, NoUserEvent> for RealmPatientForm {
 }
 
 impl RealmPatientForm {
-    fn handle_keyboard(&mut self, key_event: KeyEvent) -> Option<Msg> {
+    pub fn handle_keyboard(&mut self, key_event: KeyEvent) -> Option<Msg> {
         if self.is_submitting {
             return None;
         }

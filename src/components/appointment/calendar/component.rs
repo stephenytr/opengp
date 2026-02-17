@@ -17,6 +17,7 @@ use crate::domain::audit::AuditAction;
 use crate::domain::patient::PatientService;
 use crate::domain::user::{Practitioner, PractitionerService};
 use crate::error::Result;
+use crate::ui::key_dispatcher::KeyDispatcher;
 use crate::ui::keybinds::{KeybindContext, KeybindRegistry};
 use crate::ui::widgets::{
     is_click, is_scroll_down, is_scroll_up, HelpModal, ModalState, ModalType,
@@ -2480,104 +2481,212 @@ impl AppointmentCalendarComponent {
     }
 
     fn handle_month_view_keys(&mut self, key: KeyEvent) -> Action {
-        match key.code {
-            KeyCode::Up => {
-                self.previous_day();
-                Action::Render
+        if KeyDispatcher::is_handled(&KeybindContext::CalendarMonthView, key) {
+            if let Some(action_name) =
+                KeybindRegistry::lookup_action(&KeybindContext::CalendarMonthView, key)
+            {
+                match action_name {
+                    "Week Up" => {
+                        let current_date = NaiveDate::from_ymd_opt(
+                            self.calendar_state.current_month_start.year(),
+                            self.calendar_state.current_month_start.month(),
+                            self.calendar_state.selected_month_day,
+                        )
+                        .unwrap_or(self.calendar_state.current_month_start);
+                        let new_date = current_date - chrono::Duration::days(7);
+                        self.calendar_state.current_month_start =
+                            NaiveDate::from_ymd_opt(new_date.year(), new_date.month(), 1)
+                                .expect("first day of month is always valid");
+                        self.calendar_state.selected_month_day = new_date.day().min(
+                            CalendarRenderer::days_in_month(new_date.year(), new_date.month()),
+                        );
+                        return Action::Render;
+                    }
+                    "Week Down" => {
+                        let current_date = NaiveDate::from_ymd_opt(
+                            self.calendar_state.current_month_start.year(),
+                            self.calendar_state.current_month_start.month(),
+                            self.calendar_state.selected_month_day,
+                        )
+                        .unwrap_or(self.calendar_state.current_month_start);
+                        let new_date = current_date + chrono::Duration::days(7);
+                        self.calendar_state.current_month_start =
+                            NaiveDate::from_ymd_opt(new_date.year(), new_date.month(), 1)
+                                .expect("first day of month is always valid");
+                        self.calendar_state.selected_month_day = new_date.day().min(
+                            CalendarRenderer::days_in_month(new_date.year(), new_date.month()),
+                        );
+                        return Action::Render;
+                    }
+                    "Day Back" => {
+                        self.previous_day();
+                        return Action::Render;
+                    }
+                    "Day Forward" => {
+                        self.next_day();
+                        return Action::Render;
+                    }
+                    "Month Back" => {
+                        self.previous_month();
+                        return Action::Render;
+                    }
+                    "Month Forward" => {
+                        self.next_month();
+                        return Action::Render;
+                    }
+                    "Today" => {
+                        self.jump_to_today();
+                        return Action::Render;
+                    }
+                    "Day View" => {
+                        self.calendar_state.focus_area = FocusArea::DayView;
+                        return Action::Render;
+                    }
+                    "New" => {
+                        return Action::AppointmentCreate;
+                    }
+                    _ => {}
+                }
             }
-            KeyCode::Down => {
-                self.next_day();
-                Action::Render
-            }
-            KeyCode::Char('h') => {
-                self.previous_month();
-                Action::Render
-            }
-            KeyCode::Char('l') => {
-                self.next_month();
-                Action::Render
-            }
-            KeyCode::Char('t') => {
-                self.jump_to_today();
-                Action::Render
-            }
-            KeyCode::Enter | KeyCode::Tab => {
-                self.calendar_state.focus_area = FocusArea::DayView;
-                Action::Render
-            }
-            KeyCode::Char('n') => Action::AppointmentCreate,
-            _ => Action::None,
         }
+
+        Action::None
     }
 
     fn handle_day_view_keys(&mut self, key: KeyEvent) -> Action {
-        match key.code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.clear_undo_if_expired();
-                self.previous_time_slot();
-                Action::Render
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.clear_undo_if_expired();
-                self.next_time_slot();
-                Action::Render
-            }
-            KeyCode::Tab => {
-                self.clear_undo_stack();
-                self.calendar_state.focus_area = FocusArea::MonthView;
-                Action::Render
-            }
-            KeyCode::Esc => {
-                self.clear_undo_stack();
-                self.calendar_state.focus_area = FocusArea::MonthView;
-                Action::Render
-            }
-            KeyCode::Enter => {
-                if let Some(selected_slot) = self.calendar_state.time_slot_state.selected() {
-                    if let Some(practitioner) = self.get_selected_practitioner() {
-                        if let Some(appt) =
-                            self.find_appointment_for_slot(practitioner.id, selected_slot)
-                        {
-                            self.detail_data.appointment_id = Some(appt.id);
-                            self.detail_data.showing = true;
-                            return Action::Render;
-                        }
+        let context = match self.calendar_state.view_mode {
+            ViewMode::Day => KeybindContext::CalendarDayView,
+            ViewMode::Week => KeybindContext::CalendarWeekView,
+        };
+
+        if KeyDispatcher::is_handled(&context, key) {
+            if let Some(action_name) = KeybindRegistry::lookup_action(&context, key) {
+                match action_name {
+                    "Up" => {
+                        self.clear_undo_if_expired();
+                        self.previous_time_slot();
+                        return Action::Render;
                     }
+                    "Down" => {
+                        self.clear_undo_if_expired();
+                        self.next_time_slot();
+                        return Action::Render;
+                    }
+                    "Month" => {
+                        self.clear_undo_stack();
+                        self.calendar_state.focus_area = FocusArea::MonthView;
+                        return Action::Render;
+                    }
+                    "Details" => {
+                        if let Some(selected_slot) =
+                            self.calendar_state.time_slot_state.selected()
+                        {
+                            if let Some(practitioner) = self.get_selected_practitioner() {
+                                if let Some(appt) =
+                                    self.find_appointment_for_slot(practitioner.id, selected_slot)
+                                {
+                                    self.detail_data.appointment_id = Some(appt.id);
+                                    self.detail_data.showing = true;
+                                    return Action::Render;
+                                }
+                            }
+                        }
+                        return Action::None;
+                    }
+                    "Arrived" => {
+                        return self.initiate_status_change(AppointmentStatus::Arrived);
+                    }
+                    "In Progress" => {
+                        return self.initiate_status_change(AppointmentStatus::InProgress);
+                    }
+                    "Completed" => {
+                        return self.initiate_status_change(AppointmentStatus::Completed);
+                    }
+                    "No Show" => {
+                        return self.initiate_status_change(AppointmentStatus::NoShow);
+                    }
+                    "New" => {
+                        return Action::AppointmentCreate;
+                    }
+                    "Week" => {
+                        self.calendar_state.view_mode = match self.calendar_state.view_mode {
+                            ViewMode::Day => ViewMode::Week,
+                            ViewMode::Week => ViewMode::Day,
+                        };
+                        return Action::Render;
+                    }
+                    "Day" => {
+                        self.calendar_state.view_mode = ViewMode::Day;
+                        return Action::Render;
+                    }
+                    "Search" => {
+                        self.search_data.showing = true;
+                        self.search_data.query.clear();
+                        self.search_data.results.clear();
+                        self.search_data.selected_index = 0;
+                        return Action::Render;
+                    }
+                    "Filter" => {
+                        self.filter_state.showing_filter_menu = true;
+                        return Action::Render;
+                    }
+                    "Practitioner" => {
+                        self.filter_state.showing_practitioner_menu = true;
+                        return Action::Render;
+                    }
+                    "Multi-Select" => {
+                        self.history_state.multi_select_mode =
+                            !self.history_state.multi_select_mode;
+                        if !self.history_state.multi_select_mode {
+                            self.history_state.selected_appointments.clear();
+                        }
+                        tracing::info!(
+                            "Multi-select mode: {}",
+                            if self.history_state.multi_select_mode {
+                                "ON"
+                            } else {
+                                "OFF"
+                            }
+                        );
+                        return Action::Render;
+                    }
+                    "Undo" => {
+                        return self.handle_undo();
+                    }
+                    "Week Back" => {
+                        self.calendar_state.week_start_date -= chrono::Duration::days(7);
+                        return Action::Render;
+                    }
+                    "Week Forward" => {
+                        self.calendar_state.week_start_date += chrono::Duration::days(7);
+                        return Action::Render;
+                    }
+                    _ => {}
                 }
-                Action::None
             }
-            KeyCode::Char('a') => self.initiate_status_change(AppointmentStatus::Arrived),
-            KeyCode::Char('i') => self.initiate_status_change(AppointmentStatus::InProgress),
-            KeyCode::Char('c') => self.initiate_status_change(AppointmentStatus::Completed),
-            KeyCode::Char('x') | KeyCode::Char('X') => {
-                self.initiate_status_change(AppointmentStatus::NoShow)
-            }
-            KeyCode::Char('n') => Action::AppointmentCreate,
-            KeyCode::Char('v') => {
-                self.calendar_state.view_mode = match self.calendar_state.view_mode {
-                    ViewMode::Day => ViewMode::Week,
-                    ViewMode::Week => ViewMode::Day,
-                };
-                Action::Render
-            }
+        }
+
+        match key.code {
             KeyCode::Left if key.modifiers.contains(KeyModifiers::SHIFT) => {
                 self.calendar_state.week_start_date -= chrono::Duration::days(7);
-                Action::Render
+                return Action::Render;
             }
             KeyCode::Right if key.modifiers.contains(KeyModifiers::SHIFT) => {
                 self.calendar_state.week_start_date += chrono::Duration::days(7);
-                Action::Render
+                return Action::Render;
             }
             KeyCode::Left if !key.modifiers.contains(KeyModifiers::SHIFT) => {
                 self.previous_practitioner_column();
-                Action::Render
+                return Action::Render;
             }
             KeyCode::Right if !key.modifiers.contains(KeyModifiers::SHIFT) => {
                 self.next_practitioner_column();
-                Action::Render
+                return Action::Render;
             }
-            _ => Action::None,
+            _ => {}
         }
+
+        Action::None
     }
 
     fn is_any_modal_active(&self) -> bool {

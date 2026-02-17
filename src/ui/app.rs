@@ -8,6 +8,7 @@ use sqlx::SqlitePool;
 use tuirealm::{
     Application, EventListenerCfg, Frame, NoUserEvent, PollStrategy,
 };
+use crossterm::event::{Event, poll};
 
 use crate::config::Config;
 use crate::domain::appointment::{
@@ -26,9 +27,11 @@ use crate::infrastructure::database::repositories::{
 };
 
 use super::component_id::Id;
-use super::components::RealmTabs;
+use super::components::{RealmPatientList, RealmPatientForm, RealmTabs};
 use super::msg::Msg;
 use super::tui::Tui;
+
+use crate::domain::patient::Patient;
 
 pub struct App {
     inner: Application<Id, Msg, NoUserEvent>,
@@ -36,6 +39,11 @@ pub struct App {
     should_quit: bool,
     active_screen: Screen,
     tabs: RealmTabs,
+    // Patient screen state
+    patients: Vec<Patient>,
+    patient_list: RealmPatientList,
+    show_patient_form: bool,
+    patient_form: Option<RealmPatientForm>,
 }
 
 pub struct Services {
@@ -84,6 +92,12 @@ impl App {
                 .titles(vec!["Patients", "Appointments", "Clinical", "Billing"])
                 .selected(0)
                 .build(),
+            patients: Vec::new(),
+            patient_list: RealmPatientList::builder()
+                .with_keybinds()
+                .build(),
+            show_patient_form: false,
+            patient_form: None,
         })
     }
 
@@ -154,11 +168,80 @@ impl App {
         while !self.should_quit {
             tui.draw(|f| self.render(f))?;
 
-            if let Ok(msgs) = self.inner.tick(PollStrategy::Once) {
-                for msg in msgs {
-                    let mut m = Some(msg);
-                    while m.is_some() {
-                        m = self.update(m);
+            // Handle global navigation keys at app level
+            // These should work regardless of which component has focus
+            if poll(Duration::from_millis(10)).unwrap_or(false) {
+                if let Ok(Event::Key(key_event)) = crossterm::event::read() {
+                    // Handle global navigation keys
+                    let handled = match key_event.code {
+                        crossterm::event::KeyCode::Tab => {
+                            self.tabs.next();
+                            self.inner.active(&Id::Navigation).ok();
+                            self.active_screen = Screen::from_index(self.tabs.selected());
+                            true
+                        }
+                        crossterm::event::KeyCode::BackTab => {
+                            self.tabs.previous();
+                            self.inner.active(&Id::Navigation).ok();
+                            self.active_screen = Screen::from_index(self.tabs.selected());
+                            true
+                        }
+                        crossterm::event::KeyCode::Right => {
+                            self.tabs.next();
+                            self.inner.active(&Id::Navigation).ok();
+                            self.active_screen = Screen::from_index(self.tabs.selected());
+                            true
+                        }
+                        crossterm::event::KeyCode::Left => {
+                            self.tabs.previous();
+                            self.inner.active(&Id::Navigation).ok();
+                            self.active_screen = Screen::from_index(self.tabs.selected());
+                            true
+                        }
+                        crossterm::event::KeyCode::Char('1') => {
+                            self.tabs.select(0);
+                            self.inner.active(&Id::Navigation).ok();
+                            self.active_screen = Screen::Patients;
+                            true
+                        }
+                        crossterm::event::KeyCode::Char('2') => {
+                            self.tabs.select(1);
+                            self.inner.active(&Id::Navigation).ok();
+                            self.active_screen = Screen::Appointments;
+                            true
+                        }
+                        crossterm::event::KeyCode::Char('3') => {
+                            self.tabs.select(2);
+                            self.inner.active(&Id::Navigation).ok();
+                            self.active_screen = Screen::Clinical;
+                            true
+                        }
+                        crossterm::event::KeyCode::Char('4') => {
+                            self.tabs.select(3);
+                            self.inner.active(&Id::Navigation).ok();
+                            self.active_screen = Screen::Billing;
+                            true
+                        }
+                        crossterm::event::KeyCode::Char('q') => {
+                            self.should_quit = true;
+                            true
+                        }
+                        _ => false,
+                    };
+
+                    if !handled {
+                        // Let tui-realm handle component-specific events
+                        if let Ok(msgs) = self.inner.tick(PollStrategy::Once) {
+                            for msg in msgs {
+                                let mut m = Some(msg);
+                                while m.is_some() {
+                                    m = self.update(m);
+                                }
+                            }
+                        }
+                    } else {
+                        // Force a re-render after navigation
+                        tui.draw(|f| self.render(f)).ok();
                     }
                 }
             }
@@ -178,10 +261,34 @@ impl App {
             .mount(Id::Navigation, Box::new(self.tabs.clone()), vec![])
             .ok();
 
-        // Set focus to navigation/tabs
-        self.inner.active(&Id::Navigation).ok();
+        // Load patients from service
+        self.patients = self.services.patient_service.list_active_patients().await.unwrap_or_default();
+        self.patient_list.update_patients(self.patients.clone());
+
+        // Mount patient list component
+        self.inner
+            .mount(Id::PatientList, Box::new(self.patient_list.clone()), vec![])
+            .ok();
+
+        // Set focus based on active screen
+        self.update_focus();
 
         Ok(())
+    }
+
+    fn update_focus(&mut self) {
+        match self.active_screen {
+            Screen::Patients => {
+                if self.show_patient_form {
+                    self.inner.active(&Id::PatientForm).ok();
+                } else {
+                    self.inner.active(&Id::PatientList).ok();
+                }
+            }
+            _ => {
+                self.inner.active(&Id::Navigation).ok();
+            }
+        }
     }
 
     fn update(&mut self, msg: Option<Msg>) -> Option<Msg> {
@@ -196,7 +303,45 @@ impl App {
             }
             Msg::NavigateToTab(index) => {
                 self.active_screen = Screen::from_index(index);
+                self.update_focus();
                 None
+            }
+            Msg::PatientCreate => {
+                let form = RealmPatientForm::builder()
+                    .with_keybinds()
+                    .build();
+                self.inner
+                    .mount(Id::PatientForm, Box::new(form.clone()), vec![])
+                    .ok();
+                self.show_patient_form = true;
+                self.patient_form = Some(form);
+                self.update_focus();
+                Some(Msg::Render)
+            }
+            Msg::PatientEdit(patient_id) => {
+                if let Some(patient) = self.patients.iter().find(|p| p.id == patient_id) {
+                    let form = RealmPatientForm::builder()
+                        .patient(patient.clone())
+                        .with_keybinds()
+                        .build();
+                    self.inner
+                        .mount(Id::PatientForm, Box::new(form.clone()), vec![])
+                        .ok();
+                    self.show_patient_form = true;
+                    self.patient_form = Some(form);
+                    self.update_focus();
+                }
+                Some(Msg::Render)
+            }
+            Msg::PatientFormCancel => {
+                self.inner.umount(&Id::PatientForm).ok();
+                self.show_patient_form = false;
+                self.patient_form = None;
+                self.update_focus();
+                Some(Msg::Render)
+            }
+            Msg::PatientSelected(_) => {
+                Some(Msg::Render)
             }
             _ => None,
         }
@@ -245,31 +390,20 @@ impl App {
         }
     }
 
-    fn render_patients(&self, frame: &mut Frame, area: Rect) {
-        let content = ratatui::widgets::Paragraph::new(
-            r#"
-[Search: /]  [New Patient: n]
-
-ID    | Name              | DOB       | Phone
-------|------------------|------------|------------
-0001  | John Smith       | 15/03/80   | 0412 345 678
-0002  | Jane Doe          | 22/07/92   | 0413 456 789
-0003  | Bob Johnson       | 10/11/65   | 0414 567 890
-0004  | Mary Williams     | 05/01/78   | 0415 678 901
-
-[Enter: View/Edit]  [d: Delete]  [Esc: Back]
-"#
-            .trim(),
-        )
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Patients ")
-                .border_style(Style::default().fg(Color::Cyan)),
-        )
-        .style(Style::default().fg(Color::White));
-
-        frame.render_widget(content, area);
+    fn render_patients(&mut self, frame: &mut Frame, area: Rect) {
+        if self.show_patient_form {
+            // Render form in modal-like overlay
+            let overlay_area = Rect {
+                x: area.x + area.width / 4,
+                y: area.y + area.height / 6,
+                width: area.width / 2,
+                height: area.height * 2 / 3,
+            };
+            self.inner.view(&Id::PatientForm, frame, overlay_area);
+        } else {
+            // Render patient list via tui-realm
+            self.inner.view(&Id::PatientList, frame, area);
+        }
     }
 
     fn render_appointments(&self, frame: &mut Frame, area: Rect) {
