@@ -7,7 +7,7 @@ use ratatui::widgets::{Block, Borders};
 use sqlx::SqlitePool;
 use tuirealm::{Application, EventListenerCfg, Frame, NoUserEvent, PollStrategy};
 
-use crossterm::event::{Event, poll, KeyEvent, KeyCode};
+use crossterm::event::{Event, poll};
 
 use crate::config::Config;
 use crate::domain::appointment::{
@@ -27,6 +27,7 @@ use crate::infrastructure::database::repositories::{
 
 use super::component_id::Id;
 use super::components::{RealmPatientList, RealmPatientForm, RealmTabs};
+use super::event_dispatcher::EventDispatcher;
 use super::msg::Msg;
 use super::tui::Tui;
 
@@ -35,13 +36,12 @@ use crate::domain::patient::Patient;
 pub struct App {
     inner: Application<Id, Msg, NoUserEvent>,
     services: Services,
-    should_quit: bool,
-    active_screen: Screen,
-    tabs: RealmTabs,
-    // Patient screen state
+    pub should_quit: bool,
+    pub active_screen: Screen,
+    pub tabs: RealmTabs,
     patients: Vec<Patient>,
-    patient_list: RealmPatientList,
-    show_patient_form: bool,
+    pub patient_list: RealmPatientList,
+    pub show_patient_form: bool,
     patient_form: Option<RealmPatientForm>,
 }
 
@@ -167,18 +167,12 @@ impl App {
         while !self.should_quit {
             tui.draw(|f| self.render(f))?;
 
-            // Always tick tui-realm first to process any pending component events
-            let msgs = self.inner.tick(PollStrategy::UpTo(1));
-            if let Ok(msgs) = msgs {
+            while let Ok(msgs) = self.inner.tick(PollStrategy::UpTo(1)) {
+                if msgs.is_empty() {
+                    break;
+                }
                 for msg in msgs {
                     self.handle_msg(msg);
-                }
-            }
-
-            // Then poll for new events and handle navigation keys directly
-            if poll(Duration::ZERO).unwrap_or(false) {
-                if let Ok(Event::Key(key)) = crossterm::event::read() {
-                    self.handle_navigation_key(key);
                 }
             }
 
@@ -198,47 +192,42 @@ impl App {
         }
     }
 
-    fn handle_navigation_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Tab => {
-                self.tabs.next();
-                self.active_screen = Screen::from_index(self.tabs.selected());
-            }
-            KeyCode::BackTab => {
-                self.tabs.previous();
-                self.active_screen = Screen::from_index(self.tabs.selected());
-            }
-            KeyCode::Right => {
-                self.tabs.next();
-                self.active_screen = Screen::from_index(self.tabs.selected());
-            }
-            KeyCode::Left => {
-                self.tabs.previous();
-                self.active_screen = Screen::from_index(self.tabs.selected());
-            }
-            KeyCode::Char('1') => {
-                self.tabs.select(0);
-                self.active_screen = Screen::Patients;
-            }
-            KeyCode::Char('2') => {
-                self.tabs.select(1);
-                self.active_screen = Screen::Appointments;
-            }
-            KeyCode::Char('3') => {
-                self.tabs.select(2);
-                self.active_screen = Screen::Clinical;
-            }
-            KeyCode::Char('4') => {
-                self.tabs.select(3);
-                self.active_screen = Screen::Billing;
-            }
-            KeyCode::Char('q') => {
-                self.should_quit = true;
-            }
-            _ => return, // Not a navigation key, ignore
-        }
-        // Navigation changed, update focus
+    pub fn handle_patient_create(&mut self) {
+        let form = RealmPatientForm::builder()
+            .with_keybinds()
+            .build();
+        self.inner
+            .mount(Id::PatientForm, Box::new(form.clone()), vec![])
+            .ok();
+        self.show_patient_form = true;
+        self.patient_form = Some(form);
         self.update_focus();
+    }
+
+    pub fn handle_patient_edit(&mut self, patient_id: uuid::Uuid) {
+        if let Some(patient) = self.patients.iter().find(|p| p.id == patient_id) {
+            let form = RealmPatientForm::builder()
+                .patient(patient.clone())
+                .with_keybinds()
+                .build();
+            self.inner
+                .mount(Id::PatientForm, Box::new(form.clone()), vec![])
+                .ok();
+            self.show_patient_form = true;
+            self.patient_form = Some(form);
+            self.update_focus();
+        }
+    }
+
+    pub fn handle_patient_form_cancel(&mut self) {
+        self.inner.umount(&Id::PatientForm).ok();
+        self.show_patient_form = false;
+        self.patient_form = None;
+        self.update_focus();
+    }
+
+    pub fn handle_patient_form_submit(&mut self) {
+        self.handle_patient_form_cancel();
     }
 
     async fn init_components(&mut self) -> Result<()> {
@@ -262,7 +251,7 @@ impl App {
         Ok(())
     }
 
-    fn update_focus(&mut self) {
+    pub fn update_focus(&mut self) {
         match self.active_screen {
             Screen::Patients => {
                 if self.show_patient_form {
