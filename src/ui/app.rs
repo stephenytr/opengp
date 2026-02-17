@@ -8,7 +8,6 @@ use sqlx::SqlitePool;
 use tuirealm::{
     Application, EventListenerCfg, Frame, NoUserEvent, PollStrategy,
 };
-use crossterm::event::{Event, poll};
 
 use crate::config::Config;
 use crate::domain::appointment::{
@@ -79,8 +78,8 @@ impl App {
 
         let inner = Application::init(
             EventListenerCfg::default()
-                .crossterm_input_listener(Duration::from_millis(20), 3)
-                .poll_timeout(Duration::from_millis(10)),
+                .crossterm_input_listener(Duration::from_millis(1), 3)
+                .poll_timeout(Duration::from_millis(1)),
         );
 
         Ok(Self {
@@ -168,81 +167,10 @@ impl App {
         while !self.should_quit {
             tui.draw(|f| self.render(f))?;
 
-            // Handle global navigation keys at app level
-            // These should work regardless of which component has focus
-            if poll(Duration::from_millis(10)).unwrap_or(false) {
-                if let Ok(Event::Key(key_event)) = crossterm::event::read() {
-                    // Handle global navigation keys
-                    let handled = match key_event.code {
-                        crossterm::event::KeyCode::Tab => {
-                            self.tabs.next();
-                            self.inner.active(&Id::Navigation).ok();
-                            self.active_screen = Screen::from_index(self.tabs.selected());
-                            true
-                        }
-                        crossterm::event::KeyCode::BackTab => {
-                            self.tabs.previous();
-                            self.inner.active(&Id::Navigation).ok();
-                            self.active_screen = Screen::from_index(self.tabs.selected());
-                            true
-                        }
-                        crossterm::event::KeyCode::Right => {
-                            self.tabs.next();
-                            self.inner.active(&Id::Navigation).ok();
-                            self.active_screen = Screen::from_index(self.tabs.selected());
-                            true
-                        }
-                        crossterm::event::KeyCode::Left => {
-                            self.tabs.previous();
-                            self.inner.active(&Id::Navigation).ok();
-                            self.active_screen = Screen::from_index(self.tabs.selected());
-                            true
-                        }
-                        crossterm::event::KeyCode::Char('1') => {
-                            self.tabs.select(0);
-                            self.inner.active(&Id::Navigation).ok();
-                            self.active_screen = Screen::Patients;
-                            true
-                        }
-                        crossterm::event::KeyCode::Char('2') => {
-                            self.tabs.select(1);
-                            self.inner.active(&Id::Navigation).ok();
-                            self.active_screen = Screen::Appointments;
-                            true
-                        }
-                        crossterm::event::KeyCode::Char('3') => {
-                            self.tabs.select(2);
-                            self.inner.active(&Id::Navigation).ok();
-                            self.active_screen = Screen::Clinical;
-                            true
-                        }
-                        crossterm::event::KeyCode::Char('4') => {
-                            self.tabs.select(3);
-                            self.inner.active(&Id::Navigation).ok();
-                            self.active_screen = Screen::Billing;
-                            true
-                        }
-                        crossterm::event::KeyCode::Char('q') => {
-                            self.should_quit = true;
-                            true
-                        }
-                        _ => false,
-                    };
-
-                    if !handled {
-                        // Let tui-realm handle component-specific events
-                        if let Ok(msgs) = self.inner.tick(PollStrategy::Once) {
-                            for msg in msgs {
-                                let mut m = Some(msg);
-                                while m.is_some() {
-                                    m = self.update(m);
-                                }
-                            }
-                        }
-                    } else {
-                        // Force a re-render after navigation
-                        tui.draw(|f| self.render(f)).ok();
-                    }
+            let msgs = self.inner.tick(PollStrategy::UpTo(10));
+            if let Ok(msgs) = msgs {
+                for msg in msgs {
+                    self.handle_msg(msg);
                 }
             }
 
@@ -253,6 +181,13 @@ impl App {
 
         tui.exit()?;
         Ok(())
+    }
+
+    fn handle_msg(&mut self, msg: Msg) {
+        let mut m = Some(msg);
+        while m.is_some() {
+            m = self.update(m);
+        }
     }
 
     async fn init_components(&mut self) -> Result<()> {
@@ -277,18 +212,7 @@ impl App {
     }
 
     fn update_focus(&mut self) {
-        match self.active_screen {
-            Screen::Patients => {
-                if self.show_patient_form {
-                    self.inner.active(&Id::PatientForm).ok();
-                } else {
-                    self.inner.active(&Id::PatientList).ok();
-                }
-            }
-            _ => {
-                self.inner.active(&Id::Navigation).ok();
-            }
-        }
+        self.inner.active(&Id::Navigation).ok();
     }
 
     fn update(&mut self, msg: Option<Msg>) -> Option<Msg> {
