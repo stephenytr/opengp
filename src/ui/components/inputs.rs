@@ -33,6 +33,19 @@ impl InputWrapper {
         self
     }
 
+    pub fn init_value(mut self, value: &str) -> Self {
+        self.value = value.to_string();
+        self
+    }
+
+    pub fn push_char(&mut self, c: char) {
+        self.value.push(c);
+    }
+
+    pub fn pop_char(&mut self) {
+        self.value.pop();
+    }
+
     pub fn is_focused(&self) -> bool {
         self.is_focused
     }

@@ -13,6 +13,7 @@ use crate::domain::patient::{
     Address, Gender, NewPatientData, Patient, PatientService, UpdatePatientData,
 };
 use crate::error::Result;
+use crate::ui::components::{InputWrapper, SelectWrapper};
 use crate::ui::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,14 +61,14 @@ pub struct PatientFormComponent {
     editing_patient_id: Option<Uuid>,
     current_field: usize,
     scroll_offset: usize,
-    first_name: String,
-    last_name: String,
-    date_of_birth: String,
-    gender_index: usize,
-    medicare_number: String,
-    medicare_irn: String,
-    phone_mobile: String,
-    email: String,
+    first_name: InputWrapper,
+    last_name: InputWrapper,
+    date_of_birth: InputWrapper,
+    gender: SelectWrapper,
+    medicare_number: InputWrapper,
+    medicare_irn: InputWrapper,
+    phone_mobile: InputWrapper,
+    email: InputWrapper,
     validation_errors: Vec<String>,
     is_submitting: bool,
     form_area: Option<Rect>,
@@ -80,14 +81,19 @@ impl PatientFormComponent {
             editing_patient_id: None,
             current_field: 0,
             scroll_offset: 0,
-            first_name: String::new(),
-            last_name: String::new(),
-            date_of_birth: String::new(),
-            gender_index: 0,
-            medicare_number: String::new(),
-            medicare_irn: String::new(),
-            phone_mobile: String::new(),
-            email: String::new(),
+            first_name: InputWrapper::new(),
+            last_name: InputWrapper::new(),
+            date_of_birth: InputWrapper::new(),
+            gender: SelectWrapper::new().items(vec![
+                "Male".to_string(),
+                "Female".to_string(),
+                "Other".to_string(),
+                "Prefer not to say".to_string(),
+            ]),
+            medicare_number: InputWrapper::new(),
+            medicare_irn: InputWrapper::new(),
+            phone_mobile: InputWrapper::new(),
+            email: InputWrapper::new(),
             validation_errors: Vec::new(),
             is_submitting: false,
             form_area: None,
@@ -102,22 +108,35 @@ impl PatientFormComponent {
             Gender::PreferNotToSay => 3,
         };
 
+        let mut gender = SelectWrapper::new().items(vec![
+            "Male".to_string(),
+            "Female".to_string(),
+            "Other".to_string(),
+            "Prefer not to say".to_string(),
+        ]);
+        gender.set_selected(gender_index);
+
         Self {
             patient_service,
             editing_patient_id: Some(patient.id),
             current_field: 0,
             scroll_offset: 0,
-            first_name: patient.first_name,
-            last_name: patient.last_name,
-            date_of_birth: patient.date_of_birth.format("%d/%m/%Y").to_string(),
-            gender_index,
-            medicare_number: patient.medicare_number.unwrap_or_default(),
-            medicare_irn: patient
-                .medicare_irn
-                .map(|i| i.to_string())
-                .unwrap_or_default(),
-            phone_mobile: patient.phone_mobile.unwrap_or_default(),
-            email: patient.email.unwrap_or_default(),
+            first_name: InputWrapper::new().init_value(&patient.first_name),
+            last_name: InputWrapper::new().init_value(&patient.last_name),
+            date_of_birth: InputWrapper::new()
+                .init_value(&patient.date_of_birth.format("%d/%m/%Y").to_string()),
+            gender,
+            medicare_number: InputWrapper::new()
+                .init_value(&patient.medicare_number.unwrap_or_default()),
+            medicare_irn: InputWrapper::new().init_value(
+                &patient
+                    .medicare_irn
+                    .map(|i| i.to_string())
+                    .unwrap_or_default(),
+            ),
+            phone_mobile: InputWrapper::new()
+                .init_value(&patient.phone_mobile.unwrap_or_default()),
+            email: InputWrapper::new().init_value(&patient.email.unwrap_or_default()),
             validation_errors: Vec::new(),
             is_submitting: false,
             form_area: None,
@@ -131,17 +150,18 @@ impl PatientFormComponent {
     fn validate(&mut self) -> bool {
         self.validation_errors.clear();
 
-        if self.first_name.trim().is_empty() {
+        if self.first_name.value().trim().is_empty() {
             self.validation_errors
                 .push("First name is required".to_string());
         }
 
-        if self.last_name.trim().is_empty() {
+        if self.last_name.value().trim().is_empty() {
             self.validation_errors
                 .push("Last name is required".to_string());
         }
 
-        if self.date_of_birth.trim().is_empty() {
+        let dob_str = self.date_of_birth.value();
+        if dob_str.trim().is_empty() {
             self.validation_errors
                 .push("Date of birth is required".to_string());
         } else if self.parse_date().is_none() {
@@ -149,14 +169,16 @@ impl PatientFormComponent {
                 .push("Date of birth must be in DD/MM/YYYY format".to_string());
         }
 
-        if !self.medicare_number.is_empty() && self.medicare_number.len() != 10 {
+        let medicare = self.medicare_number.value();
+        if !medicare.is_empty() && medicare.len() != 10 {
             self.validation_errors
                 .push("Medicare number must be 10 digits".to_string());
         }
 
-        if !self.medicare_irn.is_empty() {
-            if let Ok(irn) = self.medicare_irn.parse::<u8>() {
-                if !(1..=9).contains(&irn) {
+        let irn = self.medicare_irn.value();
+        if !irn.is_empty() {
+            if let Ok(irn_val) = irn.parse::<u8>() {
+                if !(1..=9).contains(&irn_val) {
                     self.validation_errors
                         .push("Medicare IRN must be between 1 and 9".to_string());
                 }
@@ -170,7 +192,7 @@ impl PatientFormComponent {
     }
 
     fn parse_date(&self) -> Option<NaiveDate> {
-        let parts: Vec<&str> = self.date_of_birth.split('/').collect();
+        let parts: Vec<&str> = self.date_of_birth.value().split('/').collect();
         if parts.len() != 3 {
             return None;
         }
@@ -186,79 +208,10 @@ impl PatientFormComponent {
         FormField::all()[self.current_field]
     }
 
-    fn get_field_value(&self, field: FormField) -> String {
-        match field {
-            FormField::FirstName => self.first_name.clone(),
-            FormField::LastName => self.last_name.clone(),
-            FormField::DateOfBirth => self.date_of_birth.clone(),
-            FormField::Gender => self.gender_names()[self.gender_index].to_string(),
-            FormField::MedicareNumber => self.medicare_number.clone(),
-            FormField::MedicareIrn => self.medicare_irn.clone(),
-            FormField::PhoneMobile => self.phone_mobile.clone(),
-            FormField::Email => self.email.clone(),
-        }
-    }
-
-    fn handle_input(&mut self, c: char) {
-        match self.current_field() {
-            FormField::FirstName => self.first_name.push(c),
-            FormField::LastName => self.last_name.push(c),
-            FormField::DateOfBirth => {
-                if c.is_ascii_digit() || c == '/' {
-                    self.date_of_birth.push(c);
-                }
-            }
-            FormField::Gender => {}
-            FormField::MedicareNumber => {
-                if c.is_ascii_digit() && self.medicare_number.len() < 10 {
-                    self.medicare_number.push(c);
-                }
-            }
-            FormField::MedicareIrn => {
-                if c.is_ascii_digit() && self.medicare_irn.is_empty() {
-                    self.medicare_irn.push(c);
-                }
-            }
-            FormField::PhoneMobile => {
-                if c.is_ascii_digit() || c == ' ' || c == '+' {
-                    self.phone_mobile.push(c);
-                }
-            }
-            FormField::Email => self.email.push(c),
-        }
-    }
-
-    fn handle_backspace(&mut self) {
-        match self.current_field() {
-            FormField::FirstName => {
-                self.first_name.pop();
-            }
-            FormField::LastName => {
-                self.last_name.pop();
-            }
-            FormField::DateOfBirth => {
-                self.date_of_birth.pop();
-            }
-            FormField::Gender => {}
-            FormField::MedicareNumber => {
-                self.medicare_number.pop();
-            }
-            FormField::MedicareIrn => {
-                self.medicare_irn.pop();
-            }
-            FormField::PhoneMobile => {
-                self.phone_mobile.pop();
-            }
-            FormField::Email => {
-                self.email.pop();
-            }
-        }
-    }
-
     fn next_field(&mut self) {
         let fields = FormField::all();
         self.current_field = (self.current_field + 1) % fields.len();
-        self.adjust_scroll();
+        self.update_focus();
     }
 
     fn prev_field(&mut self) {
@@ -268,7 +221,30 @@ impl PatientFormComponent {
         } else {
             self.current_field -= 1;
         }
+        self.update_focus();
+    }
+
+    fn update_focus(&mut self) {
         self.adjust_scroll();
+        self.first_name.set_focus(false);
+        self.last_name.set_focus(false);
+        self.date_of_birth.set_focus(false);
+        self.gender.set_focus(false);
+        self.medicare_number.set_focus(false);
+        self.medicare_irn.set_focus(false);
+        self.phone_mobile.set_focus(false);
+        self.email.set_focus(false);
+
+        match self.current_field() {
+            FormField::FirstName => self.first_name.set_focus(true),
+            FormField::LastName => self.last_name.set_focus(true),
+            FormField::DateOfBirth => self.date_of_birth.set_focus(true),
+            FormField::Gender => self.gender.set_focus(true),
+            FormField::MedicareNumber => self.medicare_number.set_focus(true),
+            FormField::MedicareIrn => self.medicare_irn.set_focus(true),
+            FormField::PhoneMobile => self.phone_mobile.set_focus(true),
+            FormField::Email => self.email.set_focus(true),
+        }
     }
 
     fn adjust_scroll(&mut self) {
@@ -281,30 +257,91 @@ impl PatientFormComponent {
         }
     }
 
-    fn gender_names(&self) -> Vec<&str> {
-        vec!["Male", "Female", "Other", "Prefer not to say"]
-    }
-
-    fn next_gender(&mut self) {
-        let genders = self.gender_names();
-        self.gender_index = (self.gender_index + 1) % genders.len();
-    }
-
-    fn prev_gender(&mut self) {
-        let genders = self.gender_names();
-        if self.gender_index == 0 {
-            self.gender_index = genders.len() - 1;
-        } else {
-            self.gender_index -= 1;
+    fn get_selected_gender(&self) -> Gender {
+        match self.gender.selected_index() {
+            Some(0) => Gender::Male,
+            Some(1) => Gender::Female,
+            Some(2) => Gender::Other,
+            _ => Gender::PreferNotToSay,
         }
     }
 
-    fn get_selected_gender(&self) -> Gender {
-        match self.gender_index {
-            0 => Gender::Male,
-            1 => Gender::Female,
-            2 => Gender::Other,
-            _ => Gender::PreferNotToSay,
+    fn get_input_mut(&mut self, field: FormField) -> Option<&mut InputWrapper> {
+        match field {
+            FormField::FirstName => Some(&mut self.first_name),
+            FormField::LastName => Some(&mut self.last_name),
+            FormField::DateOfBirth => Some(&mut self.date_of_birth),
+            FormField::MedicareNumber => Some(&mut self.medicare_number),
+            FormField::MedicareIrn => Some(&mut self.medicare_irn),
+            FormField::PhoneMobile => Some(&mut self.phone_mobile),
+            FormField::Email => Some(&mut self.email),
+            FormField::Gender => None,
+        }
+    }
+
+    fn get_field_display_value(&self, field: FormField, is_current: bool) -> String {
+        match field {
+            FormField::FirstName => {
+                let v = self.first_name.value();
+                if is_current && !v.is_empty() {
+                    format!("{} █", v)
+                } else {
+                    v.to_string()
+                }
+            }
+            FormField::LastName => {
+                let v = self.last_name.value();
+                if is_current && !v.is_empty() {
+                    format!("{} █", v)
+                } else {
+                    v.to_string()
+                }
+            }
+            FormField::DateOfBirth => {
+                let v = self.date_of_birth.value();
+                if is_current && !v.is_empty() {
+                    format!("{} █", v)
+                } else {
+                    v.to_string()
+                }
+            }
+            FormField::Gender => self
+                .gender
+                .selected()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "Select...".to_string()),
+            FormField::MedicareNumber => {
+                let v = self.medicare_number.value();
+                if is_current && !v.is_empty() {
+                    format!("{} █", v)
+                } else {
+                    v.to_string()
+                }
+            }
+            FormField::MedicareIrn => {
+                let v = self.medicare_irn.value();
+                if is_current && !v.is_empty() {
+                    format!("{} █", v)
+                } else {
+                    v.to_string()
+                }
+            }
+            FormField::PhoneMobile => {
+                let v = self.phone_mobile.value();
+                if is_current && !v.is_empty() {
+                    format!("{} █", v)
+                } else {
+                    v.to_string()
+                }
+            }
+            FormField::Email => {
+                let v = self.email.value();
+                if is_current && !v.is_empty() {
+                    format!("{} █", v)
+                } else {
+                    v.to_string()
+                }
+            }
         }
     }
 
@@ -316,40 +353,40 @@ impl PatientFormComponent {
         self.is_submitting = true;
 
         let dob = self.parse_date().unwrap();
-        let medicare_irn = if self.medicare_irn.is_empty() {
+        let medicare_irn = if self.medicare_irn.value().is_empty() {
             None
         } else {
-            self.medicare_irn.parse::<u8>().ok()
+            self.medicare_irn.value().parse::<u8>().ok()
         };
 
         if let Some(patient_id) = self.editing_patient_id {
             let data = UpdatePatientData {
                 ihi: None,
-                medicare_number: if self.medicare_number.is_empty() {
+                medicare_number: if self.medicare_number.value().is_empty() {
                     None
                 } else {
-                    Some(self.medicare_number.clone())
+                    Some(self.medicare_number.value().to_string())
                 },
                 medicare_irn,
                 medicare_expiry: None,
                 title: None,
-                first_name: Some(self.first_name.clone()),
+                first_name: Some(self.first_name.value().to_string()),
                 middle_name: None,
-                last_name: Some(self.last_name.clone()),
+                last_name: Some(self.last_name.value().to_string()),
                 preferred_name: None,
                 date_of_birth: Some(dob),
                 gender: Some(self.get_selected_gender()),
                 address: None,
                 phone_home: None,
-                phone_mobile: if self.phone_mobile.is_empty() {
+                phone_mobile: if self.phone_mobile.value().is_empty() {
                     None
                 } else {
-                    Some(self.phone_mobile.clone())
+                    Some(self.phone_mobile.value().to_string())
                 },
-                email: if self.email.is_empty() {
+                email: if self.email.value().is_empty() {
                     None
                 } else {
-                    Some(self.email.clone())
+                    Some(self.email.value().to_string())
                 },
                 emergency_contact: None,
                 concession_type: None,
@@ -375,31 +412,31 @@ impl PatientFormComponent {
 
         let data = NewPatientData {
             ihi: None,
-            medicare_number: if self.medicare_number.is_empty() {
+            medicare_number: if self.medicare_number.value().is_empty() {
                 None
             } else {
-                Some(self.medicare_number.clone())
+                Some(self.medicare_number.value().to_string())
             },
             medicare_irn,
             medicare_expiry: None,
             title: None,
-            first_name: self.first_name.clone(),
+            first_name: self.first_name.value().to_string(),
             middle_name: None,
-            last_name: self.last_name.clone(),
+            last_name: self.last_name.value().to_string(),
             preferred_name: None,
             date_of_birth: dob,
             gender: self.get_selected_gender(),
             address: Address::default(),
             phone_home: None,
-            phone_mobile: if self.phone_mobile.is_empty() {
+            phone_mobile: if self.phone_mobile.value().is_empty() {
                 None
             } else {
-                Some(self.phone_mobile.clone())
+                Some(self.phone_mobile.value().to_string())
             },
-            email: if self.email.is_empty() {
+            email: if self.email.value().is_empty() {
                 None
             } else {
-                Some(self.email.clone())
+                Some(self.email.value().to_string())
             },
             emergency_contact: None,
             concession_type: None,
@@ -427,6 +464,7 @@ impl PatientFormComponent {
 #[async_trait]
 impl Component for PatientFormComponent {
     async fn init(&mut self) -> Result<()> {
+        self.update_focus();
         Ok(())
     }
 
@@ -435,7 +473,6 @@ impl Component for PatientFormComponent {
             return Action::None;
         }
 
-        // Handle Ctrl+S or F10 to submit
         if (key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL))
             || key.code == KeyCode::F(10)
         {
@@ -454,28 +491,28 @@ impl Component for PatientFormComponent {
             }
             KeyCode::Up => {
                 if matches!(self.current_field(), FormField::Gender) {
-                    self.prev_gender();
-                    Action::Render
-                } else {
-                    self.prev_field();
-                    Action::Render
+                    self.gender.previous();
                 }
+                self.prev_field();
+                Action::Render
             }
             KeyCode::Down => {
                 if matches!(self.current_field(), FormField::Gender) {
-                    self.next_gender();
-                    Action::Render
-                } else {
-                    self.next_field();
-                    Action::Render
+                    self.gender.next();
                 }
+                self.next_field();
+                Action::Render
             }
             KeyCode::Char(c) => {
-                self.handle_input(c);
+                if let Some(input) = self.get_input_mut(self.current_field()) {
+                    input.push_char(c);
+                }
                 Action::Render
             }
             KeyCode::Backspace => {
-                self.handle_backspace();
+                if let Some(input) = self.get_input_mut(self.current_field()) {
+                    input.pop_char();
+                }
                 Action::Render
             }
             _ => Action::None,
@@ -561,6 +598,7 @@ impl Component for PatientFormComponent {
                     && row < field_area.y + field_area.height
                 {
                     self.current_field = *field_idx;
+                    self.update_focus();
                     return Action::Render;
                 }
             }
@@ -644,13 +682,7 @@ impl Component for PatientFormComponent {
 
         for (render_idx, (field_idx, field)) in visible_fields.iter().enumerate() {
             let is_current = *field_idx == self.current_field;
-            let value = self.get_field_value(*field);
-
-            let display_value = if is_current {
-                format!("{} █", value)
-            } else {
-                value
-            };
+            let value = self.get_field_display_value(*field, is_current);
 
             let style = if is_current {
                 Style::default()
@@ -660,7 +692,7 @@ impl Component for PatientFormComponent {
                 Style::default().fg(Color::White)
             };
 
-            let paragraph = Paragraph::new(display_value)
+            let paragraph = Paragraph::new(value)
                 .style(style)
                 .block(Block::default().borders(Borders::ALL).title(field.label()));
 
