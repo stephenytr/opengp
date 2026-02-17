@@ -31,7 +31,7 @@ pub fn render_patient_overview(component: &mut ClinicalComponent, frame: &mut Fr
     let right_chunk = chunks[1];
 
     render_patient_summary(component, frame, left_chunk);
-    render_recent_consultations(component, frame, right_chunk);
+    render_clinical_options(component, frame, right_chunk);
 }
 
 fn render_patient_summary(component: &mut ClinicalComponent, frame: &mut Frame, area: Rect) {
@@ -83,7 +83,7 @@ fn render_patient_summary(component: &mut ClinicalComponent, frame: &mut Frame, 
     lines.push(Line::from(Span::raw("")));
     lines.push(Line::from(vec![
         Span::raw("⚠️ ALLERGIES: "),
-        Span::styled("Press F4 to manage", Style::default().fg(Color::DarkGray)),
+        Span::styled("Press F4", Style::default().fg(Color::DarkGray)),
     ]));
 
     for allergy in &component.allergies {
@@ -104,29 +104,168 @@ fn render_patient_summary(component: &mut ClinicalComponent, frame: &mut Frame, 
         ]));
     }
 
+    if component.allergies.is_empty() {
+        lines.push(Line::from(vec![Span::raw("  No known allergies")]));
+    }
+
     lines.push(Line::from(Span::raw("")));
     lines.push(Line::from(vec![
         Span::raw("ACTIVE CONDITIONS: "),
-        Span::styled("Press F5 to manage", Style::default().fg(Color::DarkGray)),
+        Span::styled("Press F5", Style::default().fg(Color::DarkGray)),
     ]));
 
-    for history in &component.medical_history {
-        if history.is_active {
+    let active_conditions: Vec<_> = component
+        .medical_history
+        .iter()
+        .filter(|h| h.is_active)
+        .collect();
+    for history in &active_conditions {
+        lines.push(Line::from(vec![
+            Span::raw("  • "),
+            Span::raw(&history.condition),
+            Span::raw(" ("),
+            Span::raw(format!("{:?}", history.status)),
+            Span::raw(")"),
+        ]));
+    }
+
+    if active_conditions.is_empty() {
+        lines.push(Line::from(vec![Span::raw("  No active conditions")]));
+    }
+
+    let paragraph = Paragraph::new(lines).block(Block::default());
+    frame.render_widget(paragraph, inner);
+}
+
+fn render_clinical_options(component: &mut ClinicalComponent, frame: &mut Frame, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Clinical Options ");
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut lines = Vec::new();
+
+    lines.push(Line::from(Span::styled(
+        " QUICK ACTIONS ",
+        Style::default().add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(Span::raw("")));
+    lines.push(Line::from(vec![
+        Span::styled(
+            "  [F2] ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("Consultations - View/Edit clinical notes"),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled(
+            "  [F2] ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("Vital Signs - BP, HR, temperature, weight"),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled(
+            "  [F3] ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("Consultations - View/Edit clinical notes"),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled(
+            "  [F4] ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("Allergies - Manage patient allergies"),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled(
+            "  [F5] ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("Medical History - Conditions & diagnoses"),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled(
+            "  [f]  ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("Family History - Hereditary conditions"),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled(
+            "  [s]  ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("Social History - Smoking, alcohol, lifestyle"),
+    ]));
+
+    lines.push(Line::from(Span::raw("")));
+    lines.push(Line::from(Span::styled(
+        " RECENT CONSULTATIONS ",
+        Style::default().add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(Span::raw("")));
+
+    if component.consultations.is_empty() {
+        lines.push(Line::from(vec![Span::raw("  No consultations yet")]));
+    } else {
+        lines.push(Line::from(vec![
+            Span::styled(
+                " Date       ",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Status   ", Style::default().add_modifier(Modifier::BOLD)),
+        ]));
+
+        for consultation in component.consultations.iter().take(5) {
+            let status = if consultation.is_signed {
+                Span::styled("Signed", Style::default().fg(Color::Green))
+            } else {
+                Span::styled("Draft", Style::default().fg(Color::Yellow))
+            };
+
             lines.push(Line::from(vec![
-                Span::raw("  • "),
-                Span::raw(&history.condition),
-                Span::raw(" ("),
-                Span::raw(format!("{:?}", history.status)),
-                Span::raw(")"),
+                Span::raw("  "),
+                Span::raw(
+                    consultation
+                        .consultation_date
+                        .format("%d/%m/%Y")
+                        .to_string(),
+                ),
+                Span::raw("  "),
+                status,
             ]));
         }
     }
 
+    lines.push(Line::from(Span::raw("")));
+    lines.push(Line::from(Span::styled(
+        " VITAL SIGNS ",
+        Style::default().add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(Span::raw("")));
+
     if let Some(ref vitals) = component.latest_vitals {
-        lines.push(Line::from(Span::raw("")));
         lines.push(Line::from(vec![
-            Span::raw("LATEST VITALS: "),
-            Span::raw(vitals.measured_at.format("%d/%m/%Y").to_string()),
+            Span::raw("  Recorded: "),
+            Span::raw(vitals.measured_at.format("%d/%m/%Y %H:%M").to_string()),
         ]));
 
         let mut vitals_str = Vec::new();
@@ -139,59 +278,72 @@ fn render_patient_summary(component: &mut ClinicalComponent, frame: &mut Frame, 
         if let Some(temp) = vitals.temperature {
             vitals_str.push(format!("Temp: {:.1}°C", temp));
         }
+        if let Some(rr) = vitals.respiratory_rate {
+            vitals_str.push(format!("RR: {}/min", rr));
+        }
         if let Some(bmi) = vitals.bmi {
             vitals_str.push(format!("BMI: {:.1}", bmi));
         }
 
         if !vitals_str.is_empty() {
-            lines.push(Line::from(Span::raw(vitals_str.join("  "))));
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::raw(vitals_str.join("  |  ")),
+            ]));
+        }
+    } else {
+        lines.push(Line::from(vec![
+            Span::raw("  No vital signs recorded"),
+            Span::raw(" "),
+            Span::styled("[v] to add", Style::default().fg(Color::DarkGray)),
+        ]));
+    }
+
+    lines.push(Line::from(Span::raw("")));
+    lines.push(Line::from(Span::styled(
+        " FAMILY HISTORY ",
+        Style::default().add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(Span::raw("")));
+
+    if component.family_history.is_empty() {
+        lines.push(Line::from(vec![
+            Span::raw("  No family history recorded"),
+            Span::raw(" "),
+            Span::styled("[f] to add", Style::default().fg(Color::DarkGray)),
+        ]));
+    } else {
+        for fh in component.family_history.iter().take(3) {
+            lines.push(Line::from(vec![
+                Span::raw("  • "),
+                Span::raw(&fh.condition),
+                Span::raw(" ("),
+                Span::raw(format!("{:?}", fh.relative_relationship)),
+                Span::raw(")"),
+            ]));
         }
     }
 
-    let paragraph = Paragraph::new(lines).block(Block::default());
-    frame.render_widget(paragraph, inner);
-}
+    lines.push(Line::from(Span::raw("")));
+    lines.push(Line::from(Span::styled(
+        " SOCIAL HISTORY ",
+        Style::default().add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(Span::raw("")));
 
-fn render_recent_consultations(component: &mut ClinicalComponent, frame: &mut Frame, area: Rect) {
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Recent Consultations ");
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    if component.consultations.is_empty() {
-        let msg = Paragraph::new(Span::raw("No consultations yet."))
-            .style(Style::default().fg(Color::DarkGray));
-        frame.render_widget(msg, inner);
-        return;
-    }
-
-    let mut lines = Vec::new();
-    lines.push(Line::from(vec![
-        Span::styled(
-            " Date       ",
-            Style::default().add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" Status   ", Style::default().add_modifier(Modifier::BOLD)),
-    ]));
-
-    for consultation in component.consultations.iter().take(5) {
-        let status = if consultation.is_signed {
-            Span::styled("Signed", Style::default().fg(Color::Green))
-        } else {
-            Span::styled("Draft", Style::default().fg(Color::Yellow))
-        };
-
+    if let Some(ref sh) = component.social_history {
         lines.push(Line::from(vec![
-            Span::raw(
-                consultation
-                    .consultation_date
-                    .format("%d/%m/%Y")
-                    .to_string(),
-            ),
-            Span::raw("  "),
-            status,
+            Span::raw("  Smoking: "),
+            Span::raw(format!("{:?}", sh.smoking_status)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::raw("  Alcohol: "),
+            Span::raw(format!("{:?}", sh.alcohol_status)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::raw("  No social history recorded"),
+            Span::raw(" "),
+            Span::styled("[s] to add", Style::default().fg(Color::DarkGray)),
         ]));
     }
 
