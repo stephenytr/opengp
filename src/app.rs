@@ -3,24 +3,19 @@
 //! The App struct coordinates all components, manages application state,
 //! and handles the main event loop.
 
-use crate::components::appointment::{AppointmentCalendarComponent, AppointmentFormComponent};
-use crate::components::clinical::ClinicalComponent;
+use crate::components::appointment::AppointmentFormComponent;
 use crate::components::patient::{PatientFormComponent, PatientListComponent};
 use crate::components::{Action, Component};
 use crate::config::Config;
-use crate::domain::appointment::{
-    AppointmentCalendarQuery, AppointmentRepository, AppointmentService,
-};
+use crate::domain::appointment::{AppointmentRepository, AppointmentService};
 use crate::domain::audit::{AuditRepository, AuditService};
-use crate::domain::clinical::ClinicalService;
 use crate::domain::patient::{PatientRepository, PatientService};
 use crate::domain::user::{PractitionerRepository, PractitionerService};
 use crate::error::Result;
 use crate::infrastructure::crypto::EncryptionService;
 use crate::infrastructure::database::repositories::{
-    SqlxAllergyRepository, SqlxAppointmentRepository, SqlxAuditRepository, SqlxClinicalRepository,
-    SqlxFamilyHistoryRepository, SqlxMedicalHistoryRepository, SqlxPatientRepository,
-    SqlxPractitionerRepository, SqlxSocialHistoryRepository, SqlxVitalSignsRepository,
+    SqlxAppointmentRepository, SqlxAuditRepository, SqlxPatientRepository,
+    SqlxPractitionerRepository,
 };
 use crate::ui::event::EventHandler;
 use crate::ui::tui::Tui;
@@ -41,7 +36,6 @@ use crate::ui::widgets::is_click;
 pub enum Screen {
     Patients,
     Appointments,
-    Clinical,
     Billing,
 }
 
@@ -50,18 +44,12 @@ impl Screen {
         match self {
             Screen::Patients => "Patients",
             Screen::Appointments => "Appointments",
-            Screen::Clinical => "Clinical",
             Screen::Billing => "Billing",
         }
     }
 
     pub fn all() -> Vec<Screen> {
-        vec![
-            Screen::Patients,
-            Screen::Appointments,
-            Screen::Clinical,
-            Screen::Billing,
-        ]
+        vec![Screen::Patients, Screen::Appointments, Screen::Billing]
     }
 }
 
@@ -75,14 +63,11 @@ pub struct App {
     patient_service: Arc<PatientService>,
     appointment_service: Arc<AppointmentService>,
     practitioner_service: Arc<crate::domain::user::PractitionerService>,
-    clinical_service: Arc<ClinicalService>,
     should_quit: bool,
     active_screen: Screen,
     patient_component: Option<Box<dyn Component>>,
     patient_form_component: Option<Box<dyn Component>>,
-    appointment_component: Option<Box<dyn Component>>,
     appointment_form_component: Option<Box<dyn Component>>,
-    clinical_component: Option<Box<dyn Component>>,
     billing_component: Option<Box<dyn Component>>,
     action_tx: UnboundedSender<Action>,
     action_rx: UnboundedReceiver<Action>,
@@ -109,7 +94,7 @@ impl App {
 
         let appointment_repo = Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
         let appointment_repository: Arc<dyn AppointmentRepository> = appointment_repo.clone();
-        let appointment_calendar_query: Arc<dyn AppointmentCalendarQuery> = appointment_repo;
+        let appointment_calendar_query: Arc<dyn crate::domain::appointment::AppointmentCalendarQuery> = appointment_repo;
         let appointment_service = Arc::new(AppointmentService::new(
             appointment_repository,
             audit_service.clone(),
@@ -121,56 +106,17 @@ impl App {
             Arc::new(SqlxPractitionerRepository::new(db_pool.clone()));
         let practitioner_service = Arc::new(PractitionerService::new(practitioner_repository));
 
-        // Initialize clinical repositories and service
-        let consultation_repo: Arc<dyn crate::domain::clinical::ConsultationRepository> =
-            Arc::new(SqlxClinicalRepository::new(db_pool.clone(), crypto.clone()));
-        let allergy_repo: Arc<dyn crate::domain::clinical::AllergyRepository> =
-            Arc::new(SqlxAllergyRepository::new(db_pool.clone(), crypto.clone()));
-        let medical_history_repo: Arc<dyn crate::domain::clinical::MedicalHistoryRepository> =
-            Arc::new(SqlxMedicalHistoryRepository::new(
-                db_pool.clone(),
-                crypto.clone(),
-            ));
-        let vital_signs_repo: Arc<dyn crate::domain::clinical::VitalSignsRepository> = Arc::new(
-            SqlxVitalSignsRepository::new(db_pool.clone(), crypto.clone()),
-        );
-        let social_history_repo: Arc<dyn crate::domain::clinical::SocialHistoryRepository> =
-            Arc::new(SqlxSocialHistoryRepository::new(
-                db_pool.clone(),
-                crypto.clone(),
-            ));
-        let family_history_repo: Arc<dyn crate::domain::clinical::FamilyHistoryRepository> =
-            Arc::new(SqlxFamilyHistoryRepository::new(
-                db_pool.clone(),
-                crypto.clone(),
-            ));
-
-        let clinical_service = Arc::new(ClinicalService::new(
-            consultation_repo,
-            allergy_repo,
-            medical_history_repo,
-            vital_signs_repo,
-            social_history_repo,
-            family_history_repo,
-            patient_service.clone(),
-            audit_service,
-            crypto,
-        ));
-
         Ok(Self {
             config,
             db_pool,
             patient_service,
             appointment_service,
             practitioner_service,
-            clinical_service,
             should_quit: false,
             active_screen: Screen::Patients,
             patient_component: None,
             patient_form_component: None,
-            appointment_component: None,
             appointment_form_component: None,
-            clinical_component: None,
             billing_component: None,
             action_tx,
             action_rx,
@@ -243,19 +189,6 @@ impl App {
         patient_list.init().await?;
         self.patient_component = Some(Box::new(patient_list));
 
-        let mut appointment_calendar = AppointmentCalendarComponent::new(
-            self.appointment_service.clone(),
-            self.practitioner_service.clone(),
-            self.patient_service.clone(),
-        );
-        appointment_calendar.init().await?;
-        self.appointment_component = Some(Box::new(appointment_calendar));
-
-        let mut clinical =
-            ClinicalComponent::new(self.clinical_service.clone(), self.patient_service.clone());
-        clinical.init().await?;
-        self.clinical_component = Some(Box::new(clinical));
-
         Ok(())
     }
 
@@ -283,8 +216,7 @@ impl App {
                 match key.code {
                     KeyCode::Char('1') => Action::NavigateToPatients,
                     KeyCode::Char('2') => Action::NavigateToAppointments,
-                    KeyCode::Char('3') => Action::NavigateToClinical,
-                    KeyCode::Char('4') => Action::NavigateToBilling,
+                    KeyCode::Char('3') => Action::NavigateToBilling,
                     _ => Action::None,
                 }
             }
@@ -306,7 +238,7 @@ impl App {
                         && row >= tabs_area.y
                         && row < tabs_area.y + tabs_area.height
                     {
-                        let titles = ["Patients", "Appointments", "Clinical", "Billing"];
+                        let titles = ["Patients", "Appointments", "Billing"];
                         let block_padding = 1;
                         let inner_x = tabs_area.x + block_padding;
                         let inner_width = tabs_area.width.saturating_sub(2 * block_padding);
@@ -322,8 +254,7 @@ impl App {
                                 return match i {
                                     0 => Action::NavigateToPatients,
                                     1 => Action::NavigateToAppointments,
-                                    2 => Action::NavigateToClinical,
-                                    3 => Action::NavigateToBilling,
+                                    2 => Action::NavigateToBilling,
                                     _ => Action::None,
                                 };
                             }
@@ -355,17 +286,6 @@ impl App {
                 info!("Navigating to Appointments");
                 self.active_screen = Screen::Appointments;
                 self.showing_form = false;
-            }
-            Action::NavigateToClinical => {
-                info!("Navigating to Clinical");
-                self.active_screen = Screen::Clinical;
-                self.showing_form = false;
-            }
-            Action::NavigateToClinicalWithPatient(patient_id) => {
-                info!("Navigating to Clinical with patient: {}", patient_id);
-                self.active_screen = Screen::Clinical;
-                self.showing_form = false;
-                return Ok(Some(Action::ClinicalPatientSelect(patient_id)));
             }
             Action::NavigateToBilling => {
                 info!("Navigating to Billing");
@@ -441,9 +361,6 @@ impl App {
                             info!("Appointment form submitted successfully");
                             self.showing_form = false;
                             self.appointment_form_component = None;
-                            if let Some(list_component) = &mut self.appointment_component {
-                                list_component.init().await?;
-                            }
                         } else {
                             self.action_tx.send(new_action)?;
                         }
@@ -478,8 +395,7 @@ impl App {
         let selected = match self.active_screen {
             Screen::Patients => 0,
             Screen::Appointments => 1,
-            Screen::Clinical => 2,
-            Screen::Billing => 3,
+            Screen::Billing => 2,
         };
 
         let tabs = Tabs::new(titles)
@@ -536,8 +452,7 @@ impl App {
     fn get_active_component_mut(&mut self) -> Option<&mut Box<dyn Component>> {
         match self.active_screen {
             Screen::Patients => self.patient_component.as_mut(),
-            Screen::Appointments => self.appointment_component.as_mut(),
-            Screen::Clinical => self.clinical_component.as_mut(),
+            Screen::Appointments => None, // Placeholder - not implemented yet
             Screen::Billing => self.billing_component.as_mut(),
         }
     }

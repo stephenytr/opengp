@@ -1,5 +1,4 @@
 pub mod appointment;
-pub mod clinical;
 pub mod patient;
 
 use async_trait::async_trait;
@@ -19,7 +18,6 @@ pub enum Action {
 
     NavigateToPatients,
     NavigateToAppointments,
-    NavigateToClinical,
     NavigateToBilling,
 
     PatientCreate,
@@ -30,63 +28,11 @@ pub enum Action {
     AppointmentCreate,
     AppointmentFormSubmit,
     AppointmentFormCancel,
-    AppointmentSelect,
-    AppointmentMarkArrived,
-    AppointmentMarkInProgress,
     AppointmentMarkCompleted,
     AppointmentMarkNoShow,
     AppointmentReschedule,
     AppointmentBatchMarkArrived,
     AppointmentBatchMarkCompleted,
-
-    // Clinical navigation
-    ClinicalPatientSelect(Uuid),
-    ClinicalPatientClear,
-    ClinicalSearchPatients(String),
-    NavigateToClinicalWithPatient(Uuid),
-
-    // Consultation actions
-    ClinicalConsultationCreate(Uuid), // patient_id
-    ClinicalConsultationEdit(Uuid),   // consultation_id
-    ClinicalConsultationSign(Uuid),   // consultation_id
-    ClinicalConsultationSave(Uuid),   // Save draft
-    ClinicalConsultationCancel,
-
-    // Allergy actions
-    ClinicalAllergyAdd(Uuid),        // patient_id
-    ClinicalAllergyEdit(Uuid),       // allergy_id
-    ClinicalAllergyDeactivate(Uuid), // allergy_id
-    ClinicalAllergySave,
-    ClinicalAllergyCancel,
-
-    // Vital signs actions
-    ClinicalVitalSignsRecord(Uuid), // patient_id
-    ClinicalVitalSignsSave,
-    ClinicalVitalSignsCancel,
-
-    // History actions
-    ClinicalMedicalHistoryAdd(Uuid),
-    ClinicalMedicalHistoryEdit(Uuid),
-    ClinicalMedicalHistorySave,
-    ClinicalMedicalHistoryCancel,
-
-    ClinicalFamilyHistoryAdd(Uuid),
-    ClinicalFamilyHistoryEdit(Uuid),
-    ClinicalFamilyHistoryDelete(Uuid),
-    ClinicalFamilyHistorySave,
-    ClinicalFamilyHistoryCancel,
-
-    ClinicalSocialHistoryEdit(Uuid),
-    ClinicalSocialHistorySave,
-    ClinicalSocialHistoryCancel,
-
-    // View mode actions
-    ClinicalShowOverview,
-    ClinicalShowConsultations,
-    ClinicalShowAllergies,
-    ClinicalShowMedicalHistory,
-    ClinicalShowFamilyHistory,
-    ClinicalShowSocialHistory,
 }
 
 #[async_trait]

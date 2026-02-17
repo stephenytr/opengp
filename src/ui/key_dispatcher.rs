@@ -60,9 +60,9 @@ impl KeyDispatcher {
             // Calendar day view
             "Up" | "Down" | "Month" | "Week" | "Search" | "Filter" | "Practitioner"
             | "Multi-Select" | "Undo" => Some(Action::Render),
-            "Details" => Some(Action::AppointmentSelect),
-            "Arrived" => Some(Action::AppointmentMarkArrived),
-            "In Progress" => Some(Action::AppointmentMarkInProgress),
+            "Details" => Some(Action::Render),
+            "Arrived" => Some(Action::Render),
+            "In Progress" => Some(Action::Render),
             "Completed" => Some(Action::AppointmentMarkCompleted),
             "No Show" => Some(Action::AppointmentMarkNoShow),
 
@@ -114,7 +114,7 @@ impl KeyDispatcher {
             // Tabs
             "Patients" => Some(Action::NavigateToPatients),
             "Appointments" => Some(Action::NavigateToAppointments),
-            "Clinical" => Some(Action::NavigateToClinical),
+            "Clinical" => Some(Action::Render),
             "Billing" => Some(Action::NavigateToBilling),
             "First" | "Last" => Some(Action::Render),
 

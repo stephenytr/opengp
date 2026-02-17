@@ -12,7 +12,6 @@ pub mod realm_select;
 pub mod realm_tabs;
 pub mod selects;
 pub mod state;
-pub mod tab_view;
 pub mod traits;
 
 pub use buttons::*;
@@ -29,5 +28,4 @@ pub use realm_select::*;
 pub use realm_tabs::*;
 pub use selects::*;
 pub use state::*;
-pub use tab_view::*;
 pub use traits::*;
