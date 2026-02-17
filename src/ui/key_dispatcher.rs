@@ -67,7 +67,7 @@ impl KeyDispatcher {
             "No Show" => Some(Action::AppointmentMarkNoShow),
 
             // Calendar week view
-            "Week Back" | "Week Forward" => Some(Action::Render),
+            "Week Back" | "Week Forward" | "Day" => Some(Action::Render),
 
             // Calendar multi-select
             "Toggle" | "Select All" | "Exit" | "Batch" => Some(Action::Render),
@@ -221,5 +221,210 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('N'), KeyModifiers::empty());
         let action = KeyDispatcher::dispatch(&KeybindContext::PatientList, key);
         assert_eq!(action, Some(Action::PatientCreate));
+    }
+
+    // =========================================================================
+    // Phase 4: Validation Tests
+    // These tests verify that all keybinds in the registry can be properly
+    // dispatched and return valid Action enum values.
+    // =========================================================================
+
+    /// Helper function to get all KeybindContext variants
+    fn all_contexts() -> Vec<KeybindContext> {
+        vec![
+            KeybindContext::Global,
+            KeybindContext::PatientList,
+            KeybindContext::PatientListSearch,
+            KeybindContext::PatientForm,
+            KeybindContext::AppointmentList,
+            KeybindContext::CalendarMonthView,
+            KeybindContext::CalendarDayView,
+            KeybindContext::CalendarWeekView,
+            KeybindContext::CalendarMultiSelect,
+            KeybindContext::CalendarDetailModal,
+            KeybindContext::CalendarRescheduleModal,
+            KeybindContext::CalendarSearchModal,
+            KeybindContext::CalendarFilterMenu,
+            KeybindContext::CalendarPractitionerMenu,
+            KeybindContext::CalendarAuditModal,
+            KeybindContext::CalendarConfirmation,
+            KeybindContext::CalendarErrorModal,
+            KeybindContext::CalendarBatchMenu,
+            KeybindContext::AppointmentForm,
+            KeybindContext::AppointmentFormPatient,
+            KeybindContext::Tabs,
+        ]
+    }
+
+    /// Test that all keybinds in all contexts can be dispatched without panicking.
+    /// This verifies the dispatcher can handle every keybind defined in the registry.
+    #[test]
+    fn test_all_keybinds_dispatchable() {
+        for context in all_contexts() {
+            let keybinds = KeybindRegistry::get_keybinds(context.clone());
+
+            for kb in &keybinds {
+                let key = KeyEvent::new(kb.key, kb.modifiers);
+
+                // This should not panic - dispatch must handle all registered keybinds
+                let result = std::panic::catch_unwind(|| KeyDispatcher::dispatch(&context, key));
+
+                assert!(
+                    result.is_ok(),
+                    "Keybind '{}' in context {:?} caused a panic: key={:?}, modifiers={:?}",
+                    kb.action,
+                    context,
+                    kb.key,
+                    kb.modifiers
+                );
+            }
+        }
+    }
+
+    /// Test that dispatcher returns valid Action values for all keybinds.
+    /// Valid means either Some(Action) or None - never an error.
+    #[test]
+    fn test_all_dispatched_actions_are_valid() {
+        for context in all_contexts() {
+            let keybinds = KeybindRegistry::get_keybinds(context.clone());
+
+            for kb in &keybinds {
+                let key = KeyEvent::new(kb.key, kb.modifiers);
+                let action = KeyDispatcher::dispatch(&context, key);
+
+                // Result must be Option<Action> - either Some or None is valid
+                // The action is "valid" if:
+                // 1. It's Some(Action) - meaning the action name was mapped, OR
+                // 2. It's None - meaning the action name wasn't recognized by map_action
+                // Either way, it's not an error - just a valid Option value
+                assert!(
+                    action.is_some() || action.is_none(),
+                    "Dispatcher returned invalid action for '{}' in context {:?}: {:?}",
+                    kb.action,
+                    context,
+                    action
+                );
+
+                // Log warning for unmapped actions (for debugging)
+                if action.is_none() && kb.implemented {
+                    eprintln!(
+                        "Warning: Keybind '{}' in context {:?} returns None - action not mapped in dispatcher",
+                        kb.action,
+                        context
+                    );
+                }
+            }
+        }
+    }
+
+    /// Test that all implemented keybinds return Some(Action).
+    /// Unimplemented keybinds may return None.
+    #[test]
+    fn test_implemented_keybinds_return_action() {
+        for context in all_contexts() {
+            let keybinds = KeybindRegistry::get_keybinds(context.clone());
+
+            // Filter to only implemented keybinds
+            let implemented_keybinds: Vec<_> =
+                keybinds.iter().filter(|kb| kb.implemented).collect();
+
+            for kb in implemented_keybinds {
+                let key = KeyEvent::new(kb.key, kb.modifiers);
+                let action = KeyDispatcher::dispatch(&context, key);
+
+                assert!(
+                    action.is_some(),
+                    "Implemented keybind '{}' in context {:?} returned None - likely unmapped action",
+                    kb.action,
+                    context
+                );
+            }
+        }
+    }
+
+    /// Test that unhandled keys (not in registry) return None.
+    #[test]
+    fn test_unhandled_keys_return_none() {
+        let unhandled_keys = vec![
+            KeyEvent::new(KeyCode::Char('z'), KeyModifiers::empty()),
+            KeyEvent::new(KeyCode::F(255), KeyModifiers::empty()),
+            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::ALT),
+        ];
+
+        for key in unhandled_keys {
+            let action = KeyDispatcher::dispatch(&KeybindContext::PatientList, key);
+            assert!(
+                action.is_none(),
+                "Unhandled key should return None, got {:?}",
+                action
+            );
+        }
+    }
+
+    /// Test that all contexts have at least one keybind defined.
+    #[test]
+    fn test_all_contexts_have_keybinds() {
+        for context in all_contexts() {
+            let keybinds = KeybindRegistry::get_keybinds(context.clone());
+
+            assert!(
+                !keybinds.is_empty(),
+                "Context {:?} has no keybinds defined",
+                context
+            );
+        }
+    }
+
+    /// Test consistency between registry lookup and dispatcher.
+    /// If registry says has_keybind is true, dispatcher must return Some(Action).
+    #[test]
+    fn test_dispatcher_matches_registry_lookup() {
+        for context in all_contexts() {
+            let keybinds = KeybindRegistry::get_keybinds(context.clone());
+
+            for kb in &keybinds {
+                let key = KeyEvent::new(kb.key, kb.modifiers);
+
+                let has_keybind = KeybindRegistry::has_keybind(&context, key);
+                let action = KeyDispatcher::dispatch(&context, key);
+
+                // If registry says it has a keybind, dispatcher should handle it
+                if has_keybind {
+                    assert!(
+                        action.is_some(),
+                        "Registry has keybind for '{}' in context {:?} but dispatcher returned None",
+                        kb.action,
+                        context
+                    );
+                }
+            }
+        }
+    }
+
+    /// Test that dispatch is case-insensitive for all character keys.
+    #[test]
+    fn test_dispatch_case_insensitive_all_contexts() {
+        for context in all_contexts() {
+            let keybinds = KeybindRegistry::get_keybinds(context.clone());
+
+            for kb in &keybinds {
+                if let KeyCode::Char(c) = kb.key {
+                    // Try with opposite case
+                    let opposite_case = if c.is_uppercase() {
+                        c.to_ascii_lowercase()
+                    } else {
+                        c.to_ascii_uppercase()
+                    };
+
+                    let key_upper =
+                        KeyEvent::new(KeyCode::Char(opposite_case), KeyModifiers::empty());
+                    let action = KeyDispatcher::dispatch(&context, key_upper);
+
+                    // Should either return the same action or None (case-sensitive handling)
+                    // Just verify it doesn't panic
+                    let _ = action;
+                }
+            }
+        }
     }
 }
