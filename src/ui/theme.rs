@@ -9,6 +9,7 @@ pub struct Theme {
     pub success: Style,
     pub header: Style,
     pub modal_background: Style,
+    pub focus: Style,
 }
 
 impl Theme {
@@ -26,6 +27,9 @@ impl Theme {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
             modal_background: Style::default().fg(Color::White).bg(Color::DarkGray),
+            focus: Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
         }
     }
 }

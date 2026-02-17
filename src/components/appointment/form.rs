@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{Duration, NaiveDate, NaiveTime, Timelike, Utc};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -95,6 +95,9 @@ pub struct AppointmentFormComponent {
     // Status
     error_message: Option<String>,
     is_submitting: bool,
+
+    // Stored area for mouse event handling
+    form_area: Option<Rect>,
 }
 
 impl AppointmentFormComponent {
@@ -166,6 +169,7 @@ impl AppointmentFormComponent {
             validation_errors: HashMap::new(),
             error_message: None,
             is_submitting: false,
+            form_area: None,
         }
     }
 
@@ -1037,6 +1041,82 @@ impl Component for AppointmentFormComponent {
         }
     }
 
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> Action {
+        use crate::ui::widgets::is_click;
+
+        if !is_click(&mouse) {
+            return Action::None;
+        }
+
+        let Some(area) = self.form_area else {
+            return Action::None;
+        };
+
+        let col = mouse.column;
+        let row = mouse.row;
+
+        let vertical = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(10),
+                Constraint::Percentage(80),
+                Constraint::Percentage(10),
+            ])
+            .split(area);
+
+        let horizontal = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(15),
+                Constraint::Percentage(70),
+                Constraint::Percentage(15),
+            ])
+            .split(vertical[1]);
+
+        let modal_area = horizontal[1];
+        let modal_block = Block::default()
+            .borders(Borders::ALL)
+            .title("Create New Appointment")
+            .border_style(Theme::default().normal);
+        let inner_area = modal_block.inner(modal_area);
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(if self.current_field == FormField::Patient { 12 } else { 3 }),
+                Constraint::Min(if self.current_field == FormField::Practitioner { 8 } else { 3 }),
+                Constraint::Min(if self.current_field == FormField::Date { 15 } else { 3 }),
+                Constraint::Min(if self.current_field == FormField::Time { 12 } else { 3 }),
+                Constraint::Min(if self.current_field == FormField::Type { 16 } else { 3 }),
+                Constraint::Min(if self.current_field == FormField::Reason { 8 } else { 3 }),
+                Constraint::Length(3),
+            ])
+            .split(inner_area);
+
+        let field_areas = [
+            (FormField::Patient, chunks[1]),
+            (FormField::Practitioner, chunks[2]),
+            (FormField::Date, chunks[3]),
+            (FormField::Time, chunks[4]),
+            (FormField::Type, chunks[5]),
+            (FormField::Reason, chunks[6]),
+        ];
+
+        for (field, field_area) in field_areas.iter() {
+            if col >= field_area.x
+                && col < field_area.x + field_area.width
+                && row >= field_area.y
+                && row < field_area.y + field_area.height
+            {
+                self.current_field = *field;
+                return Action::Render;
+            }
+        }
+
+        Action::None
+    }
+
     async fn update(&mut self, action: Action) -> Result<Option<Action>> {
         if action == Action::AppointmentFormSubmit && self.is_submitting {
             self.is_submitting = false;
@@ -1059,6 +1139,8 @@ impl Component for AppointmentFormComponent {
     }
 
     fn render(&mut self, frame: &mut Frame, area: Rect) {
+        self.form_area = Some(area);
+
         let theme = Theme::default();
         let vertical = Layout::default()
             .direction(Direction::Vertical)
