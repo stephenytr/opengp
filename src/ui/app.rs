@@ -1,6 +1,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Style};
+use ratatui::widgets::{Block, Borders};
 use sqlx::SqlitePool;
 use tuirealm::{
     Application, EventListenerCfg, Frame, NoUserEvent, PollStrategy,
@@ -23,6 +26,7 @@ use crate::infrastructure::database::repositories::{
 };
 
 use super::component_id::Id;
+use super::components::RealmTabs;
 use super::msg::Msg;
 use super::tui::Tui;
 
@@ -31,6 +35,7 @@ pub struct App {
     services: Services,
     should_quit: bool,
     active_screen: Screen,
+    tabs: RealmTabs,
 }
 
 pub struct Services {
@@ -40,12 +45,24 @@ pub struct Services {
     pub clinical_service: Arc<ClinicalService>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Screen {
+    #[default]
     Patients,
     Appointments,
     Clinical,
     Billing,
+}
+
+impl Screen {
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            0 => Screen::Patients,
+            1 => Screen::Appointments,
+            2 => Screen::Clinical,
+            _ => Screen::Billing,
+        }
+    }
 }
 
 impl App {
@@ -63,6 +80,10 @@ impl App {
             services,
             should_quit: false,
             active_screen: Screen::Patients,
+            tabs: RealmTabs::builder()
+                .titles(vec!["Patients", "Appointments", "Clinical", "Billing"])
+                .selected(0)
+                .build(),
         })
     }
 
@@ -152,6 +173,14 @@ impl App {
     }
 
     async fn init_components(&mut self) -> Result<()> {
+        // Mount the tabs component
+        self.inner
+            .mount(Id::Navigation, Box::new(self.tabs.clone()), vec![])
+            .ok();
+
+        // Set focus to navigation/tabs
+        self.inner.active(&Id::Navigation).ok();
+
         Ok(())
     }
 
@@ -163,6 +192,10 @@ impl App {
             }
             Msg::NavigateTo(target) => {
                 self.handle_navigation(target);
+                None
+            }
+            Msg::NavigateToTab(index) => {
+                self.active_screen = Screen::from_index(index);
                 None
             }
             _ => None,
@@ -193,10 +226,147 @@ impl App {
 
     fn render(&mut self, frame: &mut Frame) {
         let area = frame.area();
-        frame.render_widget(
-            ratatui::widgets::Paragraph::new(format!("Screen: {:?}", self.active_screen)),
-            area,
-        );
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(0),
+            ])
+            .split(area);
+
+        self.inner.view(&Id::Navigation, frame, chunks[0]);
+
+        match self.active_screen {
+            Screen::Patients => self.render_patients(frame, chunks[1]),
+            Screen::Appointments => self.render_appointments(frame, chunks[1]),
+            Screen::Clinical => self.render_clinical(frame, chunks[1]),
+            Screen::Billing => self.render_billing(frame, chunks[1]),
+        }
+    }
+
+    fn render_patients(&self, frame: &mut Frame, area: Rect) {
+        let content = ratatui::widgets::Paragraph::new(
+            r#"
+[Search: /]  [New Patient: n]
+
+ID    | Name              | DOB       | Phone
+------|------------------|------------|------------
+0001  | John Smith       | 15/03/80   | 0412 345 678
+0002  | Jane Doe          | 22/07/92   | 0413 456 789
+0003  | Bob Johnson       | 10/11/65   | 0414 567 890
+0004  | Mary Williams     | 05/01/78   | 0415 678 901
+
+[Enter: View/Edit]  [d: Delete]  [Esc: Back]
+"#
+            .trim(),
+        )
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Patients ")
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .style(Style::default().fg(Color::White));
+
+        frame.render_widget(content, area);
+    }
+
+    fn render_appointments(&self, frame: &mut Frame, area: Rect) {
+        let content = ratatui::widgets::Paragraph::new(
+            r#"
+[<]  February 2026  [>]  [Today: t]  [Calendar View: v]
+
+Sun  | Mon  | Tue  | Wed  | Thu  | Fri  | Sat
+-----|------|------|------|------|------|------
+ 1   |  2   |  3   |  4   |  5   |  6   |  7
+     |      | 3ap  |      |      | 2ap  |      
+-----|------|------|------|------|------|------
+ 8   |  9   | 10   | 11   | 12   | 13   | 14
+     |      |      |      |      |      |      
+-----|------|------|------|------|------|------
+15   | 16   | 17   | 18   | 19   | 20   | 21
+     |      | Today|      |      |      |      
+-----|------|------|------|------|------|------
+22   | 23   | 24   | 25   | 26   | 27   | 28
+     |      |      |      |      |      |      
+
+[n: New Appointment]  [Enter: View]  [f: Filter]
+"#
+            .trim(),
+        )
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Appointments ")
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .style(Style::default().fg(Color::White));
+
+        frame.render_widget(content, area);
+    }
+
+    fn render_clinical(&self, frame: &mut Frame, area: Rect) {
+        let content = ratatui::widgets::Paragraph::new(
+            r#"
+Patient: [Select Patient... ]
+
+Tab: [Overview] [Consultations] [Allergies]
+
+Patient Overview
+----------------------------------------
+Name:     John Smith
+DOB:      15 March 1980 (45 years)
+Gender:   Male
+Phone:    0412 345 678
+Address:  123 Main St, Sydney NSW 2000
+
+----------------------------------------
+Allergies: Penicillin (Severe)
+Medications: Metformin 500mg, Amlodipine 5mg
+
+[c: New Consultation]  [a: Add Allergy]  [v: Vitals]
+"#
+            .trim(),
+        )
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Clinical ")
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .style(Style::default().fg(Color::White));
+
+        frame.render_widget(content, area);
+    }
+
+    fn render_billing(&self, frame: &mut Frame, area: Rect) {
+        let content = ratatui::widgets::Paragraph::new(
+            r#"
+[Search: /]  [New Invoice: n]
+
+ID    | Patient       | Date    | Amount | Status
+------|---------------|---------|--------|--------
+INV001| John Smith    | 17/02/26| $150.00| Paid
+INV002| Jane Doe      | 16/02/26| $85.00 | Pending
+INV003| Bob Johnson   | 15/02/26| $220.00| Paid
+INV004| Mary Williams | 14/02/26| $95.00 | Overdue
+
+Summary: Total: $550.00  Paid: $370.00  Pending: $180.00
+
+[Enter: View Invoice]  [p: Process Payment]  [x: Export]
+"#
+            .trim(),
+        )
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Billing ")
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .style(Style::default().fg(Color::White));
+
+        frame.render_widget(content, area);
     }
 
     pub fn services(&self) -> &Services {

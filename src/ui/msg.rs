@@ -6,7 +6,9 @@ pub enum Msg {
     AppClose,
     Tick,
     Render,
+    // Navigation
     NavigateTo(NavigationTarget),
+    NavigateToTab(usize),
 
     // Patient domain
     PatientsLoaded,
