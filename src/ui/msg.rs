@@ -1,5 +1,5 @@
-use uuid::Uuid;
 use crate::domain::appointment::AppointmentStatus;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Msg {
@@ -97,6 +97,25 @@ pub enum Msg {
     // Error
     Error(String),
     ErrorClear,
+
+    // Input
+    InputChanged(String),
+    InputSubmitted(String),
+    InputBlur,
+
+    // Select
+    SelectChanged(usize, String),
+    SelectOpen,
+    SelectClose,
+
+    // List
+    ListItemSelected(usize, String),
+    ListItemActivated(usize, String),
+    ListScrollUp,
+    ListScrollDown,
+
+    // Button
+    ButtonPressed(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
