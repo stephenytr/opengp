@@ -60,6 +60,7 @@ impl HelpModal {
             KeybindContext::CalendarBatchMenu => "Batch Operations",
             KeybindContext::AppointmentForm => "Appointment Form",
             KeybindContext::AppointmentFormPatient => "Select Patient",
+            KeybindContext::Tabs => "Tab Navigation",
         }
     }
 

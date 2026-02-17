@@ -91,6 +91,9 @@ pub enum KeybindContext {
 
     /// Appointment form patient field focused
     AppointmentFormPatient,
+
+    /// Tab navigation (shared across all screens)
+    Tabs,
 }
 
 /// Represents a single keybind with its action and description
@@ -179,6 +182,7 @@ impl KeybindRegistry {
             KeybindContext::CalendarBatchMenu => Self::calendar_batch_menu_keybinds(),
             KeybindContext::AppointmentForm => Self::appointment_form_keybinds(),
             KeybindContext::AppointmentFormPatient => Self::appointment_form_patient_keybinds(),
+            KeybindContext::Tabs => Self::tabs_keybinds(),
         }
     }
 
@@ -247,10 +251,7 @@ impl KeybindRegistry {
                 "Quit application",
             ),
             Keybind::new(KeyCode::Char('q'), "Quit", "Quit application"),
-            Keybind::new(KeyCode::Char('1'), "Patients", "Go to Patients"),
-            Keybind::new(KeyCode::Char('2'), "Appointments", "Go to Appointments"),
-            Keybind::unimplemented(KeyCode::Char('3'), "Clinical", "Go to Clinical"),
-            Keybind::unimplemented(KeyCode::Char('4'), "Billing", "Go to Billing"),
+            Keybind::new(KeyCode::Char('?'), "Help", "Show help"),
         ]
     }
 
@@ -546,6 +547,22 @@ impl KeybindRegistry {
             ),
         ]
     }
+
+    fn tabs_keybinds() -> Vec<Keybind> {
+        vec![
+            Keybind::new(KeyCode::Char('q'), "Quit", "Quit application"),
+            Keybind::new(KeyCode::Char('1'), "Patients", "Go to Patients"),
+            Keybind::new(KeyCode::Char('2'), "Appointments", "Go to Appointments"),
+            Keybind::new(KeyCode::Char('3'), "Clinical", "Go to Clinical"),
+            Keybind::new(KeyCode::Char('4'), "Billing", "Go to Billing"),
+            Keybind::new(KeyCode::Right, "Next", "Next tab"),
+            Keybind::new(KeyCode::Left, "Previous", "Previous tab"),
+            Keybind::new(KeyCode::Tab, "Next", "Next tab"),
+            Keybind::new(KeyCode::BackTab, "Previous", "Previous tab"),
+            Keybind::new(KeyCode::Home, "First", "First tab"),
+            Keybind::new(KeyCode::End, "Last", "Last tab"),
+        ]
+    }
 }
 
 #[cfg(test)]
@@ -589,7 +606,7 @@ mod tests {
     #[test]
     fn test_get_keybinds_global() {
         let keybinds = KeybindRegistry::get_keybinds(KeybindContext::Global);
-        assert_eq!(keybinds.len(), 6);
+        assert_eq!(keybinds.len(), 3);
         assert!(keybinds
             .iter()
             .any(|kb| matches!(kb.key, KeyCode::Char('q'))));

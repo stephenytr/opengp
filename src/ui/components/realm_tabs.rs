@@ -8,17 +8,20 @@ use tuirealm::{
     AttrValue, Attribute, Component, Event, MockComponent, NoUserEvent, Props, State, StateValue,
 };
 
+use crate::ui::keybinds::{Keybind, KeybindContext, KeybindRegistry};
 use crate::ui::msg::Msg;
 use crate::ui::theme::Theme;
 
 #[derive(MockComponent, Clone)]
 pub struct RealmTabs {
     component: TabsWidget,
+    keybinds: Vec<Keybind>,
 }
 
 pub struct RealmTabsBuilder {
     titles: Vec<String>,
     selected: usize,
+    keybinds: Option<Vec<Keybind>>,
 }
 
 impl RealmTabsBuilder {
@@ -26,6 +29,7 @@ impl RealmTabsBuilder {
         Self {
             titles: Vec::new(),
             selected: 0,
+            keybinds: None,
         }
     }
 
@@ -39,6 +43,11 @@ impl RealmTabsBuilder {
         self
     }
 
+    pub fn with_keybinds(mut self) -> Self {
+        self.keybinds = Some(KeybindRegistry::get_keybinds(KeybindContext::Tabs));
+        self
+    }
+
     pub fn build(self) -> RealmTabs {
         let theme = Theme::new();
         let tabs = TabsWidget::default()
@@ -48,7 +57,14 @@ impl RealmTabsBuilder {
             .selected_style(theme.selected)
             .highlight_style(theme.highlight);
 
-        RealmTabs { component: tabs }
+        let keybinds = self
+            .keybinds
+            .unwrap_or_else(|| KeybindRegistry::get_keybinds(KeybindContext::Tabs));
+
+        RealmTabs {
+            component: tabs,
+            keybinds,
+        }
     }
 }
 
@@ -78,6 +94,10 @@ impl RealmTabs {
     pub fn set_selected(&mut self, index: usize) {
         self.component.selected = index;
     }
+
+    pub fn keybinds(&self) -> &[Keybind] {
+        &self.keybinds
+    }
 }
 
 impl Default for RealmTabs {
@@ -89,76 +109,7 @@ impl Default for RealmTabs {
 impl Component<Msg, NoUserEvent> for RealmTabs {
     fn on(&mut self, ev: Event<NoUserEvent>) -> Option<Msg> {
         match ev {
-            Event::Keyboard(KeyEvent {
-                code: Key::Right,
-                modifiers: KeyModifiers::NONE,
-            }) => {
-                let current = self.component.selected;
-                let next = (current + 1) % self.component.titles.len().max(1);
-                self.component.selected = next;
-                Some(Msg::NavigateToTab(next))
-            }
-            Event::Keyboard(KeyEvent {
-                code: Key::Left,
-                modifiers: KeyModifiers::NONE,
-            }) => {
-                let current = self.component.selected;
-                let prev = if self.component.titles.is_empty() {
-                    0
-                } else if current == 0 {
-                    self.component.titles.len() - 1
-                } else {
-                    current - 1
-                };
-                self.component.selected = prev;
-                Some(Msg::NavigateToTab(prev))
-            }
-            Event::Keyboard(KeyEvent {
-                code: Key::Tab,
-                modifiers: KeyModifiers::NONE,
-            }) => {
-                let current = self.component.selected;
-                let next = (current + 1) % self.component.titles.len().max(1);
-                self.component.selected = next;
-                Some(Msg::NavigateToTab(next))
-            }
-            Event::Keyboard(KeyEvent {
-                code: Key::Tab,
-                modifiers: KeyModifiers::SHIFT,
-            }) => {
-                let current = self.component.selected;
-                let prev = if self.component.titles.is_empty() {
-                    0
-                } else if current == 0 {
-                    self.component.titles.len() - 1
-                } else {
-                    current - 1
-                };
-                self.component.selected = prev;
-                Some(Msg::NavigateToTab(prev))
-            }
-            Event::Keyboard(KeyEvent {
-                code: Key::Home,
-                modifiers: KeyModifiers::NONE,
-            }) => {
-                if !self.component.titles.is_empty() {
-                    self.component.selected = 0;
-                    Some(Msg::NavigateToTab(0))
-                } else {
-                    None
-                }
-            }
-            Event::Keyboard(KeyEvent {
-                code: Key::End,
-                modifiers: KeyModifiers::NONE,
-            }) => {
-                if !self.component.titles.is_empty() {
-                    self.component.selected = self.component.titles.len() - 1;
-                    Some(Msg::NavigateToTab(self.component.selected))
-                } else {
-                    None
-                }
-            }
+            Event::Keyboard(key_event) => self.handle_keyboard(key_event),
             Event::Mouse(MouseEvent {
                 kind: MouseEventKind::Down(_),
                 column,
@@ -170,6 +121,137 @@ impl Component<Msg, NoUserEvent> for RealmTabs {
 }
 
 impl RealmTabs {
+    fn handle_keyboard(&mut self, key_event: KeyEvent) -> Option<Msg> {
+        let key = key_event.code;
+        let modifiers = key_event.modifiers;
+
+        tracing::debug!("Tabs received: key={:?}, modifiers={:?}", key, modifiers);
+
+        for kb in &self.keybinds {
+            let key_match = self.key_matches(kb.key, key);
+
+            // For BackTab, don't check modifiers since it already implies shift
+            // Also on Linux crossterm sends BackTab with modifiers=NONE
+            let mod_match = if matches!(kb.key, crossterm::event::KeyCode::BackTab) {
+                true
+            } else {
+                self.modifiers_match(kb.modifiers, modifiers)
+            };
+
+            tracing::debug!(
+                "  Trying: {:?} {:?} -> key_match={}, mod_match={}",
+                kb.key,
+                kb.modifiers,
+                key_match,
+                mod_match
+            );
+
+            if key_match && mod_match {
+                tracing::debug!("  MATCHED action: {}", kb.action);
+                return self.execute_tab_action(kb.action);
+            }
+        }
+        None
+    }
+
+    fn key_matches(&self, crossterm_key: crossterm::event::KeyCode, tui_key: Key) -> bool {
+        use crossterm::event::KeyCode;
+        match (crossterm_key, tui_key) {
+            (KeyCode::Char(c1), Key::Char(c2)) => c1 == c2,
+            (KeyCode::Enter, Key::Enter) => true,
+            (KeyCode::Esc, Key::Esc) => true,
+            (KeyCode::Tab, Key::Tab) => true,
+            (KeyCode::BackTab, Key::BackTab) => true,
+            (KeyCode::Up, Key::Up) => true,
+            (KeyCode::Down, Key::Down) => true,
+            (KeyCode::Left, Key::Left) => true,
+            (KeyCode::Right, Key::Right) => true,
+            (KeyCode::Home, Key::Home) => true,
+            (KeyCode::End, Key::End) => true,
+            (KeyCode::Backspace, Key::Backspace) => true,
+            (KeyCode::Delete, Key::Delete) => true,
+            _ => false,
+        }
+    }
+
+    fn modifiers_match(
+        &self,
+        crossterm_mods: crossterm::event::KeyModifiers,
+        tui_mods: KeyModifiers,
+    ) -> bool {
+        let has_shift =
+            |m: crossterm::event::KeyModifiers| m.contains(crossterm::event::KeyModifiers::SHIFT);
+        let has_ctrl =
+            |m: crossterm::event::KeyModifiers| m.contains(crossterm::event::KeyModifiers::CONTROL);
+        let has_alt =
+            |m: crossterm::event::KeyModifiers| m.contains(crossterm::event::KeyModifiers::ALT);
+
+        let tui_has_shift = tui_mods.intersects(KeyModifiers::SHIFT);
+        let tui_has_ctrl = tui_mods.intersects(KeyModifiers::CONTROL);
+        let tui_has_alt = tui_mods.intersects(KeyModifiers::ALT);
+
+        has_shift(crossterm_mods) == tui_has_shift
+            && has_ctrl(crossterm_mods) == tui_has_ctrl
+            && has_alt(crossterm_mods) == tui_has_alt
+    }
+
+    fn execute_tab_action(&mut self, action: &str) -> Option<Msg> {
+        match action {
+            "Quit" => Some(Msg::AppClose),
+            "Patients" => {
+                self.component.selected = 0;
+                Some(Msg::NavigateToTab(0))
+            }
+            "Appointments" => {
+                self.component.selected = 1;
+                Some(Msg::NavigateToTab(1))
+            }
+            "Clinical" => {
+                self.component.selected = 2;
+                Some(Msg::NavigateToTab(2))
+            }
+            "Billing" => {
+                self.component.selected = 3;
+                Some(Msg::NavigateToTab(3))
+            }
+            "Next" => {
+                let current = self.component.selected;
+                let next = (current + 1) % self.component.titles.len().max(1);
+                self.component.selected = next;
+                Some(Msg::NavigateToTab(next))
+            }
+            "Previous" => {
+                let current = self.component.selected;
+                let prev = if self.component.titles.is_empty() {
+                    0
+                } else if current == 0 {
+                    self.component.titles.len() - 1
+                } else {
+                    current - 1
+                };
+                self.component.selected = prev;
+                Some(Msg::NavigateToTab(prev))
+            }
+            "First" => {
+                if !self.component.titles.is_empty() {
+                    self.component.selected = 0;
+                    Some(Msg::NavigateToTab(0))
+                } else {
+                    None
+                }
+            }
+            "Last" => {
+                if !self.component.titles.is_empty() {
+                    self.component.selected = self.component.titles.len() - 1;
+                    Some(Msg::NavigateToTab(self.component.selected))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
     fn handle_tab_click(&mut self, column: u16) -> Option<Msg> {
         if self.component.titles.is_empty() {
             return None;
@@ -187,11 +269,9 @@ impl RealmTabs {
             let tab_start = tabs_start + (i as u16 * tab_width);
             let tab_end = tab_start + tab_width;
 
-            if column >= tab_start && column < tab_end {
-                if i != self.component.selected {
-                    self.component.selected = i;
-                    return Some(Msg::NavigateToTab(i));
-                }
+            if column >= tab_start && column < tab_end && i != self.component.selected {
+                self.component.selected = i;
+                return Some(Msg::NavigateToTab(i));
             }
         }
         None
