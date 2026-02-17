@@ -282,12 +282,12 @@ impl ClinicalComponent {
                 Action::ClinicalSearchPatients(String::new())
             }
             KeyCode::Char(c) if self.patient_search.is_open => {
-                self.patient_search.query.push(c);
-                Action::ClinicalSearchPatients(self.patient_search.query.clone())
+                self.patient_search.query.push_char(c);
+                Action::ClinicalSearchPatients(self.patient_search.query.value().to_string())
             }
             KeyCode::Backspace if self.patient_search.is_open => {
-                self.patient_search.query.pop();
-                Action::ClinicalSearchPatients(self.patient_search.query.clone())
+                self.patient_search.query.pop_char();
+                Action::ClinicalSearchPatients(self.patient_search.query.value().to_string())
             }
             KeyCode::Esc if self.patient_search.is_open => {
                 self.patient_search.is_open = false;

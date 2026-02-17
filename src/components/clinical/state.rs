@@ -1,6 +1,7 @@
 use uuid::Uuid;
 
 use crate::domain::patient::Patient;
+use crate::ui::components::{InputWrapper, SelectWrapper};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ClinicalView {
@@ -67,76 +68,198 @@ impl SOAPSection {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct VitalSignsFormState {
-    pub systolic_bp: String,
-    pub diastolic_bp: String,
-    pub heart_rate: String,
-    pub respiratory_rate: String,
-    pub temperature: String,
-    pub oxygen_saturation: String,
-    pub height_cm: String,
-    pub weight_kg: String,
-    pub notes: String,
+    pub systolic_bp: InputWrapper,
+    pub diastolic_bp: InputWrapper,
+    pub heart_rate: InputWrapper,
+    pub respiratory_rate: InputWrapper,
+    pub temperature: InputWrapper,
+    pub oxygen_saturation: InputWrapper,
+    pub height_cm: InputWrapper,
+    pub weight_kg: InputWrapper,
+    pub notes: InputWrapper,
     pub has_changes: bool,
 }
 
-#[derive(Debug, Clone, Default)]
+impl Default for VitalSignsFormState {
+    fn default() -> Self {
+        Self {
+            systolic_bp: InputWrapper::new(),
+            diastolic_bp: InputWrapper::new(),
+            heart_rate: InputWrapper::new(),
+            respiratory_rate: InputWrapper::new(),
+            temperature: InputWrapper::new(),
+            oxygen_saturation: InputWrapper::new(),
+            height_cm: InputWrapper::new(),
+            weight_kg: InputWrapper::new(),
+            notes: InputWrapper::new(),
+            has_changes: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct AllergyFormState {
-    pub allergen: String,
-    pub allergy_type: String,
-    pub severity: String,
-    pub reaction: String,
-    pub onset_date: String,
-    pub notes: String,
+    pub allergen: InputWrapper,
+    pub allergy_type: InputWrapper,
+    pub severity: SelectWrapper,
+    pub reaction: InputWrapper,
+    pub onset_date: InputWrapper,
+    pub notes: InputWrapper,
     pub is_active: bool,
     pub has_changes: bool,
     pub editing_id: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, Default)]
+impl Default for AllergyFormState {
+    fn default() -> Self {
+        Self {
+            allergen: InputWrapper::new(),
+            allergy_type: InputWrapper::new(),
+            severity: SelectWrapper::new().items(vec![
+                "Mild".to_string(),
+                "Moderate".to_string(),
+                "Severe".to_string(),
+                "Life-threatening".to_string(),
+            ]),
+            reaction: InputWrapper::new(),
+            onset_date: InputWrapper::new(),
+            notes: InputWrapper::new(),
+            is_active: true,
+            has_changes: false,
+            editing_id: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct MedicalHistoryFormState {
-    pub condition: String,
-    pub diagnosis_date: String,
-    pub status: String,
-    pub severity: String,
-    pub notes: String,
+    pub condition: InputWrapper,
+    pub diagnosis_date: InputWrapper,
+    pub status: SelectWrapper,
+    pub severity: SelectWrapper,
+    pub notes: InputWrapper,
     pub is_active: bool,
     pub has_changes: bool,
     pub editing_id: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, Default)]
+impl Default for MedicalHistoryFormState {
+    fn default() -> Self {
+        Self {
+            condition: InputWrapper::new(),
+            diagnosis_date: InputWrapper::new(),
+            status: SelectWrapper::new().items(vec![
+                "Active".to_string(),
+                "Resolved".to_string(),
+                "Managed".to_string(),
+                "Unknown".to_string(),
+            ]),
+            severity: SelectWrapper::new().items(vec![
+                "Mild".to_string(),
+                "Moderate".to_string(),
+                "Severe".to_string(),
+            ]),
+            notes: InputWrapper::new(),
+            is_active: true,
+            has_changes: false,
+            editing_id: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct FamilyHistoryFormState {
-    pub relative_relationship: String,
-    pub condition: String,
-    pub age_at_diagnosis: String,
-    pub notes: String,
+    pub relative_relationship: SelectWrapper,
+    pub condition: InputWrapper,
+    pub age_at_diagnosis: InputWrapper,
+    pub notes: InputWrapper,
     pub has_changes: bool,
     pub editing_id: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, Default)]
+impl Default for FamilyHistoryFormState {
+    fn default() -> Self {
+        Self {
+            relative_relationship: SelectWrapper::new().items(vec![
+                "Mother".to_string(),
+                "Father".to_string(),
+                "Sibling".to_string(),
+                "Grandparent".to_string(),
+                "Aunt/Uncle".to_string(),
+                "Other".to_string(),
+            ]),
+            condition: InputWrapper::new(),
+            age_at_diagnosis: InputWrapper::new(),
+            notes: InputWrapper::new(),
+            has_changes: false,
+            editing_id: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct SocialHistoryFormState {
-    pub smoking_status: String,
-    pub cigarettes_per_day: String,
-    pub smoking_quit_date: String,
-    pub alcohol_status: String,
-    pub standard_drinks_per_week: String,
-    pub exercise_frequency: String,
-    pub occupation: String,
-    pub living_situation: String,
-    pub support_network: String,
-    pub notes: String,
+    pub smoking_status: SelectWrapper,
+    pub cigarettes_per_day: InputWrapper,
+    pub smoking_quit_date: InputWrapper,
+    pub alcohol_status: SelectWrapper,
+    pub standard_drinks_per_week: InputWrapper,
+    pub exercise_frequency: InputWrapper,
+    pub occupation: InputWrapper,
+    pub living_situation: InputWrapper,
+    pub support_network: InputWrapper,
+    pub notes: InputWrapper,
     pub has_changes: bool,
 }
 
-#[derive(Debug, Clone, Default)]
+impl Default for SocialHistoryFormState {
+    fn default() -> Self {
+        Self {
+            smoking_status: SelectWrapper::new().items(vec![
+                "Non-smoker".to_string(),
+                "Current smoker".to_string(),
+                "Former smoker".to_string(),
+                "Unknown".to_string(),
+            ]),
+            cigarettes_per_day: InputWrapper::new(),
+            smoking_quit_date: InputWrapper::new(),
+            alcohol_status: SelectWrapper::new().items(vec![
+                "Non-drinker".to_string(),
+                "Occasional".to_string(),
+                "Regular".to_string(),
+                "Heavy".to_string(),
+                "Unknown".to_string(),
+            ]),
+            standard_drinks_per_week: InputWrapper::new(),
+            exercise_frequency: InputWrapper::new(),
+            occupation: InputWrapper::new(),
+            living_situation: InputWrapper::new(),
+            support_network: InputWrapper::new(),
+            notes: InputWrapper::new(),
+            has_changes: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct PatientSearchState {
-    pub query: String,
+    pub query: InputWrapper,
     pub results: Vec<Patient>,
     pub is_open: bool,
     pub selected_index: usize,
+}
+
+impl Default for PatientSearchState {
+    fn default() -> Self {
+        Self {
+            query: InputWrapper::new(),
+            results: Vec::new(),
+            is_open: false,
+            selected_index: 0,
+        }
+    }
 }
 
 impl PatientSearchState {

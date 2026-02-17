@@ -17,7 +17,7 @@ pub fn render_patient_selector(component: &mut ClinicalComponent, frame: &mut Fr
     let search_text = if component.patient_search.query.is_empty() {
         "Press '/' to search patients..."
     } else {
-        &component.patient_search.query
+        component.patient_search.query.value()
     };
 
     let search_paragraph = Paragraph::new(Span::raw(search_text))

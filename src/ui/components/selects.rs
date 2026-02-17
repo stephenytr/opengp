@@ -1,3 +1,4 @@
+#[derive(Debug, Clone)]
 pub struct SelectWrapper {
     items: Vec<String>,
     selected_index: Option<usize>,

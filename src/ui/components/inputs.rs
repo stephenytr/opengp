@@ -1,3 +1,4 @@
+#[derive(Debug, Clone)]
 pub struct InputWrapper {
     value: String,
     placeholder: String,
@@ -56,6 +57,10 @@ impl InputWrapper {
 
     pub fn clear(&mut self) {
         self.value.clear();
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.value.is_empty()
     }
 }
 
