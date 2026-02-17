@@ -2,9 +2,9 @@
 
 **Project**: OpenGP - Open Source General Practice Management Software  
 **Feature**: Clinical Record Management System  
-**Document Version**: 1.0  
-**Last Updated**: 2026-02-16  
-**Status**: Planning
+**Document Version**: 1.1  
+**Last Updated**: 2026-02-17  
+**Status**: In Progress
 
 ---
 

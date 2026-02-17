@@ -21,6 +21,7 @@ OpenGP is a terminal-based general practice management system built with Rust, d
 
 - **Language**: Rust
 - **UI Framework**: Ratatui (Terminal UI)
+- **UI Components**: tui-realm adapters
 - **Database**: SQLite (PostgreSQL migration path)
 - **Async Runtime**: Tokio
 
@@ -37,7 +38,7 @@ OpenGP is designed to comply with:
 
 ### Prerequisites
 
-- Rust 1.75 or later
+- Rust 1.85 or later
 - SQLite 3.x
 
 ### Building

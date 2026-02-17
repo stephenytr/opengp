@@ -1,7 +1,7 @@
 # OpenGP Architecture Documentation
 
-**Version**: 1.1  
-**Last Updated**: 2026-02-16  
+**Version**: 1.4  
+**Last Updated**: 2026-02-17  
 **Status**: Living Document
 
 ---
@@ -40,10 +40,11 @@ OpenGP is built using a **layered, component-based architecture** with clear sep
 | Aspect | Decision | Rationale |
 |--------|----------|-----------|
 | **Language** | Rust | Memory safety, performance, strong type system |
-| **UI Framework** | Ratatui | Terminal-based, cross-platform, resource-efficient |
+| **UI Framework** | Ratatui + Custom Wrappers | Terminal-based, cross-platform, resource-efficient |
+| **UI Integration** | tui-realm (integrated) | adapters for form inputs, lists, and selects |
 | **Async Runtime** | Tokio | Industry standard, excellent ecosystem |
 | **Database** | SQLx | Compile-time query validation, multi-DB support |
-| **Architecture Style** | Layered + Domain-Driven Design | Clear boundaries, business logic isolation |
+| **Architecture Style** | Layered + Domain-Driven Design + Trait Abstractions | Clear boundaries, business logic isolation, dependency injection |
 
 ---
 
@@ -84,6 +85,90 @@ pub trait PatientRepository {
 
 // Data layer implements it
 impl PatientRepository for SqlitePatientRepository { ... }
+```
+
+### Abstraction Patterns
+
+The codebase uses **trait-based abstractions** throughout for loose coupling and testability:
+
+#### Repository Pattern (Domain Layer)
+
+```rust
+// src/domain/patient/repository.rs
+#[async_trait]
+pub trait PatientRepository: Send + Sync {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<Patient>>;
+    async fn create(&self, patient: Patient) -> Result<Patient>;
+    async fn update(&self, patient: Patient) -> Result<Patient>;
+    // ... more operations
+}
+```
+
+#### Service Layer (Dependency Injection)
+
+```rust
+// src/domain/patient/service.rs
+pub struct PatientService {
+    repository: Arc<dyn PatientRepository>,     // Abstract repository
+    audit_logger: Arc<dyn AuditLogger>,        // Abstract logger
+}
+
+// Concrete implementations injected at runtime:
+let service = PatientService::new(
+    Arc::new(SqlitePatientRepository::new(pool)),  // Or MockPatientRepository for tests
+    Arc::new(AuditLogger::new(repo)),
+);
+```
+
+#### Query Abstraction (Read Models)
+
+```rust
+// src/domain/appointment/query.rs
+/// Separate read model for optimized calendar queries
+#[async_trait]
+pub trait AppointmentCalendarQuery: Send + Sync {
+    async fn for_date_range(
+        &self,
+        start: NaiveDate,
+        end: NaiveDate,
+    ) -> Result<Vec<CalendarAppointment>>;
+}
+```
+
+#### UI Component Abstraction
+
+```rust
+// src/components/mod.rs - Component trait
+#[async_trait]
+pub trait Component: Send {
+    async fn init(&mut self) -> Result<()>;
+    fn handle_events(&mut self, event: Option<Event>) -> Action;
+    async fn update(&mut self, action: Action) -> Result<Option<Action>>;
+    fn render(&mut self, frame: &mut Frame, area: Rect);
+}
+
+// Components are stored as trait objects
+struct App {
+    patient_component: Box<dyn Component>,
+    appointment_component: Box<dyn Component>,
+    // Or with Arc for shared ownership
+    clinical_component: Arc<dyn Component>,
+}
+```
+
+#### UI Component Traits
+
+```rust
+// src/ui/components/traits.rs - Additional UI abstractions
+pub trait InteractiveComponent {
+    fn get_state(&self) -> ComponentState;
+    fn is_focused(&self) -> bool;
+    fn set_focus(&mut self, focused: bool);
+}
+
+pub trait Renderable {
+    fn render(&mut self, area: Rect, frame: &mut Frame);
+}
 ```
 
 ### 4. Explicit Over Implicit
@@ -175,55 +260,110 @@ impl PatientRepository for SqlitePatientRepository { ... }
 
 ## Layer Architecture
 
-### 1. UI Layer (Ratatui)
+### 1. UI Layer (Ratatui + Custom Wrappers)
 
 **Responsibility**: Rendering terminal UI and handling user input.
 
 ```rust
 // src/ui/mod.rs
-pub mod tui;      // Terminal setup and management
-pub mod event;    // Event handling and key mappings
-pub mod theme;    // Color schemes and styling
-pub mod widgets;  // Custom reusable widgets
-
-// src/ui/tui.rs
-pub struct Tui {
-    terminal: Terminal<CrosstermBackend<Stdout>>,
-    event_rx: UnboundedReceiver<Event>,
-}
-
-impl Tui {
-    pub fn new() -> Result<Self> { ... }
-    pub fn enter(&mut self) -> Result<()> { ... }
-    pub fn exit(&mut self) -> Result<()> { ... }
-    pub fn draw<F>(&mut self, f: F) -> Result<()>
-    where
-        F: FnOnce(&mut Frame),
-    { ... }
-    pub async fn next(&mut self) -> Result<Event> { ... }
-}
+pub mod tui;           // Terminal setup and management
+pub mod event;         // Event handling and key mappings
+pub mod theme;         // Color schemes and styling
+pub mod widgets;       // Custom reusable widgets
+pub mod components;    // Reusable UI components with traits
+pub mod keybinds;      // Keyboard binding definitions
+pub mod app;           // UI application wrapper
+pub mod msg;           // Message types for component communication
+pub mod component_id;  // Component identifier definitions
 ```
 
 **Key Patterns**:
 - **Immediate Mode Rendering**: UI rebuilt every frame
 - **Event-Driven**: Async event handling via Tokio channels
-- **Stateless Widgets**: UI components don't hold state
-- **Layout Engine**: Constraint-based responsive layouts
+- **Component Traits**: `InteractiveComponent`, `Renderable`, `KeyboardInput` for abstractions
+- **Custom Wrappers**: `InputWrapper`, `SelectWrapper`, `ListPicker` for form elements
+- **tui-realm Integration**: `RealmInput`, `RealmList`, `RealmSelect` adapters for tui-realm
 
-**Widget Architecture**:
+**Reusable UI Components** (`src/ui/components/`):
+
 ```rust
-// src/ui/widgets/patient_table.rs
-pub struct PatientTable<'a> {
-    patients: &'a [Patient],
-    selected: Option<usize>,
-    theme: &'a Theme,
+// Basic widgets
+pub mod buttons;       // Button widgets
+pub mod checkboxes;    // Checkbox widgets
+pub mod inputs;        // Input field widgets
+pub mod selects;       // Select dropdown widgets
+pub mod list_picker;   // List picker with fuzzy filtering
+pub mod modal;         // Modal dialogs
+pub mod tab_view;      // Tab navigation
+pub mod state;         // Component state management
+pub mod traits;        // Component traits (InteractiveComponent, Renderable)
+
+// tui-realm adapters
+pub mod realm_input;   // tui-realm input adapter
+pub mod realm_list;    // tui-realm list adapter
+pub mod realm_select;  // tui-realm select adapter
+pub mod theme_adapter; // Theme adapter for tui-realm
+```
+
+**Custom UI Component Wrappers**:
+
+```rust
+// src/ui/components/inputs.rs
+pub struct InputWrapper {
+    value: String,
+    placeholder: String,
+    is_focused: bool,
+    // ... manages input state
 }
 
-impl<'a> Widget for PatientTable<'a> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        // Render logic
-    }
+// src/ui/components/selects.rs  
+pub struct SelectWrapper<T> {
+    options: Vec<T>,
+    selected_index: usize,
+    is_open: bool,
+    // ... manages selection state
 }
+
+// src/ui/components/list_picker.rs
+pub struct ListPicker<T> {
+    items: Vec<T>,
+    filter_query: String,
+    selected_index: Option<usize>,
+    // ... manages list navigation and filtering
+}
+```
+
+**Widget Architecture** (`src/ui/widgets/`):
+```rust
+// src/ui/widgets/list_selector.rs
+pub struct ListSelector<T> { ... }
+
+// src/ui/widgets/search_filter.rs
+pub struct SearchFilter<T> { ... }
+
+// src/ui/widgets/modal_handler.rs
+pub struct ModalHandler { ... }
+
+// src/ui/widgets/confirmation_dialog.rs
+pub struct ConfirmationDialog { ... }
+
+// src/ui/widgets/form_field.rs
+pub struct FormField { ... }
+
+// src/ui/widgets/status_badge.rs
+pub struct StatusBadge { ... }
+
+// src/ui/widgets/help_modal.rs
+pub struct HelpModal { ... }
+
+// src/ui/widgets/month_calendar.rs
+pub struct MonthCalendar { ... }
+
+// src/ui/widgets/time_slot_picker.rs
+pub struct TimeSlotPicker { ... }
+
+// src/ui/widgets/mouse_debug.rs
+pub struct MouseDebug { ... }
 ```
 
 ### 2. Application Layer
@@ -1015,7 +1155,7 @@ pub enum AuditAction {
 
 ### Component Trait
 
-Every major UI feature is a `Component`:
+Every major UI feature implements the `Component` trait:
 
 ```rust
 // src/components/mod.rs
@@ -1025,10 +1165,13 @@ use ratatui::Frame;
 use crossterm::event::{KeyEvent, MouseEvent};
 
 /// Component trait for modular UI components
+/// 
+/// This trait provides a common interface for all UI components,
+/// enabling loose coupling and testability through dependency injection.
 #[async_trait]
 pub trait Component: Send {
     /// Initialize component (called once)
-    async fn init(&mut self) -> Result<()> {
+    async fn init(&mut self) -> crate::error::Result<()> {
         Ok(())
     }
     
@@ -1044,46 +1187,46 @@ pub trait Component: Send {
     }
     
     /// Handle keyboard events
-    fn handle_key_events(&mut self, key: KeyEvent) -> Action {
-        Action::None
-    }
+    fn handle_key_events(&mut self, key: KeyEvent) -> Action;
     
     /// Handle mouse events
-    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> Action {
-        Action::None
-    }
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> Action;
     
     /// Update component state based on action
-    async fn update(&mut self, action: Action) -> Result<Option<Action>> {
-        Ok(None)
-    }
+    async fn update(&mut self, action: Action) -> crate::error::Result<Option<Action>>;
     
     /// Render component to terminal
     fn render(&mut self, frame: &mut Frame, area: Rect);
 }
+```
 
-#[derive(Debug, Clone)]
-pub enum Action {
-    None,
-    Tick,
-    Render,
-    Quit,
-    
-    // Navigation
-    NavigateToPatients,
-    NavigateToAppointments,
-    NavigateToClinical,
-    NavigateToBilling,
-    
-    // Patient actions
-    PatientSelect(Uuid),
-    PatientCreate,
-    PatientEdit(Uuid),
-    PatientSearch(String),
-    
-    // ... more actions
+### UI Component Traits
+
+Additional traits for interactive UI components (`src/ui/components/traits.rs`):
+
+```rust
+/// Trait for interactive components that can receive focus and handle events
+pub trait InteractiveComponent {
+    fn get_state(&self) -> ComponentState;
+    fn is_focused(&self) -> bool;
+    fn set_focus(&mut self, focused: bool);
+    fn reset(&mut self);
+}
+
+/// Trait for components that can be rendered
+pub trait Renderable {
+    fn render(&mut self, area: Rect, frame: &mut Frame);
+}
+
+/// Marker trait for components that can handle keyboard input
+pub trait KeyboardInput {
+    fn on_key(&mut self, key: KeyEvent) -> bool;
 }
 ```
+
+### Component Implementations
+
+Components implement the `Component` trait and are injected via `Arc<dyn Component>`:
 
 ### Example Component: Patient List
 

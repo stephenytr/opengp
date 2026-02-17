@@ -2,14 +2,13 @@
 
 **Project**: OpenGP - Open Source General Practice Management Software  
 **Language**: Rust (Edition 2021, stable path to 2024)  
-**Framework**: Ratatui (TUI), SQLx (Database), Tokio (Async Runtime)  
+**Framework**: Ratatui (TUI), tui-realm (planned), SQLx (Database), Tokio (Async Runtime)  
 **Target**: Australian healthcare providers  
 **License**: AGPL-3.0
 
 > **Note**: Rust 2024 Edition was stabilized in Rust 1.85.0 (February 2025). This project currently uses Edition 2021 with a migration path to 2024 planned. Editions are backward-compatible, opt-in milestones that enable language improvements without breaking existing code.
 
 ---
-
 
 ## Quick Reference
 
@@ -98,18 +97,74 @@ src/
 ├── config.rs                # Configuration management
 ├── error.rs                 # Top-level error types
 ├── ui/                      # UI Layer (Ratatui)
+│   ├── app.rs              # UI application wrapper
 │   ├── tui.rs              # Terminal setup
 │   ├── event.rs            # Event handling
 │   ├── theme.rs            # Styling
 │   ├── keybinds.rs         # Keyboard bindings
+│   ├── msg.rs              # Message types
+│   ├── component_id.rs     # Component identifiers
+│   ├── mod.rs              # UI module exports
+│   ├── components/         # Reusable UI primitives
+│   │   ├── buttons.rs      # Button widgets
+│   │   ├── checkboxes.rs   # Checkbox widgets
+│   │   ├── inputs.rs       # Input field widgets
+│   │   ├── selects.rs      # Select dropdown widgets
+│   │   ├── list_picker.rs  # List picker with filtering
+│   │   ├── modal.rs        # Modal dialogs
+│   │   ├── tab_view.rs     # Tab navigation
+│   │   ├── state.rs        # Component state
+│   │   ├── traits.rs       # Component traits
+│   │   ├── realm_input.rs  # tui-realm input adapter
+│   │   ├── realm_list.rs   # tui-realm list adapter
+│   │   ├── realm_select.rs # tui-realm select adapter
+│   │   └── theme_adapter.rs # Theme adapter
 │   └── widgets/            # Custom widgets
-├── components/              # UI Components (trait-based)
+│       ├── list_selector.rs
+│       ├── search_filter.rs
+│       ├── modal_handler.rs
+│       ├── confirmation_dialog.rs
+│       ├── form_field.rs
+│       ├── status_badge.rs
+│       ├── help_modal.rs
+│       ├── month_calendar.rs
+│       ├── time_slot_picker.rs
+│       └── mouse_debug.rs
+├── components/              # UI Components (app-level)
 │   ├── patient/            # Patient UI components
+│   │   ├── form.rs
+│   │   ├── list.rs
+│   │   └── mod.rs
 │   ├── appointment/        # Appointment UI components
 │   │   ├── calendar/       # Calendar view
+│   │   │   ├── component.rs
+│   │   │   ├── state.rs
+│   │   │   ├── layout.rs
+│   │   │   ├── renderers.rs
+│   │   │   └── mod.rs
+│   │   ├── form.rs         # Appointment form
 │   │   ├── list.rs         # List view
-│   │   └── form.rs         # Form view
-│   └── clinical/           # Clinical UI components
+│   │   ├── logs/           # Appointment logs
+│   │   ├── calendar_tests.rs
+│   │   └── mod.rs
+│   ├── clinical/           # Clinical UI components
+│   │   ├── component.rs
+│   │   ├── state.rs
+│   │   ├── consultation_form.rs
+│   │   ├── consultation_list.rs
+│   │   ├── allergy_form.rs
+│   │   ├── allergy_list.rs
+│   │   ├── vital_signs_form.rs
+│   │   ├── patient_overview.rs
+│   │   ├── patient_selector.rs
+│   │   ├── medical_history_form.rs
+│   │   ├── medical_history_list.rs
+│   │   ├── family_history_form.rs
+│   │   ├── family_history_list.rs
+│   │   ├── social_history_form.rs
+│   │   ├── renderers.rs
+│   │   └── mod.rs
+│   └── mod.rs
 ├── domain/                  # Domain Layer (business logic)
 │   ├── patient/            # Patient domain
 │   │   ├── model.rs        # Domain entities
@@ -117,23 +172,72 @@ src/
 │   │   ├── repository.rs   # Persistence interface (trait)
 │   │   ├── dto.rs          # Data transfer objects
 │   │   ├── error.rs        # Domain errors
-│   │   └── query.rs        # Query objects
+│   │   ├── query.rs        # Query objects
+│   │   └── mod.rs
 │   ├── appointment/        # Appointment domain
+│   │   ├── model.rs
+│   │   ├── service.rs
+│   │   ├── repository.rs
+│   │   ├── dto.rs
+│   │   ├── query.rs
+│   │   ├── error.rs
+│   │   └── mod.rs
 │   ├── clinical/           # Clinical notes domain
+│   │   ├── model.rs
+│   │   ├── service.rs
+│   │   ├── repository.rs
+│   │   ├── dto.rs
+│   │   ├── error.rs
+│   │   └── mod.rs
 │   ├── billing/            # Billing domain
 │   ├── prescription/       # Prescription domain
+│   │   ├── model.rs
+│   │   ├── service.rs
+│   │   ├── repository.rs
+│   │   ├── dto.rs
+│   │   ├── error.rs
+│   │   └── mod.rs
 │   ├── immunisation/       # Immunisation domain
+│   │   ├── model.rs
+│   │   └── mod.rs
 │   ├── pathology/          # Pathology results domain
+│   │   ├── model.rs
+│   │   └── mod.rs
 │   ├── referral/           # Referral domain
+│   │   ├── model.rs
+│   │   └── mod.rs
 │   ├── audit/              # Audit logging domain
-│   └── user/               # User management domain
+│   │   ├── model.rs
+│   │   ├── service.rs
+│   │   ├── repository.rs
+│   │   ├── error.rs
+│   │   └── mod.rs
+│   ├── user/               # User management domain
+│   │   ├── model.rs
+│   │   ├── service.rs
+│   │   ├── repository.rs
+│   │   ├── dto.rs
+│   │   ├── error.rs
+│   │   └── mod.rs
+│   ├── error.rs            # Top-level domain errors
+│   ├── macros.rs           # Domain macros
+│   └── mod.rs
 ├── infrastructure/          # Infrastructure Layer
 │   ├── database/           # Database implementation
-│   │   ├── repositories/   # Repository implementations
-│   │   ├── mocks.rs        # In-memory test mocks
+│   │   ├── mod.rs
 │   │   ├── helpers.rs      # Database helpers
-│   │   └── test_utils.rs   # Test utilities
+│   │   ├── mocks.rs        # In-memory test mocks
+│   │   ├── test_utils.rs   # Test utilities
+│   │   └── repositories/   # Repository implementations
+│   │       ├── mod.rs
+│   │       ├── patient.rs
+│   │       ├── practitioner.rs
+│   │       ├── appointment.rs
+│   │       ├── clinical.rs
+│   │       ├── user.rs
+│   │       └── audit.rs
 │   ├── fixtures/           # Test data generators
+│   │   ├── mod.rs
 │   │   ├── patient_generator.rs
 │   │   ├── appointment_generator.rs
 │   │   ├── prescription_generator.rs
@@ -141,12 +245,14 @@ src/
 │   │   └── audit_generator.rs
 │   ├── crypto/             # Encryption/hashing
 │   ├── audit/              # Audit logging
-│   └── auth/               # Authentication
+│   ├── auth/               # Authentication
+│   └── mod.rs
 └── integrations/            # External APIs
     ├── medicare/           # Medicare Online
     ├── pbs/                # PBS API
     ├── air/                # Immunisation Register
-    └── hi_service/         # Healthcare Identifiers
+    ├── hi_service/         # Healthcare Identifiers
+    └── mod.rs
 ```
 
 **Layer Dependency Rule**: Outer → Inner only. Domain layer NEVER depends on infrastructure or UI.
@@ -629,16 +735,128 @@ pub trait PatientRepository: Send + Sync {
 
 ### Component Trait Pattern
 
+The codebase uses a custom `Component` trait for UI components:
+
 ```rust
 // src/components/mod.rs
 use async_trait::async_trait;
 
 #[async_trait]
 pub trait Component: Send {
-    async fn init(&mut self) -> Result<()> { Ok(()) }
+    async fn init(&mut self) -> crate::error::Result<()> { Ok(()) }
+    fn handle_events(&mut self, event: Option<Event>) -> Action;
     fn handle_key_events(&mut self, key: KeyEvent) -> Action;
-    async fn update(&mut self, action: Action) -> Result<Option<Action>>;
+    fn handle_mouse_events(&mut self, mouse: MouseEvent) -> Action;
+    async fn update(&mut self, action: Action) -> crate::error::Result<Option<Action>>;
     fn render(&mut self, frame: &mut Frame, area: Rect);
+}
+```
+
+**Additional UI Component Traits** (`src/ui/components/traits.rs`):
+
+```rust
+// For interactive components with focus management
+pub trait InteractiveComponent {
+    fn get_state(&self) -> ComponentState;
+    fn is_focused(&self) -> bool;
+    fn set_focus(&mut self, focused: bool);
+    fn reset(&mut self);
+}
+
+// For renderable components
+pub trait Renderable {
+    fn render(&mut self, area: Rect, frame: &mut Frame);
+}
+```
+
+**Custom UI Wrappers** (instead of tui-realm directly):
+
+```rust
+// src/ui/components/inputs.rs - Custom input wrapper
+pub struct InputWrapper {
+    value: String,
+    placeholder: String,
+    is_focused: bool,
+}
+
+// src/ui/components/selects.rs - Custom select wrapper
+pub struct SelectWrapper<T> {
+    options: Vec<T>,
+    selected_index: usize,
+    is_open: bool,
+}
+
+// src/ui/components/list_picker.rs - List with fuzzy filtering
+pub struct ListPicker<T> {
+    items: Vec<T>,
+    filter_query: String,
+    selected_index: Option<usize>,
+}
+```
+
+> **Note**: The project includes `tuirealm` as a dependency but has not yet been integrated. The current implementation uses custom wrapper structs. The traits in `src/ui/components/traits.rs` are designed to be compatible with tui-realm for future integration.
+
+### Abstraction Patterns
+
+The codebase heavily uses trait-based abstractions for loose coupling and testability:
+
+#### Repository Pattern
+
+Domain modules define repository traits that abstract data persistence:
+
+```rust
+// src/domain/patient/repository.rs
+#[async_trait]
+pub trait PatientRepository: Send + Sync {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<Patient>, RepositoryError>;
+    async fn create(&self, patient: Patient) -> Result<Patient, RepositoryError>;
+    async fn update(&self, patient: Patient) -> Result<Patient, RepositoryError>;
+}
+```
+
+Concrete implementations are provided by infrastructure layer:
+
+```rust
+// src/infrastructure/database/repositories/patient.rs
+impl PatientRepository for SqlxPatientRepository { ... }
+```
+
+#### Service Layer with Dependency Injection
+
+Services depend on trait objects, enabling different implementations:
+
+```rust
+pub struct PatientService {
+    repository: Arc<dyn PatientRepository>,
+    audit_logger: Arc<dyn AuditLogger>,
+}
+
+// Production: real implementations
+let service = PatientService::new(
+    Arc::new(SqlxPatientRepository::new(pool)),
+    Arc::new(AuditLogger::new(audit_repo)),
+);
+
+// Tests: mock implementations
+let service = PatientService::new(
+    Arc::new(MockPatientRepository::new()),
+    Arc::new(MockAuditLogger::new()),
+);
+```
+
+#### Query Abstraction (Read Models)
+
+Separate traits for optimized read operations:
+
+```rust
+// src/domain/appointment/query.rs
+#[async_trait]
+pub trait AppointmentCalendarQuery: Send + Sync {
+    async fn for_date_range(
+        &self,
+        start: NaiveDate,
+        end: NaiveDate,
+    ) -> Result<Vec<CalendarAppointment>>;
 }
 ```
 
@@ -1082,6 +1300,6 @@ impl HistoryState {
 
 ---
 
-**Document Version**: 1.1  
-**Last Updated**: 2026-02-16  
+**Document Version**: 1.4  
+**Last Updated**: 2026-02-17  
 **Maintainer**: OpenGP Development Team
