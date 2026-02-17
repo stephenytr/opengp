@@ -113,8 +113,9 @@ impl Component<Msg, NoUserEvent> for RealmTabs {
             Event::Mouse(MouseEvent {
                 kind: MouseEventKind::Down(_),
                 column,
+                row,
                 ..
-            }) => self.handle_tab_click(column),
+            }) => self.handle_tab_click(column, row),
             _ => None,
         }
     }
@@ -252,24 +253,49 @@ impl RealmTabs {
         }
     }
 
-    fn handle_tab_click(&mut self, column: u16) -> Option<Msg> {
+    fn handle_tab_click(&mut self, column: u16, row: u16) -> Option<Msg> {
         if self.component.titles.is_empty() {
             return None;
         }
 
         let area = self.component.last_area;
-        let tab_count = self.component.titles.len();
 
-        let available_width = area.width.saturating_sub(2);
-        let tab_width = (available_width / tab_count as u16).max(1);
+        let inner_area = Rect {
+            x: area.x + 1,
+            y: area.y + 1,
+            width: area.width.saturating_sub(2),
+            height: area.height.saturating_sub(2),
+        };
 
-        let tabs_start = area.x + 1;
+        if row != inner_area.y {
+            return None;
+        }
 
-        for i in 0..tab_count {
-            let tab_start = tabs_start + (i as u16 * tab_width);
-            let tab_end = tab_start + tab_width;
+        let divider_width = 1;
+        let padding_width = 1;
 
-            if column >= tab_start && column < tab_end && i != self.component.selected {
+        let mut x = inner_area.left();
+
+        for (i, title) in self.component.titles.iter().enumerate() {
+            let tab_start = x;
+            x += padding_width;
+
+            let title_width = title.len() as u16;
+            x += title_width;
+
+            x += padding_width;
+
+            let tab_end = x;
+
+            let is_last_tab = i == self.component.titles.len() - 1;
+            let effective_end = if is_last_tab {
+                inner_area.right()
+            } else {
+                x += divider_width;
+                tab_end
+            };
+
+            if column >= tab_start && column < effective_end && i != self.component.selected {
                 self.component.selected = i;
                 return Some(Msg::NavigateToTab(i));
             }
