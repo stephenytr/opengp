@@ -344,6 +344,18 @@ impl KeybindRegistry {
             context: KeyContext::PatientList,
             description: "Create new patient",
         });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE),
+            action: Action::Edit,
+            context: KeyContext::PatientList,
+            description: "Edit selected patient",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
+            action: Action::Delete,
+            context: KeyContext::PatientList,
+            description: "Delete selected patient",
+        });
 
         // Patient form keybinds
         self.register(Keybind {
@@ -351,6 +363,12 @@ impl KeybindRegistry {
             action: Action::Save,
             context: KeyContext::PatientForm,
             description: "Save patient",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            action: Action::Escape,
+            context: KeyContext::PatientForm,
+            description: "Cancel and go back",
         });
 
         // Schedule keybinds

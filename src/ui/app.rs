@@ -9,6 +9,7 @@ use ratatui::style::Color;
 use ratatui::Frame;
 
 use crate::ui::components::help::HelpOverlay;
+use crate::ui::components::patient::{PatientForm, PatientList, PatientState};
 use crate::ui::components::status_bar::{StatusBar, STATUS_BAR_HEIGHT};
 use crate::ui::components::tabs::{Tab, TabBar};
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
@@ -34,13 +35,20 @@ pub struct App {
     title: String,
     /// Version info
     version: String,
+    /// Patient component state
+    patient_state: PatientState,
+    /// Patient list component
+    patient_list: PatientList,
+    /// Patient form component
+    patient_form: Option<PatientForm>,
 }
 
 impl App {
     /// Create a new application instance
     pub fn new() -> Self {
+        let theme = Theme::dark();
         let mut app = Self {
-            theme: Theme::dark(),
+            theme: theme.clone(),
             keybinds: KeybindRegistry::new(),
             tab_bar: TabBar::new(),
             status_bar: StatusBar::patient_list(),
@@ -49,15 +57,17 @@ impl App {
             should_quit: false,
             title: "OpenGP".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
+            patient_state: PatientState::new(),
+            patient_list: PatientList::new(theme.clone()),
+            patient_form: None,
         };
 
-        self.refresh_status_bar();
-        self.refresh_context();
+        app.refresh_status_bar();
+        app.refresh_context();
 
         app
     }
 
-    /// Get the theme
     pub fn theme(&self) -> &Theme {
         &self.theme
     }
@@ -153,6 +163,35 @@ impl App {
                 Action::Quit => {
                     self.should_quit = true;
                 }
+                // Patient list actions
+                Action::New => {
+                    if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+                        self.patient_form = Some(PatientForm::new(self.theme.clone()));
+                        self.current_context = KeyContext::PatientForm;
+                    }
+                }
+                Action::Edit => {
+                    if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+                        if let Some(patient) = self.patient_list.selected_patient().cloned() {
+                            self.patient_form =
+                                Some(PatientForm::from_patient(patient, self.theme.clone()));
+                            self.current_context = KeyContext::PatientForm;
+                        }
+                    }
+                }
+                Action::Delete => {
+                    // TODO: Implement delete confirmation
+                }
+                // Patient form actions
+                Action::Escape => {
+                    if self.patient_form.is_some() {
+                        self.patient_form = None();
+                        self.current_context = KeyContext::PatientList;
+                    }
+                }
+                Action::Save => {
+                    // TODO: Handle form save
+                }
                 _ => {}
             }
             return keybind.action;
@@ -163,6 +202,27 @@ impl App {
             self.refresh_status_bar();
             self.refresh_context();
             return Action::Enter;
+        }
+
+        // Handle patient list navigation when in list view
+        if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+            if let Some(action) = self.patient_list.handle_key(key) {
+                match action {
+                    crate::ui::components::patient::PatientListAction::SelectionChanged => {}
+                    crate::ui::components::patient::PatientListAction::OpenPatient(id) => {
+                        // Open patient for viewing/editing
+                        if let Some(patient) = self.patient_list.selected_patient().cloned() {
+                            self.patient_form =
+                                Some(PatientForm::from_patient(patient, self.theme.clone()));
+                            self.current_context = KeyContext::PatientForm;
+                        }
+                    }
+                    crate::ui::components::patient::PatientListAction::FocusSearch => {
+                        // TODO: Focus search input
+                    }
+                }
+                return Action::Enter;
+            }
         }
 
         Action::Unknown
@@ -236,30 +296,80 @@ impl App {
     }
 
     /// Render the content area based on current tab
-    fn render_content<B: Backend>(&self, frame: &mut Frame<B>, area: Rect) {
-        use ratatui::text::Text;
-        use ratatui::widgets::{Block, Borders, Paragraph};
-
+    fn render_content<B: Backend>(&mut self, frame: &mut Frame<B>, area: Rect) {
         let tab = self.tab_bar.selected();
 
-        let content = match tab {
-            Tab::Patient => "Patient List\n\nUse arrow keys or j/k to navigate\n/ to search, n for new patient\nEnter to open patient",
-            Tab::Appointment => "Appointments\n\nCalendar and schedule view\nh/l to navigate days\nj/k to navigate weeks",
-            Tab::Clinical => "Clinical Notes\n\nPatient clinical records\nSOAP notes, allergies, history",
-            Tab::Billing => "Billing\n\nInvoicing and payments\nMedicare claims",
-        };
+        match tab {
+            Tab::Patient => {
+                // Render patient form if active, otherwise render list
+                if let Some(ref mut form) = self.patient_form {
+                    frame.render_widget(form.clone(), area);
+                } else {
+                    frame.render_widget(self.patient_list.clone(), area);
+                }
+            }
+            Tab::Appointment => {
+                use ratatui::text::Text;
+                use ratatui::widgets::{Block, Borders, Paragraph};
 
-        let paragraph = Paragraph::new(Text::from(content))
-            .block(
-                Block::default()
-                    .title(format!(" {} ", tab.name()))
-                    .borders(Borders::ALL)
-                    .border_style(ratatui::style::Style::default().fg(self.theme.colors.border)),
-            )
-            .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
-            .alignment(ratatui::layout::Alignment::Center);
+                let content = "Appointments\n\nCalendar and schedule view\nh/l to navigate days\nj/k to navigate weeks";
 
-        frame.render_widget(paragraph, area);
+                let paragraph = Paragraph::new(Text::from(content))
+                    .block(
+                        Block::default()
+                            .title(format!(" {} ", tab.name()))
+                            .borders(Borders::ALL)
+                            .border_style(
+                                ratatui::style::Style::default().fg(self.theme.colors.border),
+                            ),
+                    )
+                    .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
+                    .alignment(ratatui::layout::Alignment::Center);
+
+                frame.render_widget(paragraph, area);
+            }
+            Tab::Clinical => {
+                use ratatui::text::Text;
+                use ratatui::widgets::{Block, Borders, Paragraph};
+
+                let content =
+                    "Clinical Notes\n\nPatient clinical records\nSOAP notes, allergies, history";
+
+                let paragraph = Paragraph::new(Text::from(content))
+                    .block(
+                        Block::default()
+                            .title(format!(" {} ", tab.name()))
+                            .borders(Borders::ALL)
+                            .border_style(
+                                ratatui::style::Style::default().fg(self.theme.colors.border),
+                            ),
+                    )
+                    .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
+                    .alignment(ratatui::layout::Alignment::Center);
+
+                frame.render_widget(paragraph, area);
+            }
+            Tab::Billing => {
+                use ratatui::text::Text;
+                use ratatui::widgets::{Block, Borders, Paragraph};
+
+                let content = "Billing\n\nInvoicing and payments\nMedicare claims";
+
+                let paragraph = Paragraph::new(Text::from(content))
+                    .block(
+                        Block::default()
+                            .title(format!(" {} ", tab.name()))
+                            .borders(Borders::ALL)
+                            .border_style(
+                                ratatui::style::Style::default().fg(self.theme.colors.border),
+                            ),
+                    )
+                    .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
+                    .alignment(ratatui::layout::Alignment::Center);
+
+                frame.render_widget(paragraph, area);
+            }
+        }
     }
 }
 
