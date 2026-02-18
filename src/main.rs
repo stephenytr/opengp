@@ -4,11 +4,15 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use opengp::domain::patient::PatientRepository;
+use opengp::infrastructure::crypto::EncryptionService;
 use opengp::infrastructure::database::{create_pool, run_migrations};
+use opengp::infrastructure::database::repositories::patient::SqlxPatientRepository;
 use opengp::ui::app::App;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io;
+use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use opengp::Config;
@@ -30,14 +34,20 @@ async fn main() -> Result<()> {
 
     tracing::info!("Database pool created with {} connection(s)", db_pool.size());
 
-    run_tui().await?;
+    let crypto = Arc::new(EncryptionService::new()?);
+    let patient_repo = SqlxPatientRepository::new(db_pool.clone(), crypto);
+
+    let patients: Vec<opengp::domain::patient::Patient> = patient_repo.list_active().await?;
+    tracing::info!("Loaded {} patients from database", patients.len());
+
+    run_tui(patients).await?;
 
     tracing::info!("OpenGP shutdown complete");
 
     Ok(())
 }
 
-async fn run_tui() -> Result<()> {
+async fn run_tui(patients: Vec<opengp::domain::patient::Patient>) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -45,6 +55,7 @@ async fn run_tui() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = App::new();
+    app.load_patients(patients);
 
     loop {
         terminal.draw(|frame| {

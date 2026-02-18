@@ -67,6 +67,11 @@ impl App {
         app
     }
 
+    /// Load patients into the list
+    pub fn load_patients(&mut self, patients: Vec<crate::domain::patient::Patient>) {
+        self.patient_list.set_patients(patients);
+    }
+
     pub fn theme(&self) -> &Theme {
         &self.theme
     }
