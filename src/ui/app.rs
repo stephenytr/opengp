@@ -3,7 +3,6 @@
 //! Main application state management, rendering, and event handling.
 
 use crossterm::event::{Event, KeyEvent, MouseEvent};
-use ratatui::backend::Backend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Color;
 use ratatui::Frame;
@@ -133,10 +132,15 @@ impl App {
             return Action::Unknown;
         }
 
-        // Look up the action from keybinds
-        if let Some(keybind) = self.keybinds.lookup(key, self.current_context) {
-            // Handle tab switching
-            match keybind.action {
+        // Look up the action from keybinds - clone to avoid borrow issues
+        let action = self
+            .keybinds
+            .lookup(key, self.current_context)
+            .map(|kb| kb.action.clone());
+
+        if let Some(action) = action {
+            // Handle actions that need mutable self
+            match action {
                 Action::SwitchToPatient => {
                     self.tab_bar.select(Tab::Patient);
                     self.refresh_status_bar();
@@ -163,7 +167,6 @@ impl App {
                 Action::Quit => {
                     self.should_quit = true;
                 }
-                // Patient list actions
                 Action::New => {
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
                         self.patient_form = Some(PatientForm::new(self.theme.clone()));
@@ -179,22 +182,17 @@ impl App {
                         }
                     }
                 }
-                Action::Delete => {
-                    // TODO: Implement delete confirmation
-                }
-                // Patient form actions
+                Action::Delete => {}
                 Action::Escape => {
                     if self.patient_form.is_some() {
-                        self.patient_form = None();
+                        self.patient_form = None;
                         self.current_context = KeyContext::PatientList;
                     }
                 }
-                Action::Save => {
-                    // TODO: Handle form save
-                }
+                Action::Save => {}
                 _ => {}
             }
-            return keybind.action;
+            return action;
         }
 
         // Handle tab bar navigation
@@ -237,8 +235,8 @@ impl App {
             .split(area)[0];
 
         if let Some(tab) = self.tab_bar.handle_mouse(mouse, tab_bar_area) {
-            self.update_status_bar();
-            self.update_context();
+            self.refresh_status_bar();
+            self.refresh_context();
         }
     }
 
@@ -262,7 +260,7 @@ impl App {
     }
 
     /// Render the application
-    pub fn render<B: Backend>(&mut self, frame: &mut Frame<B>) {
+    pub fn render(&mut self, frame: &mut Frame) {
         let terminal = frame.area();
 
         // If help overlay is visible, only render it
@@ -296,7 +294,7 @@ impl App {
     }
 
     /// Render the content area based on current tab
-    fn render_content<B: Backend>(&mut self, frame: &mut Frame<B>, area: Rect) {
+    fn render_content(&mut self, frame: &mut Frame, area: Rect) {
         let tab = self.tab_bar.selected();
 
         match tab {

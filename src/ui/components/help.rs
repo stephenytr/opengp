@@ -10,7 +10,7 @@ use ratatui::widgets::{Block, Borders, Padding, Widget};
 use crate::ui::keybinds::KeyContext;
 
 /// Help overlay state
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HelpOverlay {
     /// Whether the help overlay is visible
     visible: bool,

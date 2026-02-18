@@ -1,7 +1,17 @@
 use color_eyre::Result;
+use crossterm::{
+    event::{DisableMouseCapture, EnableMouseCapture},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
 use opengp::infrastructure::database::{create_pool, run_migrations};
-use opengp::Config;
+use opengp::ui::app::App;
+use ratatui::backend::CrosstermBackend;
+use ratatui::Terminal;
+use std::io;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+use opengp::Config;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -18,12 +28,45 @@ async fn main() -> Result<()> {
 
     run_migrations(&db_pool).await?;
 
-    tracing::info!("OpenGP initialized - UI not yet implemented");
     tracing::info!("Database pool created with {} connection(s)", db_pool.size());
 
-    tokio::signal::ctrl_c().await?;
+    run_tui().await?;
 
     tracing::info!("OpenGP shutdown complete");
+
+    Ok(())
+}
+
+async fn run_tui() -> Result<()> {
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    let mut app = App::new();
+
+    loop {
+        terminal.draw(|frame| {
+            app.render(frame);
+        })?;
+
+        if let Ok(crossterm::event::Event::Key(key)) = crossterm::event::read() {
+            let action = app.handle_key_event(key);
+
+            if action == opengp::ui::keybinds::Action::Quit || app.should_quit() {
+                break;
+            }
+        }
+    }
+
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
 
     Ok(())
 }

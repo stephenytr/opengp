@@ -31,6 +31,19 @@ pub struct PatientList {
     theme: Theme,
 }
 
+impl Clone for PatientList {
+    fn clone(&self) -> Self {
+        Self {
+            patients: self.patients.clone(),
+            filtered: self.filtered.clone(),
+            search_query: self.search_query.clone(),
+            selected_index: self.selected_index,
+            loading: self.loading,
+            theme: self.theme.clone(),
+        }
+    }
+}
+
 impl PatientList {
     pub fn new(theme: Theme) -> Self {
         Self {

@@ -71,7 +71,7 @@ impl Tab {
 }
 
 /// Tab bar state
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TabBar {
     /// Currently selected tab
     selected: Tab,

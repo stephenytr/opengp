@@ -138,6 +138,19 @@ pub struct PatientForm {
     theme: Theme,
 }
 
+impl Clone for PatientForm {
+    fn clone(&self) -> Self {
+        Self {
+            mode: self.mode,
+            values: self.values.clone(),
+            errors: self.errors.clone(),
+            focused_field: self.focused_field,
+            saving: self.saving,
+            theme: self.theme.clone(),
+        }
+    }
+}
+
 impl PatientForm {
     pub fn new(theme: Theme) -> Self {
         let mut values = HashMap::new();
