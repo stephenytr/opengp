@@ -1,6 +1,5 @@
 use color_eyre::Result;
 use opengp::infrastructure::database::{create_pool, run_migrations};
-use opengp::ui::App;
 use opengp::Config;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -19,9 +18,10 @@ async fn main() -> Result<()> {
 
     run_migrations(&db_pool).await?;
 
-    let mut app = App::new(config, db_pool)?;
+    tracing::info!("OpenGP initialized - UI not yet implemented");
+    tracing::info!("Database pool created with {} connection(s)", db_pool.size());
 
-    app.run().await?;
+    tokio::signal::ctrl_c().await?;
 
     tracing::info!("OpenGP shutdown complete");
 

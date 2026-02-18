@@ -1,16 +1,8 @@
-//! Top-level error types
-//!
-//! Defines the main error type used throughout the application.
-
-use crate::components::Action;
 use crate::config::ConfigError;
 use crate::infrastructure::crypto::CryptoError;
-use tokio::sync::mpsc::error::SendError;
 
-/// Result type alias using our Error type
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Top-level application error
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Configuration error: {0}")]
@@ -25,15 +17,6 @@ pub enum Error {
     #[error("Encryption error: {0}")]
     Crypto(#[from] CryptoError),
 
-    #[error("Channel send error: {0}")]
-    ChannelSend(String),
-
     #[error("Application error: {0}")]
     App(String),
-}
-
-impl From<SendError<Action>> for Error {
-    fn from(err: SendError<Action>) -> Self {
-        Error::ChannelSend(err.to_string())
-    }
 }
