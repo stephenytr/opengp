@@ -31,10 +31,13 @@ pub struct App {
     /// Whether the application should quit
     should_quit: bool,
     /// Application title
+    #[allow(dead_code)]
     title: String,
     /// Version info
+    #[allow(dead_code)]
     version: String,
     /// Patient component state
+    #[allow(dead_code)]
     patient_state: PatientState,
     /// Patient list component
     patient_list: PatientList,
@@ -222,7 +225,7 @@ impl App {
             if let Some(action) = self.patient_list.handle_key(key) {
                 match action {
                     crate::ui::components::patient::PatientListAction::SelectionChanged => {}
-                    crate::ui::components::patient::PatientListAction::OpenPatient(id) => {
+                    crate::ui::components::patient::PatientListAction::OpenPatient(_id) => {
                         // Open patient for viewing/editing
                         if let Some(patient) = self.patient_list.selected_patient().cloned() {
                             self.patient_form =
@@ -230,9 +233,8 @@ impl App {
                             self.current_context = KeyContext::PatientForm;
                         }
                     }
-                    crate::ui::components::patient::PatientListAction::FocusSearch => {
-                        // TODO: Focus search input
-                    }
+                    crate::ui::components::patient::PatientListAction::FocusSearch => {}
+                    crate::ui::components::patient::PatientListAction::SearchChanged => {}
                 }
                 return Action::Enter;
             }
@@ -249,7 +251,7 @@ impl App {
             .constraints([Constraint::Percentage(100)])
             .split(area)[0];
 
-        if let Some(tab) = self.tab_bar.handle_mouse(mouse, tab_bar_area) {
+        if let Some(_tab) = self.tab_bar.handle_mouse(mouse, tab_bar_area) {
             self.refresh_status_bar();
             self.refresh_context();
         }
@@ -409,7 +411,7 @@ mod tests {
 
         // Simulate pressing F3 to switch to Appointments tab
         let key = crossterm::event::KeyEvent::new(
-            crossterm::event::Key::F3,
+            crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
         );
         app.handle_key_event(key);
@@ -425,7 +427,7 @@ mod tests {
 
         // Simulate pressing F1 to open help
         let key = crossterm::event::KeyEvent::new(
-            crossterm::event::Key::F1,
+            crossterm::event::KeyCode::F(1),
             crossterm::event::KeyModifiers::NONE,
         );
         app.handle_key_event(key);
@@ -444,7 +446,7 @@ mod tests {
 
         // Simulate Ctrl+Q to quit
         let key = crossterm::event::KeyEvent::new(
-            crossterm::event::Key::Char('q'),
+            crossterm::event::KeyCode::Char('q'),
             crossterm::event::KeyModifiers::CONTROL,
         );
         app.handle_key_event(key);

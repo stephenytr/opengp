@@ -255,11 +255,7 @@ impl Widget for TabBar {
                 let is_focused = self.focused && is_selected;
 
                 // Build the label with shortcut
-                let label = if is_selected {
-                    format!(" {} ", tab_item.label)
-                } else {
-                    format!(" {} ", tab_item.label)
-                };
+                let label = format!(" {} ", tab_item.label);
 
                 // Render the tab label
                 let style = if is_selected {

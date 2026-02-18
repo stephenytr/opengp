@@ -30,7 +30,7 @@ pub enum KeyContext {
 }
 
 /// Actions that can be triggered by keybinds
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum Action {
     // Global actions
     /// Quit the application
@@ -147,13 +147,8 @@ pub enum Action {
     Validate,
 
     // Unknown action (fallback)
+    #[default]
     Unknown,
-}
-
-impl Default for Action {
-    fn default() -> Self {
-        Action::Unknown
-    }
 }
 
 /// A keybind definition
@@ -332,12 +327,7 @@ impl KeybindRegistry {
         });
 
         // Patient list keybinds
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE),
-            action: Action::Search,
-            context: KeyContext::PatientList,
-            description: "Focus search input",
-        });
+        // Note: '/' is handled directly in PatientList for search input
         self.register(Keybind {
             key: KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
             action: Action::New,
@@ -407,13 +397,7 @@ impl KeybindRegistry {
         }
 
         // Fall back to global keybinds
-        for kb in &self.global {
-            if kb.key == key {
-                return Some(kb);
-            }
-        }
-
-        None
+        self.global.iter().find(|kb| kb.key == key)
     }
 
     /// Get all keybinds for a context (including global)

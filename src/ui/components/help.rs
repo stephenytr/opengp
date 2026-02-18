@@ -53,18 +53,17 @@ impl HelpOverlay {
     }
 
     fn get_display_keybinds(&self) -> Vec<(&'static str, &'static str)> {
-        let mut keybinds = Vec::new();
-
-        // Add global keybinds
-        keybinds.push(("Global", ""));
-        keybinds.push(("F1", "Toggle Help"));
-        keybinds.push(("Ctrl+Q", "Quit"));
-        keybinds.push(("Ctrl+N", "New Item"));
-        keybinds.push(("Ctrl+F", "Search"));
-        keybinds.push(("Ctrl+R", "Refresh"));
-        keybinds.push(("Tab", "Next Focus"));
-        keybinds.push(("Shift+Tab", "Previous Focus"));
-        keybinds.push(("Esc", "Cancel / Back"));
+        let mut keybinds = vec![
+            ("Global", ""),
+            ("F1", "Toggle Help"),
+            ("Ctrl+Q", "Quit"),
+            ("Ctrl+N", "New Item"),
+            ("Ctrl+F", "Search"),
+            ("Ctrl+R", "Refresh"),
+            ("Tab", "Next Focus"),
+            ("Shift+Tab", "Previous Focus"),
+            ("Esc", "Cancel / Back"),
+        ];
 
         // Add context-specific keybinds
         match self.context {
@@ -143,8 +142,8 @@ impl Widget for HelpOverlay {
         }
 
         // Calculate the help box size (centered, roughly 60% of screen)
-        let width = (area.width * 3 / 5).max(40).min(80);
-        let height = (area.height * 3 / 5).max(15).min(30);
+        let width = (area.width * 3 / 5).clamp(40, 80);
+        let height = (area.height * 3 / 5).clamp(15, 30);
 
         let x = area.x + (area.width - width) / 2;
         let y = area.y + (area.height - height) / 2;
@@ -178,7 +177,7 @@ impl Widget for HelpOverlay {
 
         // Render keybinds in two columns
         let col_width = content_area.width / 2;
-        let mid_point = (keybinds.len() + 1) / 2;
+        let mid_point = keybinds.len().div_ceil(2);
 
         for (i, (key, desc)) in keybinds.iter().enumerate() {
             let col = if i < mid_point { 0 } else { col_width as usize };
