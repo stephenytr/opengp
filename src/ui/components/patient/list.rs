@@ -28,6 +28,7 @@ pub struct PatientList {
     search_query: String,
     searching: bool,
     selected_index: usize,
+    scroll_offset: usize,
     loading: bool,
     theme: Theme,
 }
@@ -40,6 +41,7 @@ impl Clone for PatientList {
             search_query: self.search_query.clone(),
             searching: self.searching,
             selected_index: self.selected_index,
+            scroll_offset: self.scroll_offset,
             loading: self.loading,
             theme: self.theme.clone(),
         }
@@ -54,6 +56,7 @@ impl PatientList {
             search_query: String::new(),
             searching: false,
             selected_index: 0,
+            scroll_offset: 0,
             loading: false,
             theme,
         }
@@ -62,6 +65,8 @@ impl PatientList {
     pub fn set_patients(&mut self, patients: Vec<Patient>) {
         self.patients = patients;
         self.apply_filter();
+        self.selected_index = 0;
+        self.scroll_offset = 0;
     }
 
     pub fn selected_patient(&self) -> Option<&Patient> {
@@ -92,6 +97,7 @@ impl PatientList {
         self.search_query = query;
         self.apply_filter();
         self.selected_index = 0;
+        self.scroll_offset = 0;
     }
 
     fn apply_filter(&mut self) {
@@ -163,6 +169,10 @@ impl PatientList {
 
     pub fn total_count(&self) -> usize {
         self.patients.len()
+    }
+
+    pub fn scroll_offset(&self) -> usize {
+        self.scroll_offset
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<PatientListAction> {
@@ -239,6 +249,20 @@ impl PatientList {
     }
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<PatientListAction> {
+        // Handle mouse wheel for scrolling
+        if let MouseEventKind::ScrollUp = mouse.kind {
+            if self.scroll_offset > 0 {
+                self.scroll_offset = self.scroll_offset.saturating_sub(3).max(0);
+            }
+            return Some(PatientListAction::SelectionChanged);
+        }
+        if let MouseEventKind::ScrollDown = mouse.kind {
+            let visible_rows = area.height.saturating_sub(3) as usize;
+            let max_scroll = self.filtered.len().saturating_sub(visible_rows);
+            self.scroll_offset = (self.scroll_offset + 3).min(max_scroll);
+            return Some(PatientListAction::SelectionChanged);
+        }
+
         if mouse.kind != MouseEventKind::Up(crossterm::event::MouseButton::Left) {
             return None;
         }
@@ -253,8 +277,10 @@ impl PatientList {
         }
 
         let row_index = (mouse.row - area.y - header_height) as usize;
-        if row_index < self.filtered.len() {
-            self.selected_index = row_index;
+        // Account for scroll offset
+        let actual_index = self.scroll_offset + row_index;
+        if actual_index < self.filtered.len() {
+            self.selected_index = actual_index;
             Some(PatientListAction::SelectionChanged)
         } else {
             None
@@ -322,17 +348,12 @@ impl Widget for PatientList {
             return;
         }
 
-        // Render search input if searching
-        if self.searching {
-            let search_line = Line::from(vec![
-                Span::raw("/"),
-                Span::styled(
-                    self.search_query.as_str(),
-                    Style::default().fg(self.theme.colors.primary),
-                ),
-            ]);
-            buf.set_line(inner.x, inner.y, &search_line, inner.width);
-        }
+        // Reserve top line for search input when searching
+        let content_area = if self.searching && inner.height > 1 {
+            Rect::new(inner.x, inner.y + 1, inner.width, inner.height - 1)
+        } else {
+            inner
+        };
 
         if self.loading {
             let text = Line::from(vec![Span::raw("Loading patients...")]);
@@ -369,12 +390,19 @@ impl Widget for PatientList {
         let header = Row::new(vec!["Name", "DOB", "Medicare #", "Phone", "Last Visit"])
             .style(Style::default().fg(self.theme.colors.primary).bold());
 
+        let visible_rows = content_area.height as usize;
+        let max_scroll = self.filtered.len().saturating_sub(visible_rows);
+        let scroll_offset = self.scroll_offset.min(max_scroll);
+
         let rows: Vec<Row> = self
             .filtered
             .iter()
+            .skip(scroll_offset)
+            .take(visible_rows)
             .enumerate()
             .map(|(i, patient)| {
-                let style = if i == self.selected_index {
+                let actual_index = scroll_offset + i;
+                let style = if actual_index == self.selected_index {
                     Style::default()
                         .bg(self.theme.colors.selected)
                         .fg(self.theme.colors.foreground)
@@ -398,7 +426,21 @@ impl Widget for PatientList {
             .block(Block::default().borders(Borders::NONE))
             .widths(col_widths);
 
-        table.render(inner, buf);
+        table.render(content_area, buf);
+
+        // Render search input AFTER table so it's visible
+        if self.searching {
+            let search_text = if self.search_query.is_empty() {
+                Span::styled("/", Style::default().fg(self.theme.colors.primary).bold())
+            } else {
+                Span::from(format!("/{}", self.search_query))
+            };
+            let search_line = Line::from(vec![
+                search_text,
+                Span::styled(" _", Style::default().fg(self.theme.colors.disabled)),
+            ]);
+            buf.set_line(inner.x, inner.y, &search_line, inner.width);
+        }
     }
 }
 

@@ -43,6 +43,16 @@ pub struct App {
     patient_list: PatientList,
     /// Patient form component
     patient_form: Option<PatientForm>,
+    /// Pending patient data to save (new or update)
+    pending_patient_data: Option<PendingPatientData>,
+}
+
+pub enum PendingPatientData {
+    New(crate::domain::patient::NewPatientData),
+    Update {
+        id: uuid::Uuid,
+        data: crate::domain::patient::UpdatePatientData,
+    },
 }
 
 impl App {
@@ -62,6 +72,7 @@ impl App {
             patient_state: PatientState::new(),
             patient_list: PatientList::new(theme.clone()),
             patient_form: None,
+            pending_patient_data: None,
         };
 
         app.refresh_status_bar();
@@ -73,6 +84,11 @@ impl App {
     /// Load patients into the list
     pub fn load_patients(&mut self, patients: Vec<crate::domain::patient::Patient>) {
         self.patient_list.set_patients(patients);
+    }
+
+    /// Take pending patient data (for saving to database)
+    pub fn take_pending_patient_data(&mut self) -> Option<PendingPatientData> {
+        self.pending_patient_data.take()
     }
 
     pub fn theme(&self) -> &Theme {
@@ -138,6 +154,57 @@ impl App {
                 return Action::Escape;
             }
             return Action::Unknown;
+        }
+
+        // Handle patient list search mode - route ALL keys to patient list, bypass global keybinds
+        if self.tab_bar.selected() == Tab::Patient
+            && self.patient_form.is_none()
+            && self.patient_list.is_searching()
+        {
+            if let Some(action) = self.patient_list.handle_key(key) {
+                match action {
+                    crate::ui::components::patient::PatientListAction::SelectionChanged => {}
+                    crate::ui::components::patient::PatientListAction::OpenPatient(_id) => {}
+                    crate::ui::components::patient::PatientListAction::FocusSearch => {}
+                    crate::ui::components::patient::PatientListAction::SearchChanged => {}
+                }
+                return Action::Enter;
+            }
+        }
+
+        // Handle patient form keys when form is open - route keys to form
+        if self.patient_form.is_some() {
+            if let Some(ref mut form) = self.patient_form {
+                if let Some(action) = form.handle_key(key) {
+                    match action {
+                        crate::ui::components::patient::PatientFormAction::FocusChanged => {}
+                        crate::ui::components::patient::PatientFormAction::ValueChanged => {}
+                        crate::ui::components::patient::PatientFormAction::Submit => {
+                            if let Some(ref mut form) = self.patient_form {
+                                if !form.has_errors() {
+                                    if form.is_edit_mode() {
+                                        if let Some((id, data)) = form.to_update_patient_data() {
+                                            self.pending_patient_data =
+                                                Some(PendingPatientData::Update { id, data });
+                                        }
+                                    } else if let Some(data) = form.to_new_patient_data() {
+                                        self.pending_patient_data =
+                                            Some(PendingPatientData::New(data));
+                                    }
+                                    self.patient_form = None;
+                                    self.current_context = KeyContext::PatientList;
+                                }
+                            }
+                        }
+                        crate::ui::components::patient::PatientFormAction::Cancel => {
+                            self.patient_form = None;
+                            self.current_context = KeyContext::PatientList;
+                        }
+                        crate::ui::components::patient::PatientFormAction::SaveComplete => {}
+                    }
+                    return Action::Enter;
+                }
+            }
         }
 
         // Look up the action from keybinds - clone to avoid borrow issues
@@ -245,15 +312,47 @@ impl App {
 
     /// Handle a mouse event
     pub fn handle_mouse_event(&mut self, mouse: MouseEvent, area: Rect) {
-        // Handle tab bar mouse events
-        let tab_bar_area = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(100)])
-            .split(area)[0];
-
-        if let Some(_tab) = self.tab_bar.handle_mouse(mouse, tab_bar_area) {
+        let tab_bar_area = self.tab_bar.area(area);
+        if self.tab_bar.handle_mouse(mouse, tab_bar_area).is_some() {
             self.refresh_status_bar();
             self.refresh_context();
+            return;
+        }
+
+        if let Some(ref mut form) = self.patient_form {
+            if let Some(action) = form.handle_mouse(mouse, area) {
+                match action {
+                    crate::ui::components::patient::PatientFormAction::FocusChanged => {}
+                    crate::ui::components::patient::PatientFormAction::ValueChanged => {}
+                    crate::ui::components::patient::PatientFormAction::Submit => {}
+                    crate::ui::components::patient::PatientFormAction::Cancel => {}
+                    crate::ui::components::patient::PatientFormAction::SaveComplete => {}
+                }
+                return;
+            }
+        }
+
+        if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+            let content_area = Rect::new(
+                area.x,
+                area.y + 2,
+                area.width,
+                area.height.saturating_sub(2 + STATUS_BAR_HEIGHT),
+            );
+            if let Some(action) = self.patient_list.handle_mouse(mouse, content_area) {
+                match action {
+                    crate::ui::components::patient::PatientListAction::SelectionChanged => {}
+                    crate::ui::components::patient::PatientListAction::OpenPatient(_id) => {
+                        if let Some(patient) = self.patient_list.selected_patient().cloned() {
+                            self.patient_form =
+                                Some(PatientForm::from_patient(patient, self.theme.clone()));
+                            self.current_context = KeyContext::PatientForm;
+                        }
+                    }
+                    crate::ui::components::patient::PatientListAction::FocusSearch => {}
+                    crate::ui::components::patient::PatientListAction::SearchChanged => {}
+                }
+            }
         }
     }
 
@@ -264,14 +363,10 @@ impl App {
                 self.handle_key_event(key);
             }
             Event::Mouse(mouse) => {
-                // Get the main content area
-                let terminal_height = 24; // This should come from the frame
-                let area = Rect::new(0, 0, 80, terminal_height);
-                self.handle_mouse_event(mouse, area);
+                let terminal_area = Rect::new(0, 0, 80, 24);
+                self.handle_mouse_event(mouse, terminal_area);
             }
-            Event::Resize(_, _) => {
-                // Handle resize if needed
-            }
+            Event::Resize(_, _) => {}
             _ => {}
         }
     }

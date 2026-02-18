@@ -470,6 +470,72 @@ impl PatientForm {
         })
     }
 
+    pub fn to_update_patient_data(
+        &mut self,
+    ) -> Option<(Uuid, crate::domain::patient::UpdatePatientData)> {
+        let patient_id = self.patient_id()?;
+
+        if !self.validate() {
+            return None;
+        }
+
+        let dob =
+            NaiveDate::parse_from_str(&self.get_value(FormField::DateOfBirth), "%Y-%m-%d").ok();
+        let gender = self.get_value(FormField::Gender).parse().ok();
+
+        let address = Address {
+            line1: self.get_value(FormField::AddressLine1).empty_to_none(),
+            line2: self.get_value(FormField::AddressLine2).empty_to_none(),
+            suburb: self.get_value(FormField::Suburb).empty_to_none(),
+            state: self.get_value(FormField::State).empty_to_none(),
+            postcode: self.get_value(FormField::Postcode).empty_to_none(),
+            country: or_default(self.get_value(FormField::Country), "Australia"),
+        };
+
+        let emergency_contact = if !self.get_value(FormField::EmergencyName).is_empty() {
+            Some(EmergencyContact {
+                name: self.get_value(FormField::EmergencyName),
+                phone: self.get_value(FormField::EmergencyPhone),
+                relationship: self.get_value(FormField::EmergencyRelationship),
+            })
+        } else {
+            None
+        };
+
+        let concession_type = self.get_value(FormField::ConcessionType).parse().ok();
+        let atsi_status = self.get_value(FormField::AtsiStatus).parse().ok();
+
+        let data = crate::domain::patient::UpdatePatientData {
+            ihi: self.get_value(FormField::Ihi).empty_to_none(),
+            medicare_number: self.get_value(FormField::MedicareNumber).empty_to_none(),
+            medicare_irn: self.get_value(FormField::MedicareIrn).parse().ok(),
+            medicare_expiry: NaiveDate::parse_from_str(
+                &self.get_value(FormField::MedicareExpiry),
+                "%Y-%m-%d",
+            )
+            .ok(),
+            title: self.get_value(FormField::Title).empty_to_none(),
+            first_name: Some(self.get_value(FormField::FirstName)),
+            middle_name: self.get_value(FormField::MiddleName).empty_to_none(),
+            last_name: Some(self.get_value(FormField::LastName)),
+            preferred_name: self.get_value(FormField::PreferredName).empty_to_none(),
+            date_of_birth: dob,
+            gender,
+            address: Some(address),
+            phone_home: self.get_value(FormField::PhoneHome).empty_to_none(),
+            phone_mobile: self.get_value(FormField::PhoneMobile).empty_to_none(),
+            email: self.get_value(FormField::Email).empty_to_none(),
+            emergency_contact,
+            concession_type,
+            concession_number: self.get_value(FormField::ConcessionNumber).empty_to_none(),
+            preferred_language: Some(self.get_value(FormField::PreferredLanguage)),
+            interpreter_required: Some(self.get_value(FormField::InterpreterRequired) == "Yes"),
+            aboriginal_torres_strait_islander: atsi_status,
+        };
+
+        Some((patient_id, data))
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<PatientFormAction> {
         use crossterm::event::KeyCode;
 
@@ -493,7 +559,10 @@ impl PatientForm {
                 self.handle_field_navigation(key.code);
                 Some(PatientFormAction::FocusChanged)
             }
-            KeyCode::Enter => Some(PatientFormAction::Submit),
+            KeyCode::Enter => {
+                self.validate();
+                Some(PatientFormAction::Submit)
+            }
             KeyCode::Esc => Some(PatientFormAction::Cancel),
             KeyCode::Char(c) => {
                 let mut value = self.get_value(self.focused_field);
@@ -530,6 +599,44 @@ impl PatientForm {
 
         if !area.contains(Position::new(mouse.column, mouse.row)) {
             return None;
+        }
+
+        let click_pos = Position::new(mouse.column, mouse.row);
+
+        let inner = Rect::new(area.x + 1, area.y + 1, area.width - 2, area.height - 2);
+        if !inner.contains(click_pos) {
+            return None;
+        }
+
+        let label_width = 22u16;
+        let field_start = inner.x + label_width + 2;
+
+        let fields: Vec<FormField> = FormField::all();
+        let mut y = inner.y + 1;
+        let max_y = inner.y + inner.height - 2;
+
+        for field in &fields {
+            if y > max_y {
+                break;
+            }
+
+            let field_height = if self.error(*field).is_some() { 2 } else { 1 };
+            let field_area = Rect::new(
+                field_start,
+                y,
+                inner.width.saturating_sub(label_width + 4),
+                field_height,
+            );
+
+            if field_area.contains(click_pos) {
+                if *field != self.focused_field {
+                    self.focused_field = *field;
+                    return Some(PatientFormAction::FocusChanged);
+                }
+                return None;
+            }
+
+            y += 2;
         }
 
         None

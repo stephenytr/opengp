@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
-use super::dto::UpdatePatientData;
+use super::dto::{NewPatientData, UpdatePatientData};
 use super::error::ValidationError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,6 +101,32 @@ impl Patient {
             created_at: Utc::now(),
             updated_at: Utc::now(),
         })
+    }
+
+    pub fn from_dto(data: NewPatientData) -> Result<Self, ValidationError> {
+        Self::new(
+            data.first_name,
+            data.last_name,
+            data.date_of_birth,
+            data.gender,
+            data.ihi,
+            data.medicare_number,
+            data.medicare_irn,
+            data.medicare_expiry,
+            data.title,
+            data.middle_name,
+            data.preferred_name,
+            data.address,
+            data.phone_home,
+            data.phone_mobile,
+            data.email,
+            data.emergency_contact,
+            data.concession_type,
+            data.concession_number,
+            data.preferred_language,
+            data.interpreter_required,
+            data.aboriginal_torres_strait_islander,
+        )
     }
 
     pub fn age(&self) -> u32 {

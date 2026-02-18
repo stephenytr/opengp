@@ -199,6 +199,12 @@ impl KeybindRegistry {
             description: "Quit application",
         });
         self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
+            action: Action::Quit,
+            context: KeyContext::Global,
+            description: "Quit application",
+        });
+        self.register(Keybind {
             key: KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL),
             action: Action::New,
             context: KeyContext::Global,

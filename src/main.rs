@@ -1,6 +1,6 @@
 use color_eyre::Result;
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture},
+    event::{DisableMouseCapture, EnableMouseCapture, Event},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -40,14 +40,17 @@ async fn main() -> Result<()> {
     let patients: Vec<opengp::domain::patient::Patient> = patient_repo.list_active().await?;
     tracing::info!("Loaded {} patients from database", patients.len());
 
-    run_tui(patients).await?;
+    run_tui(patients, patient_repo).await?;
 
     tracing::info!("OpenGP shutdown complete");
 
     Ok(())
 }
 
-async fn run_tui(patients: Vec<opengp::domain::patient::Patient>) -> Result<()> {
+async fn run_tui(
+    patients: Vec<opengp::domain::patient::Patient>,
+    patient_repo: SqlxPatientRepository,
+) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -62,11 +65,44 @@ async fn run_tui(patients: Vec<opengp::domain::patient::Patient>) -> Result<()> 
             app.render(frame);
         })?;
 
-        if let Ok(crossterm::event::Event::Key(key)) = crossterm::event::read() {
-            let action = app.handle_key_event(key);
+        // Check if there's pending patient data to save
+        if let Some(pending) = app.take_pending_patient_data() {
+            use opengp::domain::patient::Patient;
+            match pending {
+                opengp::ui::app::PendingPatientData::New(data) => {
+                    let patient = Patient::from_dto(data)?;
+                    patient_repo.create(patient).await?;
+                    tracing::info!("Created new patient in database");
+                }
+                opengp::ui::app::PendingPatientData::Update { id, data } => {
+                    let mut patient = patient_repo.find_by_id(id).await?.ok_or_else(|| color_eyre::eyre::eyre!("Patient not found"))?;
+                    patient.update(data)?;
+                    patient_repo.update(patient).await?;
+                    tracing::info!("Updated patient in database");
+                }
+            }
+            
+            // Reload patients to update the list
+            let patients = patient_repo.list_active().await?;
+            app.load_patients(patients);
+        }
 
-            if action == opengp::ui::keybinds::Action::Quit || app.should_quit() {
-                break;
+        if let Ok(event) = crossterm::event::read() {
+            match event {
+                Event::Key(key) => {
+                    let action = app.handle_key_event(key);
+
+                    if action == opengp::ui::keybinds::Action::Quit || app.should_quit() {
+                        break;
+                    }
+                }
+                Event::Mouse(mouse) => {
+                    let terminal_size = terminal.size().unwrap_or_default();
+                    let terminal_rect = ratatui::layout::Rect::new(0, 0, terminal_size.width, terminal_size.height);
+                    app.handle_mouse_event(mouse, terminal_rect);
+                }
+                Event::Resize(_, _) => {}
+                _ => {}
             }
         }
     }

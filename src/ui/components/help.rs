@@ -56,7 +56,7 @@ impl HelpOverlay {
         let mut keybinds = vec![
             ("Global", ""),
             ("F1", "Toggle Help"),
-            ("Ctrl+Q", "Quit"),
+            ("q", "Quit (or Ctrl+Q)"),
             ("Ctrl+N", "New Item"),
             ("Ctrl+F", "Search"),
             ("Ctrl+R", "Refresh"),

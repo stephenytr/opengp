@@ -219,6 +219,11 @@ impl TabBar {
             total_area.height,
         ))
     }
+
+    /// Get the tab bar area within a given terminal area
+    pub fn area(&self, terminal: Rect) -> Rect {
+        Rect::new(terminal.x, terminal.y, terminal.width, 2)
+    }
 }
 
 impl Default for TabBar {
