@@ -6,6 +6,7 @@ use crate::domain::patient::Patient;
 
 /// View mode for patient tab
 #[derive(Debug, Clone, Default)]
+#[allow(clippy::large_enum_variant)]
 pub enum PatientView {
     /// Showing patient list
     #[default]
@@ -91,7 +92,7 @@ impl PatientState {
         if total_items == 0 {
             return 1;
         }
-        (total_items + self.page_size - 1) / self.page_size
+        total_items.div_ceil(self.page_size)
     }
 
     /// Get page offset

@@ -26,6 +26,7 @@ pub struct PatientList {
     patients: Vec<Patient>,
     filtered: Vec<Patient>,
     search_query: String,
+    searching: bool,
     selected_index: usize,
     loading: bool,
     theme: Theme,
@@ -37,6 +38,7 @@ impl Clone for PatientList {
             patients: self.patients.clone(),
             filtered: self.filtered.clone(),
             search_query: self.search_query.clone(),
+            searching: self.searching,
             selected_index: self.selected_index,
             loading: self.loading,
             theme: self.theme.clone(),
@@ -50,6 +52,7 @@ impl PatientList {
             patients: Vec::new(),
             filtered: Vec::new(),
             search_query: String::new(),
+            searching: false,
             selected_index: 0,
             loading: false,
             theme,
@@ -75,6 +78,14 @@ impl PatientList {
 
     pub fn set_loading(&mut self, loading: bool) {
         self.loading = loading;
+    }
+
+    pub fn is_searching(&self) -> bool {
+        self.searching
+    }
+
+    pub fn search_query(&self) -> &str {
+        &self.search_query
     }
 
     pub fn set_search_query(&mut self, query: String) {
@@ -104,11 +115,7 @@ impl PatientList {
                     p.phone_mobile.as_deref().unwrap_or("")
                 );
 
-                if let Some(result) = best_match(&query, &searchable) {
-                    Some((i, result.score() as i64))
-                } else {
-                    None
-                }
+                best_match(&query, &searchable).map(|result| (i, result.score() as i64))
             })
             .collect();
 
@@ -161,6 +168,34 @@ impl PatientList {
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<PatientListAction> {
         use crossterm::event::KeyCode;
 
+        // Handle search input mode
+        if self.searching {
+            match key.code {
+                KeyCode::Esc => {
+                    self.searching = false;
+                    self.search_query.clear();
+                    self.apply_filter();
+                    self.selected_index = 0;
+                }
+                KeyCode::Backspace => {
+                    self.search_query.pop();
+                    self.apply_filter();
+                    self.selected_index = 0;
+                }
+                KeyCode::Char(c) => {
+                    self.search_query.push(c);
+                    self.apply_filter();
+                    self.selected_index = 0;
+                }
+                KeyCode::Enter => {
+                    self.searching = false;
+                }
+                _ => {}
+            }
+            return Some(PatientListAction::SearchChanged);
+        }
+
+        // Normal navigation mode
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
                 self.move_up();
@@ -195,7 +230,10 @@ impl PatientList {
                     None
                 }
             }
-            KeyCode::Char('/') => Some(PatientListAction::FocusSearch),
+            KeyCode::Char('/') => {
+                self.searching = true;
+                Some(PatientListAction::FocusSearch)
+            }
             _ => None,
         }
     }
@@ -229,6 +267,7 @@ pub enum PatientListAction {
     SelectionChanged,
     OpenPatient(Uuid),
     FocusSearch,
+    SearchChanged,
 }
 
 fn format_name(patient: &Patient) -> String {
@@ -281,6 +320,18 @@ impl Widget for PatientList {
         let inner = block.inner(area);
         if inner.is_empty() {
             return;
+        }
+
+        // Render search input if searching
+        if self.searching {
+            let search_line = Line::from(vec![
+                Span::raw("/"),
+                Span::styled(
+                    self.search_query.as_str(),
+                    Style::default().fg(self.theme.colors.primary),
+                ),
+            ]);
+            buf.set_line(inner.x, inner.y, &search_line, inner.width);
         }
 
         if self.loading {
