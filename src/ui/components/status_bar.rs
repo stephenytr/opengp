@@ -1,0 +1,224 @@
+//! Status Bar Component
+//!
+//! Bottom status bar displaying current context and helpful information.
+
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
+use ratatui::style::{Color, Style};
+use ratatui::widgets::{Block, Borders, Widget};
+
+/// Status bar content
+#[derive(Debug, Clone, Default)]
+pub struct StatusBar {
+    /// Left section - current context/mode
+    left: String,
+    /// Center section - additional info
+    center: String,
+    /// Right section - keyboard shortcut hints
+    right: String,
+    /// Whether to show the status bar
+    visible: bool,
+}
+
+impl StatusBar {
+    /// Create a new empty status bar
+    pub fn new() -> Self {
+        Self {
+            left: String::new(),
+            center: String::new(),
+            right: String::new(),
+            visible: true,
+        }
+    }
+
+    /// Set the left section
+    pub fn set_left(&mut self, text: impl Into<String>) {
+        self.left = text.into();
+    }
+
+    /// Set the center section
+    pub fn set_center(&mut self, text: impl Into<String>) {
+        self.center = text.into();
+    }
+
+    /// Set the right section
+    pub fn set_right(&mut self, text: impl Into<String>) {
+        self.right = text.into();
+    }
+
+    /// Set the status bar content
+    pub fn set_content(
+        &mut self,
+        left: impl Into<String>,
+        center: impl Into<String>,
+        right: impl Into<String>,
+    ) {
+        self.left = left.into();
+        self.center = center.into();
+        self.right = right.into();
+    }
+
+    /// Clear all content
+    pub fn clear(&mut self) {
+        self.left.clear();
+        self.center.clear();
+        self.right.clear();
+    }
+
+    /// Set visibility
+    pub fn set_visible(&mut self, visible: bool) {
+        self.visible = visible;
+    }
+
+    /// Check if visible
+    pub fn is_visible(&self) -> bool {
+        self.visible
+    }
+
+    /// Create a status bar for the Patient list context
+    pub fn patient_list() -> Self {
+        let mut bar = Self::new();
+        bar.set_left("Patients");
+        bar.set_center("Search: / | New: n | Refresh: Ctrl+R");
+        bar.set_right("F1 Help");
+        bar
+    }
+
+    /// Create a status bar for the Patient form context
+    pub fn patient_form() -> Self {
+        let mut bar = Self::new();
+        bar.set_left("New Patient");
+        bar.set_center("Tab: Next Field | Enter: Submit | Ctrl+S: Save");
+        bar.set_right("Esc: Cancel");
+        bar
+    }
+
+    /// Create a status bar for the Calendar context
+    pub fn calendar() -> Self {
+        let mut bar = Self::new();
+        bar.set_left("Calendar");
+        bar.set_center("h/l: Day | j/k: Week | t: Today | Enter: Select");
+        bar.set_right("F1 Help");
+        bar
+    }
+
+    /// Create a status bar for the Schedule context
+    pub fn schedule() -> Self {
+        let mut bar = Self::new();
+        bar.set_left("Schedule");
+        bar.set_center("h/l: Column | j/k: Time | n: New | Enter: Select");
+        bar.set_right("F1 Help");
+        bar
+    }
+
+    /// Create a status bar for the Clinical context
+    pub fn clinical() -> Self {
+        let mut bar = Self::new();
+        bar.set_left("Clinical Notes");
+        bar.set_center("Enter: View | n: New Note");
+        bar.set_right("F1 Help");
+        bar
+    }
+
+    /// Create a status bar for the Billing context
+    pub fn billing() -> Self {
+        let mut bar = Self::new();
+        bar.set_left("Billing");
+        bar.set_center("Enter: View | n: New Invoice");
+        bar.set_right("F1 Help");
+        bar
+    }
+}
+
+/// Render the status bar
+impl Widget for StatusBar {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        if area.is_empty() || !self.visible {
+            return;
+        }
+
+        // Use a block with top border
+        let block = Block::default()
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(Color::DarkGray));
+
+        block.render(area, buf);
+
+        // Calculate sections
+        let width = area.width as usize;
+        let center_width = width / 3;
+        let side_width = (width - center_width) / 2;
+
+        // Render left section
+        if !self.left.is_empty() {
+            let left_text = if self.left.len() > side_width {
+                &self.left[..side_width]
+            } else {
+                &self.left
+            };
+            buf.set_string(area.x, area.y, left_text, Style::default().fg(Color::White));
+        }
+
+        // Render center section
+        if !self.center.is_empty() {
+            let center_start = area.x + (side_width as u16);
+            let center_text = if self.center.len() > center_width {
+                &self.center[..center_width]
+            } else {
+                &self.center
+            };
+            buf.set_string(
+                center_start,
+                area.y,
+                center_text,
+                Style::default().fg(Color::Gray),
+            );
+        }
+
+        // Render right section
+        if !self.right.is_empty() {
+            let right_start = area.x + (area.width.saturating_sub(self.right.len() as u16));
+            buf.set_string(
+                right_start,
+                area.y,
+                &self.right,
+                Style::default().fg(Color::DarkGray),
+            );
+        }
+    }
+}
+
+/// Height of the status bar
+pub const STATUS_BAR_HEIGHT: u16 = 1;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_status_bar_creation() {
+        let bar = StatusBar::new();
+        assert!(bar.is_visible());
+        assert!(bar.left.is_empty());
+    }
+
+    #[test]
+    fn test_status_bar_patient_list() {
+        let bar = StatusBar::patient_list();
+        assert!(bar.is_visible());
+        assert_eq!(bar.left, "Patients");
+        assert!(bar.right.contains("Help"));
+    }
+
+    #[test]
+    fn test_status_bar_visibility() {
+        let mut bar = StatusBar::new();
+        assert!(bar.is_visible());
+
+        bar.set_visible(false);
+        assert!(!bar.is_visible());
+
+        bar.set_visible(true);
+        assert!(bar.is_visible());
+    }
+}
