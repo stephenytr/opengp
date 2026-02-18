@@ -195,6 +195,16 @@ impl App {
                     }
                 }
                 Action::Save => {}
+                Action::NavigateDown => {
+                    if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+                        self.patient_list.move_down();
+                    }
+                }
+                Action::NavigateUp => {
+                    if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+                        self.patient_list.move_up();
+                    }
+                }
                 _ => {}
             }
             return action;
