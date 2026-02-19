@@ -5,10 +5,15 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use opengp::domain::patient::PatientRepository;
+use opengp::domain::user::PractitionerRepository;
+use opengp::domain::appointment::AppointmentCalendarQuery;
 use opengp::infrastructure::crypto::EncryptionService;
 use opengp::infrastructure::database::{create_pool, run_migrations};
 use opengp::infrastructure::database::repositories::patient::SqlxPatientRepository;
+use opengp::infrastructure::database::repositories::practitioner::SqlxPractitionerRepository;
+use opengp::infrastructure::database::repositories::appointment::SqlxAppointmentRepository;
 use opengp::ui::app::App;
+use opengp::ui::services::AppointmentUiService;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io;
@@ -36,11 +41,19 @@ async fn main() -> Result<()> {
 
     let crypto = Arc::new(EncryptionService::new()?);
     let patient_repo = SqlxPatientRepository::new(db_pool.clone(), crypto);
+    
+    // Create appointment-related repositories and service
+    let practitioner_repo: Arc<dyn PractitionerRepository> = Arc::new(SqlxPractitionerRepository::new(db_pool.clone()));
+    let appointment_repo: Arc<dyn AppointmentCalendarQuery> = Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
+    let appointment_service = Arc::new(AppointmentUiService::new(
+        practitioner_repo,
+        appointment_repo,
+    ));
 
     let patients: Vec<opengp::domain::patient::Patient> = patient_repo.list_active().await?;
     tracing::info!("Loaded {} patients from database", patients.len());
 
-    run_tui(patients, patient_repo).await?;
+    run_tui(patients, patient_repo, appointment_service).await?;
 
     tracing::info!("OpenGP shutdown complete");
 
@@ -50,6 +63,7 @@ async fn main() -> Result<()> {
 async fn run_tui(
     patients: Vec<opengp::domain::patient::Patient>,
     patient_repo: SqlxPatientRepository,
+    appointment_service: Arc<AppointmentUiService>,
 ) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -57,7 +71,7 @@ async fn run_tui(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new();
+    let mut app = App::new(Some(appointment_service.clone()));
     app.load_patients(patients);
 
     loop {
@@ -85,6 +99,30 @@ async fn run_tui(
             // Reload patients to update the list
             let patients = patient_repo.list_active().await?;
             app.load_patients(patients);
+        }
+
+        // Check if there's a pending appointment date to load practitioners and schedule for
+        if let Some(date) = app.take_pending_appointment_date() {
+            match appointment_service.get_practitioners().await {
+                Ok(practitioners) => {
+                    app.appointment_state_mut().practitioners = practitioners;
+                    tracing::info!("Loaded practitioners for schedule view");
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load practitioners: {}", e);
+                }
+            }
+
+            // Load the schedule for the selected date
+            match appointment_service.get_schedule(date).await {
+                Ok(schedule) => {
+                    app.appointment_state_mut().schedule_data = Some(schedule);
+                    tracing::info!("Loaded schedule for date: {}", date);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load schedule: {}", e);
+                }
+            }
         }
 
         if let Ok(event) = crossterm::event::read() {
