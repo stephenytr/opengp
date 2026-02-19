@@ -11,7 +11,7 @@ use ratatui::style::Color;
 use ratatui::Frame;
 
 use crate::ui::components::appointment::{
-    AppointmentState, AppointmentView, CalendarAction, Schedule,
+    AppointmentState, AppointmentView, CalendarAction, ScheduleAction,
 };
 use crate::ui::components::help::HelpOverlay;
 use crate::ui::components::patient::{PatientForm, PatientList, PatientState};
@@ -254,6 +254,9 @@ impl App {
                 }
                 Action::SwitchToAppointments => {
                     self.tab_bar.select(Tab::Appointment);
+                    let today = chrono::Utc::now().date_naive();
+                    self.appointment_state.selected_date = Some(today);
+                    self.pending_appointment_date = Some(today);
                     self.refresh_status_bar();
                     self.refresh_context();
                 }
@@ -293,6 +296,12 @@ impl App {
                     if self.patient_form.is_some() {
                         self.patient_form = None;
                         self.current_context = KeyContext::PatientList;
+                    }
+                    // Also return to Calendar view from Schedule view
+                    if self.tab_bar.selected() == Tab::Appointment
+                        && self.appointment_state.current_view == AppointmentView::Schedule
+                    {
+                        self.appointment_state.current_view = AppointmentView::Calendar;
                     }
                 }
                 Action::Save => {}
@@ -365,24 +374,16 @@ impl App {
         if self.tab_bar.selected() == Tab::Appointment
             && self.appointment_state.current_view == AppointmentView::Schedule
         {
-            if let Some(keybind) = self.keybinds.lookup(key, KeyContext::Schedule) {
-                match keybind.action {
-                    Action::NavigateUp | Action::PrevTimeSlot => {
-                        tracing::debug!("Schedule: Navigate to previous time slot");
+            if let Some(action) = self.appointment_state.schedule.handle_key(key) {
+                match action {
+                    ScheduleAction::SelectPractitioner(id) => {
+                        self.appointment_state.selected_practitioner = Some(id);
                     }
-                    Action::NavigateDown | Action::NextTimeSlot => {
-                        tracing::debug!("Schedule: Navigate to next time slot");
+                    ScheduleAction::SelectAppointment(id) => {
+                        self.appointment_state.selected_appointment = Some(id);
                     }
-                    Action::NavigateLeft | Action::PrevPractitioner => {
-                        tracing::debug!("Schedule: Navigate to previous practitioner");
-                    }
-                    Action::NavigateRight | Action::NextPractitioner => {
-                        tracing::debug!("Schedule: Navigate to next practitioner");
-                    }
-                    Action::NewAppointment => {
-                        tracing::debug!("Schedule: Create new appointment");
-                    }
-                    _ => {}
+                    ScheduleAction::NavigateTimeSlot(_delta) => {}
+                    ScheduleAction::NavigatePractitioner(_delta) => {}
                 }
                 return Action::Enter;
             }
@@ -436,20 +437,73 @@ impl App {
             }
         }
 
-        // Handle calendar mouse events when in appointment view (calendar mode)
-        if self.tab_bar.selected() == Tab::Appointment
-            && self.appointment_state.current_view == AppointmentView::Calendar
-        {
-            if let Some(action) = self.appointment_state.calendar.handle_mouse(mouse, area) {
-                match action {
-                    CalendarAction::SelectDate(date) => {
-                        self.appointment_state.selected_date = Some(date);
-                        self.appointment_state.current_view = AppointmentView::Schedule;
-                        self.pending_appointment_date = Some(date);
+        // Handle appointment view mouse events - layout aware
+        if self.tab_bar.selected() == Tab::Appointment {
+            use crate::ui::components::appointment::schedule::ScheduleAction;
+            use crate::ui::components::appointment::AppointmentView;
+
+            match self.appointment_state.current_view {
+                AppointmentView::Calendar => {
+                    // Full area goes to calendar
+                    if let Some(action) = self.appointment_state.calendar.handle_mouse(mouse, area)
+                    {
+                        match action {
+                            CalendarAction::SelectDate(date) => {
+                                self.appointment_state.selected_date = Some(date);
+                                self.appointment_state.current_view = AppointmentView::Schedule;
+                                self.pending_appointment_date = Some(date);
+                            }
+                            CalendarAction::FocusDate(_) => {}
+                            CalendarAction::MonthChanged(_) => {}
+                            CalendarAction::GoToToday => {}
+                        }
                     }
-                    CalendarAction::FocusDate(_) => {}
-                    CalendarAction::MonthChanged(_) => {}
-                    CalendarAction::GoToToday => {}
+                }
+                AppointmentView::Schedule => {
+                    // Replicate the split layout from render_content
+                    let chunks = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+                        .split(area);
+
+                    // Route to calendar (left pane) - only handle clicks, not scroll (scroll is for schedule only)
+                    use crossterm::event::MouseEventKind;
+                    if let MouseEventKind::Up(_) | MouseEventKind::Down(_) = mouse.kind {
+                        if let Some(action) = self
+                            .appointment_state
+                            .calendar
+                            .handle_mouse(mouse, chunks[0])
+                        {
+                            match action {
+                                CalendarAction::SelectDate(date) => {
+                                    self.appointment_state.selected_date = Some(date);
+                                    self.pending_appointment_date = Some(date);
+                                    // Stay in Schedule view - user clicked a different date
+                                }
+                                CalendarAction::FocusDate(_) => {}
+                                CalendarAction::MonthChanged(_) => {}
+                                CalendarAction::GoToToday => {}
+                            }
+                        }
+                    }
+
+                    // Route to schedule (right pane) with correct sub-area
+                    if let Some(action) = self
+                        .appointment_state
+                        .schedule
+                        .handle_mouse(mouse, chunks[1])
+                    {
+                        match action {
+                            ScheduleAction::SelectPractitioner(id) => {
+                                self.appointment_state.selected_practitioner = Some(id);
+                            }
+                            ScheduleAction::SelectAppointment(id) => {
+                                self.appointment_state.selected_appointment = Some(id);
+                            }
+                            ScheduleAction::NavigateTimeSlot(_) => {}
+                            ScheduleAction::NavigatePractitioner(_) => {}
+                        }
+                    }
                 }
             }
         }
@@ -531,16 +585,16 @@ impl App {
                         let chunks = Layout::default()
                             .direction(ratatui::layout::Direction::Horizontal)
                             .constraints([
-                                Constraint::Percentage(25), // Calendar takes 25%
-                                Constraint::Percentage(75), // Schedule takes 75%
+                                Constraint::Percentage(10), // Calendar takes 25%
+                                Constraint::Percentage(90), // Schedule takes 75%
                             ])
                             .split(area);
 
                         // Render calendar on left
                         frame.render_widget(self.appointment_state.calendar.clone(), chunks[0]);
 
-                        // Render schedule on right (create with theme)
-                        let mut schedule = Schedule::new(self.theme.clone());
+                        // Use stored schedule from state
+                        let schedule = &mut self.appointment_state.schedule;
 
                         // If we have schedule data loaded, load it into the schedule
                         if let Some(ref data) = self.appointment_state.schedule_data {
@@ -579,7 +633,7 @@ impl App {
                             schedule.load_schedule(day_view);
                         }
 
-                        frame.render_widget(schedule, chunks[1]);
+                        frame.render_widget(schedule.clone(), chunks[1]);
                     }
                 }
             }

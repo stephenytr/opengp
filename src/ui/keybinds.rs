@@ -300,6 +300,33 @@ impl KeybindRegistry {
             });
         }
 
+        // Schedule-specific: j/k for time slot navigation
+        // This overrides the shared NavigateUp/Down mappings for Schedule context
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+            action: Action::NextTimeSlot,
+            context: KeyContext::Schedule,
+            description: "Move to next time slot",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE),
+            action: Action::PrevTimeSlot,
+            context: KeyContext::Schedule,
+            description: "Move to previous time slot",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+            action: Action::NextTimeSlot,
+            context: KeyContext::Schedule,
+            description: "Move to next time slot",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
+            action: Action::PrevTimeSlot,
+            context: KeyContext::Schedule,
+            description: "Move to previous time slot",
+        });
+
         // Calendar-specific keybinds
         self.register(Keybind {
             key: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
@@ -385,6 +412,31 @@ impl KeybindRegistry {
             action: Action::NewAppointment,
             context: KeyContext::Schedule,
             description: "Create new appointment",
+        });
+        // Schedule horizontal navigation (h/l for practitioner columns)
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+            action: Action::PrevPractitioner,
+            context: KeyContext::Schedule,
+            description: "Go to previous practitioner",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE),
+            action: Action::NextPractitioner,
+            context: KeyContext::Schedule,
+            description: "Go to next practitioner",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
+            action: Action::PrevPractitioner,
+            context: KeyContext::Schedule,
+            description: "Go to previous practitioner",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
+            action: Action::NextPractitioner,
+            context: KeyContext::Schedule,
+            description: "Go to next practitioner",
         });
     }
 

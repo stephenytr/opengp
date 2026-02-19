@@ -5,6 +5,7 @@ use crate::domain::appointment::CalendarDayView;
 use crate::domain::user::Practitioner;
 
 use super::calendar::Calendar;
+use super::schedule::Schedule;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppointmentView {
@@ -16,6 +17,7 @@ pub enum AppointmentView {
 pub struct AppointmentState {
     pub current_view: AppointmentView,
     pub calendar: Calendar,
+    pub schedule: Schedule,
     pub selected_date: Option<NaiveDate>,
     pub schedule_data: Option<CalendarDayView>,
     pub practitioners: Vec<Practitioner>,
@@ -28,7 +30,8 @@ impl AppointmentState {
     pub fn new(theme: crate::ui::theme::Theme) -> Self {
         Self {
             current_view: AppointmentView::Calendar,
-            calendar: Calendar::new(theme),
+            calendar: Calendar::new(theme.clone()),
+            schedule: Schedule::new(theme),
             selected_date: Some(chrono::Utc::now().date_naive()),
             schedule_data: None,
             practitioners: Vec::new(),
