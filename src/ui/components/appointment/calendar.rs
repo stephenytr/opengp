@@ -198,8 +198,16 @@ impl Calendar {
             return None;
         }
 
-        let col = (column - grid_x) as usize / 4;
-        let row_idx = (row - grid_y) as usize / 3;
+        // Calculate actual cell dimensions from rendered area
+        let cell_width = (area.width.saturating_sub(2)) / 7;
+        let cell_height = (area.height.saturating_sub(4)) / 6;
+
+        // Ensure minimum cell size of 1 to avoid division by zero
+        let cell_width = cell_width.max(1);
+        let cell_height = cell_height.max(1);
+
+        let col = (column - grid_x) as usize / cell_width as usize;
+        let row_idx = (row - grid_y) as usize / cell_height as usize;
 
         if col > 6 || row_idx > 5 {
             return None;

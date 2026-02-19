@@ -7,6 +7,7 @@
 pub mod app;
 pub mod components;
 pub mod keybinds;
+pub mod services;
 pub mod theme;
 
 pub use app::App;

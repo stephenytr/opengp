@@ -2,11 +2,17 @@
 //!
 //! Main application state management, rendering, and event handling.
 
+use chrono::NaiveDate;
 use crossterm::event::{Event, KeyEvent, MouseEvent};
+use std::sync::Arc;
+
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Color;
 use ratatui::Frame;
 
+use crate::ui::components::appointment::{
+    AppointmentState, AppointmentView, CalendarAction, Schedule,
+};
 use crate::ui::components::help::HelpOverlay;
 use crate::ui::components::patient::{PatientForm, PatientList, PatientState};
 use crate::ui::components::status_bar::{StatusBar, STATUS_BAR_HEIGHT};
@@ -45,6 +51,12 @@ pub struct App {
     patient_form: Option<PatientForm>,
     /// Pending patient data to save (new or update)
     pending_patient_data: Option<PendingPatientData>,
+    /// Appointment/schedule component state
+    appointment_state: AppointmentState,
+    /// Appointment UI service for loading practitioners
+    appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
+    /// Pending appointment date to load (for async loading in main loop)
+    pending_appointment_date: Option<NaiveDate>,
 }
 
 pub enum PendingPatientData {
@@ -57,7 +69,9 @@ pub enum PendingPatientData {
 
 impl App {
     /// Create a new application instance
-    pub fn new() -> Self {
+    pub fn new(
+        appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
+    ) -> Self {
         let theme = Theme::dark();
         let mut app = Self {
             theme: theme.clone(),
@@ -73,6 +87,9 @@ impl App {
             patient_list: PatientList::new(theme.clone()),
             patient_form: None,
             pending_patient_data: None,
+            appointment_state: AppointmentState::new(theme.clone()),
+            appointment_service,
+            pending_appointment_date: None,
         };
 
         app.refresh_status_bar();
@@ -89,6 +106,16 @@ impl App {
     /// Take pending patient data (for saving to database)
     pub fn take_pending_patient_data(&mut self) -> Option<PendingPatientData> {
         self.pending_patient_data.take()
+    }
+
+    /// Take pending appointment date (for loading practitioners in main loop)
+    pub fn take_pending_appointment_date(&mut self) -> Option<NaiveDate> {
+        self.pending_appointment_date.take()
+    }
+
+    /// Get mutable reference to appointment state (for loading practitioners)
+    pub fn appointment_state_mut(&mut self) -> &mut AppointmentState {
+        &mut self.appointment_state
     }
 
     pub fn theme(&self) -> &Theme {
@@ -316,6 +343,51 @@ impl App {
             }
         }
 
+        // Handle calendar navigation when in appointment view (calendar mode)
+        if self.tab_bar.selected() == Tab::Appointment
+            && self.appointment_state.current_view == AppointmentView::Calendar
+        {
+            if let Some(action) = self.appointment_state.calendar.handle_key(key) {
+                match action {
+                    CalendarAction::SelectDate(date) => {
+                        self.appointment_state.selected_date = Some(date);
+                        self.appointment_state.current_view = AppointmentView::Schedule;
+                        self.pending_appointment_date = Some(date);
+                    }
+                    CalendarAction::FocusDate(_) => {}
+                    CalendarAction::MonthChanged(_) => {}
+                    CalendarAction::GoToToday => {}
+                }
+                return Action::Enter;
+            }
+        }
+
+        if self.tab_bar.selected() == Tab::Appointment
+            && self.appointment_state.current_view == AppointmentView::Schedule
+        {
+            if let Some(keybind) = self.keybinds.lookup(key, KeyContext::Schedule) {
+                match keybind.action {
+                    Action::NavigateUp | Action::PrevTimeSlot => {
+                        tracing::debug!("Schedule: Navigate to previous time slot");
+                    }
+                    Action::NavigateDown | Action::NextTimeSlot => {
+                        tracing::debug!("Schedule: Navigate to next time slot");
+                    }
+                    Action::NavigateLeft | Action::PrevPractitioner => {
+                        tracing::debug!("Schedule: Navigate to previous practitioner");
+                    }
+                    Action::NavigateRight | Action::NextPractitioner => {
+                        tracing::debug!("Schedule: Navigate to next practitioner");
+                    }
+                    Action::NewAppointment => {
+                        tracing::debug!("Schedule: Create new appointment");
+                    }
+                    _ => {}
+                }
+                return Action::Enter;
+            }
+        }
+
         Action::Unknown
     }
 
@@ -360,6 +432,24 @@ impl App {
                     }
                     crate::ui::components::patient::PatientListAction::FocusSearch => {}
                     crate::ui::components::patient::PatientListAction::SearchChanged => {}
+                }
+            }
+        }
+
+        // Handle calendar mouse events when in appointment view (calendar mode)
+        if self.tab_bar.selected() == Tab::Appointment
+            && self.appointment_state.current_view == AppointmentView::Calendar
+        {
+            if let Some(action) = self.appointment_state.calendar.handle_mouse(mouse, area) {
+                match action {
+                    CalendarAction::SelectDate(date) => {
+                        self.appointment_state.selected_date = Some(date);
+                        self.appointment_state.current_view = AppointmentView::Schedule;
+                        self.pending_appointment_date = Some(date);
+                    }
+                    CalendarAction::FocusDate(_) => {}
+                    CalendarAction::MonthChanged(_) => {}
+                    CalendarAction::GoToToday => {}
                 }
             }
         }
@@ -428,24 +518,70 @@ impl App {
                 }
             }
             Tab::Appointment => {
-                use ratatui::text::Text;
-                use ratatui::widgets::{Block, Borders, Paragraph};
+                use crate::ui::components::appointment::AppointmentView;
 
-                let content = "Appointments\n\nCalendar and schedule view\nh/l to navigate days\nj/k to navigate weeks";
+                match self.appointment_state.current_view {
+                    AppointmentView::Calendar => {
+                        frame.render_widget(self.appointment_state.calendar.clone(), area);
+                    }
+                    AppointmentView::Schedule => {
+                        // Split view: calendar on left, schedule on right
+                        use ratatui::layout::Constraint;
 
-                let paragraph = Paragraph::new(Text::from(content))
-                    .block(
-                        Block::default()
-                            .title(format!(" {} ", tab.name()))
-                            .borders(Borders::ALL)
-                            .border_style(
-                                ratatui::style::Style::default().fg(self.theme.colors.border),
-                            ),
-                    )
-                    .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
-                    .alignment(ratatui::layout::Alignment::Center);
+                        let chunks = Layout::default()
+                            .direction(ratatui::layout::Direction::Horizontal)
+                            .constraints([
+                                Constraint::Percentage(25), // Calendar takes 25%
+                                Constraint::Percentage(75), // Schedule takes 75%
+                            ])
+                            .split(area);
 
-                frame.render_widget(paragraph, area);
+                        // Render calendar on left
+                        frame.render_widget(self.appointment_state.calendar.clone(), chunks[0]);
+
+                        // Render schedule on right (create with theme)
+                        let mut schedule = Schedule::new(self.theme.clone());
+
+                        // If we have schedule data loaded, load it into the schedule
+                        if let Some(ref data) = self.appointment_state.schedule_data {
+                            schedule.load_schedule(data.clone());
+                        }
+
+                        // If we have practitioners but no schedule_data, load them directly
+                        if !self.appointment_state.practitioners.is_empty()
+                            && self.appointment_state.schedule_data.is_none()
+                        {
+                            use crate::domain::appointment::{
+                                CalendarDayView, PractitionerSchedule,
+                            };
+
+                            let date = self
+                                .appointment_state
+                                .selected_date
+                                .unwrap_or_else(|| chrono::Utc::now().date_naive());
+
+                            let schedules: Vec<PractitionerSchedule> = self
+                                .appointment_state
+                                .practitioners
+                                .iter()
+                                .map(|p| PractitionerSchedule {
+                                    practitioner_id: p.id,
+                                    practitioner_name: p.display_name(),
+                                    appointments: Vec::new(),
+                                })
+                                .collect();
+
+                            let day_view = CalendarDayView {
+                                date,
+                                practitioners: schedules,
+                            };
+
+                            schedule.load_schedule(day_view);
+                        }
+
+                        frame.render_widget(schedule, chunks[1]);
+                    }
+                }
             }
             Tab::Clinical => {
                 use ratatui::text::Text;
@@ -494,7 +630,7 @@ impl App {
 
 impl Default for App {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 
@@ -504,14 +640,14 @@ mod tests {
 
     #[test]
     fn test_app_creation() {
-        let app = App::new();
+        let app = App::new(None);
         assert_eq!(app.current_tab(), Tab::Patient);
         assert!(!app.should_quit());
     }
 
     #[test]
     fn test_tab_switching() {
-        let mut app = App::new();
+        let mut app = App::new(None);
 
         // Simulate pressing F3 to switch to Appointments tab
         let key = crossterm::event::KeyEvent::new(
@@ -525,7 +661,7 @@ mod tests {
 
     #[test]
     fn test_help_toggle() {
-        let mut app = App::new();
+        let mut app = App::new(None);
 
         assert!(!app.help_overlay.is_visible());
 
@@ -546,7 +682,7 @@ mod tests {
 
     #[test]
     fn test_quit() {
-        let mut app = App::new();
+        let mut app = App::new(None);
 
         // Simulate Ctrl+Q to quit
         let key = crossterm::event::KeyEvent::new(

@@ -6,10 +6,7 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use crate::domain::patient::dto::{NewPatientData, UpdatePatientData};
-use crate::domain::patient::model::Patient;
-use crate::domain::patient::service::PatientService;
-use crate::domain::patient::RepositoryError;
+use crate::domain::patient::{NewPatientData, UpdatePatientData, Patient, PatientService, RepositoryError};
 
 /// Result type for UI operations
 pub type UiResult<T> = Result<T, UiServiceError>;
