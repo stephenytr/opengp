@@ -159,6 +159,42 @@ impl PatientList {
         self.selected_index = new_index as usize;
     }
 
+    pub fn adjust_scroll(&mut self, visible_rows: usize) {
+        if visible_rows == 0 {
+            return;
+        }
+        if self.selected_index < self.scroll_offset {
+            self.scroll_offset = self.selected_index;
+        } else if self.selected_index >= self.scroll_offset + visible_rows {
+            self.scroll_offset = self.selected_index.saturating_sub(visible_rows) + 1;
+        }
+    }
+
+    pub fn move_up_and_scroll(&mut self, visible_rows: usize) {
+        self.move_up();
+        self.adjust_scroll(visible_rows);
+    }
+
+    pub fn move_down_and_scroll(&mut self, visible_rows: usize) {
+        self.move_down();
+        self.adjust_scroll(visible_rows);
+    }
+
+    pub fn move_first_and_scroll(&mut self, visible_rows: usize) {
+        self.move_first();
+        self.adjust_scroll(visible_rows);
+    }
+
+    pub fn move_last_and_scroll(&mut self, visible_rows: usize) {
+        self.move_last();
+        self.adjust_scroll(visible_rows);
+    }
+
+    pub fn move_by_and_scroll(&mut self, offset: isize, visible_rows: usize) {
+        self.move_by(offset);
+        self.adjust_scroll(visible_rows);
+    }
+
     pub fn has_selection(&self) -> bool {
         !self.filtered.is_empty()
     }

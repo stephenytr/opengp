@@ -143,6 +143,10 @@ impl App {
         self.help_overlay.set_context(self.current_context);
     }
 
+    fn calculate_visible_patient_rows(&self) -> usize {
+        15_usize.saturating_sub(5)
+    }
+
     /// Handle a key event
     pub fn handle_key_event(&mut self, key: KeyEvent) -> Action {
         // Check help overlay first
@@ -267,12 +271,14 @@ impl App {
                 Action::Save => {}
                 Action::NavigateDown => {
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
-                        self.patient_list.move_down();
+                        let visible_rows = self.calculate_visible_patient_rows();
+                        self.patient_list.move_down_and_scroll(visible_rows);
                     }
                 }
                 Action::NavigateUp => {
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
-                        self.patient_list.move_up();
+                        let visible_rows = self.calculate_visible_patient_rows();
+                        self.patient_list.move_up_and_scroll(visible_rows);
                     }
                 }
                 _ => {}
@@ -291,7 +297,10 @@ impl App {
         if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
             if let Some(action) = self.patient_list.handle_key(key) {
                 match action {
-                    crate::ui::components::patient::PatientListAction::SelectionChanged => {}
+                    crate::ui::components::patient::PatientListAction::SelectionChanged => {
+                        let visible_rows = self.calculate_visible_patient_rows();
+                        self.patient_list.adjust_scroll(visible_rows);
+                    }
                     crate::ui::components::patient::PatientListAction::OpenPatient(_id) => {
                         // Open patient for viewing/editing
                         if let Some(patient) = self.patient_list.selected_patient().cloned() {
