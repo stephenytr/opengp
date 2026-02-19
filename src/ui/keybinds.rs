@@ -331,6 +331,18 @@ impl KeybindRegistry {
             context: KeyContext::Calendar,
             description: "Go to today",
         });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+            action: Action::PrevMonth,
+            context: KeyContext::Calendar,
+            description: "Go to previous month",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('M'), KeyModifiers::SHIFT),
+            action: Action::NextMonth,
+            context: KeyContext::Calendar,
+            description: "Go to next month",
+        });
 
         // Patient list keybinds
         // Note: '/' is handled directly in PatientList for search input
