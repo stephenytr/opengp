@@ -372,6 +372,7 @@ impl Schedule {
                             col_width.saturating_sub(2),
                             apt,
                             max_slot,
+                            area,
                         );
                     }
                 }
@@ -400,10 +401,11 @@ impl Schedule {
     fn render_appointment_block(
         &self,
         buf: &mut Buffer,
-        x: u16,
-        width: u16,
+        area_x: u16,
+        area_width: u16,
         apt: &CalendarAppointment,
         max_slot: u8,
+        area: Rect,
     ) {
         let start_slot = self.time_to_slot(apt.start_time);
         if start_slot > max_slot {
@@ -412,18 +414,34 @@ impl Schedule {
 
         let slot_span = apt.slot_span as u16;
         let height = slot_span * 2;
-        let y = 1 + start_slot as u16 * 2;
+        let mut y = 1 + start_slot as u16 * 2;
 
-        // Clamp height to fit in viewport
-        let actual_height = std::cmp::min(height, (max_slot as u16 * 2) - y + 1);
+        // Clamp y to stay within buffer bounds
+        if y >= area.y + area.height {
+            return;
+        }
+        if y < area.y {
+            y = area.y;
+        }
+
+        // Clamp height to fit within buffer
+        let max_height = (area.y + area.height - y) as u16;
+        let actual_height = height.min(max_height).max(1);
 
         let color = self.get_appointment_color(apt.status);
 
         // Render appointment block
         for row in 0..actual_height {
             let row_y = y + row;
-            for col in 0..width {
-                if let Some(cell) = buf.cell_mut((x + col, row_y)) {
+            if row_y >= area.y + area.height {
+                break;
+            }
+            for col in 0..area_width {
+                let col_x = area_x + col;
+                if col_x >= area.x + area.width {
+                    break;
+                }
+                if let Some(cell) = buf.cell_mut((col_x, row_y)) {
                     cell.set_bg(color);
                     if row == 0 {
                         cell.set_fg(ratatui::style::Color::Black);
@@ -432,20 +450,23 @@ impl Schedule {
             }
         }
 
-        // Render patient name in first line
-        let name_width = (width as usize).saturating_sub(2);
-        if name_width > 0 {
+        // Render patient name in first line (with bounds checking)
+        let name_width = (area_width as usize).saturating_sub(2);
+        if name_width > 0 && y < area.y + area.height {
             let name = if apt.patient_name.len() > name_width {
-                format!("{}...", &apt.patient_name[..name_width - 3])
+                format!("{}...", &apt.patient_name[..name_width.saturating_sub(3)])
             } else {
                 apt.patient_name.clone()
             };
-            buf.set_string(
-                x + 1,
-                y,
-                name,
-                Style::default().fg(ratatui::style::Color::Black).bold(),
-            );
+            let name_x = area_x + 1;
+            if name_x < area.x + area.width {
+                let _ = buf.set_string(
+                    name_x,
+                    y,
+                    name,
+                    Style::default().fg(ratatui::style::Color::Black).bold(),
+                );
+            }
         }
     }
 }
