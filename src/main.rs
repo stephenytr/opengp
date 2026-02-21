@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
     tracing::info!("Database pool created with {} connection(s)", db_pool.size());
 
     let crypto = Arc::new(EncryptionService::new()?);
-    let patient_repo = Arc::new(SqlxPatientRepository::new(db_pool.clone(), crypto));
+    let patient_repo = Arc::new(SqlxPatientRepository::new(db_pool.clone(), crypto.clone()));
     
     // Create appointment-related repositories and service
     let practitioner_repo: Arc<dyn PractitionerRepository> = Arc::new(SqlxPractitionerRepository::new(db_pool.clone()));
@@ -55,10 +55,34 @@ async fn main() -> Result<()> {
         Arc::new(opengp::domain::patient::PatientService::new(patient_repo.clone()))
     ));
 
+    // Create clinical service repositories
+    let consultation_repo: Arc<dyn opengp::domain::clinical::ConsultationRepository> = Arc::new(opengp::infrastructure::database::repositories::clinical::SqlxClinicalRepository::new(db_pool.clone(), crypto.clone()));
+    let allergy_repo: Arc<dyn opengp::domain::clinical::AllergyRepository> = Arc::new(opengp::infrastructure::database::repositories::clinical::SqlxAllergyRepository::new(db_pool.clone(), crypto.clone()));
+    let medical_history_repo: Arc<dyn opengp::domain::clinical::MedicalHistoryRepository> = Arc::new(opengp::infrastructure::database::repositories::clinical::SqlxMedicalHistoryRepository::new(db_pool.clone(), crypto.clone()));
+    let vital_signs_repo: Arc<dyn opengp::domain::clinical::VitalSignsRepository> = Arc::new(opengp::infrastructure::database::repositories::clinical::SqlxVitalSignsRepository::new(db_pool.clone(), crypto.clone()));
+    let social_history_repo: Arc<dyn opengp::domain::clinical::SocialHistoryRepository> = Arc::new(opengp::infrastructure::database::repositories::clinical::SqlxSocialHistoryRepository::new(db_pool.clone(), crypto.clone()));
+    let family_history_repo: Arc<dyn opengp::domain::clinical::FamilyHistoryRepository> = Arc::new(opengp::infrastructure::database::repositories::clinical::SqlxFamilyHistoryRepository::new(db_pool.clone(), crypto.clone()));
+    
+    let clinical_service = Arc::new(opengp::ui::services::ClinicalUiService::new(
+        Arc::new(opengp::domain::clinical::ClinicalService::new(
+            consultation_repo,
+            allergy_repo,
+            medical_history_repo,
+            vital_signs_repo,
+            social_history_repo,
+            family_history_repo,
+            Arc::new(opengp::domain::patient::PatientService::new(patient_repo.clone())),
+            Arc::new(opengp::domain::audit::AuditService::new(
+                Arc::new(opengp::infrastructure::database::repositories::audit::SqlxAuditRepository::new(db_pool.clone()))
+            )),
+            crypto.clone(),
+        ))
+    ));
+
     let patients: Vec<opengp::domain::patient::Patient> = patient_repo.list_active().await?;
     tracing::info!("Loaded {} patients from database", patients.len());
 
-    run_tui(patients, patient_repo.clone(), appointment_service, patient_service).await?;
+    run_tui(patients, patient_repo.clone(), appointment_service, patient_service, clinical_service).await?;
 
     tracing::info!("OpenGP shutdown complete");
 
@@ -70,6 +94,7 @@ async fn run_tui(
     patient_repo: Arc<SqlxPatientRepository>,
     appointment_service: Arc<AppointmentUiService>,
     patient_service: Arc<opengp::ui::services::PatientUiService>,
+    clinical_service: Arc<opengp::ui::services::ClinicalUiService>,
 ) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -77,7 +102,7 @@ async fn run_tui(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new(Some(appointment_service.clone()), Some(patient_service.clone()));
+    let mut app = App::new(Some(appointment_service.clone()), Some(patient_service.clone()), Some(clinical_service.clone()));
     app.load_patients(patients);
 
     loop {

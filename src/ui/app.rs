@@ -13,6 +13,7 @@ use ratatui::Frame;
 use crate::ui::components::appointment::{
     AppointmentState, AppointmentView, CalendarAction, ScheduleAction,
 };
+use crate::ui::components::clinical::ClinicalState;
 use crate::ui::components::help::HelpOverlay;
 use crate::ui::components::patient::{PatientForm, PatientList, PatientState};
 use crate::ui::components::status_bar::{StatusBar, STATUS_BAR_HEIGHT};
@@ -59,6 +60,9 @@ pub struct App {
     appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
     patient_service: Option<Arc<crate::ui::services::PatientUiService>>,
     pending_appointment_date: Option<NaiveDate>,
+    /// Clinical component state
+    clinical_state: ClinicalState,
+    clinical_service: Option<Arc<crate::ui::services::ClinicalUiService>>,
     terminal_size: Rect,
 }
 
@@ -75,6 +79,7 @@ impl App {
     pub fn new(
         appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
         patient_service: Option<Arc<crate::ui::services::PatientUiService>>,
+        clinical_service: Option<Arc<crate::ui::services::ClinicalUiService>>,
     ) -> Self {
         let theme = Theme::dark();
         let mut app = Self {
@@ -96,6 +101,8 @@ impl App {
             appointment_service,
             patient_service,
             pending_appointment_date: None,
+            clinical_state: ClinicalState::with_theme(theme.clone()),
+            clinical_service,
             terminal_size: Rect::new(0, 0, 80, 24),
         };
 
@@ -370,7 +377,70 @@ impl App {
             return self.handle_appointment_keys(key);
         }
 
+        // Handle clinical tab navigation
+        if self.tab_bar.selected() == Tab::Clinical {
+            return self.handle_clinical_keys(key);
+        }
+
         Action::Unknown
+    }
+
+    /// Handle key events for the Clinical tab
+    fn handle_clinical_keys(&mut self, key: KeyEvent) -> Action {
+        use crate::ui::components::clinical::ClinicalView;
+        use crossterm::event::KeyCode;
+
+        // Handle view switching with arrow keys
+        if key.code == KeyCode::Right {
+            self.clinical_state.cycle_view();
+            return Action::Enter;
+        }
+        if key.code == KeyCode::Left {
+            self.clinical_state.cycle_view_reverse();
+            return Action::Enter;
+        }
+
+        // Handle navigation keys
+        let action = self
+            .keybinds
+            .lookup(key, self.current_context)
+            .map(|kb| kb.action.clone());
+
+        if let Some(action) = action {
+            match action {
+                Action::NavigateDown => {
+                    let visible_rows = self.calculate_visible_clinical_rows();
+                    self.clinical_state.next_item();
+                    self.clinical_state.adjust_scroll(visible_rows);
+                    return Action::Enter;
+                }
+                Action::NavigateUp => {
+                    let visible_rows = self.calculate_visible_clinical_rows();
+                    self.clinical_state.prev_item();
+                    self.clinical_state.adjust_scroll(visible_rows);
+                    return Action::Enter;
+                }
+                Action::New => {
+                    // Handle new entry based on current view
+                    return Action::Enter;
+                }
+                Action::Edit => {
+                    // Handle edit based on current view
+                    return Action::Enter;
+                }
+                Action::Delete => {
+                    // Handle delete based on current view
+                    return Action::Enter;
+                }
+                _ => {}
+            }
+        }
+
+        Action::Unknown
+    }
+
+    fn calculate_visible_clinical_rows(&self) -> usize {
+        15_usize.saturating_sub(5)
     }
 
     /// Handle key events for the Patient tab
@@ -695,22 +765,91 @@ impl App {
 
     /// Render the Clinical tab content
     fn render_clinical_tab(&mut self, frame: &mut Frame, area: Rect) {
-        use ratatui::text::Text;
-        use ratatui::widgets::{Block, Borders, Paragraph};
+        use crate::ui::components::clinical::{
+            AllergyList, ConsultationList, FamilyHistoryList, MedicalHistoryList,
+            SocialHistoryComponent, VitalSignsList,
+        };
 
-        let content = "Clinical Notes\n\nPatient clinical records\nSOAP notes, allergies, history";
+        // Check if we have a patient selected
+        if !self.clinical_state.has_patient() {
+            // Show message to select a patient first
+            use ratatui::text::Text;
+            use ratatui::widgets::{Block, Borders, Paragraph};
 
-        let paragraph = Paragraph::new(Text::from(content))
-            .block(
-                Block::default()
-                    .title(format!(" {} ", self.tab_bar.selected().name()))
-                    .borders(Borders::ALL)
-                    .border_style(ratatui::style::Style::default().fg(self.theme.colors.border)),
-            )
-            .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
-            .alignment(ratatui::layout::Alignment::Center);
+            let content = "No Patient Selected\n\nPlease select a patient from the Patient tab\nto view their clinical records.";
 
-        frame.render_widget(paragraph, area);
+            let paragraph = Paragraph::new(Text::from(content))
+                .block(
+                    Block::default()
+                        .title(format!(" {} ", self.tab_bar.selected().name()))
+                        .borders(Borders::ALL)
+                        .border_style(
+                            ratatui::style::Style::default().fg(self.theme.colors.border),
+                        ),
+                )
+                .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
+                .alignment(ratatui::layout::Alignment::Center);
+
+            frame.render_widget(paragraph, area);
+            return;
+        }
+
+        let theme = self.theme.clone();
+
+        match self.clinical_state.view {
+            crate::ui::components::clinical::ClinicalView::Consultations => {
+                let mut list = ConsultationList::new(theme);
+                list.consultations = self.clinical_state.consultations.clone();
+                list.loading = self.clinical_state.loading;
+                frame.render_widget(list, area);
+            }
+            crate::ui::components::clinical::ClinicalView::Allergies => {
+                let mut list = AllergyList::new(theme);
+                list.allergies = self.clinical_state.allergies.clone();
+                list.loading = self.clinical_state.loading;
+                frame.render_widget(list, area);
+            }
+            crate::ui::components::clinical::ClinicalView::MedicalHistory => {
+                let mut list = MedicalHistoryList::new(theme);
+                list.conditions = self.clinical_state.medical_history.clone();
+                list.loading = self.clinical_state.loading;
+                frame.render_widget(list, area);
+            }
+            crate::ui::components::clinical::ClinicalView::VitalSigns => {
+                let mut list = VitalSignsList::new(theme);
+                list.vitals = self.clinical_state.vital_signs.clone();
+                list.loading = self.clinical_state.loading;
+                frame.render_widget(list, area);
+            }
+            crate::ui::components::clinical::ClinicalView::SocialHistory => {
+                let mut component = SocialHistoryComponent::new(theme);
+                component.loading = self.clinical_state.loading;
+                // Convert domain SocialHistory to UI SocialHistoryData
+                if let Some(ref sh) = self.clinical_state.social_history {
+                    component.social_history = Some(
+                        crate::ui::components::clinical::social_history::SocialHistoryData {
+                            smoking_status: sh.smoking_status,
+                            cigarettes_per_day: sh.cigarettes_per_day,
+                            smoking_quit_date: sh.smoking_quit_date,
+                            alcohol_status: sh.alcohol_status,
+                            standard_drinks_per_week: sh.standard_drinks_per_week,
+                            exercise_frequency: sh.exercise_frequency,
+                            occupation: sh.occupation.clone(),
+                            living_situation: sh.living_situation.clone(),
+                            support_network: sh.support_network.clone(),
+                            notes: sh.notes.clone(),
+                        },
+                    );
+                }
+                frame.render_widget(component, area);
+            }
+            crate::ui::components::clinical::ClinicalView::FamilyHistory => {
+                let mut list = FamilyHistoryList::new(theme);
+                list.entries = self.clinical_state.family_history.clone();
+                list.loading = self.clinical_state.loading;
+                frame.render_widget(list, area);
+            }
+        }
     }
 
     /// Render the Billing tab content
@@ -736,7 +875,7 @@ impl App {
 
 impl Default for App {
     fn default() -> Self {
-        Self::new(None, None)
+        Self::new(None, None, None)
     }
 }
 
@@ -746,14 +885,14 @@ mod tests {
 
     #[test]
     fn test_app_creation() {
-        let app = App::new(None, None);
+        let app = App::new(None, None, None);
         assert_eq!(app.current_tab(), Tab::Patient);
         assert!(!app.should_quit());
     }
 
     #[test]
     fn test_tab_switching() {
-        let mut app = App::new(None, None);
+        let mut app = App::new(None, None, None);
 
         // Simulate pressing F3 to switch to Appointments tab
         let key = crossterm::event::KeyEvent::new(
@@ -767,7 +906,7 @@ mod tests {
 
     #[test]
     fn test_help_toggle() {
-        let mut app = App::new(None, None);
+        let mut app = App::new(None, None, None);
 
         assert!(!app.help_overlay.is_visible());
 
@@ -788,7 +927,7 @@ mod tests {
 
     #[test]
     fn test_quit() {
-        let mut app = App::new(None, None);
+        let mut app = App::new(None, None, None);
 
         // Simulate Ctrl+Q to quit
         let key = crossterm::event::KeyEvent::new(

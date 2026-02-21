@@ -439,6 +439,82 @@ impl KeybindRegistry {
             context: KeyContext::Schedule,
             description: "Go to next practitioner",
         });
+
+        // Clinical keybinds
+        // Navigation
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+            action: Action::NavigateDown,
+            context: KeyContext::Clinical,
+            description: "Move selection down",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE),
+            action: Action::NavigateUp,
+            context: KeyContext::Clinical,
+            description: "Move selection up",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+            action: Action::NavigateDown,
+            context: KeyContext::Clinical,
+            description: "Move selection down",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
+            action: Action::NavigateUp,
+            context: KeyContext::Clinical,
+            description: "Move selection up",
+        });
+        // Actions
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
+            action: Action::New,
+            context: KeyContext::Clinical,
+            description: "Create new clinical note",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE),
+            action: Action::Edit,
+            context: KeyContext::Clinical,
+            description: "Edit selected item",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE),
+            action: Action::TabNext,
+            context: KeyContext::Clinical,
+            description: "Cycle to next sub-view",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT),
+            action: Action::TabPrev,
+            context: KeyContext::Clinical,
+            description: "Cycle to previous sub-view",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            action: Action::Enter,
+            context: KeyContext::Clinical,
+            description: "Open selected item",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
+            action: Action::Save,
+            context: KeyContext::Clinical,
+            description: "Sign consultation",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
+            action: Action::Delete,
+            context: KeyContext::Clinical,
+            description: "Deactivate item",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            action: Action::Escape,
+            context: KeyContext::Clinical,
+            description: "Go back / Cancel",
+        });
     }
 
     /// Register a keybind
