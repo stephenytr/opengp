@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
     tracing::info!("Database pool created with {} connection(s)", db_pool.size());
 
     let crypto = Arc::new(EncryptionService::new()?);
-    let patient_repo = SqlxPatientRepository::new(db_pool.clone(), crypto);
+    let patient_repo = Arc::new(SqlxPatientRepository::new(db_pool.clone(), crypto));
     
     // Create appointment-related repositories and service
     let practitioner_repo: Arc<dyn PractitionerRepository> = Arc::new(SqlxPractitionerRepository::new(db_pool.clone()));
@@ -50,10 +50,15 @@ async fn main() -> Result<()> {
         appointment_repo,
     ));
 
+    // Create patient service
+    let patient_service = Arc::new(opengp::ui::services::PatientUiService::new(
+        Arc::new(opengp::domain::patient::PatientService::new(patient_repo.clone()))
+    ));
+
     let patients: Vec<opengp::domain::patient::Patient> = patient_repo.list_active().await?;
     tracing::info!("Loaded {} patients from database", patients.len());
 
-    run_tui(patients, patient_repo, appointment_service).await?;
+    run_tui(patients, patient_repo.clone(), appointment_service, patient_service).await?;
 
     tracing::info!("OpenGP shutdown complete");
 
@@ -62,8 +67,9 @@ async fn main() -> Result<()> {
 
 async fn run_tui(
     patients: Vec<opengp::domain::patient::Patient>,
-    patient_repo: SqlxPatientRepository,
+    patient_repo: Arc<SqlxPatientRepository>,
     appointment_service: Arc<AppointmentUiService>,
+    patient_service: Arc<opengp::ui::services::PatientUiService>,
 ) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -71,7 +77,7 @@ async fn run_tui(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new(Some(appointment_service.clone()));
+    let mut app = App::new(Some(appointment_service.clone()), Some(patient_service.clone()));
     app.load_patients(patients);
 
     loop {
@@ -99,6 +105,22 @@ async fn run_tui(
             // Reload patients to update the list
             let patients = patient_repo.list_active().await?;
             app.load_patients(patients);
+        }
+
+        // Check if there's a pending patient to load for editing
+        if let Some(patient_id) = app.take_pending_edit_patient_id() {
+            match patient_repo.find_by_id(patient_id).await {
+                Ok(Some(patient)) => {
+                    app.open_patient_form(patient);
+                    tracing::info!("Loaded patient for editing: {}", patient_id);
+                }
+                Ok(None) => {
+                    tracing::error!("Patient not found for editing: {}", patient_id);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load patient for editing: {}", e);
+                }
+            }
         }
 
         // Check if there's a pending appointment date to load practitioners and schedule for

@@ -6,11 +6,17 @@
 
 pub mod app;
 pub mod components;
+pub mod error;
 pub mod keybinds;
+pub mod layout;
 pub mod services;
 pub mod theme;
+pub mod view_models;
+pub mod widgets;
 
 pub use app::App;
 pub use components::tabs::Tab;
+pub use error::{UiComponent, UiError};
 pub use keybinds::{Action, KeybindRegistry};
 pub use theme::{ColorPalette, Theme};
+pub use widgets::{FieldType, FormField, FormFieldState, LoadingIndicator, SearchInput, SearchInputState, SpinnerStyle};

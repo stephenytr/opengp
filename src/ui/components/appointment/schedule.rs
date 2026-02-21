@@ -12,9 +12,10 @@ use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
 use crate::domain::appointment::{AppointmentStatus, CalendarAppointment, CalendarDayView};
-use crate::domain::user::Practitioner;
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
+use crate::ui::layout::TIME_COLUMN_WIDTH;
 use crate::ui::theme::Theme;
+use crate::ui::view_models::PractitionerViewItem;
 
 /// Actions that can be triggered from the schedule view
 #[derive(Debug, Clone)]
@@ -38,8 +39,7 @@ pub enum ScheduleAction {
 /// - Selection highlighting for time slots and practitioner columns
 #[derive(Debug, Clone)]
 pub struct Schedule {
-    /// List of practitioners to display
-    practitioners: Vec<Practitioner>,
+    practitioners: Vec<PractitionerViewItem>,
     /// Schedule data for the current day
     schedule_data: Option<CalendarDayView>,
     /// Currently selected practitioner column index
@@ -52,6 +52,8 @@ pub struct Schedule {
     viewport_end_hour: u8,
     /// Theme for styling
     theme: Theme,
+    /// Whether this widget has keyboard focus
+    pub focused: bool,
 }
 
 impl Schedule {
@@ -65,6 +67,7 @@ impl Schedule {
             viewport_start_hour: 8,
             viewport_end_hour: 18,
             theme,
+            focused: false,
         }
     }
 
@@ -76,36 +79,10 @@ impl Schedule {
         self.schedule_data = Some(data.clone());
         self.practitioners.clear();
 
-        // Extract unique practitioners from schedule data
         for practitioner_schedule in &data.practitioners {
-            let practitioner = Practitioner {
+            let practitioner = PractitionerViewItem {
                 id: practitioner_schedule.practitioner_id,
-                user_id: None,
-                first_name: practitioner_schedule
-                    .practitioner_name
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .to_string(),
-                middle_name: None,
-                last_name: practitioner_schedule
-                    .practitioner_name
-                    .split_whitespace()
-                    .last()
-                    .unwrap_or("")
-                    .to_string(),
-                title: "Dr".to_string(),
-                hpi_i: None,
-                ahpra_registration: None,
-                prescriber_number: None,
-                provider_number: String::new(),
-                speciality: None,
-                qualifications: Vec::new(),
-                phone: None,
-                email: None,
-                is_active: true,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
+                display_name: practitioner_schedule.practitioner_name.clone(),
             };
             self.practitioners.push(practitioner);
         }
@@ -118,7 +95,7 @@ impl Schedule {
 
     /// Handle keyboard input and return an action if triggered.
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ScheduleAction> {
-        let registry = KeybindRegistry::new();
+        let registry = KeybindRegistry::global();
 
         if let Some(keybind) = registry.lookup(key, KeyContext::Schedule) {
             return match keybind.action {
@@ -169,7 +146,7 @@ impl Schedule {
         match mouse.kind {
             MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
                 // Calculate layout
-                let time_column_width = 7; // "08:00 " width
+                let time_column_width = TIME_COLUMN_WIDTH;
                 let inner = area.inner(ratatui::layout::Margin {
                     horizontal: 1,
                     vertical: 1,
@@ -344,7 +321,7 @@ impl Schedule {
                 Style::default().fg(self.theme.colors.foreground)
             };
 
-            let header_text = practitioner.display_name();
+            let header_text = &practitioner.display_name;
             let header_len = header_text.len().min(col_width as usize - 2);
             buf.set_string(col_x + 1, area.y, &header_text[..header_len], header_style);
 
@@ -484,10 +461,16 @@ impl Widget for Schedule {
             .map(|d| d.date.format("%A %d %B %Y").to_string())
             .unwrap_or_else(|| "Schedule".to_string());
 
+        let border_style = if self.focused {
+            Style::default().fg(self.theme.colors.primary)
+        } else {
+            Style::default().fg(self.theme.colors.border)
+        };
+
         let block = Block::default()
             .title(format!(" {} ", title))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.theme.colors.border));
+            .border_style(border_style);
 
         block.clone().render(area, buf);
 
@@ -503,7 +486,7 @@ impl Widget for Schedule {
         }
 
         // Calculate layout
-        let time_column_width = 7;
+        let time_column_width = TIME_COLUMN_WIDTH;
         let practitioner_area = Rect {
             x: inner.x + time_column_width,
             y: inner.y,

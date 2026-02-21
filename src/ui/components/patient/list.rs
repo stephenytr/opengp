@@ -14,22 +14,23 @@ use sublime_fuzzy::best_match;
 use uuid::Uuid;
 
 use crate::domain::patient::Patient;
+use crate::ui::layout::{
+    HEADER_HEIGHT, PATIENT_COL_DOB, PATIENT_COL_LAST_VISIT, PATIENT_COL_MEDICARE, PATIENT_COL_NAME,
+    PATIENT_COL_PHONE,
+};
 use crate::ui::theme::Theme;
-
-const COL_NAME: u16 = 25;
-const COL_DOB: u16 = 10;
-const COL_MEDICARE: u16 = 15;
-const COL_PHONE: u16 = 15;
-const COL_LAST_VISIT: u16 = 12;
+use crate::ui::view_models::PatientListItem;
+use crate::ui::widgets::LoadingState;
 
 pub struct PatientList {
-    patients: Vec<Patient>,
-    filtered: Vec<Patient>,
+    patients: Vec<PatientListItem>,
+    filtered: Vec<PatientListItem>,
     search_query: String,
     searching: bool,
     selected_index: usize,
     scroll_offset: usize,
     loading: bool,
+    loading_state: LoadingState,
     theme: Theme,
 }
 
@@ -43,6 +44,7 @@ impl Clone for PatientList {
             selected_index: self.selected_index,
             scroll_offset: self.scroll_offset,
             loading: self.loading,
+            loading_state: self.loading_state.clone(),
             theme: self.theme.clone(),
         }
     }
@@ -58,18 +60,19 @@ impl PatientList {
             selected_index: 0,
             scroll_offset: 0,
             loading: false,
+            loading_state: LoadingState::new().message("Loading patients..."),
             theme,
         }
     }
 
-    pub fn set_patients(&mut self, patients: Vec<Patient>) {
+    pub fn set_patients(&mut self, patients: Vec<PatientListItem>) {
         self.patients = patients;
         self.apply_filter();
         self.selected_index = 0;
         self.scroll_offset = 0;
     }
 
-    pub fn selected_patient(&self) -> Option<&Patient> {
+    pub fn selected_patient(&self) -> Option<&PatientListItem> {
         self.filtered.get(self.selected_index)
     }
 
@@ -114,9 +117,8 @@ impl PatientList {
             .enumerate()
             .filter_map(|(i, p)| {
                 let searchable = format!(
-                    "{} {} {} {}",
-                    p.last_name,
-                    p.first_name,
+                    "{} {} {}",
+                    p.full_name,
                     p.medicare_number.as_deref().unwrap_or(""),
                     p.phone_mobile.as_deref().unwrap_or("")
                 );
@@ -307,12 +309,11 @@ impl PatientList {
             return None;
         }
 
-        let header_height = 2;
-        if mouse.row < area.y + header_height {
+        if mouse.row < area.y + HEADER_HEIGHT {
             return None;
         }
 
-        let row_index = (mouse.row - area.y - header_height) as usize;
+        let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
         // Account for scroll offset
         let actual_index = self.scroll_offset + row_index;
         if actual_index < self.filtered.len() {
@@ -332,37 +333,33 @@ pub enum PatientListAction {
     SearchChanged,
 }
 
-fn format_name(patient: &Patient) -> String {
-    match &patient.preferred_name {
-        Some(preferred) if !preferred.is_empty() => format!("{}, {}", patient.last_name, preferred),
-        _ => format!("{}, {}", patient.last_name, patient.first_name),
-    }
+fn format_name(patient: &PatientListItem) -> String {
+    patient.full_name.clone()
 }
 
-fn format_dob(patient: &Patient) -> String {
-    format!(
-        "{} ({})",
-        patient.date_of_birth.format("%d/%m/%y"),
-        patient.age()
-    )
+fn format_dob(patient: &PatientListItem) -> String {
+    patient.date_of_birth.format("%d/%m/%y").to_string()
 }
 
-fn format_medicare(patient: &Patient) -> String {
+fn format_medicare(patient: &PatientListItem) -> String {
     patient
         .medicare_number
-        .clone()
-        .unwrap_or_else(|| "-".to_string())
+        .as_ref()
+        .map(|s| s.as_str())
+        .unwrap_or("-")
+        .to_string()
 }
 
-fn format_phone(patient: &Patient) -> String {
+fn format_phone(patient: &PatientListItem) -> String {
     patient
         .phone_mobile
-        .clone()
-        .or_else(|| patient.phone_home.clone())
-        .unwrap_or_else(|| "-".to_string())
+        .as_ref()
+        .map(|s| s.as_str())
+        .unwrap_or("-")
+        .to_string()
 }
 
-fn format_last_visit(_patient: &Patient) -> String {
+fn format_last_visit(_patient: &PatientListItem) -> String {
     "-".to_string()
 }
 
@@ -392,10 +389,10 @@ impl Widget for PatientList {
         };
 
         if self.loading {
-            let text = Line::from(vec![Span::raw("Loading patients...")]);
-            let x = inner.x + (inner.width.saturating_sub(17)) / 2;
-            let y = inner.y + inner.height / 2;
-            buf.set_line(x, y, &text, inner.width);
+            let mut loading_state = self.loading_state.clone();
+            loading_state.tick();
+            let indicator = loading_state.to_indicator(self.theme.clone());
+            indicator.render(inner, buf);
             return;
         }
 
@@ -416,11 +413,11 @@ impl Widget for PatientList {
         }
 
         let col_widths = [
-            Constraint::Length(COL_NAME),
-            Constraint::Length(COL_DOB),
-            Constraint::Length(COL_MEDICARE),
-            Constraint::Length(COL_PHONE),
-            Constraint::Length(COL_LAST_VISIT),
+            Constraint::Length(PATIENT_COL_NAME),
+            Constraint::Length(PATIENT_COL_DOB),
+            Constraint::Length(PATIENT_COL_MEDICARE),
+            Constraint::Length(PATIENT_COL_PHONE),
+            Constraint::Length(PATIENT_COL_LAST_VISIT),
         ];
 
         let header = Row::new(vec!["Name", "DOB", "Medicare #", "Phone", "Last Visit"])
@@ -485,8 +482,8 @@ mod tests {
     use super::*;
     use chrono::NaiveDate;
 
-    fn create_test_patient(first: &str, last: &str) -> Patient {
-        Patient::new(
+    fn create_test_patient(first: &str, last: &str) -> PatientListItem {
+        let patient = Patient::new(
             first.to_string(),
             last.to_string(),
             NaiveDate::from_ymd_opt(1980, 1, 1).unwrap(),
@@ -509,7 +506,8 @@ mod tests {
             None,
             None,
         )
-        .unwrap()
+        .unwrap();
+        PatientListItem::from(patient)
     }
 
     #[test]
@@ -554,12 +552,12 @@ mod tests {
         assert!(list.has_selection());
 
         list.move_first();
-        assert_eq!(list.selected_patient().unwrap().first_name, "John");
+        assert!(list.selected_patient().unwrap().full_name.contains("John"));
 
         list.move_down();
-        assert_eq!(list.selected_patient().unwrap().first_name, "Jane");
+        assert!(list.selected_patient().unwrap().full_name.contains("Jane"));
 
         list.move_up();
-        assert_eq!(list.selected_patient().unwrap().first_name, "John");
+        assert!(list.selected_patient().unwrap().full_name.contains("John"));
     }
 }

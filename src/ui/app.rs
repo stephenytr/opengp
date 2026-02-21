@@ -19,13 +19,14 @@ use crate::ui::components::status_bar::{StatusBar, STATUS_BAR_HEIGHT};
 use crate::ui::components::tabs::{Tab, TabBar};
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
 use crate::ui::theme::Theme;
+use crate::ui::view_models::PatientListItem;
 
 /// Application state
 pub struct App {
     /// Theme configuration
     theme: Theme,
-    /// Keybind registry
-    keybinds: KeybindRegistry,
+    /// Keybind registry (reference to global singleton)
+    keybinds: &'static KeybindRegistry,
     /// Tab bar state
     tab_bar: TabBar,
     /// Status bar
@@ -51,12 +52,14 @@ pub struct App {
     patient_form: Option<PatientForm>,
     /// Pending patient data to save (new or update)
     pending_patient_data: Option<PendingPatientData>,
+    /// Pending patient ID to load for editing
+    pending_edit_patient_id: Option<uuid::Uuid>,
     /// Appointment/schedule component state
     appointment_state: AppointmentState,
-    /// Appointment UI service for loading practitioners
     appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
-    /// Pending appointment date to load (for async loading in main loop)
+    patient_service: Option<Arc<crate::ui::services::PatientUiService>>,
     pending_appointment_date: Option<NaiveDate>,
+    terminal_size: Rect,
 }
 
 pub enum PendingPatientData {
@@ -71,11 +74,12 @@ impl App {
     /// Create a new application instance
     pub fn new(
         appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
+        patient_service: Option<Arc<crate::ui::services::PatientUiService>>,
     ) -> Self {
         let theme = Theme::dark();
         let mut app = Self {
             theme: theme.clone(),
-            keybinds: KeybindRegistry::new(),
+            keybinds: KeybindRegistry::global(),
             tab_bar: TabBar::new(),
             status_bar: StatusBar::patient_list(),
             help_overlay: HelpOverlay::new(),
@@ -87,9 +91,12 @@ impl App {
             patient_list: PatientList::new(theme.clone()),
             patient_form: None,
             pending_patient_data: None,
+            pending_edit_patient_id: None,
             appointment_state: AppointmentState::new(theme.clone()),
             appointment_service,
+            patient_service,
             pending_appointment_date: None,
+            terminal_size: Rect::new(0, 0, 80, 24),
         };
 
         app.refresh_status_bar();
@@ -100,12 +107,24 @@ impl App {
 
     /// Load patients into the list
     pub fn load_patients(&mut self, patients: Vec<crate::domain::patient::Patient>) {
-        self.patient_list.set_patients(patients);
+        let list_items: Vec<PatientListItem> =
+            patients.into_iter().map(PatientListItem::from).collect();
+        self.patient_list.set_patients(list_items);
     }
 
     /// Take pending patient data (for saving to database)
     pub fn take_pending_patient_data(&mut self) -> Option<PendingPatientData> {
         self.pending_patient_data.take()
+    }
+
+    /// Take pending patient ID to load for editing
+    pub fn take_pending_edit_patient_id(&mut self) -> Option<uuid::Uuid> {
+        self.pending_edit_patient_id.take()
+    }
+
+    /// Set pending patient ID to load for editing (from UI event)
+    pub fn request_edit_patient(&mut self, patient_id: uuid::Uuid) {
+        self.pending_edit_patient_id = Some(patient_id);
     }
 
     /// Take pending appointment date (for loading practitioners in main loop)
@@ -116,6 +135,12 @@ impl App {
     /// Get mutable reference to appointment state (for loading practitioners)
     pub fn appointment_state_mut(&mut self) -> &mut AppointmentState {
         &mut self.appointment_state
+    }
+
+    /// Open patient form for editing (called from main loop after fetching patient)
+    pub fn open_patient_form(&mut self, patient: crate::domain::patient::Patient) {
+        self.patient_form = Some(PatientForm::from_patient(patient, self.theme.clone()));
+        self.current_context = KeyContext::PatientForm;
     }
 
     pub fn theme(&self) -> &Theme {
@@ -161,9 +186,13 @@ impl App {
     }
 
     fn refresh_context(&mut self) {
+        use crate::ui::components::appointment::AppointmentView;
         self.current_context = match self.tab_bar.selected() {
             Tab::Patient => KeyContext::PatientList,
-            Tab::Appointment => KeyContext::Schedule,
+            Tab::Appointment => match self.appointment_state.current_view {
+                AppointmentView::Calendar => KeyContext::Calendar,
+                AppointmentView::Schedule => KeyContext::Schedule,
+            },
             Tab::Clinical => KeyContext::Clinical,
             Tab::Billing => KeyContext::Billing,
         };
@@ -284,10 +313,9 @@ impl App {
                 }
                 Action::Edit => {
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
-                        if let Some(patient) = self.patient_list.selected_patient().cloned() {
-                            self.patient_form =
-                                Some(PatientForm::from_patient(patient, self.theme.clone()));
-                            self.current_context = KeyContext::PatientForm;
+                        if let Some(patient_id) = self.patient_list.selected_patient_id() {
+                            // Set pending edit ID - main loop will fetch full Patient and create form
+                            self.request_edit_patient(patient_id);
                         }
                     }
                 }
@@ -302,6 +330,9 @@ impl App {
                         && self.appointment_state.current_view == AppointmentView::Schedule
                     {
                         self.appointment_state.current_view = AppointmentView::Calendar;
+                        self.appointment_state.calendar.focused = true;
+                        self.appointment_state.schedule.focused = false;
+                        self.refresh_context();
                     }
                 }
                 Action::Save => {}
@@ -331,37 +362,51 @@ impl App {
 
         // Handle patient list navigation when in list view
         if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
-            if let Some(action) = self.patient_list.handle_key(key) {
-                match action {
-                    crate::ui::components::patient::PatientListAction::SelectionChanged => {
-                        let visible_rows = self.calculate_visible_patient_rows();
-                        self.patient_list.adjust_scroll(visible_rows);
-                    }
-                    crate::ui::components::patient::PatientListAction::OpenPatient(_id) => {
-                        // Open patient for viewing/editing
-                        if let Some(patient) = self.patient_list.selected_patient().cloned() {
-                            self.patient_form =
-                                Some(PatientForm::from_patient(patient, self.theme.clone()));
-                            self.current_context = KeyContext::PatientForm;
-                        }
-                    }
-                    crate::ui::components::patient::PatientListAction::FocusSearch => {}
-                    crate::ui::components::patient::PatientListAction::SearchChanged => {}
-                }
-                return Action::Enter;
-            }
+            return self.handle_patient_keys(key);
         }
 
         // Handle calendar navigation when in appointment view (calendar mode)
-        if self.tab_bar.selected() == Tab::Appointment
-            && self.appointment_state.current_view == AppointmentView::Calendar
-        {
+        if self.tab_bar.selected() == Tab::Appointment {
+            return self.handle_appointment_keys(key);
+        }
+
+        Action::Unknown
+    }
+
+    /// Handle key events for the Patient tab
+    fn handle_patient_keys(&mut self, key: KeyEvent) -> Action {
+        if let Some(action) = self.patient_list.handle_key(key) {
+            match action {
+                crate::ui::components::patient::PatientListAction::SelectionChanged => {
+                    let visible_rows = self.calculate_visible_patient_rows();
+                    self.patient_list.adjust_scroll(visible_rows);
+                }
+                crate::ui::components::patient::PatientListAction::OpenPatient(id) => {
+                    self.request_edit_patient(id);
+                }
+                crate::ui::components::patient::PatientListAction::FocusSearch => {}
+                crate::ui::components::patient::PatientListAction::SearchChanged => {}
+            }
+            return Action::Enter;
+        }
+        Action::Unknown
+    }
+
+    /// Handle key events for the Appointment tab (calendar and schedule)
+    fn handle_appointment_keys(&mut self, key: KeyEvent) -> Action {
+        use crate::ui::components::appointment::AppointmentView;
+
+        // Handle calendar navigation when in calendar mode
+        if self.appointment_state.current_view == AppointmentView::Calendar {
             if let Some(action) = self.appointment_state.calendar.handle_key(key) {
                 match action {
                     CalendarAction::SelectDate(date) => {
                         self.appointment_state.selected_date = Some(date);
                         self.appointment_state.current_view = AppointmentView::Schedule;
+                        self.appointment_state.schedule.focused = true;
+                        self.appointment_state.calendar.focused = false;
                         self.pending_appointment_date = Some(date);
+                        self.refresh_context();
                     }
                     CalendarAction::FocusDate(_) => {}
                     CalendarAction::MonthChanged(_) => {}
@@ -371,9 +416,8 @@ impl App {
             }
         }
 
-        if self.tab_bar.selected() == Tab::Appointment
-            && self.appointment_state.current_view == AppointmentView::Schedule
-        {
+        // Handle schedule navigation when in schedule mode
+        if self.appointment_state.current_view == AppointmentView::Schedule {
             if let Some(action) = self.appointment_state.schedule.handle_key(key) {
                 match action {
                     ScheduleAction::SelectPractitioner(id) => {
@@ -424,12 +468,8 @@ impl App {
             if let Some(action) = self.patient_list.handle_mouse(mouse, content_area) {
                 match action {
                     crate::ui::components::patient::PatientListAction::SelectionChanged => {}
-                    crate::ui::components::patient::PatientListAction::OpenPatient(_id) => {
-                        if let Some(patient) = self.patient_list.selected_patient().cloned() {
-                            self.patient_form =
-                                Some(PatientForm::from_patient(patient, self.theme.clone()));
-                            self.current_context = KeyContext::PatientForm;
-                        }
+                    crate::ui::components::patient::PatientListAction::OpenPatient(id) => {
+                        self.request_edit_patient(id);
                     }
                     crate::ui::components::patient::PatientListAction::FocusSearch => {}
                     crate::ui::components::patient::PatientListAction::SearchChanged => {}
@@ -442,16 +482,29 @@ impl App {
             use crate::ui::components::appointment::schedule::ScheduleAction;
             use crate::ui::components::appointment::AppointmentView;
 
+            let appointment_content_area = Rect::new(
+                area.x,
+                area.y + 2,
+                area.width,
+                area.height.saturating_sub(2 + STATUS_BAR_HEIGHT),
+            );
+
             match self.appointment_state.current_view {
                 AppointmentView::Calendar => {
-                    // Full area goes to calendar
-                    if let Some(action) = self.appointment_state.calendar.handle_mouse(mouse, area)
+                    // Content area (below tab bar) goes to calendar
+                    self.appointment_state.calendar.focused = true;
+                    self.appointment_state.schedule.focused = false;
+                    if let Some(action) = self
+                        .appointment_state
+                        .calendar
+                        .handle_mouse(mouse, appointment_content_area)
                     {
                         match action {
                             CalendarAction::SelectDate(date) => {
                                 self.appointment_state.selected_date = Some(date);
                                 self.appointment_state.current_view = AppointmentView::Schedule;
                                 self.pending_appointment_date = Some(date);
+                                self.refresh_context();
                             }
                             CalendarAction::FocusDate(_) => {}
                             CalendarAction::MonthChanged(_) => {}
@@ -464,7 +517,7 @@ impl App {
                     let chunks = Layout::default()
                         .direction(Direction::Horizontal)
                         .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
-                        .split(area);
+                        .split(appointment_content_area);
 
                     // Route to calendar (left pane) - only handle clicks, not scroll (scroll is for schedule only)
                     use crossterm::event::MouseEventKind;
@@ -474,6 +527,8 @@ impl App {
                             .calendar
                             .handle_mouse(mouse, chunks[0])
                         {
+                            self.appointment_state.calendar.focused = true;
+                            self.appointment_state.schedule.focused = false;
                             match action {
                                 CalendarAction::SelectDate(date) => {
                                     self.appointment_state.selected_date = Some(date);
@@ -493,6 +548,8 @@ impl App {
                         .schedule
                         .handle_mouse(mouse, chunks[1])
                     {
+                        self.appointment_state.schedule.focused = true;
+                        self.appointment_state.calendar.focused = false;
                         match action {
                             ScheduleAction::SelectPractitioner(id) => {
                                 self.appointment_state.selected_practitioner = Some(id);
@@ -516,10 +573,11 @@ impl App {
                 self.handle_key_event(key);
             }
             Event::Mouse(mouse) => {
-                let terminal_area = Rect::new(0, 0, 80, 24);
-                self.handle_mouse_event(mouse, terminal_area);
+                self.handle_mouse_event(mouse, self.terminal_size);
             }
-            Event::Resize(_, _) => {}
+            Event::Resize(w, h) => {
+                self.terminal_size = Rect::new(0, 0, w, h);
+            }
             _ => {}
         }
     }
@@ -563,128 +621,122 @@ impl App {
         let tab = self.tab_bar.selected();
 
         match tab {
-            Tab::Patient => {
-                // Render patient form if active, otherwise render list
-                if let Some(ref mut form) = self.patient_form {
-                    frame.render_widget(form.clone(), area);
-                } else {
-                    frame.render_widget(self.patient_list.clone(), area);
+            Tab::Patient => self.render_patient_tab(frame, area),
+            Tab::Appointment => self.render_appointment_tab(frame, area),
+            Tab::Clinical => self.render_clinical_tab(frame, area),
+            Tab::Billing => self.render_billing_tab(frame, area),
+        }
+    }
+
+    /// Render the Patient tab content
+    fn render_patient_tab(&mut self, frame: &mut Frame, area: Rect) {
+        if let Some(ref mut form) = self.patient_form {
+            frame.render_widget(form.clone(), area);
+        } else {
+            frame.render_widget(self.patient_list.clone(), area);
+        }
+    }
+
+    /// Render the Appointment tab content
+    fn render_appointment_tab(&mut self, frame: &mut Frame, area: Rect) {
+        use crate::ui::components::appointment::AppointmentView;
+
+        match self.appointment_state.current_view {
+            AppointmentView::Calendar => {
+                frame.render_widget(self.appointment_state.calendar.clone(), area);
+            }
+            AppointmentView::Schedule => {
+                let chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+                    .split(area);
+
+                frame.render_widget(self.appointment_state.calendar.clone(), chunks[0]);
+
+                let schedule = &mut self.appointment_state.schedule;
+
+                if let Some(ref data) = self.appointment_state.schedule_data {
+                    schedule.load_schedule(data.clone());
                 }
-            }
-            Tab::Appointment => {
-                use crate::ui::components::appointment::AppointmentView;
 
-                match self.appointment_state.current_view {
-                    AppointmentView::Calendar => {
-                        frame.render_widget(self.appointment_state.calendar.clone(), area);
-                    }
-                    AppointmentView::Schedule => {
-                        // Split view: calendar on left, schedule on right
-                        use ratatui::layout::Constraint;
+                if !self.appointment_state.practitioners.is_empty()
+                    && self.appointment_state.schedule_data.is_none()
+                {
+                    use crate::domain::appointment::{CalendarDayView, PractitionerSchedule};
 
-                        let chunks = Layout::default()
-                            .direction(ratatui::layout::Direction::Horizontal)
-                            .constraints([
-                                Constraint::Percentage(10), // Calendar takes 25%
-                                Constraint::Percentage(90), // Schedule takes 75%
-                            ])
-                            .split(area);
+                    let date = self
+                        .appointment_state
+                        .selected_date
+                        .unwrap_or_else(|| chrono::Utc::now().date_naive());
 
-                        // Render calendar on left
-                        frame.render_widget(self.appointment_state.calendar.clone(), chunks[0]);
+                    let schedules: Vec<PractitionerSchedule> = self
+                        .appointment_state
+                        .practitioners
+                        .iter()
+                        .map(|p| PractitionerSchedule {
+                            practitioner_id: p.id,
+                            practitioner_name: p.display_name(),
+                            appointments: Vec::new(),
+                        })
+                        .collect();
 
-                        // Use stored schedule from state
-                        let schedule = &mut self.appointment_state.schedule;
+                    let day_view = CalendarDayView {
+                        date,
+                        practitioners: schedules,
+                    };
 
-                        // If we have schedule data loaded, load it into the schedule
-                        if let Some(ref data) = self.appointment_state.schedule_data {
-                            schedule.load_schedule(data.clone());
-                        }
-
-                        // If we have practitioners but no schedule_data, load them directly
-                        if !self.appointment_state.practitioners.is_empty()
-                            && self.appointment_state.schedule_data.is_none()
-                        {
-                            use crate::domain::appointment::{
-                                CalendarDayView, PractitionerSchedule,
-                            };
-
-                            let date = self
-                                .appointment_state
-                                .selected_date
-                                .unwrap_or_else(|| chrono::Utc::now().date_naive());
-
-                            let schedules: Vec<PractitionerSchedule> = self
-                                .appointment_state
-                                .practitioners
-                                .iter()
-                                .map(|p| PractitionerSchedule {
-                                    practitioner_id: p.id,
-                                    practitioner_name: p.display_name(),
-                                    appointments: Vec::new(),
-                                })
-                                .collect();
-
-                            let day_view = CalendarDayView {
-                                date,
-                                practitioners: schedules,
-                            };
-
-                            schedule.load_schedule(day_view);
-                        }
-
-                        frame.render_widget(schedule.clone(), chunks[1]);
-                    }
+                    schedule.load_schedule(day_view);
                 }
-            }
-            Tab::Clinical => {
-                use ratatui::text::Text;
-                use ratatui::widgets::{Block, Borders, Paragraph};
 
-                let content =
-                    "Clinical Notes\n\nPatient clinical records\nSOAP notes, allergies, history";
-
-                let paragraph = Paragraph::new(Text::from(content))
-                    .block(
-                        Block::default()
-                            .title(format!(" {} ", tab.name()))
-                            .borders(Borders::ALL)
-                            .border_style(
-                                ratatui::style::Style::default().fg(self.theme.colors.border),
-                            ),
-                    )
-                    .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
-                    .alignment(ratatui::layout::Alignment::Center);
-
-                frame.render_widget(paragraph, area);
-            }
-            Tab::Billing => {
-                use ratatui::text::Text;
-                use ratatui::widgets::{Block, Borders, Paragraph};
-
-                let content = "Billing\n\nInvoicing and payments\nMedicare claims";
-
-                let paragraph = Paragraph::new(Text::from(content))
-                    .block(
-                        Block::default()
-                            .title(format!(" {} ", tab.name()))
-                            .borders(Borders::ALL)
-                            .border_style(
-                                ratatui::style::Style::default().fg(self.theme.colors.border),
-                            ),
-                    )
-                    .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
-                    .alignment(ratatui::layout::Alignment::Center);
-
-                frame.render_widget(paragraph, area);
+                frame.render_widget(schedule.clone(), chunks[1]);
             }
         }
+    }
+
+    /// Render the Clinical tab content
+    fn render_clinical_tab(&mut self, frame: &mut Frame, area: Rect) {
+        use ratatui::text::Text;
+        use ratatui::widgets::{Block, Borders, Paragraph};
+
+        let content = "Clinical Notes\n\nPatient clinical records\nSOAP notes, allergies, history";
+
+        let paragraph = Paragraph::new(Text::from(content))
+            .block(
+                Block::default()
+                    .title(format!(" {} ", self.tab_bar.selected().name()))
+                    .borders(Borders::ALL)
+                    .border_style(ratatui::style::Style::default().fg(self.theme.colors.border)),
+            )
+            .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
+            .alignment(ratatui::layout::Alignment::Center);
+
+        frame.render_widget(paragraph, area);
+    }
+
+    /// Render the Billing tab content
+    fn render_billing_tab(&mut self, frame: &mut Frame, area: Rect) {
+        use ratatui::text::Text;
+        use ratatui::widgets::{Block, Borders, Paragraph};
+
+        let content = "Billing\n\nInvoicing and payments\nMedicare claims";
+
+        let paragraph = Paragraph::new(Text::from(content))
+            .block(
+                Block::default()
+                    .title(format!(" {} ", self.tab_bar.selected().name()))
+                    .borders(Borders::ALL)
+                    .border_style(ratatui::style::Style::default().fg(self.theme.colors.border)),
+            )
+            .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
+            .alignment(ratatui::layout::Alignment::Center);
+
+        frame.render_widget(paragraph, area);
     }
 }
 
 impl Default for App {
     fn default() -> Self {
-        Self::new(None)
+        Self::new(None, None)
     }
 }
 
@@ -694,14 +746,14 @@ mod tests {
 
     #[test]
     fn test_app_creation() {
-        let app = App::new(None);
+        let app = App::new(None, None);
         assert_eq!(app.current_tab(), Tab::Patient);
         assert!(!app.should_quit());
     }
 
     #[test]
     fn test_tab_switching() {
-        let mut app = App::new(None);
+        let mut app = App::new(None, None);
 
         // Simulate pressing F3 to switch to Appointments tab
         let key = crossterm::event::KeyEvent::new(
@@ -715,7 +767,7 @@ mod tests {
 
     #[test]
     fn test_help_toggle() {
-        let mut app = App::new(None);
+        let mut app = App::new(None, None);
 
         assert!(!app.help_overlay.is_visible());
 
@@ -736,7 +788,7 @@ mod tests {
 
     #[test]
     fn test_quit() {
-        let mut app = App::new(None);
+        let mut app = App::new(None, None);
 
         // Simulate Ctrl+Q to quit
         let key = crossterm::event::KeyEvent::new(

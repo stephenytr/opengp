@@ -7,6 +7,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::domain::patient::{NewPatientData, UpdatePatientData, Patient, PatientService, RepositoryError};
+use crate::ui::view_models::PatientListItem;
 
 /// Result type for UI operations
 pub type UiResult<T> = Result<T, UiServiceError>;
@@ -61,6 +62,12 @@ impl PatientUiService {
             .list_active_patients()
             .await
             .map_err(|e| UiServiceError::Repository(e.to_string()))
+    }
+
+    /// List all active patients as view items
+    pub async fn list_patients_as_view_items(&self) -> UiResult<Vec<PatientListItem>> {
+        let patients = self.list_patients().await?;
+        Ok(patients.into_iter().map(PatientListItem::from).collect())
     }
 
     /// Search patients by query

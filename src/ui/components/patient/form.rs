@@ -13,7 +13,9 @@ use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
 use crate::domain::patient::{Address, EmergencyContact, NewPatientData, Patient};
+use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
+use crate::ui::view_models::PatientFormData;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormMode {
@@ -131,7 +133,7 @@ impl FormField {
 
 pub struct PatientForm {
     mode: FormMode,
-    values: HashMap<FormField, String>,
+    data: PatientFormData,
     errors: HashMap<FormField, String>,
     focused_field: FormField,
     saving: bool,
@@ -142,7 +144,7 @@ impl Clone for PatientForm {
     fn clone(&self) -> Self {
         Self {
             mode: self.mode,
-            values: self.values.clone(),
+            data: self.data.clone(),
             errors: self.errors.clone(),
             focused_field: self.focused_field,
             saving: self.saving,
@@ -153,14 +155,9 @@ impl Clone for PatientForm {
 
 impl PatientForm {
     pub fn new(theme: Theme) -> Self {
-        let mut values = HashMap::new();
-        values.insert(FormField::Country, "Australia".to_string());
-        values.insert(FormField::PreferredLanguage, "English".to_string());
-        values.insert(FormField::InterpreterRequired, "No".to_string());
-
         Self {
             mode: FormMode::Create,
-            values,
+            data: PatientFormData::empty(),
             errors: HashMap::new(),
             focused_field: FormField::FirstName,
             saving: false,
@@ -171,103 +168,7 @@ impl PatientForm {
     pub fn from_patient(patient: Patient, theme: Theme) -> Self {
         let mut form = Self::new(theme);
         form.mode = FormMode::Edit(patient.id);
-
-        form.values
-            .insert(FormField::Title, patient.title.unwrap_or_default());
-        form.values.insert(FormField::FirstName, patient.first_name);
-        form.values.insert(
-            FormField::MiddleName,
-            patient.middle_name.unwrap_or_default(),
-        );
-        form.values.insert(FormField::LastName, patient.last_name);
-        form.values.insert(
-            FormField::PreferredName,
-            patient.preferred_name.unwrap_or_default(),
-        );
-        form.values.insert(
-            FormField::DateOfBirth,
-            patient.date_of_birth.format("%Y-%m-%d").to_string(),
-        );
-        form.values
-            .insert(FormField::Gender, patient.gender.to_string());
-
-        form.values.insert(
-            FormField::AddressLine1,
-            patient.address.line1.unwrap_or_default(),
-        );
-        form.values.insert(
-            FormField::AddressLine2,
-            patient.address.line2.unwrap_or_default(),
-        );
-        form.values.insert(
-            FormField::Suburb,
-            patient.address.suburb.unwrap_or_default(),
-        );
-        form.values
-            .insert(FormField::State, patient.address.state.unwrap_or_default());
-        form.values.insert(
-            FormField::Postcode,
-            patient.address.postcode.unwrap_or_default(),
-        );
-        form.values
-            .insert(FormField::Country, patient.address.country);
-
-        form.values
-            .insert(FormField::PhoneHome, patient.phone_home.unwrap_or_default());
-        form.values.insert(
-            FormField::PhoneMobile,
-            patient.phone_mobile.unwrap_or_default(),
-        );
-        form.values
-            .insert(FormField::Email, patient.email.unwrap_or_default());
-
-        form.values.insert(
-            FormField::MedicareNumber,
-            patient.medicare_number.unwrap_or_default(),
-        );
-        if let Some(irn) = patient.medicare_irn {
-            form.values.insert(FormField::MedicareIrn, irn.to_string());
-        }
-        if let Some(expiry) = patient.medicare_expiry {
-            form.values.insert(
-                FormField::MedicareExpiry,
-                expiry.format("%Y-%m-%d").to_string(),
-            );
-        }
-        form.values
-            .insert(FormField::Ihi, patient.ihi.unwrap_or_default());
-
-        if let Some(ec) = patient.emergency_contact {
-            form.values.insert(FormField::EmergencyName, ec.name);
-            form.values.insert(FormField::EmergencyPhone, ec.phone);
-            form.values
-                .insert(FormField::EmergencyRelationship, ec.relationship);
-        }
-
-        if let Some(ct) = patient.concession_type {
-            form.values
-                .insert(FormField::ConcessionType, ct.to_string());
-        }
-        form.values.insert(
-            FormField::ConcessionNumber,
-            patient.concession_number.unwrap_or_default(),
-        );
-        form.values
-            .insert(FormField::PreferredLanguage, patient.preferred_language);
-        form.values.insert(
-            FormField::InterpreterRequired,
-            if patient.interpreter_required {
-                "Yes"
-            } else {
-                "No"
-            }
-            .to_string(),
-        );
-
-        if let Some(atsi) = patient.aboriginal_torres_strait_islander {
-            form.values.insert(FormField::AtsiStatus, atsi.to_string());
-        }
-
+        form.data = PatientFormData::from(patient);
         form
     }
 
@@ -283,12 +184,148 @@ impl PatientForm {
     }
 
     pub fn set_value(&mut self, field: FormField, value: String) {
-        self.values.insert(field, value.clone());
+        match field {
+            FormField::Title => self.data.title = if value.is_empty() { None } else { Some(value) },
+            FormField::FirstName => self.data.first_name = value,
+            FormField::MiddleName => {
+                self.data.middle_name = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::LastName => self.data.last_name = value,
+            FormField::PreferredName => {
+                self.data.preferred_name = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::DateOfBirth => {
+                if let Ok(dob) = NaiveDate::parse_from_str(&value, "%Y-%m-%d") {
+                    self.data.date_of_birth = dob;
+                }
+            }
+            FormField::Gender => {
+                if let Ok(gender) = value.parse() {
+                    self.data.gender = gender;
+                }
+            }
+            FormField::AddressLine1 => {
+                self.data.address_line1 = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::AddressLine2 => {
+                self.data.address_line2 = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::Suburb => {
+                self.data.suburb = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::State => self.data.state = if value.is_empty() { None } else { Some(value) },
+            FormField::Postcode => {
+                self.data.postcode = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::Country => {
+                self.data.country = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::PhoneHome => {
+                self.data.phone_home = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::PhoneMobile => {
+                self.data.phone_mobile = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::Email => self.data.email = if value.is_empty() { None } else { Some(value) },
+            FormField::MedicareNumber => {
+                self.data.medicare_number = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::MedicareIrn => self.data.medicare_irn = value.parse().ok(),
+            FormField::MedicareExpiry => {
+                self.data.medicare_expiry = NaiveDate::parse_from_str(&value, "%Y-%m-%d").ok();
+            }
+            FormField::Ihi => self.data.ihi = if value.is_empty() { None } else { Some(value) },
+            FormField::EmergencyName => {
+                self.data.emergency_contact_name = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::EmergencyPhone => {
+                self.data.emergency_contact_phone =
+                    if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::EmergencyRelationship => {
+                self.data.emergency_contact_relationship =
+                    if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::ConcessionType => self.data.concession_type = value.parse().ok(),
+            FormField::ConcessionNumber => {
+                self.data.concession_number = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::PreferredLanguage => {
+                self.data.preferred_language = if value.is_empty() { None } else { Some(value) }
+            }
+            FormField::InterpreterRequired => self.data.interpreter_required = value == "Yes",
+            FormField::AtsiStatus => {
+                self.data.aboriginal_torres_strait_islander = value.parse().ok()
+            }
+        }
         self.validate_field(&field);
     }
 
     pub fn get_value(&self, field: FormField) -> String {
-        self.values.get(&field).cloned().unwrap_or_default()
+        match field {
+            FormField::Title => self.data.title.clone().unwrap_or_default(),
+            FormField::FirstName => self.data.first_name.clone(),
+            FormField::MiddleName => self.data.middle_name.clone().unwrap_or_default(),
+            FormField::LastName => self.data.last_name.clone(),
+            FormField::PreferredName => self.data.preferred_name.clone().unwrap_or_default(),
+            FormField::DateOfBirth => self.data.date_of_birth.format("%Y-%m-%d").to_string(),
+            FormField::Gender => self.data.gender.to_string(),
+            FormField::AddressLine1 => self.data.address_line1.clone().unwrap_or_default(),
+            FormField::AddressLine2 => self.data.address_line2.clone().unwrap_or_default(),
+            FormField::Suburb => self.data.suburb.clone().unwrap_or_default(),
+            FormField::State => self.data.state.clone().unwrap_or_default(),
+            FormField::Postcode => self.data.postcode.clone().unwrap_or_default(),
+            FormField::Country => self.data.country.clone().unwrap_or_default(),
+            FormField::PhoneHome => self.data.phone_home.clone().unwrap_or_default(),
+            FormField::PhoneMobile => self.data.phone_mobile.clone().unwrap_or_default(),
+            FormField::Email => self.data.email.clone().unwrap_or_default(),
+            FormField::MedicareNumber => self.data.medicare_number.clone().unwrap_or_default(),
+            FormField::MedicareIrn => self
+                .data
+                .medicare_irn
+                .map(|n| n.to_string())
+                .unwrap_or_default(),
+            FormField::MedicareExpiry => self
+                .data
+                .medicare_expiry
+                .map(|d| d.format("%Y-%m-%d").to_string())
+                .unwrap_or_default(),
+            FormField::Ihi => self.data.ihi.clone().unwrap_or_default(),
+            FormField::EmergencyName => {
+                self.data.emergency_contact_name.clone().unwrap_or_default()
+            }
+            FormField::EmergencyPhone => self
+                .data
+                .emergency_contact_phone
+                .clone()
+                .unwrap_or_default(),
+            FormField::EmergencyRelationship => self
+                .data
+                .emergency_contact_relationship
+                .clone()
+                .unwrap_or_default(),
+            FormField::ConcessionType => self
+                .data
+                .concession_type
+                .map(|c| c.to_string())
+                .unwrap_or_default(),
+            FormField::ConcessionNumber => self.data.concession_number.clone().unwrap_or_default(),
+            FormField::PreferredLanguage => {
+                self.data.preferred_language.clone().unwrap_or_default()
+            }
+            FormField::InterpreterRequired => {
+                if self.data.interpreter_required {
+                    "Yes".to_string()
+                } else {
+                    "No".to_string()
+                }
+            }
+            FormField::AtsiStatus => self
+                .data
+                .aboriginal_torres_strait_islander
+                .map(|a| a.to_string())
+                .unwrap_or_default(),
+        }
     }
 
     pub fn focused_field(&self) -> FormField {
@@ -608,7 +645,7 @@ impl PatientForm {
             return None;
         }
 
-        let label_width = 22u16;
+        let label_width = LABEL_WIDTH;
         let field_start = inner.x + label_width + 2;
 
         let fields: Vec<FormField> = FormField::all();
@@ -696,7 +733,7 @@ impl Widget for PatientForm {
             return;
         }
 
-        let label_width = 22u16;
+        let label_width = LABEL_WIDTH;
         let field_start = inner.x + label_width + 2;
 
         let fields: Vec<FormField> = FormField::all();

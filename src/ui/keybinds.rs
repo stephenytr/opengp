@@ -4,6 +4,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 /// Key context for context-specific keybinds
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -492,7 +493,15 @@ impl KeybindRegistry {
             .or_else(|| self.action_lookup.get(&(KeyContext::Global, action)))
             .map(|kb| kb.description)
     }
+
+    /// Get the global singleton keybind registry
+    pub fn global() -> &'static KeybindRegistry {
+        &DEFAULT_REGISTRY
+    }
 }
+
+/// Global keybind registry singleton - lazily initialized
+static DEFAULT_REGISTRY: LazyLock<KeybindRegistry> = LazyLock::new(KeybindRegistry::new);
 
 /// Helper to create key events
 #[macro_export]

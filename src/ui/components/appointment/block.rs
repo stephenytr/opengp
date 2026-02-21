@@ -8,10 +8,9 @@ use ratatui::prelude::Stylize;
 use ratatui::style::Style;
 use ratatui::widgets::Widget;
 
-use crate::domain::appointment::AppointmentStatus;
-use crate::domain::appointment::AppointmentType;
-use crate::domain::appointment::CalendarAppointment;
+use crate::domain::appointment::{AppointmentStatus, AppointmentType, CalendarAppointment};
 use crate::ui::theme::Theme;
+use crate::ui::view_models::AppointmentViewItem;
 
 /// Widget for rendering an appointment block in the calendar.
 ///

@@ -34,6 +34,7 @@ pub struct Calendar {
     pub focused_date: NaiveDate,
     pub days: Vec<CalendarDay>,
     pub theme: Theme,
+    pub focused: bool,
 }
 
 impl Calendar {
@@ -47,6 +48,7 @@ impl Calendar {
             focused_date: today,
             days: Vec::new(),
             theme,
+            focused: false,
         };
         calendar.rebuild_days();
         calendar
@@ -78,11 +80,7 @@ impl Calendar {
 
         let first_weekday = first_of_month.weekday().num_days_from_monday();
 
-        let start_date = if first_weekday == 0 {
-            first_of_month
-        } else {
-            first_of_month.pred_opt().unwrap()
-        };
+        let start_date = first_of_month - chrono::Duration::days(first_weekday as i64);
 
         for i in 0..42 {
             let date = start_date + chrono::Duration::days(i as i64);
@@ -107,7 +105,7 @@ impl Calendar {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<CalendarAction> {
-        let registry = KeybindRegistry::new();
+        let registry = KeybindRegistry::global();
 
         if let Some(keybind) = registry.lookup(key, KeyContext::Calendar) {
             return match keybind.action {
@@ -191,23 +189,29 @@ impl Calendar {
     }
 
     fn get_day_index_at(&self, column: u16, row: u16, area: Rect) -> Option<usize> {
-        let grid_x = area.x + 1;
-        let grid_y = area.y + 2;
+        let grid_x = area.x + 2;
+        let grid_y = area.y + 3;
 
         if column < grid_x || row < grid_y {
             return None;
         }
 
-        // Calculate actual cell dimensions from rendered area
-        let cell_width = (area.width.saturating_sub(2)) / 7;
-        let cell_height = (area.height.saturating_sub(4)) / 6;
+        let inner_right = area.x + area.width.saturating_sub(2);
+        let inner_bottom = area.y + area.height.saturating_sub(2);
 
-        // Ensure minimum cell size of 1 to avoid division by zero
-        let cell_width = cell_width.max(1);
-        let cell_height = cell_height.max(1);
+        if column >= inner_right || row >= inner_bottom {
+            return None;
+        }
 
-        let col = (column - grid_x) as usize / cell_width as usize;
-        let row_idx = (row - grid_y) as usize / cell_height as usize;
+        let dx = (column - grid_x) as usize;
+        let dy = (row - grid_y) as usize;
+
+        if dx % 3 >= 2 || dy % 2 != 0 {
+            return None;
+        }
+
+        let col = dx / 3;
+        let row_idx = dy / 2;
 
         if col > 6 || row_idx > 5 {
             return None;
@@ -220,7 +224,7 @@ impl Calendar {
         let weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
         for (i, day) in weekdays.iter().enumerate() {
-            let x = area.x + 1 + (i * 4) as u16;
+            let x = area.x + 1 + (i * 3) as u16;
             let style = if i >= 5 {
                 Style::default().fg(self.theme.colors.disabled)
             } else {
@@ -235,13 +239,18 @@ impl Calendar {
             let row = i / 7;
             let col = i % 7;
 
-            let x = area.x + 1 + (col * 4) as u16;
-            let y = area.y + 2 + (row * 3) as u16;
+            let x = area.x + 1 + (col * 3) as u16;
+            let y = area.y + 2 + (row * 2) as u16;
 
             let style = self.get_day_style(day);
 
             let day_str = format!("{:>2}", day.date.day());
             buf.set_string(x, y, day_str, style);
+
+            if day.is_selected {
+                buf.set_string(x - 1, y, "[", style);
+                buf.set_string(x + 2, y, "]", style);
+            }
 
             if day.has_appointments {
                 buf.set_string(
@@ -250,11 +259,6 @@ impl Calendar {
                     "•",
                     Style::default().fg(self.theme.colors.primary),
                 );
-            }
-
-            if day.is_selected {
-                buf.set_string(x - 1, y, "[", style);
-                buf.set_string(x + 2, y, "]", style);
             }
         }
     }
@@ -280,14 +284,20 @@ impl Calendar {
 
 impl Widget for Calendar {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        if area.is_empty() {
+        if area.is_empty() || area.width < 21 || area.height < 9 {
             return;
         }
+
+        let border_style = if self.focused {
+            Style::default().fg(self.theme.colors.primary)
+        } else {
+            Style::default().fg(self.theme.colors.border)
+        };
 
         let block = Block::default()
             .title(format!(" {} ", self.current_month.format("%B %Y")))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.theme.colors.border));
+            .border_style(border_style);
 
         block.clone().render(area, buf);
 
@@ -295,5 +305,122 @@ impl Widget for Calendar {
 
         self.render_weekday_header(inner, buf);
         self.render_days(inner, buf);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_calendar() -> Calendar {
+        Calendar::new(Theme::dark())
+    }
+
+    #[test]
+    fn test_calendar_initial_state() {
+        let calendar = create_test_calendar();
+        let today = chrono::Utc::now().date_naive();
+
+        assert_eq!(calendar.current_month.year(), today.year());
+        assert_eq!(calendar.current_month.month(), today.month());
+        assert_eq!(calendar.current_month.day(), 1);
+
+        assert!(calendar.selected_date.is_some());
+        assert_eq!(calendar.selected_date.unwrap(), today);
+
+        assert_eq!(calendar.focused_date, today);
+
+        assert_eq!(calendar.days.len(), 42);
+    }
+
+    #[test]
+    fn test_calendar_navigation_next_month() {
+        let mut calendar = create_test_calendar();
+        let original_month = calendar.current_month;
+
+        let next = calendar.next_month();
+
+        if original_month.month() == 12 {
+            assert_eq!(next.year(), original_month.year() + 1);
+            assert_eq!(next.month(), 1);
+        } else {
+            assert_eq!(next.year(), original_month.year());
+            assert_eq!(next.month(), original_month.month() + 1);
+        }
+        assert_eq!(next.day(), 1);
+
+        calendar.current_month = next;
+        calendar.rebuild_days();
+
+        assert_eq!(calendar.current_month, next);
+    }
+
+    #[test]
+    fn test_calendar_navigation_prev_month() {
+        let mut calendar = create_test_calendar();
+        let original_month = calendar.current_month;
+
+        let prev = calendar.previous_month();
+
+        if original_month.month() == 1 {
+            assert_eq!(prev.year(), original_month.year() - 1);
+            assert_eq!(prev.month(), 12);
+        } else {
+            assert_eq!(prev.year(), original_month.year());
+            assert_eq!(prev.month(), original_month.month() - 1);
+        }
+        assert_eq!(prev.day(), 1);
+
+        calendar.current_month = prev;
+        calendar.rebuild_days();
+
+        assert_eq!(calendar.current_month, prev);
+    }
+
+    #[test]
+    fn test_calendar_today_highlighting() {
+        let calendar = create_test_calendar();
+        let today = chrono::Utc::now().date_naive();
+
+        let today_days: Vec<&CalendarDay> =
+            calendar.days.iter().filter(|day| day.is_today).collect();
+
+        assert_eq!(today_days.len(), 1);
+
+        let today_day = today_days[0];
+        assert_eq!(today_day.date, today);
+        assert!(today_day.is_current_month);
+    }
+
+    #[test]
+    fn test_calendar_date_selection() {
+        let mut calendar = create_test_calendar();
+        let today = chrono::Utc::now().date_naive();
+
+        let selected_date = NaiveDate::from_ymd_opt(
+            calendar.current_month.year(),
+            calendar.current_month.month(),
+            15,
+        )
+        .unwrap();
+
+        calendar.selected_date = Some(selected_date);
+        calendar.rebuild_days();
+
+        let selected_days: Vec<&CalendarDay> =
+            calendar.days.iter().filter(|day| day.is_selected).collect();
+
+        assert_eq!(selected_days.len(), 1);
+        assert_eq!(selected_days[0].date, selected_date);
+        assert!(selected_days[0].is_current_month);
+
+        let today_still_selected = calendar
+            .days
+            .iter()
+            .any(|day| day.is_today && day.is_selected);
+
+        if today.day() != 15 {
+            assert!(!today_still_selected);
+        }
     }
 }
