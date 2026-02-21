@@ -298,6 +298,10 @@ impl App {
                 }
                 Action::SwitchToClinical => {
                     self.tab_bar.select(Tab::Clinical);
+                    // Sync patient selection from Patient tab to Clinical tab
+                    if let Some(patient_id) = self.patient_list.selected_patient_id() {
+                        self.clinical_state.set_patient(patient_id);
+                    }
                     self.refresh_status_bar();
                     self.refresh_context();
                 }
