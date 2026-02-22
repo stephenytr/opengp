@@ -172,6 +172,60 @@ async fn run_tui(
             }
         }
 
+        if let Some(patient_id) = app.take_pending_clinical_patient_id() {
+            app.clinical_state_mut().set_loading(true);
+
+            match clinical_service.list_consultations(patient_id).await {
+                Ok(consultations) => {
+                    app.clinical_state_mut().consultations = consultations;
+                    tracing::info!("Loaded consultations for clinical view");
+                }
+                Err(e) => tracing::error!("Failed to load consultations: {}", e),
+            }
+
+            match clinical_service.list_allergies(patient_id, false).await {
+                Ok(allergies) => {
+                    app.clinical_state_mut().allergies = allergies;
+                    tracing::info!("Loaded allergies for clinical view");
+                }
+                Err(e) => tracing::error!("Failed to load allergies: {}", e),
+            }
+
+            match clinical_service.list_medical_history(patient_id, false).await {
+                Ok(conditions) => {
+                    app.clinical_state_mut().medical_history = conditions;
+                    tracing::info!("Loaded medical history for clinical view");
+                }
+                Err(e) => tracing::error!("Failed to load medical history: {}", e),
+            }
+
+            match clinical_service.list_vitals_history(patient_id, 50).await {
+                Ok(vitals) => {
+                    app.clinical_state_mut().vital_signs = vitals;
+                    tracing::info!("Loaded vital signs for clinical view");
+                }
+                Err(e) => tracing::error!("Failed to load vital signs: {}", e),
+            }
+
+            match clinical_service.get_social_history(patient_id).await {
+                Ok(history) => {
+                    app.clinical_state_mut().social_history = history;
+                    tracing::info!("Loaded social history for clinical view");
+                }
+                Err(e) => tracing::error!("Failed to load social history: {}", e),
+            }
+
+            match clinical_service.list_family_history(patient_id).await {
+                Ok(entries) => {
+                    app.clinical_state_mut().family_history = entries;
+                    tracing::info!("Loaded family history for clinical view");
+                }
+                Err(e) => tracing::error!("Failed to load family history: {}", e),
+            }
+
+            app.clinical_state_mut().set_loading(false);
+        }
+
         if let Ok(event) = crossterm::event::read() {
             match event {
                 Event::Key(key) => {

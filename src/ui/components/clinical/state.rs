@@ -1,12 +1,16 @@
 use crate::domain::clinical::{
     Allergy, Consultation, FamilyHistory, MedicalHistory, SocialHistory, VitalSigns,
 };
+use crate::ui::components::clinical::{
+    AllergyList, ConsultationList, FamilyHistoryList, MedicalHistoryList, VitalSignsList,
+};
 use crate::ui::theme::Theme;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Default)]
 pub enum ClinicalView {
     #[default]
+    PatientSummary,
     Consultations,
     Allergies,
     MedicalHistory,
@@ -15,7 +19,7 @@ pub enum ClinicalView {
     FamilyHistory,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone)]
 pub struct ClinicalState {
     pub view: ClinicalView,
     pub selected_patient_id: Option<Uuid>,
@@ -27,22 +31,42 @@ pub struct ClinicalState {
     pub vital_signs: Vec<VitalSigns>,
     pub social_history: Option<SocialHistory>,
     pub family_history: Vec<FamilyHistory>,
-    pub selected_index: usize,
-    pub scroll_offset: usize,
     pub page: usize,
     pub page_size: usize,
     pub theme: Theme,
+    // Persistent component instances (own selected_index and scroll_offset)
+    pub consultation_list: ConsultationList,
+    pub allergy_list: AllergyList,
+    pub medical_history_list: MedicalHistoryList,
+    pub vitals_list: VitalSignsList,
+    pub family_history_list: FamilyHistoryList,
 }
 
 impl ClinicalState {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(theme: Theme) -> Self {
+        Self::with_theme(theme)
     }
 
     pub fn with_theme(theme: Theme) -> Self {
         Self {
-            theme,
-            ..Default::default()
+            view: ClinicalView::PatientSummary,
+            selected_patient_id: None,
+            loading: false,
+            error: None,
+            consultations: Vec::new(),
+            allergies: Vec::new(),
+            medical_history: Vec::new(),
+            vital_signs: Vec::new(),
+            social_history: None,
+            family_history: Vec::new(),
+            page: 0,
+            page_size: 20,
+            theme: theme.clone(),
+            consultation_list: ConsultationList::new(theme.clone()),
+            allergy_list: AllergyList::new(theme.clone()),
+            medical_history_list: MedicalHistoryList::new(theme.clone()),
+            vitals_list: VitalSignsList::new(theme.clone()),
+            family_history_list: FamilyHistoryList::new(theme),
         }
     }
 
@@ -85,26 +109,42 @@ impl ClinicalState {
         self.view = ClinicalView::FamilyHistory;
     }
 
+    pub fn show_patient_summary(&mut self) {
+        self.view = ClinicalView::PatientSummary;
+    }
+
     pub fn cycle_view(&mut self) {
         self.view = match self.view {
+            ClinicalView::PatientSummary => ClinicalView::Consultations,
             ClinicalView::Consultations => ClinicalView::Allergies,
             ClinicalView::Allergies => ClinicalView::MedicalHistory,
             ClinicalView::MedicalHistory => ClinicalView::VitalSigns,
             ClinicalView::VitalSigns => ClinicalView::SocialHistory,
             ClinicalView::SocialHistory => ClinicalView::FamilyHistory,
-            ClinicalView::FamilyHistory => ClinicalView::Consultations,
+            ClinicalView::FamilyHistory => ClinicalView::PatientSummary,
         };
+        self.reset_component_selection();
     }
 
     pub fn cycle_view_reverse(&mut self) {
         self.view = match self.view {
-            ClinicalView::Consultations => ClinicalView::FamilyHistory,
+            ClinicalView::PatientSummary => ClinicalView::FamilyHistory,
+            ClinicalView::Consultations => ClinicalView::PatientSummary,
             ClinicalView::Allergies => ClinicalView::Consultations,
             ClinicalView::MedicalHistory => ClinicalView::Allergies,
             ClinicalView::VitalSigns => ClinicalView::MedicalHistory,
             ClinicalView::SocialHistory => ClinicalView::VitalSigns,
             ClinicalView::FamilyHistory => ClinicalView::SocialHistory,
         };
+        self.reset_component_selection();
+    }
+
+    fn reset_component_selection(&mut self) {
+        self.consultation_list.move_first();
+        self.allergy_list.move_first();
+        self.medical_history_list.move_first();
+        self.vitals_list.move_first();
+        self.family_history_list.move_first();
     }
 
     pub fn set_patient(&mut self, patient_id: Uuid) {
@@ -119,6 +159,17 @@ impl ClinicalState {
         self.vital_signs.clear();
         self.social_history = None;
         self.family_history.clear();
+
+        self.consultation_list.consultations.clear();
+        self.consultation_list.move_first();
+        self.allergy_list.allergies.clear();
+        self.allergy_list.move_first();
+        self.medical_history_list.conditions.clear();
+        self.medical_history_list.move_first();
+        self.vitals_list.vitals.clear();
+        self.vitals_list.move_first();
+        self.family_history_list.entries.clear();
+        self.family_history_list.move_first();
     }
 
     pub fn set_loading(&mut self, loading: bool) {
@@ -134,26 +185,26 @@ impl ClinicalState {
     }
 
     pub fn next_item(&mut self) {
-        let max = self.current_list_count();
-        if self.selected_index + 1 < max {
-            self.selected_index += 1;
+        match self.view {
+            ClinicalView::PatientSummary => {}
+            ClinicalView::Consultations => self.consultation_list.next(),
+            ClinicalView::Allergies => self.allergy_list.next(),
+            ClinicalView::MedicalHistory => self.medical_history_list.next(),
+            ClinicalView::VitalSigns => self.vitals_list.next(),
+            ClinicalView::SocialHistory => {}
+            ClinicalView::FamilyHistory => self.family_history_list.next(),
         }
     }
 
     pub fn prev_item(&mut self) {
-        if self.selected_index > 0 {
-            self.selected_index -= 1;
-        }
-    }
-
-    fn current_list_count(&self) -> usize {
         match self.view {
-            ClinicalView::Consultations => self.consultations.len(),
-            ClinicalView::Allergies => self.allergies.len(),
-            ClinicalView::MedicalHistory => self.medical_history.len(),
-            ClinicalView::VitalSigns => self.vital_signs.len(),
-            ClinicalView::SocialHistory => self.social_history.is_some() as usize,
-            ClinicalView::FamilyHistory => self.family_history.len(),
+            ClinicalView::PatientSummary => {}
+            ClinicalView::Consultations => self.consultation_list.prev(),
+            ClinicalView::Allergies => self.allergy_list.prev(),
+            ClinicalView::MedicalHistory => self.medical_history_list.prev(),
+            ClinicalView::VitalSigns => self.vitals_list.prev(),
+            ClinicalView::SocialHistory => {}
+            ClinicalView::FamilyHistory => self.family_history_list.prev(),
         }
     }
 
@@ -176,10 +227,38 @@ impl ClinicalState {
         if visible_rows == 0 {
             return;
         }
-        if self.selected_index < self.scroll_offset {
-            self.scroll_offset = self.selected_index;
-        } else if self.selected_index >= self.scroll_offset + visible_rows {
-            self.scroll_offset = self.selected_index.saturating_sub(visible_rows) + 1;
+        match self.view {
+            ClinicalView::PatientSummary => {}
+            ClinicalView::Consultations => self.consultation_list.adjust_scroll(visible_rows),
+            ClinicalView::Allergies => self.allergy_list.adjust_scroll(visible_rows),
+            ClinicalView::MedicalHistory => self.medical_history_list.adjust_scroll(visible_rows),
+            ClinicalView::VitalSigns => self.vitals_list.adjust_scroll(visible_rows),
+            ClinicalView::SocialHistory => {}
+            ClinicalView::FamilyHistory => self.family_history_list.adjust_scroll(visible_rows),
+        }
+    }
+
+    pub fn selected_index(&self) -> usize {
+        match self.view {
+            ClinicalView::PatientSummary => 0,
+            ClinicalView::Consultations => self.consultation_list.selected_index,
+            ClinicalView::Allergies => self.allergy_list.selected_index,
+            ClinicalView::MedicalHistory => self.medical_history_list.selected_index,
+            ClinicalView::VitalSigns => self.vitals_list.selected_index,
+            ClinicalView::SocialHistory => 0,
+            ClinicalView::FamilyHistory => self.family_history_list.selected_index,
+        }
+    }
+
+    pub fn scroll_offset(&self) -> usize {
+        match self.view {
+            ClinicalView::PatientSummary => 0,
+            ClinicalView::Consultations => self.consultation_list.scroll_offset,
+            ClinicalView::Allergies => self.allergy_list.scroll_offset,
+            ClinicalView::MedicalHistory => self.medical_history_list.scroll_offset,
+            ClinicalView::VitalSigns => self.vitals_list.scroll_offset,
+            ClinicalView::SocialHistory => 0,
+            ClinicalView::FamilyHistory => self.family_history_list.scroll_offset,
         }
     }
 }

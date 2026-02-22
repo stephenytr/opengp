@@ -13,7 +13,10 @@ pub struct PatientListItem {
     pub id: Uuid,
     pub full_name: String,
     pub date_of_birth: NaiveDate,
+    pub gender: Gender,
     pub medicare_number: Option<String>,
+    pub medicare_irn: Option<u8>,
+    pub ihi: Option<String>,
     pub phone_mobile: Option<String>,
 }
 
@@ -37,7 +40,10 @@ impl From<Patient> for PatientListItem {
             id: patient.id,
             full_name,
             date_of_birth: patient.date_of_birth,
+            gender: patient.gender,
             medicare_number: patient.medicare_number,
+            medicare_irn: patient.medicare_irn,
+            ihi: patient.ihi,
             phone_mobile: patient.phone_mobile,
         }
     }

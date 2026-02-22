@@ -108,7 +108,7 @@ struct TimeSlot {
 /// let config = AppointmentGeneratorConfig {
 ///     fill_rate: 0.60,
 ///     start_date: Some(Utc::now()),
-///     end_date: Some(Utc::now() + Duration::days(7)),
+///     end_date: Some(Utc::now() + Duration::days(31)),
 ///     ..Default::default()
 /// };
 ///

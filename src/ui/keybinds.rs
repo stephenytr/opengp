@@ -147,6 +147,36 @@ pub enum Action {
     /// Validate form
     Validate,
 
+    // Clinical view actions (number keys 1-7)
+    /// Switch to Patient Summary view
+    SwitchToPatientSummary,
+    /// Switch to Consultations view
+    SwitchToConsultations,
+    /// Switch to Allergies view
+    SwitchToAllergies,
+    /// Switch to Medical History view
+    SwitchToMedicalHistory,
+    /// Switch to Vital Signs view
+    SwitchToVitalSigns,
+    /// Switch to Social History view
+    SwitchToSocialHistory,
+    /// Switch to Family History view
+    SwitchToFamilyHistory,
+
+    // Clinical quick actions (letter keys)
+    /// View allergies
+    ViewAllergies,
+    /// View conditions (medical history)
+    ViewConditions,
+    /// View vital signs
+    ViewVitals,
+    /// View observations (consultations)
+    ViewObservations,
+    /// View family history
+    ViewFamilyHistory,
+    /// View social history
+    ViewSocialHistory,
+
     // Unknown action (fallback)
     #[default]
     Unknown,
@@ -399,6 +429,12 @@ impl KeybindRegistry {
             context: KeyContext::PatientList,
             description: "Delete selected patient",
         });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            action: Action::Enter,
+            context: KeyContext::PatientList,
+            description: "Open patient clinical record",
+        });
 
         // Patient form keybinds
         self.register(Keybind {
@@ -528,6 +564,101 @@ impl KeybindRegistry {
             action: Action::Escape,
             context: KeyContext::Clinical,
             description: "Go back / Cancel",
+        });
+
+        // Clinical: Number keys 1-7 to jump to specific views
+        // 1 = Patient Summary
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE),
+            action: Action::SwitchToPatientSummary,
+            context: KeyContext::Clinical,
+            description: "Go to Patient Summary",
+        });
+        // 2 = Consultations
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE),
+            action: Action::SwitchToConsultations,
+            context: KeyContext::Clinical,
+            description: "Go to Consultations",
+        });
+        // 3 = Allergies
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE),
+            action: Action::SwitchToAllergies,
+            context: KeyContext::Clinical,
+            description: "Go to Allergies",
+        });
+        // 4 = Medical History
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE),
+            action: Action::SwitchToMedicalHistory,
+            context: KeyContext::Clinical,
+            description: "Go to Medical History",
+        });
+        // 5 = Vital Signs
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE),
+            action: Action::SwitchToVitalSigns,
+            context: KeyContext::Clinical,
+            description: "Go to Vital Signs",
+        });
+        // 6 = Social History
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('6'), KeyModifiers::NONE),
+            action: Action::SwitchToSocialHistory,
+            context: KeyContext::Clinical,
+            description: "Go to Social History",
+        });
+        // 7 = Family History
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('7'), KeyModifiers::NONE),
+            action: Action::SwitchToFamilyHistory,
+            context: KeyContext::Clinical,
+            description: "Go to Family History",
+        });
+
+        // Clinical: Quick actions
+        // a = Add/View Allergies
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+            action: Action::ViewAllergies,
+            context: KeyContext::Clinical,
+            description: "View allergies",
+        });
+        // c = Add/View Conditions (Medical History)
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE),
+            action: Action::ViewConditions,
+            context: KeyContext::Clinical,
+            description: "View conditions",
+        });
+        // v = View Vital Signs
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE),
+            action: Action::ViewVitals,
+            context: KeyContext::Clinical,
+            description: "View vital signs",
+        });
+        // o = View Observations (recent consultations)
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE),
+            action: Action::ViewObservations,
+            context: KeyContext::Clinical,
+            description: "View recent consultations",
+        });
+        // f = View Family History
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE),
+            action: Action::ViewFamilyHistory,
+            context: KeyContext::Clinical,
+            description: "View family history",
+        });
+        // h = View Social History
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+            action: Action::ViewSocialHistory,
+            context: KeyContext::Clinical,
+            description: "View social history",
         });
     }
 

@@ -105,6 +105,15 @@ impl HelpOverlay {
                 keybinds.push(("Enter", "View Note"));
                 keybinds.push(("n", "New Note"));
                 keybinds.push(("e", "Edit Note"));
+                keybinds.push(("Tab/Shift+Tab", "Cycle Views"));
+                keybinds.push(("←/→", "Cycle Views"));
+                keybinds.push(("1-7", "Jump to View"));
+                keybinds.push(("a", "Allergies"));
+                keybinds.push(("c", "Conditions"));
+                keybinds.push(("v", "Vital Signs"));
+                keybinds.push(("o", "Observations"));
+                keybinds.push(("f", "Family History"));
+                keybinds.push(("h", "Social History"));
             }
             KeyContext::Billing => {
                 keybinds.push(("Billing", ""));

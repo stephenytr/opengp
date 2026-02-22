@@ -60,6 +60,8 @@ pub struct App {
     appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
     patient_service: Option<Arc<crate::ui::services::PatientUiService>>,
     pending_appointment_date: Option<NaiveDate>,
+    /// Pending patient ID to load for clinical view
+    pending_clinical_patient_id: Option<uuid::Uuid>,
     /// Clinical component state
     clinical_state: ClinicalState,
     clinical_service: Option<Arc<crate::ui::services::ClinicalUiService>>,
@@ -101,6 +103,7 @@ impl App {
             appointment_service,
             patient_service,
             pending_appointment_date: None,
+            pending_clinical_patient_id: None,
             clinical_state: ClinicalState::with_theme(theme.clone()),
             clinical_service,
             terminal_size: Rect::new(0, 0, 80, 24),
@@ -139,9 +142,17 @@ impl App {
         self.pending_appointment_date.take()
     }
 
+    pub fn take_pending_clinical_patient_id(&mut self) -> Option<uuid::Uuid> {
+        self.pending_clinical_patient_id.take()
+    }
+
     /// Get mutable reference to appointment state (for loading practitioners)
     pub fn appointment_state_mut(&mut self) -> &mut AppointmentState {
         &mut self.appointment_state
+    }
+
+    pub fn clinical_state_mut(&mut self) -> &mut ClinicalState {
+        &mut self.clinical_state
     }
 
     /// Open patient form for editing (called from main loop after fetching patient)
@@ -304,10 +315,10 @@ impl App {
                 }
                 Action::SwitchToClinical => {
                     self.tab_bar.select(Tab::Clinical);
-                    // Sync patient selection from Patient tab to Clinical tab
                     if let Some(patient_id) = self.patient_list.selected_patient_id() {
                         self.clinical_state.set_patient(patient_id);
                     }
+                    self.clinical_state.show_patient_summary();
                     self.refresh_status_bar();
                     self.refresh_context();
                 }
@@ -392,8 +403,10 @@ impl App {
                         return self.handle_appointment_keys(key);
                     }
                 }
-                // Enter key on Appointment tab - delegate to handle_appointment_keys
                 Action::Enter => {
+                    if self.tab_bar.selected() == Tab::Patient {
+                        return self.handle_patient_keys(key);
+                    }
                     if self.tab_bar.selected() == Tab::Appointment {
                         return self.handle_appointment_keys(key);
                     }
@@ -403,6 +416,29 @@ impl App {
                     if self.tab_bar.selected() == Tab::Appointment {
                         // TODO: Open appointment creation form (not yet implemented)
                         // Currently a no-op stub
+                    }
+                }
+                // Clinical view switching (number keys 1-7)
+                Action::SwitchToPatientSummary
+                | Action::SwitchToConsultations
+                | Action::SwitchToAllergies
+                | Action::SwitchToMedicalHistory
+                | Action::SwitchToVitalSigns
+                | Action::SwitchToSocialHistory
+                | Action::SwitchToFamilyHistory => {
+                    if self.tab_bar.selected() == Tab::Clinical {
+                        return self.handle_clinical_keys(key);
+                    }
+                }
+                // Clinical quick actions (letter keys)
+                Action::ViewAllergies
+                | Action::ViewConditions
+                | Action::ViewVitals
+                | Action::ViewObservations
+                | Action::ViewFamilyHistory
+                | Action::ViewSocialHistory => {
+                    if self.tab_bar.selected() == Tab::Clinical {
+                        return self.handle_clinical_keys(key);
                     }
                 }
                 _ => {}
@@ -438,7 +474,70 @@ impl App {
     /// Handle key events for the Clinical tab
     fn handle_clinical_keys(&mut self, key: KeyEvent) -> Action {
         use crate::ui::components::clinical::ClinicalView;
+        use crate::ui::keybinds::{Action as KeyAction, KeyContext, KeybindRegistry};
         use crossterm::event::KeyCode;
+
+        // First check keybinds registry for clinical-specific actions
+        let registry = KeybindRegistry::global();
+        if let Some(keybind) = registry.lookup(key, KeyContext::Clinical) {
+            match keybind.action {
+                // Number keys 1-7 to jump to specific views
+                KeyAction::SwitchToPatientSummary => {
+                    self.clinical_state.show_patient_summary();
+                    return Action::Enter;
+                }
+                KeyAction::SwitchToConsultations => {
+                    self.clinical_state.show_consultations();
+                    return Action::Enter;
+                }
+                KeyAction::SwitchToAllergies => {
+                    self.clinical_state.show_allergies();
+                    return Action::Enter;
+                }
+                KeyAction::SwitchToMedicalHistory => {
+                    self.clinical_state.show_medical_history();
+                    return Action::Enter;
+                }
+                KeyAction::SwitchToVitalSigns => {
+                    self.clinical_state.show_vital_signs();
+                    return Action::Enter;
+                }
+                KeyAction::SwitchToSocialHistory => {
+                    self.clinical_state.show_social_history();
+                    return Action::Enter;
+                }
+                KeyAction::SwitchToFamilyHistory => {
+                    self.clinical_state.show_family_history();
+                    return Action::Enter;
+                }
+                // Quick action keys
+                KeyAction::ViewAllergies => {
+                    self.clinical_state.show_allergies();
+                    return Action::Enter;
+                }
+                KeyAction::ViewConditions => {
+                    self.clinical_state.show_medical_history();
+                    return Action::Enter;
+                }
+                KeyAction::ViewVitals => {
+                    self.clinical_state.show_vital_signs();
+                    return Action::Enter;
+                }
+                KeyAction::ViewObservations => {
+                    self.clinical_state.show_consultations();
+                    return Action::Enter;
+                }
+                KeyAction::ViewFamilyHistory => {
+                    self.clinical_state.show_family_history();
+                    return Action::Enter;
+                }
+                KeyAction::ViewSocialHistory => {
+                    self.clinical_state.show_social_history();
+                    return Action::Enter;
+                }
+                _ => {}
+            }
+        }
 
         // Handle view switching with arrow keys
         if key.code == KeyCode::Right {
@@ -452,6 +551,7 @@ impl App {
 
         // Dispatch to active component's handle_key()
         match self.clinical_state.view {
+            ClinicalView::PatientSummary => {}
             ClinicalView::Consultations => {
                 if let Some(action) = self.clinical_state.consultation_list.handle_key(key) {
                     match action {
@@ -535,7 +635,13 @@ impl App {
                     self.patient_list.adjust_scroll(visible_rows);
                 }
                 crate::ui::components::patient::PatientListAction::OpenPatient(id) => {
-                    self.request_edit_patient(id);
+                    self.clinical_state.clear_patient();
+                    self.clinical_state.set_patient(id);
+                    self.clinical_state.show_patient_summary();
+                    self.tab_bar.select(Tab::Clinical);
+                    self.pending_clinical_patient_id = Some(id);
+                    self.refresh_status_bar();
+                    self.refresh_context();
                 }
                 crate::ui::components::patient::PatientListAction::FocusSearch => {}
                 crate::ui::components::patient::PatientListAction::SearchChanged => {}
@@ -577,6 +683,23 @@ impl App {
                         self.appointment_state.selected_practitioner = Some(id);
                     }
                     ScheduleAction::SelectAppointment(id) => {
+                        if let Some(ref schedule_data) = self.appointment_state.schedule_data {
+                            for practitioner in &schedule_data.practitioners {
+                                if let Some(appointment) =
+                                    practitioner.appointments.iter().find(|apt| apt.id == id)
+                                {
+                                    let patient_id = appointment.patient_id;
+                                    self.clinical_state.clear_patient();
+                                    self.clinical_state.set_patient(patient_id);
+                                    self.clinical_state.show_patient_summary();
+                                    self.tab_bar.select(Tab::Clinical);
+                                    self.pending_clinical_patient_id = Some(patient_id);
+                                    self.refresh_status_bar();
+                                    self.refresh_context();
+                                    break;
+                                }
+                            }
+                        }
                         self.appointment_state.selected_appointment = Some(id);
                     }
                     ScheduleAction::NavigateTimeSlot(_delta) => {}
@@ -669,7 +792,7 @@ impl App {
                     // Replicate the split layout from render_content
                     let chunks = Layout::default()
                         .direction(Direction::Horizontal)
-                        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+                        .constraints([Constraint::Percentage(15), Constraint::Percentage(85)])
                         .split(appointment_content_area);
 
                     // Route to calendar (left pane) - only handle clicks, not scroll (scroll is for schedule only)
@@ -894,6 +1017,23 @@ impl App {
         self.clinical_state.family_history_list.loading = self.clinical_state.loading;
 
         match self.clinical_state.view {
+            crate::ui::components::clinical::ClinicalView::PatientSummary => {
+                use crate::ui::components::clinical::PatientSummaryComponent;
+
+                // Get patient data from patient list
+                let patient_item = self.patient_list.selected_patient();
+
+                let mut component = PatientSummaryComponent::new(self.theme.clone());
+
+                component.patient = patient_item.cloned();
+
+                component.allergies = self.clinical_state.allergies.clone();
+                component.conditions = self.clinical_state.medical_history.clone();
+                component.consultations = self.clinical_state.consultations.clone();
+                component.vitals = self.clinical_state.vital_signs.last().cloned();
+
+                frame.render_widget(component, area);
+            }
             crate::ui::components::clinical::ClinicalView::Consultations => {
                 frame.render_widget(self.clinical_state.consultation_list.clone(), area);
             }
