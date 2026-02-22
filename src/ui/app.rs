@@ -174,6 +174,12 @@ impl App {
         self.should_quit = true;
     }
 
+    /// Get appointment state for testing
+    #[cfg(test)]
+    pub fn appointment_state(&self) -> &AppointmentState {
+        &self.appointment_state
+    }
+
     /// Toggle the theme between dark and light
     pub fn toggle_theme(&mut self) {
         if self.theme.colors.background == Color::Black {
@@ -314,7 +320,14 @@ impl App {
                     self.help_overlay.toggle();
                 }
                 Action::Quit => {
-                    self.should_quit = true;
+                    // Ctrl+Q always quits. Bare 'q' only quits from Patient tab.
+                    // On Appointment/Clinical/Billing tabs, 'q' may be used for navigation.
+                    let is_ctrl_q = key
+                        .modifiers
+                        .contains(crossterm::event::KeyModifiers::CONTROL);
+                    if is_ctrl_q || self.tab_bar.selected() == Tab::Patient {
+                        self.should_quit = true;
+                    }
                 }
                 Action::New => {
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
@@ -357,6 +370,39 @@ impl App {
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
                         let visible_rows = self.calculate_visible_patient_rows();
                         self.patient_list.move_up_and_scroll(visible_rows);
+                    }
+                }
+                // Appointment calendar actions - delegate to handle_appointment_keys
+                Action::PrevDay
+                | Action::NextDay
+                | Action::Today
+                | Action::PrevMonth
+                | Action::NextMonth
+                | Action::SelectDate => {
+                    if self.tab_bar.selected() == Tab::Appointment {
+                        return self.handle_appointment_keys(key);
+                    }
+                }
+                // Appointment schedule actions - delegate to handle_appointment_keys
+                Action::PrevPractitioner
+                | Action::NextPractitioner
+                | Action::PrevTimeSlot
+                | Action::NextTimeSlot => {
+                    if self.tab_bar.selected() == Tab::Appointment {
+                        return self.handle_appointment_keys(key);
+                    }
+                }
+                // Enter key on Appointment tab - delegate to handle_appointment_keys
+                Action::Enter => {
+                    if self.tab_bar.selected() == Tab::Appointment {
+                        return self.handle_appointment_keys(key);
+                    }
+                }
+                // NewAppointment stub - handled in Task 5
+                Action::NewAppointment => {
+                    if self.tab_bar.selected() == Tab::Appointment {
+                        // TODO: Open appointment creation form (not yet implemented)
+                        // Currently a no-op stub
                     }
                 }
                 _ => {}
@@ -404,39 +450,72 @@ impl App {
             return Action::Enter;
         }
 
-        // Handle navigation keys
-        let action = self
-            .keybinds
-            .lookup(key, self.current_context)
-            .map(|kb| kb.action.clone());
-
-        if let Some(action) = action {
-            match action {
-                Action::NavigateDown => {
-                    let visible_rows = self.calculate_visible_clinical_rows();
-                    self.clinical_state.next_item();
-                    self.clinical_state.adjust_scroll(visible_rows);
-                    return Action::Enter;
+        // Dispatch to active component's handle_key()
+        match self.clinical_state.view {
+            ClinicalView::Consultations => {
+                if let Some(action) = self.clinical_state.consultation_list.handle_key(key) {
+                    match action {
+                        crate::ui::components::clinical::ConsultationListAction::Select(_)
+                        | crate::ui::components::clinical::ConsultationListAction::Open(_)
+                        | crate::ui::components::clinical::ConsultationListAction::New
+                        | crate::ui::components::clinical::ConsultationListAction::NextPage
+                        | crate::ui::components::clinical::ConsultationListAction::PrevPage => {
+                            return Action::Enter;
+                        }
+                    }
                 }
-                Action::NavigateUp => {
-                    let visible_rows = self.calculate_visible_clinical_rows();
-                    self.clinical_state.prev_item();
-                    self.clinical_state.adjust_scroll(visible_rows);
-                    return Action::Enter;
+            }
+            ClinicalView::Allergies => {
+                if let Some(action) = self.clinical_state.allergy_list.handle_key(key) {
+                    match action {
+                        crate::ui::components::clinical::AllergyListAction::Select(_)
+                        | crate::ui::components::clinical::AllergyListAction::Open(_)
+                        | crate::ui::components::clinical::AllergyListAction::New
+                        | crate::ui::components::clinical::AllergyListAction::ToggleInactive
+                        | crate::ui::components::clinical::AllergyListAction::Delete(_) => {
+                            return Action::Enter;
+                        }
+                    }
                 }
-                Action::New => {
-                    // Handle new entry based on current view
-                    return Action::Enter;
+            }
+            ClinicalView::MedicalHistory => {
+                if let Some(action) = self.clinical_state.medical_history_list.handle_key(key) {
+                    match action {
+                        crate::ui::components::clinical::MedicalHistoryListAction::Select(_)
+                        | crate::ui::components::clinical::MedicalHistoryListAction::Open(_)
+                        | crate::ui::components::clinical::MedicalHistoryListAction::New
+                        | crate::ui::components::clinical::MedicalHistoryListAction::SetFilter(_)
+                        | crate::ui::components::clinical::MedicalHistoryListAction::Delete(_) => {
+                            return Action::Enter;
+                        }
+                    }
                 }
-                Action::Edit => {
-                    // Handle edit based on current view
-                    return Action::Enter;
+            }
+            ClinicalView::VitalSigns => {
+                if let Some(action) = self.clinical_state.vitals_list.handle_key(key) {
+                    match action {
+                        crate::ui::components::clinical::VitalSignsListAction::Select(_)
+                        | crate::ui::components::clinical::VitalSignsListAction::Open(_)
+                        | crate::ui::components::clinical::VitalSignsListAction::New
+                        | crate::ui::components::clinical::VitalSignsListAction::NextPage
+                        | crate::ui::components::clinical::VitalSignsListAction::PrevPage => {
+                            return Action::Enter;
+                        }
+                    }
                 }
-                Action::Delete => {
-                    // Handle delete based on current view
-                    return Action::Enter;
+            }
+            ClinicalView::SocialHistory => {}
+            ClinicalView::FamilyHistory => {
+                if let Some(action) = self.clinical_state.family_history_list.handle_key(key) {
+                    match action {
+                        crate::ui::components::clinical::FamilyHistoryListAction::Select(_)
+                        | crate::ui::components::clinical::FamilyHistoryListAction::Open(_)
+                        | crate::ui::components::clinical::FamilyHistoryListAction::New
+                        | crate::ui::components::clinical::FamilyHistoryListAction::Delete(_) => {
+                            return Action::Enter;
+                        }
+                    }
                 }
-                _ => {}
             }
         }
 
@@ -769,10 +848,7 @@ impl App {
 
     /// Render the Clinical tab content
     fn render_clinical_tab(&mut self, frame: &mut Frame, area: Rect) {
-        use crate::ui::components::clinical::{
-            AllergyList, ConsultationList, FamilyHistoryList, MedicalHistoryList,
-            SocialHistoryComponent, VitalSignsList,
-        };
+        use crate::ui::components::clinical::SocialHistoryComponent;
 
         // Check if we have a patient selected
         if !self.clinical_state.has_patient() {
@@ -798,35 +874,40 @@ impl App {
             return;
         }
 
-        let theme = self.theme.clone();
+        // Sync data to persistent component instances before rendering
+        self.clinical_state.consultation_list.consultations =
+            self.clinical_state.consultations.clone();
+        self.clinical_state.consultation_list.loading = self.clinical_state.loading;
+
+        self.clinical_state.allergy_list.allergies = self.clinical_state.allergies.clone();
+        self.clinical_state.allergy_list.loading = self.clinical_state.loading;
+
+        self.clinical_state.medical_history_list.conditions =
+            self.clinical_state.medical_history.clone();
+        self.clinical_state.medical_history_list.loading = self.clinical_state.loading;
+
+        self.clinical_state.vitals_list.vitals = self.clinical_state.vital_signs.clone();
+        self.clinical_state.vitals_list.loading = self.clinical_state.loading;
+
+        self.clinical_state.family_history_list.entries =
+            self.clinical_state.family_history.clone();
+        self.clinical_state.family_history_list.loading = self.clinical_state.loading;
 
         match self.clinical_state.view {
             crate::ui::components::clinical::ClinicalView::Consultations => {
-                let mut list = ConsultationList::new(theme);
-                list.consultations = self.clinical_state.consultations.clone();
-                list.loading = self.clinical_state.loading;
-                frame.render_widget(list, area);
+                frame.render_widget(self.clinical_state.consultation_list.clone(), area);
             }
             crate::ui::components::clinical::ClinicalView::Allergies => {
-                let mut list = AllergyList::new(theme);
-                list.allergies = self.clinical_state.allergies.clone();
-                list.loading = self.clinical_state.loading;
-                frame.render_widget(list, area);
+                frame.render_widget(self.clinical_state.allergy_list.clone(), area);
             }
             crate::ui::components::clinical::ClinicalView::MedicalHistory => {
-                let mut list = MedicalHistoryList::new(theme);
-                list.conditions = self.clinical_state.medical_history.clone();
-                list.loading = self.clinical_state.loading;
-                frame.render_widget(list, area);
+                frame.render_widget(self.clinical_state.medical_history_list.clone(), area);
             }
             crate::ui::components::clinical::ClinicalView::VitalSigns => {
-                let mut list = VitalSignsList::new(theme);
-                list.vitals = self.clinical_state.vital_signs.clone();
-                list.loading = self.clinical_state.loading;
-                frame.render_widget(list, area);
+                frame.render_widget(self.clinical_state.vitals_list.clone(), area);
             }
             crate::ui::components::clinical::ClinicalView::SocialHistory => {
-                let mut component = SocialHistoryComponent::new(theme);
+                let mut component = SocialHistoryComponent::new(self.theme.clone());
                 component.loading = self.clinical_state.loading;
                 // Convert domain SocialHistory to UI SocialHistoryData
                 if let Some(ref sh) = self.clinical_state.social_history {
@@ -845,13 +926,9 @@ impl App {
                         },
                     );
                 }
-                frame.render_widget(component, area);
             }
             crate::ui::components::clinical::ClinicalView::FamilyHistory => {
-                let mut list = FamilyHistoryList::new(theme);
-                list.entries = self.clinical_state.family_history.clone();
-                list.loading = self.clinical_state.loading;
-                frame.render_widget(list, area);
+                frame.render_widget(self.clinical_state.family_history_list.clone(), area);
             }
         }
     }
@@ -941,5 +1018,167 @@ mod tests {
         app.handle_key_event(key);
 
         assert!(app.should_quit());
+    }
+
+    #[test]
+    fn test_calendar_keybind_routing() {
+        let mut app = App::new(None, None, None);
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::F(3),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+        assert_eq!(app.current_tab(), Tab::Appointment);
+
+        let initial_date = app.appointment_state().calendar.focused_date;
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('l'),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+        assert!(
+            app.appointment_state().calendar.focused_date > initial_date,
+            "Calendar focused_date should advance after pressing 'l'"
+        );
+    }
+
+    #[test]
+    fn test_calendar_enter_selects_date() {
+        let mut app = App::new(None, None, None);
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::F(3),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+
+        use crate::ui::components::appointment::AppointmentView;
+        assert_eq!(
+            app.appointment_state().current_view,
+            AppointmentView::Schedule,
+            "Pressing Enter in Calendar should switch to Schedule view"
+        );
+    }
+
+    #[test]
+    fn test_schedule_keybind_routing() {
+        let mut app = App::new(None, None, None);
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::F(3),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+
+        use crate::ui::components::appointment::AppointmentView;
+        assert_eq!(
+            app.appointment_state().current_view,
+            AppointmentView::Schedule
+        );
+
+        let initial_slot = app.appointment_state().schedule.selected_time_slot;
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('j'),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+        assert!(
+            app.appointment_state().schedule.selected_time_slot >= initial_slot,
+            "Schedule time slot should advance after pressing 'j'"
+        );
+    }
+
+    #[test]
+    fn test_q_does_not_quit_on_appointment() {
+        let mut app = App::new(None, None, None);
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::F(3),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+        assert_eq!(app.current_tab(), Tab::Appointment);
+
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('q'),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+        assert!(
+            !app.should_quit(),
+            "Bare 'q' should NOT quit the app when on Appointment tab"
+        );
+    }
+
+    #[test]
+    fn test_ctrl_q_always_quits() {
+        let mut app = App::new(None, None, None);
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::F(3),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('q'),
+            crossterm::event::KeyModifiers::CONTROL,
+        );
+        app.handle_key_event(key);
+        assert!(app.should_quit(), "Ctrl+Q should always quit the app");
+    }
+
+    #[test]
+    fn test_schedule_escape_returns_to_calendar() {
+        let mut app = App::new(None, None, None);
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::F(3),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+
+        use crate::ui::components::appointment::AppointmentView;
+        assert_eq!(
+            app.appointment_state().current_view,
+            AppointmentView::Schedule
+        );
+
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Esc,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+        assert_eq!(
+            app.appointment_state().current_view,
+            AppointmentView::Calendar,
+            "Escape in Schedule should return to Calendar view"
+        );
+    }
+
+    #[test]
+    fn test_patient_keybind_regression() {
+        let mut app = App::new(None, None, None);
+        assert_eq!(app.current_tab(), Tab::Patient);
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('q'),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
+        assert!(
+            app.should_quit(),
+            "Bare 'q' should still quit from Patient tab"
+        );
     }
 }

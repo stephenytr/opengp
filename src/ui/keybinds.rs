@@ -371,6 +371,13 @@ impl KeybindRegistry {
             context: KeyContext::Calendar,
             description: "Go to next month",
         });
+        // Calendar: Enter selects focused date
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            action: Action::Enter,
+            context: KeyContext::Calendar,
+            description: "Select focused date",
+        });
 
         // Patient list keybinds
         // Note: '/' is handled directly in PatientList for search input
@@ -438,6 +445,13 @@ impl KeybindRegistry {
             action: Action::NextPractitioner,
             context: KeyContext::Schedule,
             description: "Go to next practitioner",
+        });
+        // Schedule: Enter selects appointment at current slot
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            action: Action::Enter,
+            context: KeyContext::Schedule,
+            description: "Select appointment at current time slot",
         });
 
         // Clinical keybinds

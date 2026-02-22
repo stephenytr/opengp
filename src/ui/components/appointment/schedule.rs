@@ -45,7 +45,7 @@ pub struct Schedule {
     /// Currently selected practitioner column index
     selected_practitioner_index: usize,
     /// Currently selected time slot (0-39 for 8am-6pm in 15-min increments)
-    selected_time_slot: u8,
+    pub selected_time_slot: u8,
     /// First hour to display in viewport
     viewport_start_hour: u8,
     /// Last hour to display in viewport
