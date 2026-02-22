@@ -2,7 +2,8 @@ use crate::domain::clinical::{
     Allergy, Consultation, FamilyHistory, MedicalHistory, SocialHistory, VitalSigns,
 };
 use crate::ui::components::clinical::{
-    AllergyList, ConsultationList, FamilyHistoryList, MedicalHistoryList, VitalSignsList,
+    AllergyForm, AllergyList, ConsultationList, FamilyHistoryForm, FamilyHistoryList,
+    MedicalHistoryForm, MedicalHistoryList, VitalSignsForm, VitalSignsList,
 };
 use crate::ui::theme::Theme;
 use uuid::Uuid;
@@ -19,9 +20,20 @@ pub enum ClinicalView {
     FamilyHistory,
 }
 
+#[derive(Debug, Clone, Default)]
+pub enum ClinicalFormView {
+    #[default]
+    None,
+    AllergyForm,
+    MedicalHistoryForm,
+    VitalSignsForm,
+    FamilyHistoryForm,
+}
+
 #[derive(Clone)]
 pub struct ClinicalState {
     pub view: ClinicalView,
+    pub form_view: ClinicalFormView,
     pub selected_patient_id: Option<Uuid>,
     pub loading: bool,
     pub error: Option<String>,
@@ -34,7 +46,10 @@ pub struct ClinicalState {
     pub page: usize,
     pub page_size: usize,
     pub theme: Theme,
-    // Persistent component instances (own selected_index and scroll_offset)
+    pub allergy_form: Option<AllergyForm>,
+    pub medical_history_form: Option<MedicalHistoryForm>,
+    pub vitals_form: Option<VitalSignsForm>,
+    pub family_history_form: Option<FamilyHistoryForm>,
     pub consultation_list: ConsultationList,
     pub allergy_list: AllergyList,
     pub medical_history_list: MedicalHistoryList,
@@ -50,6 +65,7 @@ impl ClinicalState {
     pub fn with_theme(theme: Theme) -> Self {
         Self {
             view: ClinicalView::PatientSummary,
+            form_view: ClinicalFormView::None,
             selected_patient_id: None,
             loading: false,
             error: None,
@@ -62,6 +78,10 @@ impl ClinicalState {
             page: 0,
             page_size: 20,
             theme: theme.clone(),
+            allergy_form: None,
+            medical_history_form: None,
+            vitals_form: None,
+            family_history_form: None,
             consultation_list: ConsultationList::new(theme.clone()),
             allergy_list: AllergyList::new(theme.clone()),
             medical_history_list: MedicalHistoryList::new(theme.clone()),
@@ -82,7 +102,47 @@ impl ClinicalState {
     }
 
     pub fn is_form_view(&self) -> bool {
-        false
+        self.is_form_open()
+    }
+
+    pub fn is_form_open(&self) -> bool {
+        !matches!(self.form_view, ClinicalFormView::None)
+    }
+
+    pub fn current_form_view(&self) -> &ClinicalFormView {
+        &self.form_view
+    }
+
+    pub fn current_form_view_mut(&mut self) -> &mut ClinicalFormView {
+        &mut self.form_view
+    }
+
+    pub fn open_allergy_form(&mut self) {
+        self.allergy_form = Some(AllergyForm::new(self.theme.clone()));
+        self.form_view = ClinicalFormView::AllergyForm;
+    }
+
+    pub fn open_medical_history_form(&mut self) {
+        self.medical_history_form = Some(MedicalHistoryForm::new(self.theme.clone()));
+        self.form_view = ClinicalFormView::MedicalHistoryForm;
+    }
+
+    pub fn open_vitals_form(&mut self) {
+        self.vitals_form = Some(VitalSignsForm::new(self.theme.clone()));
+        self.form_view = ClinicalFormView::VitalSignsForm;
+    }
+
+    pub fn open_family_history_form(&mut self) {
+        self.family_history_form = Some(FamilyHistoryForm::new(self.theme.clone()));
+        self.form_view = ClinicalFormView::FamilyHistoryForm;
+    }
+
+    pub fn close_form(&mut self) {
+        self.form_view = ClinicalFormView::None;
+        self.allergy_form = None;
+        self.medical_history_form = None;
+        self.vitals_form = None;
+        self.family_history_form = None;
     }
 
     pub fn show_consultations(&mut self) {
@@ -159,6 +219,7 @@ impl ClinicalState {
         self.vital_signs.clear();
         self.social_history = None;
         self.family_history.clear();
+        self.close_form();
 
         self.consultation_list.consultations.clear();
         self.consultation_list.move_first();

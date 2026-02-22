@@ -126,6 +126,13 @@ impl HelpOverlay {
                 keybinds.push(("Enter", "Select"));
                 keybinds.push(("Esc", "Close"));
             }
+            KeyContext::ClinicalForm => {
+                keybinds.push(("Clinical Form", ""));
+                keybinds.push(("Tab", "Next Field"));
+                keybinds.push(("Shift+Tab", "Previous Field"));
+                keybinds.push(("Enter", "Submit"));
+                keybinds.push(("Esc", "Cancel"));
+            }
             KeyContext::Help => {
                 keybinds.push(("Help", ""));
                 keybinds.push(("Esc", "Close"));

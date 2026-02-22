@@ -44,10 +44,13 @@ async fn main() -> Result<()> {
     
     // Create appointment-related repositories and service
     let practitioner_repo: Arc<dyn PractitionerRepository> = Arc::new(SqlxPractitionerRepository::new(db_pool.clone()));
-    let appointment_repo: Arc<dyn AppointmentCalendarQuery> = Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
+    let appointment_repo_impl = Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
+    let appointment_repo_for_create: Arc<dyn opengp::domain::appointment::AppointmentRepository> = appointment_repo_impl.clone();
+    let appointment_repo: Arc<dyn AppointmentCalendarQuery> = appointment_repo_impl;
     let appointment_service = Arc::new(AppointmentUiService::new(
         practitioner_repo,
         appointment_repo,
+        appointment_repo_for_create,
     ));
 
     // Create patient service
@@ -168,6 +171,111 @@ async fn run_tui(
                 }
                 Err(e) => {
                     tracing::error!("Failed to load schedule: {}", e);
+                }
+            }
+        }
+
+        if let Some(data) = app.take_pending_appointment_save() {
+            match appointment_service.create_appointment(data).await {
+                Ok(()) => {
+                    tracing::info!("Created new appointment in database");
+                    if let Some(date) = app.appointment_state_mut().selected_date {
+                        match appointment_service.get_schedule(date).await {
+                            Ok(schedule) => {
+                                app.appointment_state_mut().schedule_data = Some(schedule);
+                            }
+                            Err(e) => tracing::error!("Failed to reload schedule: {}", e),
+                        }
+                    }
+                }
+                Err(e) => tracing::error!("Failed to create appointment: {}", e),
+            }
+        }
+
+        if let Some(pending) = app.take_pending_clinical_save_data() {
+            let system_user_id = uuid::Uuid::nil();
+            match pending {
+                opengp::ui::app::PendingClinicalSaveData::Allergy { patient_id, allergy } => {
+                    match clinical_service.add_allergy(
+                        patient_id,
+                        allergy.allergen,
+                        allergy.allergy_type,
+                        allergy.severity,
+                        allergy.reaction,
+                        allergy.notes,
+                        system_user_id,
+                    ).await {
+                        Ok(_) => {
+                            tracing::info!("Saved allergy for patient {}", patient_id);
+                            match clinical_service.list_allergies(patient_id, false).await {
+                                Ok(allergies) => app.clinical_state_mut().allergies = allergies,
+                                Err(e) => tracing::error!("Failed to reload allergies: {}", e),
+                            }
+                        }
+                        Err(e) => tracing::error!("Failed to save allergy: {}", e),
+                    }
+                }
+                opengp::ui::app::PendingClinicalSaveData::MedicalHistory { patient_id, history } => {
+                    match clinical_service.add_medical_history(
+                        patient_id,
+                        history.condition,
+                        history.status,
+                        history.severity,
+                        history.notes,
+                        system_user_id,
+                    ).await {
+                        Ok(_) => {
+                            tracing::info!("Saved medical history for patient {}", patient_id);
+                            match clinical_service.list_medical_history(patient_id, false).await {
+                                Ok(conditions) => app.clinical_state_mut().medical_history = conditions,
+                                Err(e) => tracing::error!("Failed to reload medical history: {}", e),
+                            }
+                        }
+                        Err(e) => tracing::error!("Failed to save medical history: {}", e),
+                    }
+                }
+                opengp::ui::app::PendingClinicalSaveData::VitalSigns { patient_id, vitals } => {
+                    match clinical_service.record_vitals(
+                        patient_id,
+                        vitals.systolic_bp,
+                        vitals.diastolic_bp,
+                        vitals.heart_rate,
+                        vitals.respiratory_rate,
+                        vitals.temperature,
+                        vitals.oxygen_saturation,
+                        vitals.height_cm,
+                        vitals.weight_kg,
+                        vitals.notes,
+                        system_user_id,
+                    ).await {
+                        Ok(_) => {
+                            tracing::info!("Saved vital signs for patient {}", patient_id);
+                            match clinical_service.list_vitals_history(patient_id, 50).await {
+                                Ok(v) => app.clinical_state_mut().vital_signs = v,
+                                Err(e) => tracing::error!("Failed to reload vital signs: {}", e),
+                            }
+                        }
+                        Err(e) => tracing::error!("Failed to save vital signs: {}", e),
+                    }
+                }
+                opengp::ui::app::PendingClinicalSaveData::FamilyHistory { patient_id, entry } => {
+                    match clinical_service.add_family_history(
+                        patient_id,
+                        entry.relative_relationship,
+                        entry.condition,
+                        entry.age_at_diagnosis,
+                        entry.notes,
+                        system_user_id,
+                    ).await {
+                        Ok(_) => {
+                            tracing::info!("Saved family history for patient {}", patient_id);
+                            match clinical_service.list_family_history(patient_id).await {
+                                Ok(entries) => app.clinical_state_mut().family_history = entries,
+                                Err(e) => tracing::error!("Failed to reload family history: {}", e),
+                            }
+                        }
+                        Err(e) => tracing::error!("Failed to save family history: {}", e),
+                    }
                 }
             }
         }

@@ -22,6 +22,8 @@ pub enum KeyContext {
     Schedule,
     /// Clinical notes
     Clinical,
+    /// Clinical form (allergy, medical history, vitals, family history)
+    ClinicalForm,
     /// Billing screen
     Billing,
     /// Search/modal dialogs

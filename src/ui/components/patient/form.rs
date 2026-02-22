@@ -16,6 +16,7 @@ use crate::domain::patient::{Address, EmergencyContact, NewPatientData, Patient}
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
+use crate::ui::widgets::{DropdownAction, DropdownOption, DropdownWidget};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormMode {
@@ -138,6 +139,10 @@ pub struct PatientForm {
     focused_field: FormField,
     saving: bool,
     theme: Theme,
+    gender_dropdown: DropdownWidget,
+    concession_type_dropdown: DropdownWidget,
+    atsi_status_dropdown: DropdownWidget,
+    interpreter_required_dropdown: DropdownWidget,
 }
 
 impl Clone for PatientForm {
@@ -149,12 +154,61 @@ impl Clone for PatientForm {
             focused_field: self.focused_field,
             saving: self.saving,
             theme: self.theme.clone(),
+            gender_dropdown: self.gender_dropdown.clone(),
+            concession_type_dropdown: self.concession_type_dropdown.clone(),
+            atsi_status_dropdown: self.atsi_status_dropdown.clone(),
+            interpreter_required_dropdown: self.interpreter_required_dropdown.clone(),
         }
     }
 }
 
 impl PatientForm {
     pub fn new(theme: Theme) -> Self {
+        let gender_options = vec![
+            DropdownOption::new("Male", "Male"),
+            DropdownOption::new("Female", "Female"),
+            DropdownOption::new("Other", "Other"),
+            DropdownOption::new("PreferNotToSay", "Prefer not to say"),
+        ];
+        let gender_dropdown = DropdownWidget::new("Gender", gender_options, theme.clone());
+
+        let concession_options = vec![
+            DropdownOption::new("DVA", "DVA"),
+            DropdownOption::new("Pensioner", "Pensioner"),
+            DropdownOption::new("HealthcareCard", "Healthcare Card"),
+            DropdownOption::new("SafetyNetCard", "Safety Net Card"),
+        ];
+        let concession_type_dropdown =
+            DropdownWidget::new("Concession Type", concession_options, theme.clone());
+
+        let atsi_options = vec![
+            DropdownOption::new(
+                "AboriginalNotTorresStrait",
+                "Aboriginal (not Torres Strait)",
+            ),
+            DropdownOption::new(
+                "TorresStraitNotAboriginal",
+                "Torres Strait (not Aboriginal)",
+            ),
+            DropdownOption::new(
+                "BothAboriginalAndTorresStrait",
+                "Both Aboriginal and Torres Strait",
+            ),
+            DropdownOption::new(
+                "NeitherAboriginalNorTorresStrait",
+                "Neither Aboriginal nor Torres Strait",
+            ),
+            DropdownOption::new("NotStated", "Not stated"),
+        ];
+        let atsi_status_dropdown = DropdownWidget::new("ATSI Status", atsi_options, theme.clone());
+
+        let interpreter_options = vec![
+            DropdownOption::new("Yes", "Yes"),
+            DropdownOption::new("No", "No"),
+        ];
+        let interpreter_required_dropdown =
+            DropdownWidget::new("Interpreter Required", interpreter_options, theme.clone());
+
         Self {
             mode: FormMode::Create,
             data: PatientFormData::empty(),
@@ -162,13 +216,32 @@ impl PatientForm {
             focused_field: FormField::FirstName,
             saving: false,
             theme,
+            gender_dropdown,
+            concession_type_dropdown,
+            atsi_status_dropdown,
+            interpreter_required_dropdown,
         }
     }
 
     pub fn from_patient(patient: Patient, theme: Theme) -> Self {
+        let gender = patient.gender;
+        let concession_type = patient.concession_type;
+        let atsi_status = patient.aboriginal_torres_strait_islander;
+        let interpreter_required = patient.interpreter_required;
+
         let mut form = Self::new(theme);
         form.mode = FormMode::Edit(patient.id);
         form.data = PatientFormData::from(patient);
+        form.gender_dropdown.set_value(&gender.to_string());
+        if let Some(concession) = concession_type {
+            form.concession_type_dropdown
+                .set_value(&concession.to_string());
+        }
+        if let Some(atsi) = atsi_status {
+            form.atsi_status_dropdown.set_value(&atsi.to_string());
+        }
+        form.interpreter_required_dropdown
+            .set_value(if interpreter_required { "Yes" } else { "No" });
         form
     }
 
@@ -200,6 +273,7 @@ impl PatientForm {
                 }
             }
             FormField::Gender => {
+                self.gender_dropdown.set_value(&value);
                 if let Ok(gender) = value.parse() {
                     self.data.gender = gender;
                 }
@@ -246,16 +320,23 @@ impl PatientForm {
                 self.data.emergency_contact_relationship =
                     if value.is_empty() { None } else { Some(value) }
             }
-            FormField::ConcessionType => self.data.concession_type = value.parse().ok(),
+            FormField::ConcessionType => {
+                self.concession_type_dropdown.set_value(&value);
+                self.data.concession_type = value.parse().ok();
+            }
             FormField::ConcessionNumber => {
                 self.data.concession_number = if value.is_empty() { None } else { Some(value) }
             }
             FormField::PreferredLanguage => {
                 self.data.preferred_language = if value.is_empty() { None } else { Some(value) }
             }
-            FormField::InterpreterRequired => self.data.interpreter_required = value == "Yes",
+            FormField::InterpreterRequired => {
+                self.interpreter_required_dropdown.set_value(&value);
+                self.data.interpreter_required = value == "Yes";
+            }
             FormField::AtsiStatus => {
-                self.data.aboriginal_torres_strait_islander = value.parse().ok()
+                self.atsi_status_dropdown.set_value(&value);
+                self.data.aboriginal_torres_strait_islander = value.parse().ok();
             }
         }
         self.validate_field(&field);
@@ -269,7 +350,11 @@ impl PatientForm {
             FormField::LastName => self.data.last_name.clone(),
             FormField::PreferredName => self.data.preferred_name.clone().unwrap_or_default(),
             FormField::DateOfBirth => self.data.date_of_birth.format("%Y-%m-%d").to_string(),
-            FormField::Gender => self.data.gender.to_string(),
+            FormField::Gender => self
+                .gender_dropdown
+                .selected_value()
+                .unwrap_or("")
+                .to_string(),
             FormField::AddressLine1 => self.data.address_line1.clone().unwrap_or_default(),
             FormField::AddressLine2 => self.data.address_line2.clone().unwrap_or_default(),
             FormField::Suburb => self.data.suburb.clone().unwrap_or_default(),
@@ -305,26 +390,24 @@ impl PatientForm {
                 .clone()
                 .unwrap_or_default(),
             FormField::ConcessionType => self
-                .data
-                .concession_type
-                .map(|c| c.to_string())
-                .unwrap_or_default(),
+                .concession_type_dropdown
+                .selected_value()
+                .unwrap_or("")
+                .to_string(),
             FormField::ConcessionNumber => self.data.concession_number.clone().unwrap_or_default(),
             FormField::PreferredLanguage => {
                 self.data.preferred_language.clone().unwrap_or_default()
             }
-            FormField::InterpreterRequired => {
-                if self.data.interpreter_required {
-                    "Yes".to_string()
-                } else {
-                    "No".to_string()
-                }
-            }
+            FormField::InterpreterRequired => self
+                .interpreter_required_dropdown
+                .selected_value()
+                .unwrap_or("No")
+                .to_string(),
             FormField::AtsiStatus => self
-                .data
-                .aboriginal_torres_strait_islander
-                .map(|a| a.to_string())
-                .unwrap_or_default(),
+                .atsi_status_dropdown
+                .selected_value()
+                .unwrap_or("")
+                .to_string(),
         }
     }
 
@@ -580,6 +663,10 @@ impl PatientForm {
             return None;
         }
 
+        if let Some(dropdown_action) = self.handle_dropdown_key(key) {
+            return dropdown_action;
+        }
+
         match key.code {
             KeyCode::Tab => {
                 if key
@@ -615,6 +702,42 @@ impl PatientForm {
             }
             _ => None,
         }
+    }
+
+    fn handle_dropdown_key(&mut self, key: KeyEvent) -> Option<Option<PatientFormAction>> {
+        let dropdown: Option<(&mut DropdownWidget, FormField)> = match self.focused_field {
+            FormField::Gender => Some((&mut self.gender_dropdown, FormField::Gender)),
+            FormField::ConcessionType => Some((
+                &mut self.concession_type_dropdown,
+                FormField::ConcessionType,
+            )),
+            FormField::AtsiStatus => Some((&mut self.atsi_status_dropdown, FormField::AtsiStatus)),
+            FormField::InterpreterRequired => Some((
+                &mut self.interpreter_required_dropdown,
+                FormField::InterpreterRequired,
+            )),
+            _ => None,
+        };
+
+        if let Some((dropdown, field)) = dropdown {
+            if let Some(action) = dropdown.handle_key(key) {
+                match action {
+                    DropdownAction::Selected(_) | DropdownAction::Closed => {
+                        let value = dropdown.selected_value().map(|v| v.to_string());
+                        if let Some(v) = value {
+                            self.set_value(field, v);
+                        }
+                        return Some(Some(PatientFormAction::ValueChanged));
+                    }
+                    DropdownAction::Opened | DropdownAction::FocusChanged => {
+                        return Some(Some(PatientFormAction::ValueChanged));
+                    }
+                }
+            }
+            return Some(None);
+        }
+
+        None
     }
 
     fn handle_field_navigation(&mut self, code: crossterm::event::KeyCode) {
@@ -768,26 +891,70 @@ impl Widget for PatientForm {
                 );
             }
 
-            let value = self.get_value(field);
-            let value_style = if has_error {
-                Style::default().fg(self.theme.colors.error)
-            } else {
-                Style::default().fg(self.theme.colors.foreground)
-            };
+            match field {
+                FormField::Gender => {
+                    let mut dropdown = self.gender_dropdown.clone();
+                    let dropdown_area = Rect::new(
+                        field_start,
+                        y,
+                        inner.width.saturating_sub(label_width + 4),
+                        3,
+                    );
+                    dropdown.render(dropdown_area, buf);
+                }
+                FormField::ConcessionType => {
+                    let mut dropdown = self.concession_type_dropdown.clone();
+                    let dropdown_area = Rect::new(
+                        field_start,
+                        y,
+                        inner.width.saturating_sub(label_width + 4),
+                        3,
+                    );
+                    dropdown.render(dropdown_area, buf);
+                }
+                FormField::AtsiStatus => {
+                    let mut dropdown = self.atsi_status_dropdown.clone();
+                    let dropdown_area = Rect::new(
+                        field_start,
+                        y,
+                        inner.width.saturating_sub(label_width + 4),
+                        3,
+                    );
+                    dropdown.render(dropdown_area, buf);
+                }
+                FormField::InterpreterRequired => {
+                    let mut dropdown = self.interpreter_required_dropdown.clone();
+                    let dropdown_area = Rect::new(
+                        field_start,
+                        y,
+                        inner.width.saturating_sub(label_width + 4),
+                        3,
+                    );
+                    dropdown.render(dropdown_area, buf);
+                }
+                _ => {
+                    let value = self.get_value(field);
+                    let value_style = if has_error {
+                        Style::default().fg(self.theme.colors.error)
+                    } else {
+                        Style::default().fg(self.theme.colors.foreground)
+                    };
 
-            let max_value_width = inner.width.saturating_sub(label_width + 4);
-            let display_value = if value.len() > max_value_width as usize {
-                &value[value.len() - max_value_width as usize..]
-            } else {
-                &value
-            };
+                    let max_value_width = inner.width.saturating_sub(label_width + 4);
+                    let display_value = if value.len() > max_value_width as usize {
+                        &value[value.len() - max_value_width as usize..]
+                    } else {
+                        &value
+                    };
 
-            buf.set_string(field_start, y, display_value, value_style);
+                    buf.set_string(field_start, y, display_value, value_style);
 
-            if let Some(error_msg) = self.error(field) {
-                let error_style = Style::default().fg(self.theme.colors.error);
-                buf.set_string(field_start, y + 1, format!("  {}", error_msg), error_style);
-                y += 1;
+                    if let Some(error_msg) = self.error(field) {
+                        let error_style = Style::default().fg(self.theme.colors.error);
+                        buf.set_string(field_start, y + 1, format!("  {}", error_msg), error_style);
+                        y += 1;
+                    }
+                }
             }
 
             y += 2;

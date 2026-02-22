@@ -11,7 +11,8 @@ use ratatui::style::Color;
 use ratatui::Frame;
 
 use crate::ui::components::appointment::{
-    AppointmentState, AppointmentView, CalendarAction, ScheduleAction,
+    AppointmentForm, AppointmentFormAction, AppointmentState, AppointmentView, CalendarAction,
+    ScheduleAction,
 };
 use crate::ui::components::clinical::ClinicalState;
 use crate::ui::components::help::HelpOverlay;
@@ -60,8 +61,13 @@ pub struct App {
     appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
     patient_service: Option<Arc<crate::ui::services::PatientUiService>>,
     pending_appointment_date: Option<NaiveDate>,
+    /// Appointment creation form (open when user presses 'n' in Schedule view)
+    appointment_form: Option<AppointmentForm>,
+    /// Pending appointment data to save (set on form Submit)
+    pending_appointment_save: Option<crate::domain::appointment::NewAppointmentData>,
     /// Pending patient ID to load for clinical view
     pending_clinical_patient_id: Option<uuid::Uuid>,
+    pending_clinical_save_data: Option<PendingClinicalSaveData>,
     /// Clinical component state
     clinical_state: ClinicalState,
     clinical_service: Option<Arc<crate::ui::services::ClinicalUiService>>,
@@ -73,6 +79,26 @@ pub enum PendingPatientData {
     Update {
         id: uuid::Uuid,
         data: crate::domain::patient::UpdatePatientData,
+    },
+}
+
+/// Pending clinical data to save (new records from forms)
+pub enum PendingClinicalSaveData {
+    Allergy {
+        patient_id: uuid::Uuid,
+        allergy: crate::domain::clinical::Allergy,
+    },
+    MedicalHistory {
+        patient_id: uuid::Uuid,
+        history: crate::domain::clinical::MedicalHistory,
+    },
+    VitalSigns {
+        patient_id: uuid::Uuid,
+        vitals: crate::domain::clinical::VitalSigns,
+    },
+    FamilyHistory {
+        patient_id: uuid::Uuid,
+        entry: crate::domain::clinical::FamilyHistory,
     },
 }
 
@@ -103,7 +129,10 @@ impl App {
             appointment_service,
             patient_service,
             pending_appointment_date: None,
+            appointment_form: None,
+            pending_appointment_save: None,
             pending_clinical_patient_id: None,
+            pending_clinical_save_data: None,
             clinical_state: ClinicalState::with_theme(theme.clone()),
             clinical_service,
             terminal_size: Rect::new(0, 0, 80, 24),
@@ -142,8 +171,19 @@ impl App {
         self.pending_appointment_date.take()
     }
 
+    /// Take pending appointment save data (for saving to database in main loop)
+    pub fn take_pending_appointment_save(
+        &mut self,
+    ) -> Option<crate::domain::appointment::NewAppointmentData> {
+        self.pending_appointment_save.take()
+    }
+
     pub fn take_pending_clinical_patient_id(&mut self) -> Option<uuid::Uuid> {
         self.pending_clinical_patient_id.take()
+    }
+
+    pub fn take_pending_clinical_save_data(&mut self) -> Option<PendingClinicalSaveData> {
+        self.pending_clinical_save_data.take()
     }
 
     /// Get mutable reference to appointment state (for loading practitioners)
@@ -213,10 +253,16 @@ impl App {
         use crate::ui::components::appointment::AppointmentView;
         self.current_context = match self.tab_bar.selected() {
             Tab::Patient => KeyContext::PatientList,
-            Tab::Appointment => match self.appointment_state.current_view {
-                AppointmentView::Calendar => KeyContext::Calendar,
-                AppointmentView::Schedule => KeyContext::Schedule,
-            },
+            Tab::Appointment => {
+                if self.appointment_form.is_some() {
+                    KeyContext::Schedule
+                } else {
+                    match self.appointment_state.current_view {
+                        AppointmentView::Calendar => KeyContext::Calendar,
+                        AppointmentView::Schedule => KeyContext::Schedule,
+                    }
+                }
+            }
             Tab::Clinical => KeyContext::Clinical,
             Tab::Billing => KeyContext::Billing,
         };
@@ -254,6 +300,14 @@ impl App {
                 }
                 return Action::Enter;
             }
+        }
+
+        if self.tab_bar.selected() == Tab::Clinical && self.clinical_state.is_form_open() {
+            return self.handle_clinical_keys(key);
+        }
+
+        if self.appointment_form.is_some() {
+            return self.handle_appointment_form_keys(key);
         }
 
         // Handle patient form keys when form is open - route keys to form
@@ -341,9 +395,33 @@ impl App {
                     }
                 }
                 Action::New => {
+                    use crate::ui::components::clinical::ClinicalView;
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
                         self.patient_form = Some(PatientForm::new(self.theme.clone()));
                         self.current_context = KeyContext::PatientForm;
+                    }
+                    if self.tab_bar.selected() == Tab::Clinical
+                        && !self.clinical_state.is_form_open()
+                    {
+                        match self.clinical_state.view {
+                            ClinicalView::Allergies => {
+                                self.clinical_state.open_allergy_form();
+                                self.current_context = KeyContext::ClinicalForm;
+                            }
+                            ClinicalView::MedicalHistory => {
+                                self.clinical_state.open_medical_history_form();
+                                self.current_context = KeyContext::ClinicalForm;
+                            }
+                            ClinicalView::VitalSigns => {
+                                self.clinical_state.open_vitals_form();
+                                self.current_context = KeyContext::ClinicalForm;
+                            }
+                            ClinicalView::FamilyHistory => {
+                                self.clinical_state.open_family_history_form();
+                                self.current_context = KeyContext::ClinicalForm;
+                            }
+                            _ => {}
+                        }
                     }
                 }
                 Action::Edit => {
@@ -360,9 +438,13 @@ impl App {
                         self.patient_form = None;
                         self.current_context = KeyContext::PatientList;
                     }
+                    if self.appointment_form.is_some() {
+                        self.appointment_form = None;
+                    }
                     // Also return to Calendar view from Schedule view
                     if self.tab_bar.selected() == Tab::Appointment
                         && self.appointment_state.current_view == AppointmentView::Schedule
+                        && self.appointment_form.is_none()
                     {
                         self.appointment_state.current_view = AppointmentView::Calendar;
                         self.appointment_state.calendar.focused = true;
@@ -411,11 +493,11 @@ impl App {
                         return self.handle_appointment_keys(key);
                     }
                 }
-                // NewAppointment stub - handled in Task 5
                 Action::NewAppointment => {
-                    if self.tab_bar.selected() == Tab::Appointment {
-                        // TODO: Open appointment creation form (not yet implemented)
-                        // Currently a no-op stub
+                    if self.tab_bar.selected() == Tab::Appointment
+                        && self.appointment_form.is_none()
+                    {
+                        self.appointment_form = Some(AppointmentForm::new(self.theme.clone()));
                     }
                 }
                 // Clinical view switching (number keys 1-7)
@@ -473,9 +555,163 @@ impl App {
 
     /// Handle key events for the Clinical tab
     fn handle_clinical_keys(&mut self, key: KeyEvent) -> Action {
-        use crate::ui::components::clinical::ClinicalView;
+        use crate::ui::components::clinical::{
+            AllergyFormAction, ClinicalFormView, ClinicalView, FamilyHistoryFormAction,
+            MedicalHistoryFormAction, VitalSignsFormAction,
+        };
         use crate::ui::keybinds::{Action as KeyAction, KeyContext, KeybindRegistry};
         use crossterm::event::KeyCode;
+
+        if self.clinical_state.is_form_open() {
+            match self.clinical_state.form_view.clone() {
+                ClinicalFormView::AllergyForm => {
+                    if let Some(ref mut form) = self.clinical_state.allergy_form {
+                        if let Some(action) = form.handle_key(key) {
+                            match action {
+                                AllergyFormAction::FocusChanged
+                                | AllergyFormAction::ValueChanged => {}
+                                AllergyFormAction::Submit => {
+                                    if let Some(ref mut form) = self.clinical_state.allergy_form {
+                                        if form.validate() {
+                                            if let Some(patient_id) =
+                                                self.clinical_state.selected_patient_id
+                                            {
+                                                let system_user_id = uuid::Uuid::nil();
+                                                let allergy =
+                                                    form.to_allergy(patient_id, system_user_id);
+                                                self.pending_clinical_save_data =
+                                                    Some(PendingClinicalSaveData::Allergy {
+                                                        patient_id,
+                                                        allergy,
+                                                    });
+                                                self.clinical_state.close_form();
+                                                self.current_context = KeyContext::Clinical;
+                                            }
+                                        }
+                                    }
+                                }
+                                AllergyFormAction::Cancel => {
+                                    self.clinical_state.close_form();
+                                    self.current_context = KeyContext::Clinical;
+                                }
+                            }
+                            return Action::Enter;
+                        }
+                    }
+                }
+                ClinicalFormView::MedicalHistoryForm => {
+                    if let Some(ref mut form) = self.clinical_state.medical_history_form {
+                        if let Some(action) = form.handle_key(key) {
+                            match action {
+                                MedicalHistoryFormAction::FocusChanged
+                                | MedicalHistoryFormAction::ValueChanged => {}
+                                MedicalHistoryFormAction::Submit => {
+                                    if let Some(ref mut form) =
+                                        self.clinical_state.medical_history_form
+                                    {
+                                        if let Some(patient_id) =
+                                            self.clinical_state.selected_patient_id
+                                        {
+                                            let system_user_id = uuid::Uuid::nil();
+                                            if let Some(history) =
+                                                form.to_medical_history(patient_id, system_user_id)
+                                            {
+                                                self.pending_clinical_save_data =
+                                                    Some(PendingClinicalSaveData::MedicalHistory {
+                                                        patient_id,
+                                                        history,
+                                                    });
+                                                self.clinical_state.close_form();
+                                                self.current_context = KeyContext::Clinical;
+                                            }
+                                        }
+                                    }
+                                }
+                                MedicalHistoryFormAction::Cancel => {
+                                    self.clinical_state.close_form();
+                                    self.current_context = KeyContext::Clinical;
+                                }
+                            }
+                            return Action::Enter;
+                        }
+                    }
+                }
+                ClinicalFormView::VitalSignsForm => {
+                    if let Some(ref mut form) = self.clinical_state.vitals_form {
+                        if let Some(action) = form.handle_key(key) {
+                            match action {
+                                VitalSignsFormAction::FocusChanged
+                                | VitalSignsFormAction::ValueChanged => {}
+                                VitalSignsFormAction::Submit => {
+                                    if let Some(ref mut form) = self.clinical_state.vitals_form {
+                                        if form.validate() {
+                                            if let Some(patient_id) =
+                                                self.clinical_state.selected_patient_id
+                                            {
+                                                let system_user_id = uuid::Uuid::nil();
+                                                let vitals =
+                                                    form.to_vital_signs(patient_id, system_user_id);
+                                                self.pending_clinical_save_data =
+                                                    Some(PendingClinicalSaveData::VitalSigns {
+                                                        patient_id,
+                                                        vitals,
+                                                    });
+                                                self.clinical_state.close_form();
+                                                self.current_context = KeyContext::Clinical;
+                                            }
+                                        }
+                                    }
+                                }
+                                VitalSignsFormAction::Cancel => {
+                                    self.clinical_state.close_form();
+                                    self.current_context = KeyContext::Clinical;
+                                }
+                            }
+                            return Action::Enter;
+                        }
+                    }
+                }
+                ClinicalFormView::FamilyHistoryForm => {
+                    if let Some(ref mut form) = self.clinical_state.family_history_form {
+                        if let Some(action) = form.handle_key(key) {
+                            match action {
+                                FamilyHistoryFormAction::FocusChanged
+                                | FamilyHistoryFormAction::ValueChanged => {}
+                                FamilyHistoryFormAction::Submit => {
+                                    if let Some(ref mut form) =
+                                        self.clinical_state.family_history_form
+                                    {
+                                        if form.validate() {
+                                            if let Some(patient_id) =
+                                                self.clinical_state.selected_patient_id
+                                            {
+                                                let system_user_id = uuid::Uuid::nil();
+                                                let entry = form
+                                                    .to_family_history(patient_id, system_user_id);
+                                                self.pending_clinical_save_data =
+                                                    Some(PendingClinicalSaveData::FamilyHistory {
+                                                        patient_id,
+                                                        entry,
+                                                    });
+                                                self.clinical_state.close_form();
+                                                self.current_context = KeyContext::Clinical;
+                                            }
+                                        }
+                                    }
+                                }
+                                FamilyHistoryFormAction::Cancel => {
+                                    self.clinical_state.close_form();
+                                    self.current_context = KeyContext::Clinical;
+                                }
+                            }
+                            return Action::Enter;
+                        }
+                    }
+                }
+                ClinicalFormView::None => {}
+            }
+            return Action::Unknown;
+        }
 
         // First check keybinds registry for clinical-specific actions
         let registry = KeybindRegistry::global();
@@ -568,9 +804,13 @@ impl App {
             ClinicalView::Allergies => {
                 if let Some(action) = self.clinical_state.allergy_list.handle_key(key) {
                     match action {
+                        crate::ui::components::clinical::AllergyListAction::New => {
+                            self.clinical_state.open_allergy_form();
+                            self.current_context = KeyContext::ClinicalForm;
+                            return Action::Enter;
+                        }
                         crate::ui::components::clinical::AllergyListAction::Select(_)
                         | crate::ui::components::clinical::AllergyListAction::Open(_)
-                        | crate::ui::components::clinical::AllergyListAction::New
                         | crate::ui::components::clinical::AllergyListAction::ToggleInactive
                         | crate::ui::components::clinical::AllergyListAction::Delete(_) => {
                             return Action::Enter;
@@ -581,9 +821,13 @@ impl App {
             ClinicalView::MedicalHistory => {
                 if let Some(action) = self.clinical_state.medical_history_list.handle_key(key) {
                     match action {
+                        crate::ui::components::clinical::MedicalHistoryListAction::New => {
+                            self.clinical_state.open_medical_history_form();
+                            self.current_context = KeyContext::ClinicalForm;
+                            return Action::Enter;
+                        }
                         crate::ui::components::clinical::MedicalHistoryListAction::Select(_)
                         | crate::ui::components::clinical::MedicalHistoryListAction::Open(_)
-                        | crate::ui::components::clinical::MedicalHistoryListAction::New
                         | crate::ui::components::clinical::MedicalHistoryListAction::SetFilter(_)
                         | crate::ui::components::clinical::MedicalHistoryListAction::Delete(_) => {
                             return Action::Enter;
@@ -594,9 +838,13 @@ impl App {
             ClinicalView::VitalSigns => {
                 if let Some(action) = self.clinical_state.vitals_list.handle_key(key) {
                     match action {
+                        crate::ui::components::clinical::VitalSignsListAction::New => {
+                            self.clinical_state.open_vitals_form();
+                            self.current_context = KeyContext::ClinicalForm;
+                            return Action::Enter;
+                        }
                         crate::ui::components::clinical::VitalSignsListAction::Select(_)
                         | crate::ui::components::clinical::VitalSignsListAction::Open(_)
-                        | crate::ui::components::clinical::VitalSignsListAction::New
                         | crate::ui::components::clinical::VitalSignsListAction::NextPage
                         | crate::ui::components::clinical::VitalSignsListAction::PrevPage => {
                             return Action::Enter;
@@ -608,9 +856,13 @@ impl App {
             ClinicalView::FamilyHistory => {
                 if let Some(action) = self.clinical_state.family_history_list.handle_key(key) {
                     match action {
+                        crate::ui::components::clinical::FamilyHistoryListAction::New => {
+                            self.clinical_state.open_family_history_form();
+                            self.current_context = KeyContext::ClinicalForm;
+                            return Action::Enter;
+                        }
                         crate::ui::components::clinical::FamilyHistoryListAction::Select(_)
                         | crate::ui::components::clinical::FamilyHistoryListAction::Open(_)
-                        | crate::ui::components::clinical::FamilyHistoryListAction::New
                         | crate::ui::components::clinical::FamilyHistoryListAction::Delete(_) => {
                             return Action::Enter;
                         }
@@ -709,6 +961,29 @@ impl App {
             }
         }
 
+        Action::Unknown
+    }
+
+    fn handle_appointment_form_keys(&mut self, key: KeyEvent) -> Action {
+        if let Some(ref mut form) = self.appointment_form {
+            if let Some(action) = form.handle_key(key) {
+                match action {
+                    AppointmentFormAction::FocusChanged | AppointmentFormAction::ValueChanged => {}
+                    AppointmentFormAction::Submit => {
+                        if let Some(ref mut form) = self.appointment_form {
+                            if let Some(data) = form.to_new_appointment_data() {
+                                self.pending_appointment_save = Some(data);
+                                self.appointment_form = None;
+                            }
+                        }
+                    }
+                    AppointmentFormAction::Cancel | AppointmentFormAction::SaveComplete => {
+                        self.appointment_form = None;
+                    }
+                }
+                return Action::Enter;
+            }
+        }
         Action::Unknown
     }
 
@@ -917,6 +1192,11 @@ impl App {
     fn render_appointment_tab(&mut self, frame: &mut Frame, area: Rect) {
         use crate::ui::components::appointment::AppointmentView;
 
+        if let Some(ref form) = self.appointment_form {
+            frame.render_widget(form.clone(), area);
+            return;
+        }
+
         match self.appointment_state.current_view {
             AppointmentView::Calendar => {
                 frame.render_widget(self.appointment_state.calendar.clone(), area);
@@ -971,9 +1251,35 @@ impl App {
 
     /// Render the Clinical tab content
     fn render_clinical_tab(&mut self, frame: &mut Frame, area: Rect) {
-        use crate::ui::components::clinical::SocialHistoryComponent;
+        use crate::ui::components::clinical::{ClinicalFormView, SocialHistoryComponent};
 
-        // Check if we have a patient selected
+        if self.clinical_state.is_form_open() {
+            match self.clinical_state.form_view.clone() {
+                ClinicalFormView::AllergyForm => {
+                    if let Some(ref form) = self.clinical_state.allergy_form {
+                        frame.render_widget(form.clone(), area);
+                    }
+                }
+                ClinicalFormView::MedicalHistoryForm => {
+                    if let Some(ref form) = self.clinical_state.medical_history_form {
+                        frame.render_widget(form.clone(), area);
+                    }
+                }
+                ClinicalFormView::VitalSignsForm => {
+                    if let Some(ref form) = self.clinical_state.vitals_form {
+                        frame.render_widget(form.clone(), area);
+                    }
+                }
+                ClinicalFormView::FamilyHistoryForm => {
+                    if let Some(ref form) = self.clinical_state.family_history_form {
+                        frame.render_widget(form.clone(), area);
+                    }
+                }
+                ClinicalFormView::None => {}
+            }
+            return;
+        }
+
         if !self.clinical_state.has_patient() {
             // Show message to select a patient first
             use ratatui::text::Text;

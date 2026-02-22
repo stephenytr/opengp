@@ -7,7 +7,8 @@ use std::sync::Arc;
 use chrono::{NaiveDate, TimeZone, Utc};
 
 use crate::domain::appointment::{
-    AppointmentSearchCriteria, AppointmentCalendarQuery, CalendarAppointment, CalendarDayView, PractitionerSchedule,
+    AppointmentSearchCriteria, AppointmentCalendarQuery, AppointmentRepository,
+    CalendarAppointment, CalendarDayView, NewAppointmentData, PractitionerSchedule,
 };
 use crate::domain::user::{Practitioner, PractitionerRepository};
 use crate::domain::error::RepositoryError;
@@ -47,6 +48,8 @@ pub struct AppointmentUiService {
     practitioner_repo: Arc<dyn PractitionerRepository>,
     /// Calendar query for appointments
     calendar_query: Arc<dyn AppointmentCalendarQuery>,
+    /// Appointment repository for creating/updating appointments
+    appointment_repo: Arc<dyn AppointmentRepository>,
 }
 
 impl AppointmentUiService {
@@ -54,11 +57,33 @@ impl AppointmentUiService {
     pub fn new(
         practitioner_repo: Arc<dyn PractitionerRepository>,
         calendar_query: Arc<dyn AppointmentCalendarQuery>,
+        appointment_repo: Arc<dyn AppointmentRepository>,
     ) -> Self {
         Self {
             practitioner_repo,
             calendar_query,
+            appointment_repo,
         }
+    }
+
+    /// Create a new appointment via the repository
+    pub async fn create_appointment(&self, data: NewAppointmentData) -> UiResult<()> {
+        use crate::domain::appointment::Appointment;
+        let end_time = data.start_time + data.duration;
+        let appointment = Appointment::new(
+            data.patient_id,
+            data.practitioner_id,
+            data.start_time,
+            data.duration,
+            data.appointment_type,
+            None,
+        );
+        let _ = end_time;
+        self.appointment_repo
+            .create(appointment)
+            .await
+            .map(|_| ())
+            .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
     /// List all active practitioners

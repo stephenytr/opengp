@@ -27,6 +27,6 @@ pub use medical_history_form::{MedicalHistoryForm, MedicalHistoryFormAction};
 pub use medical_history_list::{MedicalHistoryList, MedicalHistoryListAction};
 pub use patient_summary::PatientSummaryComponent;
 pub use social_history::{SocialHistoryAction, SocialHistoryComponent};
-pub use state::{ClinicalState, ClinicalView};
+pub use state::{ClinicalFormView, ClinicalState, ClinicalView};
 pub use vitals_form::{VitalSignsForm, VitalSignsFormAction};
 pub use vitals_list::{VitalSignsList, VitalSignsListAction};
