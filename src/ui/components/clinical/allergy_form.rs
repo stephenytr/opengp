@@ -365,6 +365,8 @@ impl Widget for AllergyForm {
         let mut y = inner.y + 1;
         let max_y = inner.y + inner.height - 2;
 
+        let mut open_dropdown: Option<(DropdownWidget, Rect)> = None;
+
         for field in fields {
             if y > max_y {
                 break;
@@ -398,6 +400,9 @@ impl Widget for AllergyForm {
                 AllergyFormField::AllergyType => {
                     let dropdown = self.allergy_type_dropdown.clone();
                     let dropdown_area = Rect::new(field_start, y, max_value_width, 3);
+                    if dropdown.is_open() {
+                        open_dropdown = Some((dropdown.clone(), dropdown_area));
+                    }
                     dropdown.render(dropdown_area, buf);
                     if let Some(error_msg) = self.error(field) {
                         let error_style = Style::default().fg(self.theme.colors.error);
@@ -409,6 +414,9 @@ impl Widget for AllergyForm {
                 AllergyFormField::Severity => {
                     let dropdown = self.severity_dropdown.clone();
                     let dropdown_area = Rect::new(field_start, y, max_value_width, 3);
+                    if dropdown.is_open() {
+                        open_dropdown = Some((dropdown.clone(), dropdown_area));
+                    }
                     dropdown.render(dropdown_area, buf);
                     if let Some(error_msg) = self.error(field) {
                         let error_style = Style::default().fg(self.theme.colors.error);
@@ -442,6 +450,10 @@ impl Widget for AllergyForm {
                     y += 2;
                 }
             }
+        }
+
+        if let Some((dropdown, dropdown_area)) = open_dropdown {
+            dropdown.render(dropdown_area, buf);
         }
 
         let help_y = inner.y + inner.height - 1;

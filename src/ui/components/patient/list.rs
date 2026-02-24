@@ -72,6 +72,10 @@ impl PatientList {
         self.scroll_offset = 0;
     }
 
+    pub fn patients(&self) -> &[PatientListItem] {
+        &self.patients
+    }
+
     pub fn selected_patient(&self) -> Option<&PatientListItem> {
         self.filtered.get(self.selected_index)
     }
@@ -214,7 +218,12 @@ impl PatientList {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<PatientListAction> {
-        use crossterm::event::KeyCode;
+        use crossterm::event::{KeyCode, KeyEventKind};
+
+        // Ignore non-press key events (e.g., Release events from terminals with keyboard enhancement)
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
 
         // Handle search input mode
         if self.searching {
@@ -381,13 +390,6 @@ impl Widget for PatientList {
             return;
         }
 
-        // Reserve top line for search input when searching
-        let content_area = if self.searching && inner.height > 1 {
-            Rect::new(inner.x, inner.y + 1, inner.width, inner.height - 1)
-        } else {
-            inner
-        };
-
         if self.loading {
             let mut loading_state = self.loading_state.clone();
             loading_state.tick();
@@ -423,7 +425,7 @@ impl Widget for PatientList {
         let header = Row::new(vec!["Name", "DOB", "Medicare #", "Phone", "Last Visit"])
             .style(Style::default().fg(self.theme.colors.primary).bold());
 
-        let visible_rows = content_area.height as usize;
+        let visible_rows = inner.height as usize;
         let max_scroll = self.filtered.len().saturating_sub(visible_rows);
         let scroll_offset = self.scroll_offset.min(max_scroll);
 
@@ -459,21 +461,7 @@ impl Widget for PatientList {
             .block(Block::default().borders(Borders::NONE))
             .widths(col_widths);
 
-        table.render(content_area, buf);
-
-        // Render search input AFTER table so it's visible
-        if self.searching {
-            let search_text = if self.search_query.is_empty() {
-                Span::styled("/", Style::default().fg(self.theme.colors.primary).bold())
-            } else {
-                Span::from(format!("/{}", self.search_query))
-            };
-            let search_line = Line::from(vec![
-                search_text,
-                Span::styled(" _", Style::default().fg(self.theme.colors.disabled)),
-            ]);
-            buf.set_line(inner.x, inner.y, &search_line, inner.width);
-        }
+        table.render(inner, buf);
     }
 }
 

@@ -16,6 +16,7 @@ use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
 use crate::ui::layout::TIME_COLUMN_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PractitionerViewItem;
+use chrono::NaiveDate;
 
 /// Actions that can be triggered from the schedule view
 #[derive(Debug, Clone)]
@@ -28,6 +29,15 @@ pub enum ScheduleAction {
     NavigateTimeSlot(i32),
     /// Navigate between practitioners (positive = right, negative = left)
     NavigatePractitioner(i32),
+    /// Create a new appointment at the selected empty slot
+    CreateAtSlot {
+        /// The practitioner for the new appointment
+        practitioner_id: Uuid,
+        /// The date for the new appointment
+        date: NaiveDate,
+        /// The start time for the new appointment (e.g., "09:00")
+        time: String,
+    },
 }
 
 /// Schedule view widget displaying practitioner columns and time slots.
@@ -131,9 +141,59 @@ impl Schedule {
                     Some(ScheduleAction::NavigateTimeSlot(1))
                 }
                 Action::Enter => {
-                    // Try to select appointment at current position
-                    self.get_appointment_at_selection()
-                        .map(|apt| ScheduleAction::SelectAppointment(apt.id))
+                    // Try to select appointment at current position, or create new if empty
+                    if let Some(apt) = self.get_appointment_at_selection() {
+                        Some(ScheduleAction::SelectAppointment(apt.id))
+                    } else if let (Some(practitioner), Some(schedule_data)) = (
+                        self.practitioners.get(self.selected_practitioner_index),
+                        &self.schedule_data,
+                    ) {
+                        Some(ScheduleAction::CreateAtSlot {
+                            practitioner_id: practitioner.id,
+                            date: schedule_data.date,
+                            time: self.slot_to_time(self.selected_time_slot),
+                        })
+                    } else {
+                        None
+                    }
+                }
+                Action::ScrollViewportUp => {
+                    const MIN_HOUR: u8 = 6;
+                    if self.viewport_start_hour > MIN_HOUR {
+                        let abs_hour = self.viewport_start_hour + (self.selected_time_slot / 4);
+                        let abs_min_slot = self.selected_time_slot % 4;
+
+                        self.viewport_start_hour = self.viewport_start_hour.saturating_sub(2);
+                        self.viewport_end_hour = self.viewport_end_hour.saturating_sub(2);
+
+                        if abs_hour >= self.viewport_start_hour && abs_hour < self.viewport_end_hour
+                        {
+                            self.selected_time_slot =
+                                (abs_hour - self.viewport_start_hour) * 4 + abs_min_slot;
+                        } else {
+                            self.selected_time_slot = 0;
+                        }
+                    }
+                    None
+                }
+                Action::ScrollViewportDown => {
+                    const MAX_HOUR: u8 = 22;
+                    if self.viewport_end_hour < MAX_HOUR {
+                        let abs_hour = self.viewport_start_hour + (self.selected_time_slot / 4);
+                        let abs_min_slot = self.selected_time_slot % 4;
+
+                        self.viewport_start_hour = (self.viewport_start_hour + 2).min(MAX_HOUR - 2);
+                        self.viewport_end_hour = (self.viewport_end_hour + 2).min(MAX_HOUR);
+
+                        if abs_hour >= self.viewport_start_hour && abs_hour < self.viewport_end_hour
+                        {
+                            self.selected_time_slot =
+                                (abs_hour - self.viewport_start_hour) * 4 + abs_min_slot;
+                        } else {
+                            self.selected_time_slot = self.max_time_slot();
+                        }
+                    }
+                    None
                 }
                 _ => None,
             };
@@ -192,17 +252,24 @@ impl Schedule {
                 None
             }
             MouseEventKind::ScrollUp => {
-                // Scroll time view up (earlier times)
-                if self.selected_time_slot > 0 {
-                    self.selected_time_slot = self.selected_time_slot.saturating_sub(4);
+                const MIN_HOUR: u8 = 6;
+                if self.viewport_start_hour > MIN_HOUR {
+                    self.viewport_start_hour = self.viewport_start_hour.saturating_sub(1);
+                    self.viewport_end_hour = self.viewport_end_hour.saturating_sub(1);
+                    self.scroll_viewport_to_show_selection();
                 }
-                Some(ScheduleAction::NavigateTimeSlot(-4))
+                None
             }
             MouseEventKind::ScrollDown => {
-                // Scroll time view down (later times)
-                let max_slot = self.max_time_slot();
-                self.selected_time_slot = (self.selected_time_slot + 4).min(max_slot);
-                Some(ScheduleAction::NavigateTimeSlot(4))
+                const MAX_HOUR: u8 = 22;
+                let window_hours = self.viewport_end_hour - self.viewport_start_hour;
+                if self.viewport_end_hour < MAX_HOUR {
+                    self.viewport_start_hour =
+                        (self.viewport_start_hour + 1).min(MAX_HOUR - window_hours);
+                    self.viewport_end_hour = (self.viewport_end_hour + 1).min(MAX_HOUR);
+                    self.scroll_viewport_to_show_selection();
+                }
+                None
             }
             _ => None,
         }
@@ -211,6 +278,25 @@ impl Schedule {
     /// Get the maximum valid time slot index.
     fn max_time_slot(&self) -> u8 {
         ((self.viewport_end_hour - self.viewport_start_hour) * 4 - 1) as u8
+    }
+
+    /// Ensure the viewport includes the currently selected time slot.
+    /// Scrolls viewport_start_hour/viewport_end_hour as needed.
+    /// This is the equivalent of patient/list.rs's adjust_scroll().
+    fn scroll_viewport_to_show_selection(&mut self) {
+        let window_hours = self.viewport_end_hour - self.viewport_start_hour;
+        // Convert selected slot back to absolute hour
+        let selected_hour = self.viewport_start_hour + (self.selected_time_slot / 4);
+
+        if selected_hour < self.viewport_start_hour {
+            // Selection is above viewport - scroll up
+            self.viewport_start_hour = selected_hour;
+            self.viewport_end_hour = selected_hour + window_hours;
+        } else if selected_hour >= self.viewport_end_hour {
+            // Selection is below viewport - scroll down
+            self.viewport_end_hour = selected_hour + 1;
+            self.viewport_start_hour = self.viewport_end_hour.saturating_sub(window_hours);
+        }
     }
 
     /// Get appointment at the currently selected position.
@@ -278,11 +364,31 @@ impl Schedule {
         }
     }
 
+    fn get_appointment_type_abbreviation(
+        apt_type: &crate::domain::appointment::AppointmentType,
+    ) -> &'static str {
+        match apt_type {
+            crate::domain::appointment::AppointmentType::Standard => "STD",
+            crate::domain::appointment::AppointmentType::Long => "LNG",
+            crate::domain::appointment::AppointmentType::Brief => "BRF",
+            crate::domain::appointment::AppointmentType::NewPatient => "NEW",
+            crate::domain::appointment::AppointmentType::HealthAssessment => "HLT",
+            crate::domain::appointment::AppointmentType::ChronicDiseaseReview => "CHR",
+            crate::domain::appointment::AppointmentType::MentalHealthPlan => "MHP",
+            crate::domain::appointment::AppointmentType::Immunisation => "IMM",
+            crate::domain::appointment::AppointmentType::Procedure => "PRC",
+            crate::domain::appointment::AppointmentType::Telephone => "TEL",
+            crate::domain::appointment::AppointmentType::Telehealth => "TEL",
+            crate::domain::appointment::AppointmentType::HomeVisit => "HOM",
+            crate::domain::appointment::AppointmentType::Emergency => "EMG",
+        }
+    }
+
     /// Render the time column on the left side.
     fn render_time_column(&self, area: Rect, buf: &mut Buffer) {
         let max_slot = self.max_time_slot();
         for slot in 0..=max_slot {
-            let y = area.y + slot as u16 * 2;
+            let y = (area.y + 1) + slot as u16 * 2;
             if y < area.y + area.height {
                 let time_str = self.slot_to_time(slot);
                 let style = if slot == self.selected_time_slot {
@@ -355,7 +461,6 @@ impl Schedule {
                 }
             }
 
-            // Highlight selected time slot in this column
             let slot_y = area.y + 1 + (self.selected_time_slot as u16 * 2);
             if slot_y < area.y + area.height {
                 let highlight_style = if is_selected {
@@ -391,15 +496,17 @@ impl Schedule {
 
         let slot_span = apt.slot_span as u16;
         let height = slot_span * 2;
-        let mut y = 1 + start_slot as u16 * 2;
+        let mut y = area.y + 1 + start_slot as u16 * 2;
 
         // Clamp y to stay within buffer bounds
         if y >= area.y + area.height {
             return;
         }
-        if y < area.y {
-            y = area.y;
-        }
+
+        // Handle appointments that start before visible area
+        let clipped_top = if y < area.y { area.y - y } else { 0 };
+        y = y.max(area.y);
+        let height = height.saturating_sub(clipped_top);
 
         // Clamp height to fit within buffer
         let max_height = (area.y + area.height - y) as u16;
@@ -407,42 +514,112 @@ impl Schedule {
 
         let color = self.get_appointment_color(apt.status);
 
-        // Render appointment block
-        for row in 0..actual_height {
-            let row_y = y + row;
-            if row_y >= area.y + area.height {
-                break;
+        if slot_span >= 2 {
+            // Render with border for multi-slot appointments
+            let block_area = Rect::new(area_x, y, area_width, actual_height);
+
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(self.theme.colors.border));
+
+            block.clone().render(block_area, buf);
+
+            let inner = block.inner(block_area);
+
+            if inner.is_empty() {
+                return;
             }
-            for col in 0..area_width {
-                let col_x = area_x + col;
-                if col_x >= area.x + area.width {
+
+            let (content_x, content_y, content_width, content_height) =
+                (inner.x, inner.y, inner.width, inner.height);
+
+            // Render appointment block background
+            for row in 0..content_height {
+                let row_y = content_y + row;
+                if row_y >= area.y + area.height {
                     break;
                 }
-                if let Some(cell) = buf.cell_mut((col_x, row_y)) {
-                    cell.set_bg(color);
-                    if row == 0 {
-                        cell.set_fg(ratatui::style::Color::Black);
+                for col in 0..content_width {
+                    let col_x = content_x + col;
+                    if col_x >= area.x + area.width {
+                        break;
+                    }
+                    if let Some(cell) = buf.cell_mut((col_x, row_y)) {
+                        cell.set_bg(color);
                     }
                 }
             }
-        }
 
-        // Render patient name in first line (with bounds checking)
-        let name_width = (area_width as usize).saturating_sub(2);
-        if name_width > 0 && y < area.y + area.height {
-            let name = if apt.patient_name.len() > name_width {
-                format!("{}...", &apt.patient_name[..name_width.saturating_sub(3)])
-            } else {
-                apt.patient_name.clone()
-            };
-            let name_x = area_x + 1;
-            if name_x < area.x + area.width {
-                let _ = buf.set_string(
-                    name_x,
-                    y,
-                    name,
-                    Style::default().fg(ratatui::style::Color::Black).bold(),
-                );
+            let abbreviation = Self::get_appointment_type_abbreviation(&apt.appointment_type);
+            let abbrev_len = abbreviation.len();
+            let name_width = (content_width as usize)
+                .saturating_sub(2)
+                .saturating_sub(abbrev_len + 1);
+            if name_width > 0 && content_y < area.y + area.height {
+                let name = if apt.patient_name.len() > name_width {
+                    format!("{}...", &apt.patient_name[..name_width.saturating_sub(3)])
+                } else {
+                    apt.patient_name.clone()
+                };
+                let name_x = content_x + 1;
+                if name_x < area.x + area.width {
+                    let full_text = format!("{} {}", name, abbreviation);
+                    let _ = buf.set_string(
+                        name_x,
+                        content_y,
+                        full_text,
+                        Style::default().fg(ratatui::style::Color::Black).bold(),
+                    );
+                }
+            }
+        } else {
+            // Original behavior for 1-slot appointments (no border)
+            let _block_area = Rect::new(area_x, y, area_width, actual_height);
+
+            let (content_x, content_y, content_width, content_height) =
+                (area_x, y, area_width, actual_height);
+
+            // Render appointment block background
+            for row in 0..content_height {
+                let row_y = content_y + row;
+                if row_y >= area.y + area.height {
+                    break;
+                }
+                for col in 0..content_width {
+                    let col_x = content_x + col;
+                    if col_x >= area.x + area.width {
+                        break;
+                    }
+                    if let Some(cell) = buf.cell_mut((col_x, row_y)) {
+                        cell.set_bg(color);
+                        if row == 0 {
+                            cell.set_fg(ratatui::style::Color::Black);
+                        }
+                    }
+                }
+            }
+
+            let abbreviation = Self::get_appointment_type_abbreviation(&apt.appointment_type);
+            let abbrev_len = abbreviation.len();
+            let name_width = (content_width as usize)
+                .saturating_sub(2)
+                .saturating_sub(abbrev_len + 1);
+            if name_width > 0 && content_y < area.y + area.height {
+                let name = if apt.patient_name.len() > name_width {
+                    format!("{}...", &apt.patient_name[..name_width.saturating_sub(3)])
+                } else {
+                    apt.patient_name.clone()
+                };
+                let name_x = content_x + 1;
+                if name_x < area.x + area.width {
+                    let full_text = format!("{} {}", name, abbreviation);
+                    let _ = buf.set_string(
+                        name_x,
+                        content_y,
+                        full_text,
+                        Style::default().fg(ratatui::style::Color::Black).bold(),
+                    );
+                }
             }
         }
     }
@@ -530,5 +707,61 @@ mod tests {
 
         // 8am to 6pm = 10 hours = 40 slots (0-39)
         assert_eq!(schedule.max_time_slot(), 39);
+    }
+
+    #[test]
+    fn test_scroll_viewport_preserves_selection() {
+        let theme = Theme::default();
+        let mut schedule = Schedule::new(theme);
+
+        schedule.selected_time_slot = 16;
+
+        let time_before = schedule.slot_to_time(schedule.selected_time_slot);
+        assert_eq!(time_before, "12:00");
+
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::PageDown,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        schedule.handle_key(key);
+
+        let time_after = schedule.slot_to_time(schedule.selected_time_slot);
+        assert_eq!(
+            time_before, time_after,
+            "Selection time should be preserved after viewport scroll"
+        );
+    }
+
+    #[test]
+    fn test_viewport_clamps_at_boundaries() {
+        let theme = Theme::default();
+        let mut schedule = Schedule::new(theme);
+
+        schedule.viewport_start_hour = 8;
+        schedule.viewport_end_hour = 18;
+
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::PageUp,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        schedule.handle_key(key);
+
+        assert!(
+            schedule.viewport_start_hour >= 6,
+            "viewport should not go below 6"
+        );
+
+        for _ in 0..20 {
+            let key = crossterm::event::KeyEvent::new(
+                crossterm::event::KeyCode::PageDown,
+                crossterm::event::KeyModifiers::NONE,
+            );
+            schedule.handle_key(key);
+        }
+
+        assert!(
+            schedule.viewport_end_hour <= 22,
+            "viewport should not exceed 22"
+        );
     }
 }

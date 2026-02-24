@@ -41,6 +41,7 @@ struct ConsultationRow {
     practitioner_id: Vec<u8>,
     appointment_id: Option<Vec<u8>>,
     consultation_date: String,
+    reason: Option<String>,
     soap_subjective: Option<Vec<u8>>,
     soap_objective: Option<Vec<u8>>,
     soap_assessment: Option<Vec<u8>>,
@@ -85,6 +86,7 @@ impl ConsultationRow {
                 .map(|b| bytes_to_uuid(b))
                 .transpose()?,
             consultation_date: string_to_datetime(&self.consultation_date),
+            reason: self.reason.clone(),
             soap_notes: SOAPNotes {
                 subjective: decrypt_soap_field(self.soap_subjective)?,
                 objective: decrypt_soap_field(self.soap_objective)?,
@@ -130,7 +132,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
             r#"
             SELECT 
                 id, patient_id, practitioner_id, appointment_id,
-                consultation_date, soap_subjective, soap_objective, 
+                consultation_date, reason, soap_subjective, soap_objective, 
                 soap_assessment, soap_plan, is_signed, signed_at, signed_by,
                 created_at, updated_at, created_by, updated_by
             FROM consultations
@@ -157,7 +159,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
             r#"
             SELECT 
                 id, patient_id, practitioner_id, appointment_id,
-                consultation_date, soap_subjective, soap_objective, 
+                consultation_date, reason, soap_subjective, soap_objective, 
                 soap_assessment, soap_plan, is_signed, signed_at, signed_by,
                 created_at, updated_at, created_by, updated_by
             FROM consultations
@@ -176,9 +178,11 @@ impl ConsultationRepository for SqlxClinicalRepository {
 
     async fn find_by_date_range(
         &self,
+        patient_id: Uuid,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<Vec<Consultation>, RepositoryError> {
+        let patient_bytes = uuid_to_bytes(&patient_id);
         let start_str = datetime_to_string(&start);
         let end_str = datetime_to_string(&end);
 
@@ -186,14 +190,15 @@ impl ConsultationRepository for SqlxClinicalRepository {
             r#"
             SELECT 
                 id, patient_id, practitioner_id, appointment_id,
-                consultation_date, soap_subjective, soap_objective, 
+                consultation_date, reason, soap_subjective, soap_objective, 
                 soap_assessment, soap_plan, is_signed, signed_at, signed_by,
                 created_at, updated_at, created_by, updated_by
             FROM consultations
-            WHERE consultation_date BETWEEN ? AND ?
+            WHERE patient_id = ? AND consultation_date BETWEEN ? AND ?
             ORDER BY consultation_date DESC
             "#,
         )
+        .bind(&patient_bytes)
         .bind(&start_str)
         .bind(&end_str)
         .fetch_all(&self.pool)
@@ -233,10 +238,10 @@ impl ConsultationRepository for SqlxClinicalRepository {
             r#"
             INSERT INTO consultations (
                 id, patient_id, practitioner_id, appointment_id,
-                consultation_date, soap_subjective, soap_objective, 
+                consultation_date, reason, soap_subjective, soap_objective, 
                 soap_assessment, soap_plan, is_signed, signed_at, signed_by,
                 created_at, updated_at, created_by, updated_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(id_bytes)
@@ -244,6 +249,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
         .bind(practitioner_bytes)
         .bind(appointment_bytes)
         .bind(&consultation_date_str)
+        .bind(&consultation.reason)
         .bind(soap_subjective)
         .bind(soap_objective)
         .bind(soap_assessment)
@@ -285,13 +291,14 @@ impl ConsultationRepository for SqlxClinicalRepository {
             r#"
             UPDATE consultations
             SET 
-                soap_subjective = ?, soap_objective = ?, 
+                reason = ?, soap_subjective = ?, soap_objective = ?, 
                 soap_assessment = ?, soap_plan = ?,
                 is_signed = ?, signed_at = ?, signed_by = ?,
                 updated_at = ?, updated_by = ?
             WHERE id = ?
             "#,
         )
+        .bind(&consultation.reason)
         .bind(soap_subjective)
         .bind(soap_objective)
         .bind(soap_assessment)

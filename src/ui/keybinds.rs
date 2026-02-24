@@ -179,6 +179,12 @@ pub enum Action {
     /// View social history
     ViewSocialHistory,
 
+    // Schedule viewport actions
+    /// Scroll viewport up (earlier hours)
+    ScrollViewportUp,
+    /// Scroll viewport down (later hours)
+    ScrollViewportDown,
+
     // Unknown action (fallback)
     #[default]
     Unknown,
@@ -304,7 +310,6 @@ impl KeybindRegistry {
         for context in &[
             KeyContext::PatientList,
             KeyContext::Calendar,
-            KeyContext::Schedule,
             KeyContext::Search,
         ] {
             self.register(Keybind {
@@ -410,6 +415,12 @@ impl KeybindRegistry {
             context: KeyContext::Calendar,
             description: "Select focused date",
         });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
+            action: Action::NewAppointment,
+            context: KeyContext::Calendar,
+            description: "Create new appointment",
+        });
 
         // Patient list keybinds
         // Note: '/' is handled directly in PatientList for search input
@@ -490,6 +501,19 @@ impl KeybindRegistry {
             action: Action::Enter,
             context: KeyContext::Schedule,
             description: "Select appointment at current time slot",
+        });
+        // Schedule: PageUp/PageDown for viewport scrolling
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE),
+            action: Action::ScrollViewportUp,
+            context: KeyContext::Schedule,
+            description: "Scroll viewport to earlier hours",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE),
+            action: Action::ScrollViewportDown,
+            context: KeyContext::Schedule,
+            description: "Scroll viewport to later hours",
         });
 
         // Clinical keybinds
@@ -775,6 +799,30 @@ mod tests {
         let result = registry.lookup(key, KeyContext::PatientList);
         assert!(result.is_some());
         assert_eq!(result.unwrap().action, Action::NavigateDown);
+    }
+
+    #[test]
+    fn test_keybind_lookup_schedule_j() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
+        let result = registry.lookup(key, KeyContext::Schedule);
+        assert!(
+            result.is_some(),
+            "j should be registered for Schedule context"
+        );
+        assert_eq!(result.unwrap().action, Action::NextTimeSlot);
+    }
+
+    #[test]
+    fn test_keybind_lookup_schedule_k() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
+        let result = registry.lookup(key, KeyContext::Schedule);
+        assert!(
+            result.is_some(),
+            "k should be registered for Schedule context"
+        );
+        assert_eq!(result.unwrap().action, Action::PrevTimeSlot);
     }
 
     #[test]

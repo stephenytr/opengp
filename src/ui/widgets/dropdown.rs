@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crossterm::event::{MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::ui::theme::Theme;
@@ -181,8 +181,9 @@ impl DropdownWidget {
             }
             KeyCode::Tab => {
                 if self.is_open() {
-                    self.select_next();
-                    Some(DropdownAction::FocusChanged)
+                    // Close dropdown and let parent handle Tab for field navigation
+                    self.close();
+                    Some(DropdownAction::Closed)
                 } else {
                     None
                 }
@@ -245,7 +246,11 @@ impl Widget for DropdownWidget {
         let block = Block::default()
             .title(self.label.as_str())
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.theme.colors.border));
+            .border_style(
+                Style::default()
+                    .fg(self.theme.colors.border)
+                    .bg(Color::Black),
+            );
 
         block.clone().render(area, buf);
 
@@ -254,11 +259,18 @@ impl Widget for DropdownWidget {
             return;
         }
 
+        // Fill inner area with black background
+        buf.set_style(inner, Style::default().bg(Color::Black));
+
         let display_text = self.selected_label().unwrap_or(&self.placeholder);
         let text_style = if self.selected_index.is_some() {
-            Style::default().fg(self.theme.colors.foreground)
+            Style::default()
+                .fg(self.theme.colors.foreground)
+                .bg(Color::Black)
         } else {
-            Style::default().fg(self.theme.colors.disabled)
+            Style::default()
+                .fg(self.theme.colors.disabled)
+                .bg(Color::Black)
         };
 
         let max_width = inner.width.saturating_sub(2) as usize;
@@ -268,15 +280,17 @@ impl Widget for DropdownWidget {
             display_text
         };
 
-        buf.set_string(inner.x + 1, inner.y + 1, display, text_style);
+        buf.set_string(inner.x + 1, inner.y, display, text_style);
 
         let arrow = if self.is_open() { "▼" } else { "▶" };
         let arrow_x = inner.x + inner.width - 2;
         buf.set_string(
             arrow_x,
-            inner.y + 1,
+            inner.y,
             arrow,
-            Style::default().fg(self.theme.colors.primary),
+            Style::default()
+                .fg(self.theme.colors.primary)
+                .bg(Color::Black),
         );
 
         if self.is_open() && !self.options.is_empty() {
@@ -287,13 +301,18 @@ impl Widget for DropdownWidget {
                 self.options.len() as u16 + 2,
             );
 
-            let options_block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(self.theme.colors.primary));
+            ratatui::widgets::Clear.render(options_area, buf);
+
+            let options_block = Block::default().borders(Borders::ALL).border_style(
+                Style::default()
+                    .fg(self.theme.colors.primary)
+                    .bg(Color::Black),
+            );
 
             options_block.clone().render(options_area, buf);
 
             let options_inner = options_block.inner(options_area);
+            buf.set_style(options_inner, Style::default().bg(Color::Black));
             for (i, option) in self.options.iter().enumerate() {
                 if (options_inner.y + i as u16) < options_inner.y + options_inner.height {
                     let is_selected = Some(i) == self.selected_index;
@@ -303,11 +322,16 @@ impl Widget for DropdownWidget {
                     let style = if is_focused {
                         Style::default()
                             .fg(self.theme.colors.primary)
+                            .bg(Color::Black)
                             .add_modifier(Modifier::REVERSED)
                     } else if is_selected {
-                        Style::default().fg(self.theme.colors.primary)
+                        Style::default()
+                            .fg(self.theme.colors.primary)
+                            .bg(Color::Black)
                     } else {
-                        Style::default().fg(self.theme.colors.foreground)
+                        Style::default()
+                            .fg(self.theme.colors.foreground)
+                            .bg(Color::Black)
                     };
 
                     let max_opt_width = options_inner.width.saturating_sub(4) as usize;

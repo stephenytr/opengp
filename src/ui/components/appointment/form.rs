@@ -16,7 +16,10 @@ use uuid::Uuid;
 use crate::domain::appointment::{AppointmentType, NewAppointmentData};
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{DropdownAction, DropdownOption, DropdownWidget};
+use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
+use crate::ui::widgets::{
+    DropdownAction, DropdownOption, DropdownWidget, SearchableListAction, SearchableListState,
+};
 
 /// All fields in the appointment creation form, in tab order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -147,6 +150,8 @@ pub struct AppointmentForm {
     saving: bool,
     theme: Theme,
     type_dropdown: DropdownWidget,
+    patient_picker: SearchableListState<PatientListItem>,
+    practitioner_picker: SearchableListState<PractitionerViewItem>,
 }
 
 impl Clone for AppointmentForm {
@@ -158,6 +163,8 @@ impl Clone for AppointmentForm {
             saving: self.saving,
             theme: self.theme.clone(),
             type_dropdown: self.type_dropdown.clone(),
+            patient_picker: self.patient_picker.clone(),
+            practitioner_picker: self.practitioner_picker.clone(),
         }
     }
 }
@@ -188,8 +195,10 @@ impl AppointmentForm {
             errors: HashMap::new(),
             focused_field: AppointmentFormField::Patient,
             saving: false,
-            theme,
+            theme: theme.clone(),
             type_dropdown,
+            patient_picker: SearchableListState::new(Vec::new()),
+            practitioner_picker: SearchableListState::new(Vec::new()),
         }
     }
 
@@ -216,6 +225,26 @@ impl AppointmentForm {
         self.data.patient_id = Some(id);
         self.data.patient_display = display_name;
         self.errors.remove(&AppointmentFormField::Patient);
+    }
+
+    /// Set patients available for selection in the picker
+    pub fn set_patients(&mut self, patients: Vec<PatientListItem>) {
+        self.patient_picker.set_items(patients);
+    }
+
+    /// Check if patient picker is open
+    pub fn is_patient_picker_open(&self) -> bool {
+        self.patient_picker.is_open()
+    }
+
+    /// Set practitioners available for selection in the picker
+    pub fn set_practitioners(&mut self, practitioners: Vec<PractitionerViewItem>) {
+        self.practitioner_picker.set_items(practitioners);
+    }
+
+    /// Check if practitioner picker is open
+    pub fn is_practitioner_picker_open(&self) -> bool {
+        self.practitioner_picker.is_open()
     }
 
     /// Set the selected practitioner (called after practitioner list resolves).
@@ -295,17 +324,15 @@ impl AppointmentForm {
 
         match field {
             AppointmentFormField::Patient => {
-                if self.data.patient_id.is_none() && self.data.patient_display.trim().is_empty() {
+                if self.data.patient_id.is_none() {
                     self.errors
-                        .insert(*field, "Patient is required".to_string());
+                        .insert(*field, "Select a patient from the picker".to_string());
                 }
             }
             AppointmentFormField::Practitioner => {
-                if self.data.practitioner_id.is_none()
-                    && self.data.practitioner_display.trim().is_empty()
-                {
+                if self.data.practitioner_id.is_none() {
                     self.errors
-                        .insert(*field, "Practitioner is required".to_string());
+                        .insert(*field, "Select a practitioner from the picker".to_string());
                 }
             }
             AppointmentFormField::Date => {
@@ -399,9 +426,10 @@ impl AppointmentForm {
 
         let naive_dt = date.and_time(time);
         let start_time = naive_dt
-            .and_local_timezone(chrono::Utc)
+            .and_local_timezone(chrono::Local)
             .single()
-            .unwrap_or_else(|| chrono::DateTime::from_naive_utc_and_offset(naive_dt, chrono::Utc));
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|| naive_dt.and_utc());
 
         let duration_mins: i64 = self.data.duration.parse().unwrap_or(15);
         let duration = chrono::Duration::minutes(duration_mins);
@@ -434,6 +462,54 @@ impl AppointmentForm {
             return None;
         }
 
+        if self.focused_field == AppointmentFormField::Patient && self.patient_picker.is_open() {
+            use crate::ui::widgets::SearchableList;
+            let mut picker = SearchableList::new(
+                &mut self.patient_picker,
+                &self.theme,
+                "Select Patient",
+                true,
+            );
+            let action = picker.handle_key(key);
+            match action {
+                SearchableListAction::Selected(id, name) => {
+                    self.set_patient(id, name);
+                    return Some(AppointmentFormAction::ValueChanged);
+                }
+                SearchableListAction::Cancelled => {
+                    return Some(AppointmentFormAction::FocusChanged);
+                }
+                SearchableListAction::None => {
+                    return Some(AppointmentFormAction::FocusChanged);
+                }
+            }
+        }
+
+        if self.focused_field == AppointmentFormField::Practitioner
+            && self.practitioner_picker.is_open()
+        {
+            use crate::ui::widgets::SearchableList;
+            let mut picker = SearchableList::new(
+                &mut self.practitioner_picker,
+                &self.theme,
+                "Select Practitioner",
+                false,
+            );
+            let action = picker.handle_key(key);
+            match action {
+                SearchableListAction::Selected(id, name) => {
+                    self.set_practitioner(id, name);
+                    return Some(AppointmentFormAction::ValueChanged);
+                }
+                SearchableListAction::Cancelled => {
+                    return Some(AppointmentFormAction::FocusChanged);
+                }
+                SearchableListAction::None => {
+                    return Some(AppointmentFormAction::FocusChanged);
+                }
+            }
+        }
+
         if self.focused_field == AppointmentFormField::AppointmentType {
             if let Some(action) = self.type_dropdown.handle_key(key) {
                 match action {
@@ -455,7 +531,8 @@ impl AppointmentForm {
                     }
                 }
             }
-            return None;
+            // Dropdown didn't handle the key - fall through to default handling
+            // This ensures Tab/Up/Down/Enter/Esc work when dropdown is closed
         }
 
         match key.code {
@@ -476,10 +553,32 @@ impl AppointmentForm {
                 Some(AppointmentFormAction::FocusChanged)
             }
             KeyCode::Enter => {
+                if self.focused_field == AppointmentFormField::Patient
+                    && !self.patient_picker.is_open()
+                {
+                    self.patient_picker.open();
+                    return Some(AppointmentFormAction::FocusChanged);
+                }
+                if self.focused_field == AppointmentFormField::Practitioner
+                    && !self.practitioner_picker.is_open()
+                {
+                    self.practitioner_picker.open();
+                    return Some(AppointmentFormAction::FocusChanged);
+                }
                 self.validate();
                 Some(AppointmentFormAction::Submit)
             }
-            KeyCode::Esc => Some(AppointmentFormAction::Cancel),
+            KeyCode::Esc => {
+                if self.patient_picker.is_open() {
+                    self.patient_picker.close();
+                    return Some(AppointmentFormAction::FocusChanged);
+                }
+                if self.practitioner_picker.is_open() {
+                    self.practitioner_picker.close();
+                    return Some(AppointmentFormAction::FocusChanged);
+                }
+                Some(AppointmentFormAction::Cancel)
+            }
             KeyCode::Char(c) => {
                 // Patient and Practitioner fields are search/select — allow free text
                 // for the search query; UUID is resolved externally.
@@ -594,6 +693,34 @@ impl Widget for AppointmentForm {
 
                 y += 2;
             }
+        }
+
+        if self.patient_picker.is_open() {
+            use crate::ui::widgets::SearchableList;
+            let mut picker_state = self.patient_picker.clone();
+            let picker_area = Rect::new(
+                inner.x + 1,
+                inner.y + 1,
+                inner.width.saturating_sub(2),
+                inner.height.saturating_sub(2),
+            );
+            let picker =
+                SearchableList::new(&mut picker_state, &self.theme, "Select Patient", true);
+            picker.render(picker_area, buf);
+        }
+
+        if self.practitioner_picker.is_open() {
+            use crate::ui::widgets::SearchableList;
+            let mut picker_state = self.practitioner_picker.clone();
+            let picker_area = Rect::new(
+                inner.x + 1,
+                inner.y + 1,
+                inner.width.saturating_sub(2),
+                inner.height.saturating_sub(2),
+            );
+            let picker =
+                SearchableList::new(&mut picker_state, &self.theme, "Select Practitioner", false);
+            picker.render(picker_area, buf);
         }
 
         // Help bar at the bottom

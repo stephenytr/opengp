@@ -83,7 +83,9 @@ pub fn bytes_to_uuid(bytes: &[u8]) -> Result<Uuid, RepositoryError> {
 ///
 /// let now = Utc::now();
 /// let s = datetime_to_string(&now);
-/// assert!(s.ends_with('Z'));
+/// // RFC3339 format: contains 'T' and has timezone offset (Z or +00:00)
+/// assert!(s.contains('T'));
+/// assert!(s.ends_with('Z') || s.ends_with("+00:00") || s.ends_with("-00:00"));
 /// ```
 pub fn datetime_to_string(dt: &DateTime<Utc>) -> String {
     dt.to_rfc3339()

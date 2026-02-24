@@ -8,7 +8,7 @@ use chrono::{NaiveDate, TimeZone, Utc};
 
 use crate::domain::appointment::{
     AppointmentSearchCriteria, AppointmentCalendarQuery, AppointmentRepository,
-    CalendarAppointment, CalendarDayView, NewAppointmentData, PractitionerSchedule,
+    AppointmentService, CalendarAppointment, CalendarDayView, NewAppointmentData, PractitionerSchedule,
 };
 use crate::domain::user::{Practitioner, PractitionerRepository};
 use crate::domain::error::RepositoryError;
@@ -50,6 +50,8 @@ pub struct AppointmentUiService {
     calendar_query: Arc<dyn AppointmentCalendarQuery>,
     /// Appointment repository for creating/updating appointments
     appointment_repo: Arc<dyn AppointmentRepository>,
+    /// Domain appointment service for status transitions
+    domain_service: Arc<AppointmentService>,
 }
 
 impl AppointmentUiService {
@@ -58,32 +60,22 @@ impl AppointmentUiService {
         practitioner_repo: Arc<dyn PractitionerRepository>,
         calendar_query: Arc<dyn AppointmentCalendarQuery>,
         appointment_repo: Arc<dyn AppointmentRepository>,
+        domain_service: Arc<AppointmentService>,
     ) -> Self {
         Self {
             practitioner_repo,
             calendar_query,
             appointment_repo,
+            domain_service,
         }
     }
 
-    /// Create a new appointment via the repository
-    pub async fn create_appointment(&self, data: NewAppointmentData) -> UiResult<()> {
-        use crate::domain::appointment::Appointment;
-        let end_time = data.start_time + data.duration;
-        let appointment = Appointment::new(
-            data.patient_id,
-            data.practitioner_id,
-            data.start_time,
-            data.duration,
-            data.appointment_type,
-            None,
-        );
-        let _ = end_time;
-        self.appointment_repo
-            .create(appointment)
+    pub async fn create_appointment(&self, data: NewAppointmentData, user_id: uuid::Uuid) -> UiResult<()> {
+        self.domain_service
+            .create_appointment(data, user_id)
             .await
             .map(|_| ())
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| UiServiceError::Unknown(e.to_string()))
     }
 
     /// List all active practitioners
@@ -158,5 +150,29 @@ impl AppointmentUiService {
             .collect();
 
         Ok(CalendarDayView { date, practitioners: schedules })
+    }
+
+    pub async fn mark_arrived(&self, appointment_id: uuid::Uuid, user_id: uuid::Uuid) -> UiResult<()> {
+        self.domain_service
+            .mark_arrived(appointment_id, user_id)
+            .await
+            .map(|_| ())
+            .map_err(|e| UiServiceError::Unknown(e.to_string()))
+    }
+
+    pub async fn mark_in_progress(&self, appointment_id: uuid::Uuid, user_id: uuid::Uuid) -> UiResult<()> {
+        self.domain_service
+            .mark_in_progress(appointment_id, user_id)
+            .await
+            .map(|_| ())
+            .map_err(|e| UiServiceError::Unknown(e.to_string()))
+    }
+
+    pub async fn mark_completed(&self, appointment_id: uuid::Uuid, user_id: uuid::Uuid) -> UiResult<()> {
+        self.domain_service
+            .mark_completed(appointment_id, user_id)
+            .await
+            .map(|_| ())
+            .map_err(|e| UiServiceError::Unknown(e.to_string()))
     }
 }

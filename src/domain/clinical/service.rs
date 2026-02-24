@@ -57,12 +57,13 @@ impl ClinicalService {
             })?
             .ok_or_else(|| ServiceError::PatientNotFound(data.patient_id))?;
 
-        let consultation = Consultation::new(
+        let mut consultation = Consultation::new(
             data.patient_id,
             data.practitioner_id,
             data.appointment_id,
             user_id,
         );
+        consultation.reason = data.reason;
 
         let saved = self.consultation_repo.create(consultation).await?;
 

@@ -374,6 +374,8 @@ impl Widget for MedicalHistoryForm {
         let mut y = inner.y + 1;
         let max_y = inner.y + inner.height - 2;
 
+        let mut open_dropdown: Option<(DropdownWidget, Rect)> = None;
+
         for field in fields {
             if y > max_y {
                 break;
@@ -405,14 +407,20 @@ impl Widget for MedicalHistoryForm {
                 MedicalHistoryFormField::Status => {
                     let dropdown = self.status_dropdown.clone();
                     let dropdown_width = inner.width.saturating_sub(label_width + 4);
-                    let dropdown_area = Rect::new(field_start, y, field_start + dropdown_width, 3);
+                    let dropdown_area = Rect::new(field_start, y, dropdown_width, 3);
+                    if dropdown.is_open() {
+                        open_dropdown = Some((dropdown.clone(), dropdown_area));
+                    }
                     dropdown.render(dropdown_area, buf);
                     y += 2;
                 }
                 MedicalHistoryFormField::Severity => {
                     let dropdown = self.severity_dropdown.clone();
                     let dropdown_width = inner.width.saturating_sub(label_width + 4);
-                    let dropdown_area = Rect::new(field_start, y, field_start + dropdown_width, 3);
+                    let dropdown_area = Rect::new(field_start, y, dropdown_width, 3);
+                    if dropdown.is_open() {
+                        open_dropdown = Some((dropdown.clone(), dropdown_area));
+                    }
                     dropdown.render(dropdown_area, buf);
                     y += 2;
                 }
@@ -442,6 +450,10 @@ impl Widget for MedicalHistoryForm {
                     y += 2;
                 }
             }
+        }
+
+        if let Some((dropdown, dropdown_area)) = open_dropdown {
+            dropdown.render(dropdown_area, buf);
         }
 
         let help_y = inner.y + inner.height - 1;

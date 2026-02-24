@@ -1,6 +1,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
+use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
 use ratatui_interact::components::InputState;
@@ -96,6 +96,7 @@ impl Widget for SearchInput<'_> {
             format!("{} ", self.prompt),
             Style::default()
                 .fg(self.theme.colors.primary)
+                .bg(Color::Black)
                 .add_modifier(ratatui::style::Modifier::BOLD),
         );
 
@@ -106,9 +107,16 @@ impl Widget for SearchInput<'_> {
                     prompt_span,
                     Span::styled(
                         self.state.placeholder,
-                        Style::default().fg(self.theme.colors.disabled),
+                        Style::default()
+                            .fg(self.theme.colors.disabled)
+                            .bg(Color::Black),
                     ),
-                    Span::styled("_", Style::default().fg(self.theme.colors.foreground)),
+                    Span::styled(
+                        "_",
+                        Style::default()
+                            .fg(self.theme.colors.foreground)
+                            .bg(Color::Black),
+                    ),
                 ]
             } else {
                 vec![prompt_span]
@@ -116,9 +124,19 @@ impl Widget for SearchInput<'_> {
         } else {
             vec![
                 prompt_span,
-                Span::styled(value, Style::default().fg(self.theme.colors.foreground)),
+                Span::styled(
+                    value,
+                    Style::default()
+                        .fg(self.theme.colors.foreground)
+                        .bg(Color::Black),
+                ),
                 if self.state.focused {
-                    Span::styled("_", Style::default().fg(self.theme.colors.foreground))
+                    Span::styled(
+                        "_",
+                        Style::default()
+                            .fg(self.theme.colors.foreground)
+                            .bg(Color::Black),
+                    )
                 } else {
                     Span::raw("")
                 },

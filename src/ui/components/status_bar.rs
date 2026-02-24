@@ -16,6 +16,8 @@ pub struct StatusBar {
     center: String,
     /// Right section - keyboard shortcut hints
     right: String,
+    /// Error message - displayed in red, overrides center when set
+    error_message: Option<String>,
     /// Whether to show the status bar
     visible: bool,
 }
@@ -27,6 +29,7 @@ impl StatusBar {
             left: String::new(),
             center: String::new(),
             right: String::new(),
+            error_message: None,
             visible: true,
         }
     }
@@ -58,11 +61,22 @@ impl StatusBar {
         self.right = right.into();
     }
 
+    /// Set an error message (displayed in red, overrides center section)
+    pub fn set_error(&mut self, message: impl Into<String>) {
+        self.error_message = Some(message.into());
+    }
+
+    /// Clear the error message
+    pub fn clear_error(&mut self) {
+        self.error_message = None;
+    }
+
     /// Clear all content
     pub fn clear(&mut self) {
         self.left.clear();
         self.center.clear();
         self.right.clear();
+        self.error_message = None;
     }
 
     /// Set visibility
@@ -159,9 +173,20 @@ impl Widget for StatusBar {
             buf.set_string(area.x, area.y, left_text, Style::default().fg(Color::White));
         }
 
-        // Render center section
-        if !self.center.is_empty() {
-            let center_start = area.x + (side_width as u16);
+        let center_start = area.x + (side_width as u16);
+        if let Some(ref error) = self.error_message {
+            let error_text = if error.len() > center_width {
+                &error[..center_width]
+            } else {
+                error.as_str()
+            };
+            buf.set_string(
+                center_start,
+                area.y,
+                error_text,
+                Style::default().fg(Color::Red),
+            );
+        } else if !self.center.is_empty() {
             let center_text = if self.center.len() > center_width {
                 &self.center[..center_width]
             } else {

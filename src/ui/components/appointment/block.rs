@@ -142,41 +142,6 @@ impl Widget for AppointmentBlock {
             display_content,
             text_style,
         );
-
-        // If selected, render a border around the block
-        if self.is_selected {
-            let border_style = Style::default()
-                .fg(ratatui::style::Color::White)
-                .bg(status_color);
-
-            // Top border
-            for x in render_area.x..(render_area.x + render_area.width) {
-                buf[(x, render_area.y)].set_style(border_style);
-                buf[(x, render_area.y)].set_char('─');
-            }
-            // Bottom border
-            let bottom_y = render_area.y + render_area.height - 1;
-            for x in render_area.x..(render_area.x + render_area.width) {
-                buf[(x, bottom_y)].set_style(border_style);
-                buf[(x, bottom_y)].set_char('─');
-            }
-            // Left border
-            for y in render_area.y..(render_area.y + render_area.height) {
-                buf[(render_area.x, y)].set_style(border_style);
-                buf[(render_area.x, y)].set_char('│');
-            }
-            // Right border
-            let right_x = render_area.x + render_area.width - 1;
-            for y in render_area.y..(render_area.y + render_area.height) {
-                buf[(right_x, y)].set_style(border_style);
-                buf[(right_x, y)].set_char('│');
-            }
-            // Corners
-            buf[(render_area.x, render_area.y)].set_char('┌');
-            buf[(right_x, render_area.y)].set_char('┐');
-            buf[(render_area.x, bottom_y)].set_char('└');
-            buf[(right_x, bottom_y)].set_char('┘');
-        }
     }
 }
 

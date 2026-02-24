@@ -11,8 +11,8 @@ use ratatui::style::Color;
 use ratatui::Frame;
 
 use crate::ui::components::appointment::{
-    AppointmentForm, AppointmentFormAction, AppointmentState, AppointmentView, CalendarAction,
-    ScheduleAction,
+    AppointmentDetailModal, AppointmentDetailModalAction, AppointmentForm, AppointmentFormAction,
+    AppointmentFormField, AppointmentState, AppointmentView, CalendarAction, ScheduleAction,
 };
 use crate::ui::components::clinical::ClinicalState;
 use crate::ui::components::help::HelpOverlay;
@@ -21,7 +21,7 @@ use crate::ui::components::status_bar::{StatusBar, STATUS_BAR_HEIGHT};
 use crate::ui::components::tabs::{Tab, TabBar};
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
 use crate::ui::theme::Theme;
-use crate::ui::view_models::PatientListItem;
+use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 
 /// Application state
 pub struct App {
@@ -61,10 +61,16 @@ pub struct App {
     appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
     patient_service: Option<Arc<crate::ui::services::PatientUiService>>,
     pending_appointment_date: Option<NaiveDate>,
+    /// Flag to load practitioners for appointment form picker
+    pending_load_practitioners: bool,
     /// Appointment creation form (open when user presses 'n' in Schedule view)
     appointment_form: Option<AppointmentForm>,
+    /// Appointment detail modal (open when user selects an appointment)
+    appointment_detail_modal: Option<AppointmentDetailModal>,
     /// Pending appointment data to save (set on form Submit)
     pending_appointment_save: Option<crate::domain::appointment::NewAppointmentData>,
+    /// Pending appointment status transition
+    pending_appointment_status_transition: Option<(uuid::Uuid, AppointmentStatusTransition)>,
     /// Pending patient ID to load for clinical view
     pending_clinical_patient_id: Option<uuid::Uuid>,
     pending_clinical_save_data: Option<PendingClinicalSaveData>,
@@ -100,6 +106,20 @@ pub enum PendingClinicalSaveData {
         patient_id: uuid::Uuid,
         entry: crate::domain::clinical::FamilyHistory,
     },
+    Consultation {
+        patient_id: uuid::Uuid,
+        practitioner_id: uuid::Uuid,
+        appointment_id: Option<uuid::Uuid>,
+        reason: Option<String>,
+        soap_notes: crate::domain::clinical::SOAPNotes,
+    },
+}
+
+#[derive(Debug)]
+pub enum AppointmentStatusTransition {
+    MarkArrived,
+    MarkInProgress,
+    MarkCompleted,
 }
 
 impl App {
@@ -129,8 +149,11 @@ impl App {
             appointment_service,
             patient_service,
             pending_appointment_date: None,
+            pending_load_practitioners: false,
             appointment_form: None,
+            appointment_detail_modal: None,
             pending_appointment_save: None,
+            pending_appointment_status_transition: None,
             pending_clinical_patient_id: None,
             pending_clinical_save_data: None,
             clinical_state: ClinicalState::with_theme(theme.clone()),
@@ -171,11 +194,27 @@ impl App {
         self.pending_appointment_date.take()
     }
 
+    /// Request loading practitioners for appointment form picker
+    pub fn request_load_practitioners(&mut self) {
+        self.pending_load_practitioners = true;
+    }
+
+    /// Take pending load practitioners flag
+    pub fn take_pending_load_practitioners(&mut self) -> bool {
+        std::mem::take(&mut self.pending_load_practitioners)
+    }
+
     /// Take pending appointment save data (for saving to database in main loop)
     pub fn take_pending_appointment_save(
         &mut self,
     ) -> Option<crate::domain::appointment::NewAppointmentData> {
         self.pending_appointment_save.take()
+    }
+
+    pub fn take_pending_appointment_status_transition(
+        &mut self,
+    ) -> Option<(uuid::Uuid, AppointmentStatusTransition)> {
+        self.pending_appointment_status_transition.take()
     }
 
     pub fn take_pending_clinical_patient_id(&mut self) -> Option<uuid::Uuid> {
@@ -189,6 +228,20 @@ impl App {
     /// Get mutable reference to appointment state (for loading practitioners)
     pub fn appointment_state_mut(&mut self) -> &mut AppointmentState {
         &mut self.appointment_state
+    }
+
+    /// Set patients in the appointment form picker
+    pub fn appointment_form_set_patients(&mut self, patients: Vec<PatientListItem>) {
+        if let Some(ref mut form) = self.appointment_form {
+            form.set_patients(patients);
+        }
+    }
+
+    /// Set practitioners in the appointment form picker
+    pub fn appointment_form_set_practitioners(&mut self, practitioners: Vec<PractitionerViewItem>) {
+        if let Some(ref mut form) = self.appointment_form {
+            form.set_practitioners(practitioners);
+        }
     }
 
     pub fn clinical_state_mut(&mut self) -> &mut ClinicalState {
@@ -231,6 +284,21 @@ impl App {
         &self.appointment_state
     }
 
+    /// Get practitioners from appointment state
+    pub fn practitioners(&self) -> &[crate::domain::user::Practitioner] {
+        &self.appointment_state.practitioners
+    }
+
+    /// Check if appointment form is open
+    pub fn has_appointment_form(&self) -> bool {
+        self.appointment_form.is_some()
+    }
+
+    /// Get patients from the patient list
+    pub fn patient_list_patients(&self) -> &[PatientListItem] {
+        self.patient_list.patients()
+    }
+
     /// Toggle the theme between dark and light
     pub fn toggle_theme(&mut self) {
         if self.theme.colors.background == Color::Black {
@@ -254,7 +322,7 @@ impl App {
         self.current_context = match self.tab_bar.selected() {
             Tab::Patient => KeyContext::PatientList,
             Tab::Appointment => {
-                if self.appointment_form.is_some() {
+                if self.appointment_form.is_some() || self.appointment_detail_modal.is_some() {
                     KeyContext::Schedule
                 } else {
                     match self.appointment_state.current_view {
@@ -308,6 +376,10 @@ impl App {
 
         if self.appointment_form.is_some() {
             return self.handle_appointment_form_keys(key);
+        }
+
+        if self.appointment_detail_modal.is_some() {
+            return self.handle_appointment_detail_modal_keys(key);
         }
 
         // Handle patient form keys when form is open - route keys to form
@@ -420,6 +492,10 @@ impl App {
                                 self.clinical_state.open_family_history_form();
                                 self.current_context = KeyContext::ClinicalForm;
                             }
+                            ClinicalView::Consultations => {
+                                self.clinical_state.open_consultation_form();
+                                self.current_context = KeyContext::ClinicalForm;
+                            }
                             _ => {}
                         }
                     }
@@ -498,6 +574,7 @@ impl App {
                         && self.appointment_form.is_none()
                     {
                         self.appointment_form = Some(AppointmentForm::new(self.theme.clone()));
+                        self.request_load_practitioners();
                     }
                 }
                 // Clinical view switching (number keys 1-7)
@@ -556,8 +633,8 @@ impl App {
     /// Handle key events for the Clinical tab
     fn handle_clinical_keys(&mut self, key: KeyEvent) -> Action {
         use crate::ui::components::clinical::{
-            AllergyFormAction, ClinicalFormView, ClinicalView, FamilyHistoryFormAction,
-            MedicalHistoryFormAction, VitalSignsFormAction,
+            AllergyFormAction, ClinicalFormView, ClinicalView, ConsultationFormAction,
+            FamilyHistoryFormAction, MedicalHistoryFormAction, VitalSignsFormAction,
         };
         use crate::ui::keybinds::{Action as KeyAction, KeyContext, KeybindRegistry};
         use crossterm::event::KeyCode;
@@ -571,28 +648,34 @@ impl App {
                                 AllergyFormAction::FocusChanged
                                 | AllergyFormAction::ValueChanged => {}
                                 AllergyFormAction::Submit => {
-                                    if let Some(ref mut form) = self.clinical_state.allergy_form {
-                                        if form.validate() {
-                                            if let Some(patient_id) =
-                                                self.clinical_state.selected_patient_id
-                                            {
-                                                let system_user_id = uuid::Uuid::nil();
-                                                let allergy =
-                                                    form.to_allergy(patient_id, system_user_id);
-                                                self.pending_clinical_save_data =
-                                                    Some(PendingClinicalSaveData::Allergy {
-                                                        patient_id,
-                                                        allergy,
-                                                    });
-                                                self.clinical_state.close_form();
-                                                self.current_context = KeyContext::Clinical;
-                                            }
+                                    let form_valid = form.validate();
+                                    if form_valid {
+                                        if let Some(patient_id) =
+                                            self.clinical_state.selected_patient_id
+                                        {
+                                            let system_user_id = uuid::Uuid::nil();
+                                            let allergy =
+                                                form.to_allergy(patient_id, system_user_id);
+                                            self.pending_clinical_save_data =
+                                                Some(PendingClinicalSaveData::Allergy {
+                                                    patient_id,
+                                                    allergy,
+                                                });
+                                            self.clinical_state.close_form();
+                                            self.current_context = KeyContext::Clinical;
+                                            self.status_bar.clear_error();
+                                        } else {
+                                            self.status_bar
+                                                .set_error("Please fill in required fields");
                                         }
+                                    } else {
+                                        self.status_bar.set_error("Please fill in required fields");
                                     }
                                 }
                                 AllergyFormAction::Cancel => {
                                     self.clinical_state.close_form();
                                     self.current_context = KeyContext::Clinical;
+                                    self.status_bar.clear_error();
                                 }
                             }
                             return Action::Enter;
@@ -606,30 +689,33 @@ impl App {
                                 MedicalHistoryFormAction::FocusChanged
                                 | MedicalHistoryFormAction::ValueChanged => {}
                                 MedicalHistoryFormAction::Submit => {
-                                    if let Some(ref mut form) =
-                                        self.clinical_state.medical_history_form
+                                    if let Some(patient_id) =
+                                        self.clinical_state.selected_patient_id
                                     {
-                                        if let Some(patient_id) =
-                                            self.clinical_state.selected_patient_id
+                                        let system_user_id = uuid::Uuid::nil();
+                                        if let Some(history) =
+                                            form.to_medical_history(patient_id, system_user_id)
                                         {
-                                            let system_user_id = uuid::Uuid::nil();
-                                            if let Some(history) =
-                                                form.to_medical_history(patient_id, system_user_id)
-                                            {
-                                                self.pending_clinical_save_data =
-                                                    Some(PendingClinicalSaveData::MedicalHistory {
-                                                        patient_id,
-                                                        history,
-                                                    });
-                                                self.clinical_state.close_form();
-                                                self.current_context = KeyContext::Clinical;
-                                            }
+                                            self.pending_clinical_save_data =
+                                                Some(PendingClinicalSaveData::MedicalHistory {
+                                                    patient_id,
+                                                    history,
+                                                });
+                                            self.clinical_state.close_form();
+                                            self.current_context = KeyContext::Clinical;
+                                            self.status_bar.clear_error();
+                                        } else {
+                                            self.status_bar
+                                                .set_error("Please fill in required fields");
                                         }
+                                    } else {
+                                        self.status_bar.set_error("Please fill in required fields");
                                     }
                                 }
                                 MedicalHistoryFormAction::Cancel => {
                                     self.clinical_state.close_form();
                                     self.current_context = KeyContext::Clinical;
+                                    self.status_bar.clear_error();
                                 }
                             }
                             return Action::Enter;
@@ -643,28 +729,34 @@ impl App {
                                 VitalSignsFormAction::FocusChanged
                                 | VitalSignsFormAction::ValueChanged => {}
                                 VitalSignsFormAction::Submit => {
-                                    if let Some(ref mut form) = self.clinical_state.vitals_form {
-                                        if form.validate() {
-                                            if let Some(patient_id) =
-                                                self.clinical_state.selected_patient_id
-                                            {
-                                                let system_user_id = uuid::Uuid::nil();
-                                                let vitals =
-                                                    form.to_vital_signs(patient_id, system_user_id);
-                                                self.pending_clinical_save_data =
-                                                    Some(PendingClinicalSaveData::VitalSigns {
-                                                        patient_id,
-                                                        vitals,
-                                                    });
-                                                self.clinical_state.close_form();
-                                                self.current_context = KeyContext::Clinical;
-                                            }
+                                    let form_valid = form.validate();
+                                    if form_valid {
+                                        if let Some(patient_id) =
+                                            self.clinical_state.selected_patient_id
+                                        {
+                                            let system_user_id = uuid::Uuid::nil();
+                                            let vitals =
+                                                form.to_vital_signs(patient_id, system_user_id);
+                                            self.pending_clinical_save_data =
+                                                Some(PendingClinicalSaveData::VitalSigns {
+                                                    patient_id,
+                                                    vitals,
+                                                });
+                                            self.clinical_state.close_form();
+                                            self.current_context = KeyContext::Clinical;
+                                            self.status_bar.clear_error();
+                                        } else {
+                                            self.status_bar
+                                                .set_error("Please fill in required fields");
                                         }
+                                    } else {
+                                        self.status_bar.set_error("Please fill in required fields");
                                     }
                                 }
                                 VitalSignsFormAction::Cancel => {
                                     self.clinical_state.close_form();
                                     self.current_context = KeyContext::Clinical;
+                                    self.status_bar.clear_error();
                                 }
                             }
                             return Action::Enter;
@@ -678,30 +770,81 @@ impl App {
                                 FamilyHistoryFormAction::FocusChanged
                                 | FamilyHistoryFormAction::ValueChanged => {}
                                 FamilyHistoryFormAction::Submit => {
-                                    if let Some(ref mut form) =
-                                        self.clinical_state.family_history_form
-                                    {
-                                        if form.validate() {
-                                            if let Some(patient_id) =
-                                                self.clinical_state.selected_patient_id
-                                            {
-                                                let system_user_id = uuid::Uuid::nil();
-                                                let entry = form
-                                                    .to_family_history(patient_id, system_user_id);
-                                                self.pending_clinical_save_data =
-                                                    Some(PendingClinicalSaveData::FamilyHistory {
-                                                        patient_id,
-                                                        entry,
-                                                    });
-                                                self.clinical_state.close_form();
-                                                self.current_context = KeyContext::Clinical;
-                                            }
+                                    let form_valid = form.validate();
+                                    if form_valid {
+                                        if let Some(patient_id) =
+                                            self.clinical_state.selected_patient_id
+                                        {
+                                            let system_user_id = uuid::Uuid::nil();
+                                            let entry =
+                                                form.to_family_history(patient_id, system_user_id);
+                                            self.pending_clinical_save_data =
+                                                Some(PendingClinicalSaveData::FamilyHistory {
+                                                    patient_id,
+                                                    entry,
+                                                });
+                                            self.clinical_state.close_form();
+                                            self.current_context = KeyContext::Clinical;
+                                            self.status_bar.clear_error();
+                                        } else {
+                                            self.status_bar
+                                                .set_error("Please fill in required fields");
                                         }
+                                    } else {
+                                        self.status_bar.set_error("Please fill in required fields");
                                     }
                                 }
                                 FamilyHistoryFormAction::Cancel => {
                                     self.clinical_state.close_form();
                                     self.current_context = KeyContext::Clinical;
+                                    self.status_bar.clear_error();
+                                }
+                            }
+                            return Action::Enter;
+                        }
+                    }
+                }
+                ClinicalFormView::ConsultationForm => {
+                    if let Some(ref mut form) = self.clinical_state.consultation_form {
+                        if let Some(action) = form.handle_key(key) {
+                            match action {
+                                ConsultationFormAction::FocusChanged
+                                | ConsultationFormAction::ValueChanged => {}
+                                ConsultationFormAction::Submit => {
+                                    let form_valid = form.validate();
+                                    if form_valid {
+                                        if let Some(patient_id) =
+                                            self.clinical_state.selected_patient_id
+                                        {
+                                            let system_user_id = uuid::Uuid::nil();
+                                            let practitioner_id = uuid::Uuid::nil();
+                                            let consultation = form.to_consultation(
+                                                patient_id,
+                                                practitioner_id,
+                                                system_user_id,
+                                            );
+                                            self.pending_clinical_save_data =
+                                                Some(PendingClinicalSaveData::Consultation {
+                                                    patient_id,
+                                                    practitioner_id,
+                                                    appointment_id: consultation.appointment_id,
+                                                    reason: consultation.reason,
+                                                    soap_notes: consultation.soap_notes,
+                                                });
+                                            self.clinical_state.close_consultation_form();
+                                            self.current_context = KeyContext::Clinical;
+                                            self.status_bar.clear_error();
+                                        } else {
+                                            self.status_bar.set_error("No patient selected");
+                                        }
+                                    } else {
+                                        self.status_bar.set_error("Please fill in required fields");
+                                    }
+                                }
+                                ConsultationFormAction::Cancel => {
+                                    self.clinical_state.close_consultation_form();
+                                    self.current_context = KeyContext::Clinical;
+                                    self.status_bar.clear_error();
                                 }
                             }
                             return Action::Enter;
@@ -895,8 +1038,14 @@ impl App {
                     self.refresh_status_bar();
                     self.refresh_context();
                 }
-                crate::ui::components::patient::PatientListAction::FocusSearch => {}
-                crate::ui::components::patient::PatientListAction::SearchChanged => {}
+                crate::ui::components::patient::PatientListAction::FocusSearch => {
+                    self.current_context = KeyContext::Search;
+                }
+                crate::ui::components::patient::PatientListAction::SearchChanged => {
+                    if !self.patient_list.is_searching() {
+                        self.current_context = KeyContext::PatientList;
+                    }
+                }
             }
             return Action::Enter;
         }
@@ -940,13 +1089,11 @@ impl App {
                                 if let Some(appointment) =
                                     practitioner.appointments.iter().find(|apt| apt.id == id)
                                 {
-                                    let patient_id = appointment.patient_id;
-                                    self.clinical_state.clear_patient();
-                                    self.clinical_state.set_patient(patient_id);
-                                    self.clinical_state.show_patient_summary();
-                                    self.tab_bar.select(Tab::Clinical);
-                                    self.pending_clinical_patient_id = Some(patient_id);
-                                    self.refresh_status_bar();
+                                    self.appointment_detail_modal =
+                                        Some(AppointmentDetailModal::new(
+                                            appointment.clone(),
+                                            self.theme.clone(),
+                                        ));
                                     self.refresh_context();
                                     break;
                                 }
@@ -956,6 +1103,33 @@ impl App {
                     }
                     ScheduleAction::NavigateTimeSlot(_delta) => {}
                     ScheduleAction::NavigatePractitioner(_delta) => {}
+                    ScheduleAction::CreateAtSlot {
+                        practitioner_id,
+                        date,
+                        time,
+                    } => {
+                        self.appointment_form = Some(AppointmentForm::new(self.theme.clone()));
+                        if let Some(ref mut form) = self.appointment_form {
+                            if let Some(ref schedule_data) = self.appointment_state.schedule_data {
+                                if let Some(practitioner) = schedule_data
+                                    .practitioners
+                                    .iter()
+                                    .find(|p| p.practitioner_id == practitioner_id)
+                                {
+                                    form.set_practitioner(
+                                        practitioner_id,
+                                        practitioner.practitioner_name.clone(),
+                                    );
+                                }
+                            }
+                            form.set_value(
+                                AppointmentFormField::Date,
+                                date.format("%Y-%m-%d").to_string(),
+                            );
+                            form.set_value(AppointmentFormField::StartTime, time);
+                        }
+                        self.request_load_practitioners();
+                    }
                 }
                 return Action::Enter;
             }
@@ -974,11 +1148,57 @@ impl App {
                             if let Some(data) = form.to_new_appointment_data() {
                                 self.pending_appointment_save = Some(data);
                                 self.appointment_form = None;
+                                self.status_bar.clear_error();
+                            } else {
+                                self.status_bar.set_error(
+                                    "Cannot save: select a patient and practitioner from the picker",
+                                );
                             }
                         }
                     }
                     AppointmentFormAction::Cancel | AppointmentFormAction::SaveComplete => {
                         self.appointment_form = None;
+                        self.status_bar.clear_error();
+                    }
+                }
+                return Action::Enter;
+            }
+        }
+        Action::Unknown
+    }
+
+    fn handle_appointment_detail_modal_keys(&mut self, key: KeyEvent) -> Action {
+        if let Some(ref mut modal) = self.appointment_detail_modal {
+            if let Some(action) = modal.handle_key(key) {
+                match action {
+                    AppointmentDetailModalAction::Close => {
+                        self.appointment_detail_modal = None;
+                    }
+                    AppointmentDetailModalAction::ViewClinicalNotes => {
+                        let patient_id = modal.patient_id();
+                        self.appointment_detail_modal = None;
+                        self.clinical_state.clear_patient();
+                        self.clinical_state.set_patient(patient_id);
+                        self.clinical_state.show_patient_summary();
+                        self.tab_bar.select(Tab::Clinical);
+                        self.pending_clinical_patient_id = Some(patient_id);
+                        self.refresh_status_bar();
+                        self.refresh_context();
+                    }
+                    AppointmentDetailModalAction::MarkArrived => {
+                        let appointment_id = modal.appointment_id();
+                        self.pending_appointment_status_transition =
+                            Some((appointment_id, AppointmentStatusTransition::MarkArrived));
+                    }
+                    AppointmentDetailModalAction::MarkInProgress => {
+                        let appointment_id = modal.appointment_id();
+                        self.pending_appointment_status_transition =
+                            Some((appointment_id, AppointmentStatusTransition::MarkInProgress));
+                    }
+                    AppointmentDetailModalAction::MarkCompleted => {
+                        let appointment_id = modal.appointment_id();
+                        self.pending_appointment_status_transition =
+                            Some((appointment_id, AppointmentStatusTransition::MarkCompleted));
                     }
                 }
                 return Action::Enter;
@@ -1110,6 +1330,7 @@ impl App {
                             }
                             ScheduleAction::NavigateTimeSlot(_) => {}
                             ScheduleAction::NavigatePractitioner(_) => {}
+                            ScheduleAction::CreateAtSlot { .. } => {}
                         }
                     }
                 }
@@ -1165,6 +1386,28 @@ impl App {
 
         // Render status bar
         frame.render_widget(self.status_bar.clone(), status_bar_area);
+
+        // Render patient search overlay on top of everything (including schedule)
+        if self.patient_list.is_searching() {
+            use ratatui::prelude::{Stylize, Widget};
+            use ratatui::text::Line;
+            use ratatui::widgets::Clear;
+
+            let query = self.patient_list.search_query();
+            let search_text = if query.is_empty() {
+                Line::from(vec!["/".bold()])
+            } else {
+                Line::from(vec![format!("/{}", query).into()])
+            };
+            let overlay_area = Rect::new(
+                content_area.x + 1,
+                content_area.y + 1,
+                content_area.width.saturating_sub(2),
+                1,
+            );
+            frame.render_widget(Clear, overlay_area);
+            search_text.render(overlay_area, frame.buffer_mut());
+        }
     }
 
     /// Render the content area based on current tab
@@ -1191,9 +1434,16 @@ impl App {
     /// Render the Appointment tab content
     fn render_appointment_tab(&mut self, frame: &mut Frame, area: Rect) {
         use crate::ui::components::appointment::AppointmentView;
+        use ratatui::widgets::Clear;
 
         if let Some(ref form) = self.appointment_form {
             frame.render_widget(form.clone(), area);
+            return;
+        }
+
+        if let Some(ref modal) = self.appointment_detail_modal {
+            frame.render_widget(Clear, area);
+            frame.render_widget(modal.clone(), area);
             return;
         }
 
@@ -1272,6 +1522,11 @@ impl App {
                 }
                 ClinicalFormView::FamilyHistoryForm => {
                     if let Some(ref form) = self.clinical_state.family_history_form {
+                        frame.render_widget(form.clone(), area);
+                    }
+                }
+                ClinicalFormView::ConsultationForm => {
+                    if let Some(ref form) = self.clinical_state.consultation_form {
                         frame.render_widget(form.clone(), area);
                     }
                 }

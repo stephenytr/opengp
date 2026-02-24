@@ -17,9 +17,10 @@ pub trait ConsultationRepository: Send + Sync {
     async fn find_by_patient(&self, patient_id: Uuid)
         -> Result<Vec<Consultation>, RepositoryError>;
 
-    /// Find consultations within a date range
+    /// Find consultations within a date range for a specific patient
     async fn find_by_date_range(
         &self,
+        patient_id: Uuid,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<Vec<Consultation>, RepositoryError>;

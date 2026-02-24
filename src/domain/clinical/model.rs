@@ -11,6 +11,7 @@ pub struct Consultation {
     pub appointment_id: Option<Uuid>,
 
     pub consultation_date: DateTime<Utc>,
+    pub reason: Option<String>,
 
     pub soap_notes: SOAPNotes,
 
@@ -37,6 +38,7 @@ impl Consultation {
             practitioner_id,
             appointment_id,
             consultation_date: Utc::now(),
+            reason: None,
             soap_notes: SOAPNotes::default(),
             is_signed: false,
             signed_at: None,

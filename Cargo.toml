@@ -37,3 +37,4 @@ strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 derive_builder = "0.20"
 ratatui-interact = "0.4.2"
+tui-textarea = "0.7"

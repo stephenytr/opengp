@@ -24,6 +24,14 @@ pub struct ConsultationList {
     theme: Theme,
     /// Optional practitioner names map (practitioner_id -> name)
     practitioner_names: std::collections::HashMap<Uuid, String>,
+    /// Date filter start (YYYY-MM-DD format)
+    pub filter_start_date: Option<String>,
+    /// Date filter end (YYYY-MM-DD format)
+    pub filter_end_date: Option<String>,
+    /// Whether filter is currently active
+    pub filter_active: bool,
+    /// Filter input mode (when true, user can type dates)
+    filter_input_mode: bool,
 }
 
 impl Clone for ConsultationList {
@@ -36,6 +44,10 @@ impl Clone for ConsultationList {
             loading_state: self.loading_state.clone(),
             theme: self.theme.clone(),
             practitioner_names: self.practitioner_names.clone(),
+            filter_start_date: self.filter_start_date.clone(),
+            filter_end_date: self.filter_end_date.clone(),
+            filter_active: self.filter_active,
+            filter_input_mode: self.filter_input_mode,
         }
     }
 }
@@ -59,6 +71,10 @@ impl ConsultationList {
             loading_state: LoadingState::new().message("Loading consultations..."),
             theme,
             practitioner_names: std::collections::HashMap::new(),
+            filter_start_date: None,
+            filter_end_date: None,
+            filter_active: false,
+            filter_input_mode: false,
         }
     }
 
@@ -71,6 +87,10 @@ impl ConsultationList {
             loading_state: LoadingState::new().message("Loading consultations..."),
             theme,
             practitioner_names: std::collections::HashMap::new(),
+            filter_start_date: None,
+            filter_end_date: None,
+            filter_active: false,
+            filter_input_mode: false,
         }
     }
 
@@ -165,6 +185,55 @@ impl ConsultationList {
         self.scroll_offset
     }
 
+    pub fn set_filter(&mut self, start: Option<String>, end: Option<String>) {
+        self.filter_start_date = start;
+        self.filter_end_date = end;
+        self.filter_active = true;
+    }
+
+    pub fn clear_filter(&mut self) {
+        self.filter_start_date = None;
+        self.filter_end_date = None;
+        self.filter_active = false;
+    }
+
+    pub fn apply_filter(&self) -> Vec<Consultation> {
+        if !self.filter_active {
+            return self.consultations.clone();
+        }
+
+        self.consultations
+            .iter()
+            .filter(|c| {
+                let consult_date = c.consultation_date.format("%Y-%m-%d").to_string();
+                let start_ok = self
+                    .filter_start_date
+                    .as_ref()
+                    .map(|s| &consult_date >= s)
+                    .unwrap_or(true);
+                let end_ok = self
+                    .filter_end_date
+                    .as_ref()
+                    .map(|e| &consult_date <= e)
+                    .unwrap_or(true);
+                start_ok && end_ok
+            })
+            .cloned()
+            .collect()
+    }
+
+    pub fn is_filter_active(&self) -> bool {
+        self.filter_active
+    }
+
+    pub fn toggle_filter_input_mode(&mut self) {
+        self.filter_input_mode = !self.filter_input_mode;
+    }
+
+    pub fn is_filter_input_mode(&self) -> bool {
+        self.filter_input_mode
+    }
+
     pub fn handle_key(
         &mut self,
         key: crossterm::event::KeyEvent,
@@ -209,6 +278,18 @@ impl ConsultationList {
             KeyCode::Char('n') => Some(ConsultationListAction::New),
             KeyCode::Char('+') | KeyCode::Char('=') => Some(ConsultationListAction::NextPage),
             KeyCode::Char('-') => Some(ConsultationListAction::PrevPage),
+            KeyCode::Char('f') => {
+                self.toggle_filter_input_mode();
+                Some(ConsultationListAction::Select(self.selected_index))
+            }
+            KeyCode::Esc => {
+                if self.filter_input_mode {
+                    self.filter_input_mode = false;
+                    Some(ConsultationListAction::Select(self.selected_index))
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -328,15 +409,51 @@ impl Widget for ConsultationList {
             return;
         }
 
+        let filter_bar_height = 1;
+        let list_area = if self.filter_active || self.filter_input_mode {
+            Rect::new(
+                inner.x,
+                inner.y + filter_bar_height,
+                inner.width,
+                inner.height.saturating_sub(filter_bar_height),
+            )
+        } else {
+            inner
+        };
+
+        if self.filter_active || self.filter_input_mode {
+            let start_str = self.filter_start_date.as_deref().unwrap_or("YYYY-MM-DD");
+            let end_str = self.filter_end_date.as_deref().unwrap_or("YYYY-MM-DD");
+
+            let filter_text = if self.filter_input_mode {
+                format!(
+                    " Filter: [{}] to [{}] (Press Enter to apply, Esc to cancel) ",
+                    start_str, end_str
+                )
+            } else {
+                format!(" Filter: {} to {} [f] Toggle  ", start_str, end_str)
+            };
+
+            let filter_style = if self.filter_input_mode {
+                Style::default()
+                    .fg(self.theme.colors.primary)
+                    .bg(self.theme.colors.selected)
+            } else {
+                Style::default().fg(self.theme.colors.secondary)
+            };
+
+            buf.set_string(inner.x, inner.y, &filter_text, filter_style);
+        }
+
         if self.consultations.is_empty() {
             let message = "No consultations found. Press n to add a new consultation.";
             let text = Line::from(vec![Span::styled(
                 message,
                 Style::default().fg(self.theme.colors.disabled),
             )]);
-            let x = inner.x + (inner.width.saturating_sub(message.len() as u16)) / 2;
-            let y = inner.y + inner.height / 2;
-            buf.set_line(x, y, &text, inner.width);
+            let x = list_area.x + (list_area.width.saturating_sub(message.len() as u16)) / 2;
+            let y = list_area.y + list_area.height / 2;
+            buf.set_line(x, y, &text, list_area.width);
             return;
         }
 
@@ -350,7 +467,7 @@ impl Widget for ConsultationList {
         let header = Row::new(vec!["Date", "Practitioner", "Reason", "Status"])
             .style(Style::default().fg(self.theme.colors.primary).bold());
 
-        let visible_rows = inner.height as usize;
+        let visible_rows = list_area.height as usize;
         let max_scroll = self.consultations.len().saturating_sub(visible_rows);
         let scroll_offset = self.scroll_offset.min(max_scroll);
 
@@ -393,7 +510,7 @@ impl Widget for ConsultationList {
             .block(Block::default().borders(Borders::NONE))
             .widths(col_widths);
 
-        table.render(inner, buf);
+        table.render(list_area, buf);
     }
 }
 

@@ -1604,6 +1604,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tui-realm-stdlib",
+ "tui-textarea",
  "tuirealm",
  "uuid",
 ]
@@ -2946,6 +2947,17 @@ checksum = "333d8b8da2b3479a68fdf4bd2621f888fa869501d6c5c72bac940d0eeb19b083"
 dependencies = [
  "textwrap",
  "tuirealm",
+ "unicode-width 0.2.0",
+]
+
+[[package]]
+name = "tui-textarea"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a5318dd619ed73c52a9417ad19046724effc1287fb75cdcc4eca1d6ac1acbae"
+dependencies = [
+ "crossterm 0.28.1",
+ "ratatui 0.29.0",
  "unicode-width 0.2.0",
 ]
 

@@ -5,13 +5,14 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use opengp::domain::patient::PatientRepository;
-use opengp::domain::user::PractitionerRepository;
+use opengp::domain::user::{PractitionerRepository, UserRepository};
 use opengp::domain::appointment::AppointmentCalendarQuery;
 use opengp::infrastructure::crypto::EncryptionService;
 use opengp::infrastructure::database::{create_pool, run_migrations};
 use opengp::infrastructure::database::repositories::patient::SqlxPatientRepository;
 use opengp::infrastructure::database::repositories::practitioner::SqlxPractitionerRepository;
 use opengp::infrastructure::database::repositories::appointment::SqlxAppointmentRepository;
+use opengp::infrastructure::database::repositories::user::SqlxUserRepository;
 use opengp::ui::app::App;
 use opengp::ui::services::AppointmentUiService;
 use ratatui::backend::CrosstermBackend;
@@ -46,11 +47,23 @@ async fn main() -> Result<()> {
     let practitioner_repo: Arc<dyn PractitionerRepository> = Arc::new(SqlxPractitionerRepository::new(db_pool.clone()));
     let appointment_repo_impl = Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
     let appointment_repo_for_create: Arc<dyn opengp::domain::appointment::AppointmentRepository> = appointment_repo_impl.clone();
-    let appointment_repo: Arc<dyn AppointmentCalendarQuery> = appointment_repo_impl;
+    let appointment_repo: Arc<dyn AppointmentCalendarQuery> = appointment_repo_impl.clone();
+    
+    // Create domain appointment service for status transitions
+    let audit_service = Arc::new(opengp::domain::audit::AuditService::new(
+        Arc::new(opengp::infrastructure::database::repositories::audit::SqlxAuditRepository::new(db_pool.clone()))
+    ));
+    let domain_appointment_service = Arc::new(opengp::domain::appointment::AppointmentService::new(
+        appointment_repo_for_create.clone(),
+        audit_service,
+        appointment_repo.clone(),
+    ));
+    
     let appointment_service = Arc::new(AppointmentUiService::new(
         practitioner_repo,
         appointment_repo,
         appointment_repo_for_create,
+        domain_appointment_service,
     ));
 
     // Create patient service
@@ -85,7 +98,24 @@ async fn main() -> Result<()> {
     let patients: Vec<opengp::domain::patient::Patient> = patient_repo.list_active().await?;
     tracing::info!("Loaded {} patients from database", patients.len());
 
-    run_tui(patients, patient_repo.clone(), appointment_service, patient_service, clinical_service).await?;
+    let user_repo = SqlxUserRepository::new(db_pool.clone());
+    let system_user_id = match user_repo.find_all().await {
+        Ok(users) => {
+            if let Some(first_user) = users.first() {
+                tracing::info!("Using system_user_id from user: {} ({})", first_user.username, first_user.id);
+                first_user.id
+            } else {
+                tracing::warn!("No users found in database, using nil UUID for system_user_id");
+                uuid::Uuid::nil()
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Failed to load users, using nil UUID for system_user_id: {}", e);
+            uuid::Uuid::nil()
+        }
+    };
+
+    run_tui(patients, patient_repo.clone(), appointment_service, patient_service, clinical_service, system_user_id).await?;
 
     tracing::info!("OpenGP shutdown complete");
 
@@ -98,6 +128,7 @@ async fn run_tui(
     appointment_service: Arc<AppointmentUiService>,
     patient_service: Arc<opengp::ui::services::PatientUiService>,
     clinical_service: Arc<opengp::ui::services::ClinicalUiService>,
+    system_user_id: uuid::Uuid,
 ) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -175,10 +206,66 @@ async fn run_tui(
             }
         }
 
+        // Check if practitioners need to be loaded for appointment form picker
+        if app.take_pending_load_practitioners() {
+            let needs_load = app.appointment_state_mut().practitioners.is_empty();
+            if needs_load {
+                match appointment_service.get_practitioners().await {
+                    Ok(practitioners) => {
+                        app.appointment_state_mut().practitioners = practitioners;
+                        tracing::info!("Loaded practitioners for appointment form");
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to load practitioners for form: {}", e);
+                    }
+                }
+            }
+            let practitioner_items: Vec<opengp::ui::view_models::PractitionerViewItem> = 
+                app.practitioners().iter()
+                    .map(|p: &opengp::domain::user::Practitioner| opengp::ui::view_models::PractitionerViewItem::from(p.clone()))
+                    .collect();
+            app.appointment_form_set_practitioners(practitioner_items);
+        }
+
+        // Pass patients to appointment form if it exists
+        if app.has_appointment_form() {
+            let patient_items: Vec<opengp::ui::view_models::PatientListItem> = 
+                app.patient_list_patients().to_vec();
+            app.appointment_form_set_patients(patient_items);
+        }
+
         if let Some(data) = app.take_pending_appointment_save() {
-            match appointment_service.create_appointment(data).await {
+            let appointment_date = data.start_time.date_naive();
+            match appointment_service.create_appointment(data, system_user_id).await {
                 Ok(()) => {
                     tracing::info!("Created new appointment in database");
+                    let date = app.appointment_state_mut().selected_date.unwrap_or(appointment_date);
+                    match appointment_service.get_schedule(date).await {
+                        Ok(schedule) => {
+                            app.appointment_state_mut().schedule_data = Some(schedule);
+                        }
+                        Err(e) => tracing::error!("Failed to reload schedule: {}", e),
+                    }
+                }
+                Err(e) => tracing::error!("Failed to create appointment: {}", e),
+            }
+        }
+
+        if let Some((appointment_id, transition)) = app.take_pending_appointment_status_transition() {
+            let result = match transition {
+                opengp::ui::app::AppointmentStatusTransition::MarkArrived => {
+                    appointment_service.mark_arrived(appointment_id, system_user_id).await
+                }
+                opengp::ui::app::AppointmentStatusTransition::MarkInProgress => {
+                    appointment_service.mark_in_progress(appointment_id, system_user_id).await
+                }
+                opengp::ui::app::AppointmentStatusTransition::MarkCompleted => {
+                    appointment_service.mark_completed(appointment_id, system_user_id).await
+                }
+            };
+            match result {
+                Ok(()) => {
+                    tracing::info!("Updated appointment status: {:?}", transition);
                     if let Some(date) = app.appointment_state_mut().selected_date {
                         match appointment_service.get_schedule(date).await {
                             Ok(schedule) => {
@@ -188,12 +275,11 @@ async fn run_tui(
                         }
                     }
                 }
-                Err(e) => tracing::error!("Failed to create appointment: {}", e),
+                Err(e) => tracing::error!("Failed to update appointment status: {}", e),
             }
         }
 
         if let Some(pending) = app.take_pending_clinical_save_data() {
-            let system_user_id = uuid::Uuid::nil();
             match pending {
                 opengp::ui::app::PendingClinicalSaveData::Allergy { patient_id, allergy } => {
                     match clinical_service.add_allergy(
@@ -275,6 +361,50 @@ async fn run_tui(
                             }
                         }
                         Err(e) => tracing::error!("Failed to save family history: {}", e),
+                    }
+                }
+                opengp::ui::app::PendingClinicalSaveData::Consultation {
+                    patient_id,
+                    practitioner_id,
+                    appointment_id,
+                    reason,
+                    soap_notes,
+                } => {
+                    match clinical_service.create_consultation(
+                        patient_id,
+                        practitioner_id,
+                        system_user_id,
+                    ).await {
+                        Ok(consultation) => {
+                            tracing::info!("Created consultation {} for patient {}", consultation.id, patient_id);
+                            let has_soap = soap_notes.subjective.is_some()
+                                || soap_notes.objective.is_some()
+                                || soap_notes.assessment.is_some()
+                                || soap_notes.plan.is_some()
+                                || reason.is_some()
+                                || appointment_id.is_some();
+                            if has_soap {
+                                match clinical_service.update_soap_notes(
+                                    consultation.id,
+                                    soap_notes.subjective,
+                                    soap_notes.objective,
+                                    soap_notes.assessment,
+                                    soap_notes.plan,
+                                    system_user_id,
+                                ).await {
+                                    Ok(_) => tracing::info!("Updated SOAP notes for consultation {}", consultation.id),
+                                    Err(e) => tracing::error!("Failed to update SOAP notes: {}", e),
+                                }
+                            }
+                            match clinical_service.list_consultations(patient_id).await {
+                                Ok(consultations) => {
+                                    app.clinical_state_mut().consultation_list.consultations = consultations.clone();
+                                    app.clinical_state_mut().consultations = consultations;
+                                }
+                                Err(e) => tracing::error!("Failed to reload consultations: {}", e),
+                            }
+                        }
+                        Err(e) => tracing::error!("Failed to create consultation: {}", e),
                     }
                 }
             }

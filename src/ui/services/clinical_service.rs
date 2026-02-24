@@ -71,6 +71,7 @@ impl ClinicalUiService {
             patient_id,
             practitioner_id,
             appointment_id: None,
+            reason: None,
         };
         self.service
             .create_consultation(data, user_id)
@@ -88,6 +89,7 @@ impl ClinicalUiService {
         user_id: Uuid,
     ) -> UiResult<Consultation> {
         let data = UpdateSOAPNotesData {
+            reason: None,
             subjective,
             objective,
             assessment,
