@@ -8,6 +8,7 @@ use ratatui::widgets::ListState;
 ///
 /// Wraps Ratatui's ListState and adds scroll offset tracking
 /// for viewport management.
+#[derive(Clone)]
 pub struct ScrollableState {
     selected_index: usize,
     scroll_offset: usize,

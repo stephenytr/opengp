@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
+use crate::ui::widgets::ScrollableState;
 
 pub trait Searchable: Clone {
     fn id(&self) -> Uuid;
@@ -57,7 +58,7 @@ pub struct SearchableListState<T: Searchable> {
     pub items: Vec<T>,
     pub filtered: Vec<T>,
     pub query: String,
-    pub selected_index: usize,
+    scrollable: ScrollableState,
     pub open: bool,
     pub focused: bool,
     _marker: PhantomData<T>,
@@ -70,7 +71,7 @@ impl<T: Searchable> SearchableListState<T> {
             items,
             filtered,
             query: String::new(),
-            selected_index: 0,
+            scrollable: ScrollableState::new(),
             open: false,
             focused: false,
             _marker: PhantomData,
@@ -84,12 +85,13 @@ impl<T: Searchable> SearchableListState<T> {
         } else {
             self.filter_fuzzy();
         }
+        self.scrollable.set_item_count(self.filtered.len());
     }
 
     pub fn open(&mut self) {
         self.open = true;
         self.query.clear();
-        self.selected_index = 0;
+        self.scrollable = ScrollableState::new();
         self.filtered = self.items.clone();
     }
 
@@ -125,7 +127,7 @@ impl<T: Searchable> SearchableListState<T> {
             .into_iter()
             .map(|(i, _)| self.items[i].clone())
             .collect();
-        self.selected_index = 0;
+        self.scrollable = ScrollableState::new();
     }
 
     fn filter_substring(&mut self) {
@@ -141,7 +143,7 @@ impl<T: Searchable> SearchableListState<T> {
             .filter(|item| item.search_text().to_lowercase().contains(&query))
             .cloned()
             .collect();
-        self.selected_index = 0;
+        self.scrollable = ScrollableState::new();
     }
 
     pub fn set_query(&mut self, query: String, fuzzy: bool) {
@@ -154,19 +156,16 @@ impl<T: Searchable> SearchableListState<T> {
     }
 
     pub fn move_up(&mut self) {
-        if self.selected_index > 0 {
-            self.selected_index -= 1;
-        }
+        self.scrollable.move_up();
     }
 
     pub fn move_down(&mut self) {
-        if self.selected_index < self.filtered.len().saturating_sub(1) {
-            self.selected_index += 1;
-        }
+        self.scrollable.set_item_count(self.filtered.len());
+        self.scrollable.move_down();
     }
 
     pub fn selected_item(&self) -> Option<&T> {
-        self.filtered.get(self.selected_index)
+        self.filtered.get(self.scrollable.selected_index())
     }
 
     pub fn selected_id(&self) -> Option<Uuid> {
@@ -322,7 +321,11 @@ impl<'a, T: Searchable> Widget for SearchableList<'a, T> {
         }
 
         let visible_rows = list_area.height as usize;
-        let start_idx = self.state.selected_index.saturating_sub(visible_rows / 2);
+        self.state
+            .scrollable
+            .set_item_count(self.state.filtered.len());
+        self.state.scrollable.adjust_scroll(visible_rows);
+        let start_idx = self.state.scrollable.scroll_offset();
         let end_idx = (start_idx + visible_rows).min(self.state.filtered.len());
 
         for (i, item) in self.state.filtered[start_idx..end_idx].iter().enumerate() {
@@ -331,7 +334,7 @@ impl<'a, T: Searchable> Widget for SearchableList<'a, T> {
                 break;
             }
 
-            let is_selected = start_idx + i == self.state.selected_index;
+            let is_selected = start_idx + i == self.state.scrollable.selected_index();
             let style = if is_selected {
                 Style::default()
                     .fg(self.theme.colors.primary)
