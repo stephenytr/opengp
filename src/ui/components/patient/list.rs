@@ -13,7 +13,6 @@ use ratatui::widgets::{Block, Borders, Row, Table, Widget};
 use sublime_fuzzy::best_match;
 use uuid::Uuid;
 
-use crate::domain::patient::Patient;
 use crate::ui::layout::{
     HEADER_HEIGHT, PATIENT_COL_DOB, PATIENT_COL_LAST_VISIT, PATIENT_COL_MEDICARE, PATIENT_COL_NAME,
     PATIENT_COL_PHONE,
@@ -468,6 +467,7 @@ impl Widget for PatientList {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::patient::Patient;
     use chrono::NaiveDate;
 
     fn create_test_patient(first: &str, last: &str) -> PatientListItem {
@@ -501,7 +501,7 @@ mod tests {
     #[test]
     fn test_patient_list_empty() {
         let theme = Theme::dark();
-        let mut list = PatientList::new(theme);
+        let list = PatientList::new(theme);
         assert_eq!(list.filtered_count(), 0);
     }
 

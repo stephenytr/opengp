@@ -58,7 +58,9 @@ pub struct App {
     pending_edit_patient_id: Option<uuid::Uuid>,
     /// Appointment/schedule component state
     appointment_state: AppointmentState,
+    #[allow(dead_code)]
     appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
+    #[allow(dead_code)]
     patient_service: Option<Arc<crate::ui::services::PatientUiService>>,
     pending_appointment_date: Option<NaiveDate>,
     /// Flag to load practitioners for appointment form picker
@@ -76,6 +78,7 @@ pub struct App {
     pending_clinical_save_data: Option<PendingClinicalSaveData>,
     /// Clinical component state
     clinical_state: ClinicalState,
+    #[allow(dead_code)]
     clinical_service: Option<Arc<crate::ui::services::ClinicalUiService>>,
     terminal_size: Rect,
 }
@@ -1015,10 +1018,6 @@ impl App {
         }
 
         Action::Unknown
-    }
-
-    fn calculate_visible_clinical_rows(&self) -> usize {
-        15_usize.saturating_sub(5)
     }
 
     /// Handle key events for the Patient tab

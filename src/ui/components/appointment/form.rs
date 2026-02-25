@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use chrono::{NaiveDate, NaiveTime};
-use crossterm::event::{KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -18,8 +18,63 @@ use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::{
-    DropdownAction, DropdownOption, DropdownWidget, SearchableListAction, SearchableListState,
+    DropdownAction, DropdownOption, DropdownWidget, HeightMode, SearchableListAction,
+    SearchableListState, TextareaState, TextareaWidget,
 };
+
+type RatatuiKeyEvent = ratatui::crossterm::event::KeyEvent;
+type RatatuiKeyCode = ratatui::crossterm::event::KeyCode;
+type RatatuiKeyModifiers = ratatui::crossterm::event::KeyModifiers;
+type RatatuiKeyEventKind = ratatui::crossterm::event::KeyEventKind;
+type RatatuiKeyEventState = ratatui::crossterm::event::KeyEventState;
+
+fn to_ratatui_key(key: KeyEvent) -> RatatuiKeyEvent {
+    let code = match key.code {
+        KeyCode::Backspace => RatatuiKeyCode::Backspace,
+        KeyCode::Enter => RatatuiKeyCode::Enter,
+        KeyCode::Left => RatatuiKeyCode::Left,
+        KeyCode::Right => RatatuiKeyCode::Right,
+        KeyCode::Up => RatatuiKeyCode::Up,
+        KeyCode::Down => RatatuiKeyCode::Down,
+        KeyCode::Home => RatatuiKeyCode::Home,
+        KeyCode::End => RatatuiKeyCode::End,
+        KeyCode::PageUp => RatatuiKeyCode::PageUp,
+        KeyCode::PageDown => RatatuiKeyCode::PageDown,
+        KeyCode::Tab => RatatuiKeyCode::Tab,
+        KeyCode::BackTab => RatatuiKeyCode::BackTab,
+        KeyCode::Delete => RatatuiKeyCode::Delete,
+        KeyCode::Insert => RatatuiKeyCode::Insert,
+        KeyCode::F(n) => RatatuiKeyCode::F(n),
+        KeyCode::Char(c) => RatatuiKeyCode::Char(c),
+        KeyCode::Null => RatatuiKeyCode::Null,
+        KeyCode::Esc => RatatuiKeyCode::Esc,
+        KeyCode::CapsLock => RatatuiKeyCode::CapsLock,
+        KeyCode::ScrollLock => RatatuiKeyCode::ScrollLock,
+        KeyCode::NumLock => RatatuiKeyCode::NumLock,
+        KeyCode::PrintScreen => RatatuiKeyCode::PrintScreen,
+        KeyCode::Pause => RatatuiKeyCode::Pause,
+        KeyCode::Menu => RatatuiKeyCode::Menu,
+        KeyCode::KeypadBegin => RatatuiKeyCode::KeypadBegin,
+        _ => RatatuiKeyCode::Null,
+    };
+
+    let modifiers = RatatuiKeyModifiers::from_bits_truncate(key.modifiers.bits());
+
+    let kind = match key.kind {
+        crossterm::event::KeyEventKind::Press => RatatuiKeyEventKind::Press,
+        crossterm::event::KeyEventKind::Repeat => RatatuiKeyEventKind::Repeat,
+        crossterm::event::KeyEventKind::Release => RatatuiKeyEventKind::Release,
+    };
+
+    let state = RatatuiKeyEventState::from_bits_truncate(key.state.bits());
+
+    RatatuiKeyEvent {
+        code,
+        modifiers,
+        kind,
+        state,
+    }
+}
 
 /// All fields in the appointment creation form, in tab order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -79,6 +134,16 @@ impl AppointmentFormField {
                 | AppointmentFormField::AppointmentType
         )
     }
+
+    pub fn is_textarea(&self) -> bool {
+        matches!(
+            self,
+            AppointmentFormField::Date
+                | AppointmentFormField::StartTime
+                | AppointmentFormField::Reason
+                | AppointmentFormField::Notes
+        )
+    }
 }
 
 /// Actions returned by the appointment form's key handler.
@@ -96,29 +161,14 @@ pub enum AppointmentFormAction {
     SaveComplete,
 }
 
-/// Internal data held by the form while the user is filling it in.
 #[derive(Debug, Clone)]
 pub struct AppointmentFormData {
-    /// Selected patient UUID (set after patient search/select)
     pub patient_id: Option<Uuid>,
-    /// Display name shown in the Patient field
     pub patient_display: String,
-    /// Selected practitioner UUID
     pub practitioner_id: Option<Uuid>,
-    /// Display name shown in the Practitioner field
     pub practitioner_display: String,
-    /// Raw date string typed by the user
-    pub date: String,
-    /// Raw start time string typed by the user
-    pub start_time: String,
-    /// Raw duration string typed by the user (defaults to type default)
     pub duration: String,
-    /// Raw appointment type string typed by the user
     pub appointment_type: String,
-    /// Optional reason for visit
-    pub reason: String,
-    /// Optional internal notes
-    pub notes: String,
 }
 
 impl AppointmentFormData {
@@ -128,12 +178,8 @@ impl AppointmentFormData {
             patient_display: String::new(),
             practitioner_id: None,
             practitioner_display: String::new(),
-            date: String::new(),
-            start_time: String::new(),
             duration: "15".to_string(),
             appointment_type: "Standard".to_string(),
-            reason: String::new(),
-            notes: String::new(),
         }
     }
 }
@@ -145,6 +191,10 @@ impl AppointmentFormData {
 /// highlights required fields that are missing or malformed.
 pub struct AppointmentForm {
     data: AppointmentFormData,
+    date: TextareaState,
+    start_time: TextareaState,
+    reason: TextareaState,
+    notes: TextareaState,
     errors: HashMap<AppointmentFormField, String>,
     focused_field: AppointmentFormField,
     saving: bool,
@@ -158,6 +208,10 @@ impl Clone for AppointmentForm {
     fn clone(&self) -> Self {
         Self {
             data: self.data.clone(),
+            date: self.date.clone(),
+            start_time: self.start_time.clone(),
+            reason: self.reason.clone(),
+            notes: self.notes.clone(),
             errors: self.errors.clone(),
             focused_field: self.focused_field,
             saving: self.saving,
@@ -192,6 +246,12 @@ impl AppointmentForm {
 
         Self {
             data: AppointmentFormData::empty(),
+            date: TextareaState::new("Date * (YYYY-MM-DD)")
+                .with_height_mode(HeightMode::SingleLine),
+            start_time: TextareaState::new("Start Time * (HH:MM)")
+                .with_height_mode(HeightMode::SingleLine),
+            reason: TextareaState::new("Reason").with_height_mode(HeightMode::SingleLine),
+            notes: TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(3)),
             errors: HashMap::new(),
             focused_field: AppointmentFormField::Patient,
             saving: false,
@@ -258,23 +318,22 @@ impl AppointmentForm {
         match field {
             AppointmentFormField::Patient => self.data.patient_display.clone(),
             AppointmentFormField::Practitioner => self.data.practitioner_display.clone(),
-            AppointmentFormField::Date => self.data.date.clone(),
-            AppointmentFormField::StartTime => self.data.start_time.clone(),
+            AppointmentFormField::Date => self.date.value(),
+            AppointmentFormField::StartTime => self.start_time.value(),
             AppointmentFormField::Duration => self.data.duration.clone(),
             AppointmentFormField::AppointmentType => self
                 .type_dropdown
                 .selected_value()
                 .map(|s: &str| s.to_string())
                 .unwrap_or_default(),
-            AppointmentFormField::Reason => self.data.reason.clone(),
-            AppointmentFormField::Notes => self.data.notes.clone(),
+            AppointmentFormField::Reason => self.reason.value(),
+            AppointmentFormField::Notes => self.notes.value(),
         }
     }
 
     pub fn set_value(&mut self, field: AppointmentFormField, value: String) {
         match field {
             AppointmentFormField::Patient => {
-                // Free-text search — UUID is set separately via set_patient()
                 self.data.patient_display = value;
                 self.data.patient_id = None;
             }
@@ -282,11 +341,18 @@ impl AppointmentForm {
                 self.data.practitioner_display = value;
                 self.data.practitioner_id = None;
             }
-            AppointmentFormField::Date => self.data.date = value,
-            AppointmentFormField::StartTime => self.data.start_time = value,
+            AppointmentFormField::Date => {
+                self.date = TextareaState::new("Date * (YYYY-MM-DD)")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value);
+            }
+            AppointmentFormField::StartTime => {
+                self.start_time = TextareaState::new("Start Time * (HH:MM)")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value);
+            }
             AppointmentFormField::Duration => self.data.duration = value,
             AppointmentFormField::AppointmentType => {
-                // Auto-fill duration when type changes
                 if let Ok(apt_type) = value.parse::<AppointmentType>() {
                     let default_mins = apt_type.default_duration_minutes();
                     self.data.duration = default_mins.to_string();
@@ -294,8 +360,16 @@ impl AppointmentForm {
                 self.type_dropdown.set_value(&value);
                 self.data.appointment_type = value;
             }
-            AppointmentFormField::Reason => self.data.reason = value,
-            AppointmentFormField::Notes => self.data.notes = value,
+            AppointmentFormField::Reason => {
+                self.reason = TextareaState::new("Reason")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value);
+            }
+            AppointmentFormField::Notes => {
+                self.notes = TextareaState::new("Notes")
+                    .with_height_mode(HeightMode::FixedLines(3))
+                    .with_value(value);
+            }
         }
         self.validate_field(&field);
     }
@@ -336,20 +410,20 @@ impl AppointmentForm {
                 }
             }
             AppointmentFormField::Date => {
-                let v = &self.data.date;
+                let v = self.date.value();
                 if v.is_empty() {
                     self.errors.insert(*field, "Date is required".to_string());
-                } else if NaiveDate::parse_from_str(v, "%Y-%m-%d").is_err() {
+                } else if NaiveDate::parse_from_str(&v, "%Y-%m-%d").is_err() {
                     self.errors
                         .insert(*field, "Use YYYY-MM-DD format".to_string());
                 }
             }
             AppointmentFormField::StartTime => {
-                let v = &self.data.start_time;
+                let v = self.start_time.value();
                 if v.is_empty() {
                     self.errors
                         .insert(*field, "Start time is required".to_string());
-                } else if NaiveTime::parse_from_str(v, "%H:%M").is_err() {
+                } else if NaiveTime::parse_from_str(&v, "%H:%M").is_err() {
                     self.errors
                         .insert(*field, "Use HH:MM format (24-hour)".to_string());
                 }
@@ -421,8 +495,10 @@ impl AppointmentForm {
         let patient_id = self.data.patient_id?;
         let practitioner_id = self.data.practitioner_id?;
 
-        let date = NaiveDate::parse_from_str(&self.data.date, "%Y-%m-%d").ok()?;
-        let time = NaiveTime::parse_from_str(&self.data.start_time, "%H:%M").ok()?;
+        let date_str = self.date.value();
+        let time_str = self.start_time.value();
+        let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d").ok()?;
+        let time = NaiveTime::parse_from_str(&time_str, "%H:%M").ok()?;
 
         let naive_dt = date.and_time(time);
         let start_time = naive_dt
@@ -436,10 +512,11 @@ impl AppointmentForm {
 
         let appointment_type = self.data.appointment_type.parse::<AppointmentType>().ok()?;
 
-        let reason = if self.data.reason.trim().is_empty() {
+        let reason_str = self.reason.value();
+        let reason = if reason_str.trim().is_empty() {
             None
         } else {
-            Some(self.data.reason.clone())
+            Some(reason_str)
         };
 
         Some(NewAppointmentData {
@@ -456,7 +533,11 @@ impl AppointmentForm {
     // ── Key handling ─────────────────────────────────────────────────────────
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<AppointmentFormAction> {
-        use crossterm::event::KeyCode;
+        use crossterm::event::KeyEventKind;
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
 
         if self.saving {
             return None;
@@ -531,8 +612,22 @@ impl AppointmentForm {
                     }
                 }
             }
-            // Dropdown didn't handle the key - fall through to default handling
-            // This ensures Tab/Up/Down/Enter/Esc work when dropdown is closed
+        }
+
+        if self.focused_field.is_textarea() {
+            let ratatui_key = to_ratatui_key(key);
+            let textarea = match self.focused_field {
+                AppointmentFormField::Date => &mut self.date,
+                AppointmentFormField::StartTime => &mut self.start_time,
+                AppointmentFormField::Reason => &mut self.reason,
+                AppointmentFormField::Notes => &mut self.notes,
+                _ => unreachable!(),
+            };
+            let consumed = textarea.handle_key(ratatui_key);
+            if consumed {
+                self.validate_field(&self.focused_field.clone());
+                return Some(AppointmentFormAction::ValueChanged);
+            }
         }
 
         match key.code {
@@ -542,6 +637,10 @@ impl AppointmentForm {
                 } else {
                     self.next_field();
                 }
+                Some(AppointmentFormAction::FocusChanged)
+            }
+            KeyCode::BackTab => {
+                self.prev_field();
                 Some(AppointmentFormAction::FocusChanged)
             }
             KeyCode::Up => {
@@ -580,8 +679,6 @@ impl AppointmentForm {
                 Some(AppointmentFormAction::Cancel)
             }
             KeyCode::Char(c) => {
-                // Patient and Practitioner fields are search/select — allow free text
-                // for the search query; UUID is resolved externally.
                 let mut value = self.get_value(self.focused_field);
                 value.push(c);
                 self.set_value(self.focused_field, value);
@@ -631,8 +728,37 @@ impl Widget for AppointmentForm {
             }
 
             let is_focused = field == self.focused_field;
-            let has_error = self.error(field).is_some();
 
+            if field.is_textarea() {
+                let textarea_state = match field {
+                    AppointmentFormField::Date => &self.date,
+                    AppointmentFormField::StartTime => &self.start_time,
+                    AppointmentFormField::Reason => &self.reason,
+                    AppointmentFormField::Notes => &self.notes,
+                    _ => unreachable!(),
+                };
+                let field_height = textarea_state.height();
+                let textarea_area =
+                    Rect::new(inner.x + 1, y, inner.width.saturating_sub(2), field_height);
+                TextareaWidget::new(textarea_state, self.theme.clone())
+                    .focused(is_focused)
+                    .render(textarea_area, buf);
+
+                if let Some(error_msg) = self.error(field) {
+                    let error_style = Style::default().fg(self.theme.colors.error);
+                    buf.set_string(
+                        inner.x + 2,
+                        y + field_height,
+                        format!("  {}", error_msg),
+                        error_style,
+                    );
+                    y += 1;
+                }
+                y += field_height + 1;
+                continue;
+            }
+
+            let has_error = self.error(field).is_some();
             let label_style = if is_focused {
                 Style::default()
                     .fg(self.theme.colors.primary)

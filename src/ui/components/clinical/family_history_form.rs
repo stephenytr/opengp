@@ -7,12 +7,68 @@ use std::collections::HashMap;
 use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::domain::clinical::FamilyHistory;
-use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
+use crate::ui::widgets::{HeightMode, TextareaState, TextareaWidget};
+
+type RatatuiKeyEvent = ratatui::crossterm::event::KeyEvent;
+type RatatuiKeyCode = ratatui::crossterm::event::KeyCode;
+type RatatuiKeyModifiers = ratatui::crossterm::event::KeyModifiers;
+type RatatuiKeyEventKind = ratatui::crossterm::event::KeyEventKind;
+type RatatuiKeyEventState = ratatui::crossterm::event::KeyEventState;
+
+fn to_ratatui_key(key: KeyEvent) -> RatatuiKeyEvent {
+    use crossterm::event::KeyCode;
+
+    let code = match key.code {
+        KeyCode::Backspace => RatatuiKeyCode::Backspace,
+        KeyCode::Enter => RatatuiKeyCode::Enter,
+        KeyCode::Left => RatatuiKeyCode::Left,
+        KeyCode::Right => RatatuiKeyCode::Right,
+        KeyCode::Up => RatatuiKeyCode::Up,
+        KeyCode::Down => RatatuiKeyCode::Down,
+        KeyCode::Home => RatatuiKeyCode::Home,
+        KeyCode::End => RatatuiKeyCode::End,
+        KeyCode::PageUp => RatatuiKeyCode::PageUp,
+        KeyCode::PageDown => RatatuiKeyCode::PageDown,
+        KeyCode::Tab => RatatuiKeyCode::Tab,
+        KeyCode::BackTab => RatatuiKeyCode::BackTab,
+        KeyCode::Delete => RatatuiKeyCode::Delete,
+        KeyCode::Insert => RatatuiKeyCode::Insert,
+        KeyCode::F(n) => RatatuiKeyCode::F(n),
+        KeyCode::Char(c) => RatatuiKeyCode::Char(c),
+        KeyCode::Null => RatatuiKeyCode::Null,
+        KeyCode::Esc => RatatuiKeyCode::Esc,
+        KeyCode::CapsLock => RatatuiKeyCode::CapsLock,
+        KeyCode::ScrollLock => RatatuiKeyCode::ScrollLock,
+        KeyCode::NumLock => RatatuiKeyCode::NumLock,
+        KeyCode::PrintScreen => RatatuiKeyCode::PrintScreen,
+        KeyCode::Pause => RatatuiKeyCode::Pause,
+        KeyCode::Menu => RatatuiKeyCode::Menu,
+        KeyCode::KeypadBegin => RatatuiKeyCode::KeypadBegin,
+        _ => RatatuiKeyCode::Null,
+    };
+
+    let modifiers = RatatuiKeyModifiers::from_bits_truncate(key.modifiers.bits());
+
+    let kind = match key.kind {
+        crossterm::event::KeyEventKind::Press => RatatuiKeyEventKind::Press,
+        crossterm::event::KeyEventKind::Repeat => RatatuiKeyEventKind::Repeat,
+        crossterm::event::KeyEventKind::Release => RatatuiKeyEventKind::Release,
+    };
+
+    let state = RatatuiKeyEventState::from_bits_truncate(key.state.bits());
+
+    RatatuiKeyEvent {
+        code,
+        modifiers,
+        kind,
+        state,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FamilyHistoryFormField {
@@ -47,6 +103,10 @@ impl FamilyHistoryFormField {
             FamilyHistoryFormField::Relationship | FamilyHistoryFormField::Condition
         )
     }
+
+    pub fn is_textarea(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -58,10 +118,10 @@ pub enum FamilyHistoryFormAction {
 }
 
 pub struct FamilyHistoryForm {
-    pub relationship: String,
-    pub condition: String,
-    pub age_at_diagnosis: String,
-    pub notes: String,
+    pub relationship: TextareaState,
+    pub condition: TextareaState,
+    pub age_at_diagnosis: TextareaState,
+    pub notes: TextareaState,
     pub focused_field: FamilyHistoryFormField,
     pub is_valid: bool,
     errors: HashMap<FamilyHistoryFormField, String>,
@@ -86,10 +146,12 @@ impl Clone for FamilyHistoryForm {
 impl FamilyHistoryForm {
     pub fn new(theme: Theme) -> Self {
         Self {
-            relationship: String::new(),
-            condition: String::new(),
-            age_at_diagnosis: String::new(),
-            notes: String::new(),
+            relationship: TextareaState::new("Relationship *")
+                .with_height_mode(HeightMode::SingleLine),
+            condition: TextareaState::new("Condition *").with_height_mode(HeightMode::SingleLine),
+            age_at_diagnosis: TextareaState::new("Age at Diagnosis")
+                .with_height_mode(HeightMode::SingleLine),
+            notes: TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(3)),
             focused_field: FamilyHistoryFormField::Relationship,
             is_valid: false,
             errors: HashMap::new(),
@@ -123,21 +185,46 @@ impl FamilyHistoryForm {
 
     pub fn get_value(&self, field: FamilyHistoryFormField) -> String {
         match field {
-            FamilyHistoryFormField::Relationship => self.relationship.clone(),
-            FamilyHistoryFormField::Condition => self.condition.clone(),
-            FamilyHistoryFormField::AgeAtDiagnosis => self.age_at_diagnosis.clone(),
-            FamilyHistoryFormField::Notes => self.notes.clone(),
+            FamilyHistoryFormField::Relationship => self.relationship.value(),
+            FamilyHistoryFormField::Condition => self.condition.value(),
+            FamilyHistoryFormField::AgeAtDiagnosis => self.age_at_diagnosis.value(),
+            FamilyHistoryFormField::Notes => self.notes.value(),
         }
     }
 
     pub fn set_value(&mut self, field: FamilyHistoryFormField, value: String) {
         match field {
-            FamilyHistoryFormField::Relationship => self.relationship = value,
-            FamilyHistoryFormField::Condition => self.condition = value,
-            FamilyHistoryFormField::AgeAtDiagnosis => self.age_at_diagnosis = value,
-            FamilyHistoryFormField::Notes => self.notes = value,
+            FamilyHistoryFormField::Relationship => {
+                self.relationship = TextareaState::new("Relationship *")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value);
+            }
+            FamilyHistoryFormField::Condition => {
+                self.condition = TextareaState::new("Condition *")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value);
+            }
+            FamilyHistoryFormField::AgeAtDiagnosis => {
+                self.age_at_diagnosis = TextareaState::new("Age at Diagnosis")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value);
+            }
+            FamilyHistoryFormField::Notes => {
+                self.notes = TextareaState::new("Notes")
+                    .with_height_mode(HeightMode::FixedLines(3))
+                    .with_value(value);
+            }
         }
         self.validate_field(&field);
+    }
+
+    fn focused_textarea_mut(&mut self) -> &mut TextareaState {
+        match self.focused_field {
+            FamilyHistoryFormField::Relationship => &mut self.relationship,
+            FamilyHistoryFormField::Condition => &mut self.condition,
+            FamilyHistoryFormField::AgeAtDiagnosis => &mut self.age_at_diagnosis,
+            FamilyHistoryFormField::Notes => &mut self.notes,
+        }
     }
 
     fn validate_field(&mut self, field: &FamilyHistoryFormField) {
@@ -188,7 +275,16 @@ impl FamilyHistoryForm {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<FamilyHistoryFormAction> {
-        use crossterm::event::KeyCode;
+        use crossterm::event::{KeyCode, KeyEventKind};
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Enter {
+            self.validate();
+            return Some(FamilyHistoryFormAction::Submit);
+        }
 
         match key.code {
             KeyCode::Tab => {
@@ -197,35 +293,25 @@ impl FamilyHistoryForm {
                 } else {
                     self.next_field();
                 }
-                Some(FamilyHistoryFormAction::FocusChanged)
+                return Some(FamilyHistoryFormAction::FocusChanged);
             }
-            KeyCode::Up => {
+            KeyCode::BackTab => {
                 self.prev_field();
-                Some(FamilyHistoryFormAction::FocusChanged)
+                return Some(FamilyHistoryFormAction::FocusChanged);
             }
-            KeyCode::Down => {
-                self.next_field();
-                Some(FamilyHistoryFormAction::FocusChanged)
-            }
-            KeyCode::Enter => {
-                self.validate();
-                Some(FamilyHistoryFormAction::Submit)
-            }
-            KeyCode::Esc => Some(FamilyHistoryFormAction::Cancel),
-            KeyCode::Char(c) => {
-                let mut value = self.get_value(self.focused_field);
-                value.push(c);
-                self.set_value(self.focused_field, value);
-                Some(FamilyHistoryFormAction::ValueChanged)
-            }
-            KeyCode::Backspace => {
-                let mut value = self.get_value(self.focused_field);
-                value.pop();
-                self.set_value(self.focused_field, value);
-                Some(FamilyHistoryFormAction::ValueChanged)
-            }
-            _ => None,
+            KeyCode::Esc => return Some(FamilyHistoryFormAction::Cancel),
+            _ => {}
         }
+
+        let ratatui_key = to_ratatui_key(key);
+        let consumed = self.focused_textarea_mut().handle_key(ratatui_key);
+        if consumed {
+            let field = self.focused_field;
+            self.validate_field(&field);
+            return Some(FamilyHistoryFormAction::ValueChanged);
+        }
+
+        None
     }
 
     pub fn to_family_history(
@@ -236,10 +322,10 @@ impl FamilyHistoryForm {
         FamilyHistory {
             id: uuid::Uuid::new_v4(),
             patient_id,
-            relative_relationship: self.relationship.clone(),
-            condition: self.condition.clone(),
-            age_at_diagnosis: self.age_at_diagnosis.parse().ok(),
-            notes: Some(self.notes.clone()).filter(|s| !s.is_empty()),
+            relative_relationship: self.relationship.value(),
+            condition: self.condition.value(),
+            age_at_diagnosis: self.age_at_diagnosis.value().parse().ok(),
+            notes: Some(self.notes.value()).filter(|s| !s.is_empty()),
             created_at: chrono::Utc::now(),
             created_by,
         }
@@ -264,9 +350,6 @@ impl Widget for FamilyHistoryForm {
             return;
         }
 
-        let label_width = LABEL_WIDTH;
-        let field_start = inner.x + label_width + 2;
-
         let fields = FamilyHistoryFormField::all();
 
         let mut y = inner.y + 1;
@@ -277,58 +360,37 @@ impl Widget for FamilyHistoryForm {
                 break;
             }
 
+            let textarea = match field {
+                FamilyHistoryFormField::Relationship => &self.relationship,
+                FamilyHistoryFormField::Condition => &self.condition,
+                FamilyHistoryFormField::AgeAtDiagnosis => &self.age_at_diagnosis,
+                FamilyHistoryFormField::Notes => &self.notes,
+            };
+
+            let field_height = textarea.height();
+            let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
             let is_focused = field == self.focused_field;
-            let has_error = self.error(field).is_some();
 
-            let label_style = if is_focused {
-                Style::default()
-                    .fg(self.theme.colors.primary)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(self.theme.colors.foreground)
-            };
+            TextareaWidget::new(textarea, self.theme.clone())
+                .focused(is_focused)
+                .render(field_area, buf);
 
-            buf.set_string(inner.x + 1, y, field.label(), label_style);
-
-            if is_focused {
-                buf.set_string(
-                    field_start - 1,
-                    y,
-                    ">",
-                    Style::default().fg(self.theme.colors.primary),
-                );
-            }
-
-            let value = self.get_value(field);
-            let value_style = if has_error {
-                Style::default().fg(self.theme.colors.error)
-            } else {
-                Style::default().fg(self.theme.colors.foreground)
-            };
-
-            let max_value_width = inner.width.saturating_sub(label_width + 4);
-            let display_value = if value.len() > max_value_width as usize {
-                &value[value.len() - max_value_width as usize..]
-            } else {
-                &value
-            };
-
-            buf.set_string(field_start, y, display_value, value_style);
+            y += field_height;
 
             if let Some(error_msg) = self.error(field) {
-                let error_style = Style::default().fg(self.theme.colors.error);
-                buf.set_string(field_start, y + 1, format!("  {}", error_msg), error_style);
-                y += 1;
+                if y <= max_y {
+                    let error_style = Style::default().fg(self.theme.colors.error);
+                    buf.set_string(inner.x + 2, y, error_msg.as_str(), error_style);
+                    y += 1;
+                }
             }
-
-            y += 2;
         }
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(
             inner.x + 1,
             help_y,
-            "Tab: Next | Enter: Submit | Esc: Cancel",
+            "Tab: Next | Ctrl+Enter: Submit | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
     }
@@ -419,5 +481,62 @@ mod tests {
         assert!(FamilyHistoryFormField::Condition.is_required());
         assert!(!FamilyHistoryFormField::AgeAtDiagnosis.is_required());
         assert!(!FamilyHistoryFormField::Notes.is_required());
+    }
+
+    #[test]
+    fn test_family_history_form_get_set_value() {
+        let theme = Theme::dark();
+        let mut form = FamilyHistoryForm::new(theme);
+
+        form.set_value(FamilyHistoryFormField::Relationship, "Mother".to_string());
+        assert_eq!(
+            form.get_value(FamilyHistoryFormField::Relationship),
+            "Mother"
+        );
+
+        form.set_value(FamilyHistoryFormField::Notes, "Some notes".to_string());
+        assert_eq!(form.get_value(FamilyHistoryFormField::Notes), "Some notes");
+    }
+
+    #[test]
+    fn test_family_history_form_tab_navigates_fields() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let theme = Theme::dark();
+        let mut form = FamilyHistoryForm::new(theme);
+
+        assert_eq!(form.focused_field(), FamilyHistoryFormField::Relationship);
+
+        let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+        let action = form.handle_key(key);
+        assert!(matches!(
+            action,
+            Some(FamilyHistoryFormAction::FocusChanged)
+        ));
+        assert_eq!(form.focused_field(), FamilyHistoryFormField::Condition);
+    }
+
+    #[test]
+    fn test_family_history_form_esc_cancels() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let theme = Theme::dark();
+        let mut form = FamilyHistoryForm::new(theme);
+
+        let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        let action = form.handle_key(key);
+        assert!(matches!(action, Some(FamilyHistoryFormAction::Cancel)));
+    }
+
+    #[test]
+    fn test_family_history_form_ctrl_enter_submits() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let theme = Theme::dark();
+        let mut form = FamilyHistoryForm::new(theme);
+
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL);
+        let action = form.handle_key(key);
+        assert!(matches!(action, Some(FamilyHistoryFormAction::Submit)));
     }
 }

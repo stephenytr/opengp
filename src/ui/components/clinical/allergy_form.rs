@@ -13,7 +13,65 @@ use ratatui::widgets::{Block, Borders, Widget};
 use crate::domain::clinical::{Allergy, AllergyType, Severity};
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{DropdownOption, DropdownWidget};
+use crate::ui::widgets::{
+    DropdownOption, DropdownWidget, HeightMode, TextareaState, TextareaWidget,
+};
+
+type RatatuiKeyEvent = ratatui::crossterm::event::KeyEvent;
+type RatatuiKeyCode = ratatui::crossterm::event::KeyCode;
+type RatatuiKeyModifiers = ratatui::crossterm::event::KeyModifiers;
+type RatatuiKeyEventKind = ratatui::crossterm::event::KeyEventKind;
+type RatatuiKeyEventState = ratatui::crossterm::event::KeyEventState;
+
+fn to_ratatui_key(key: KeyEvent) -> RatatuiKeyEvent {
+    use crossterm::event::KeyCode;
+
+    let code = match key.code {
+        KeyCode::Backspace => RatatuiKeyCode::Backspace,
+        KeyCode::Enter => RatatuiKeyCode::Enter,
+        KeyCode::Left => RatatuiKeyCode::Left,
+        KeyCode::Right => RatatuiKeyCode::Right,
+        KeyCode::Up => RatatuiKeyCode::Up,
+        KeyCode::Down => RatatuiKeyCode::Down,
+        KeyCode::Home => RatatuiKeyCode::Home,
+        KeyCode::End => RatatuiKeyCode::End,
+        KeyCode::PageUp => RatatuiKeyCode::PageUp,
+        KeyCode::PageDown => RatatuiKeyCode::PageDown,
+        KeyCode::Tab => RatatuiKeyCode::Tab,
+        KeyCode::BackTab => RatatuiKeyCode::BackTab,
+        KeyCode::Delete => RatatuiKeyCode::Delete,
+        KeyCode::Insert => RatatuiKeyCode::Insert,
+        KeyCode::F(n) => RatatuiKeyCode::F(n),
+        KeyCode::Char(c) => RatatuiKeyCode::Char(c),
+        KeyCode::Null => RatatuiKeyCode::Null,
+        KeyCode::Esc => RatatuiKeyCode::Esc,
+        KeyCode::CapsLock => RatatuiKeyCode::CapsLock,
+        KeyCode::ScrollLock => RatatuiKeyCode::ScrollLock,
+        KeyCode::NumLock => RatatuiKeyCode::NumLock,
+        KeyCode::PrintScreen => RatatuiKeyCode::PrintScreen,
+        KeyCode::Pause => RatatuiKeyCode::Pause,
+        KeyCode::Menu => RatatuiKeyCode::Menu,
+        KeyCode::KeypadBegin => RatatuiKeyCode::KeypadBegin,
+        _ => RatatuiKeyCode::Null,
+    };
+
+    let modifiers = RatatuiKeyModifiers::from_bits_truncate(key.modifiers.bits());
+
+    let kind = match key.kind {
+        crossterm::event::KeyEventKind::Press => RatatuiKeyEventKind::Press,
+        crossterm::event::KeyEventKind::Repeat => RatatuiKeyEventKind::Repeat,
+        crossterm::event::KeyEventKind::Release => RatatuiKeyEventKind::Release,
+    };
+
+    let state = RatatuiKeyEventState::from_bits_truncate(key.state.bits());
+
+    RatatuiKeyEvent {
+        code,
+        modifiers,
+        kind,
+        state,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AllergyFormField {
@@ -54,6 +112,14 @@ impl AllergyFormField {
             AllergyFormField::Allergen | AllergyFormField::AllergyType | AllergyFormField::Severity
         )
     }
+
+    /// Returns true if this field uses TextareaWidget.
+    pub fn is_textarea(&self) -> bool {
+        matches!(
+            self,
+            AllergyFormField::Allergen | AllergyFormField::Reaction | AllergyFormField::Notes
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -65,12 +131,12 @@ pub enum AllergyFormAction {
 }
 
 pub struct AllergyForm {
-    pub allergen: String,
+    pub allergen: TextareaState,
     pub allergy_type: Option<AllergyType>,
     pub severity: Option<Severity>,
-    pub reaction: String,
+    pub reaction: TextareaState,
     pub onset_date: Option<String>,
-    pub notes: String,
+    pub notes: TextareaState,
     pub focused_field: AllergyFormField,
     pub is_valid: bool,
     errors: HashMap<AllergyFormField, String>,
@@ -113,12 +179,12 @@ impl AllergyForm {
         ];
 
         Self {
-            allergen: String::new(),
+            allergen: TextareaState::new("Allergen *").with_height_mode(HeightMode::SingleLine),
             allergy_type: None,
             severity: None,
-            reaction: String::new(),
+            reaction: TextareaState::new("Reaction").with_height_mode(HeightMode::SingleLine),
             onset_date: None,
-            notes: String::new(),
+            notes: TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(3)),
             focused_field: AllergyFormField::Allergen,
             is_valid: false,
             errors: HashMap::new(),
@@ -158,7 +224,7 @@ impl AllergyForm {
 
     pub fn get_value(&self, field: AllergyFormField) -> String {
         match field {
-            AllergyFormField::Allergen => self.allergen.clone(),
+            AllergyFormField::Allergen => self.allergen.value(),
             AllergyFormField::AllergyType => self
                 .allergy_type_dropdown
                 .selected_value()
@@ -169,15 +235,19 @@ impl AllergyForm {
                 .selected_value()
                 .map(|s: &str| s.to_string())
                 .unwrap_or_default(),
-            AllergyFormField::Reaction => self.reaction.clone(),
+            AllergyFormField::Reaction => self.reaction.value(),
             AllergyFormField::OnsetDate => self.onset_date.clone().unwrap_or_default(),
-            AllergyFormField::Notes => self.notes.clone(),
+            AllergyFormField::Notes => self.notes.value(),
         }
     }
 
     pub fn set_value(&mut self, field: AllergyFormField, value: String) {
         match field {
-            AllergyFormField::Allergen => self.allergen = value,
+            AllergyFormField::Allergen => {
+                self.allergen = TextareaState::new("Allergen *")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value);
+            }
             AllergyFormField::AllergyType => {
                 self.allergy_type_dropdown.set_value(&value);
                 self.allergy_type = value.parse().ok();
@@ -186,11 +256,19 @@ impl AllergyForm {
                 self.severity_dropdown.set_value(&value);
                 self.severity = value.parse().ok();
             }
-            AllergyFormField::Reaction => self.reaction = value,
+            AllergyFormField::Reaction => {
+                self.reaction = TextareaState::new("Reaction")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value);
+            }
             AllergyFormField::OnsetDate => {
                 self.onset_date = if value.is_empty() { None } else { Some(value) };
             }
-            AllergyFormField::Notes => self.notes = value,
+            AllergyFormField::Notes => {
+                self.notes = TextareaState::new("Notes")
+                    .with_height_mode(HeightMode::FixedLines(3))
+                    .with_value(value);
+            }
         }
         self.validate_field(&field);
     }
@@ -255,7 +333,17 @@ impl AllergyForm {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<AllergyFormAction> {
-        use crossterm::event::KeyCode;
+        use crossterm::event::{KeyCode, KeyEventKind};
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
+        // Ctrl+Enter submits the form from any field.
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Enter {
+            self.validate();
+            return Some(AllergyFormAction::Submit);
+        }
 
         match self.focused_field {
             AllergyFormField::AllergyType => {
@@ -276,6 +364,29 @@ impl AllergyForm {
                     return Some(AllergyFormAction::ValueChanged);
                 }
             }
+            // Textarea fields: delegate key handling to TextareaState.
+            AllergyFormField::Allergen => {
+                let ratatui_key = to_ratatui_key(key);
+                let consumed = self.allergen.handle_key(ratatui_key);
+                if consumed {
+                    self.validate_field(&AllergyFormField::Allergen);
+                    return Some(AllergyFormAction::ValueChanged);
+                }
+            }
+            AllergyFormField::Reaction => {
+                let ratatui_key = to_ratatui_key(key);
+                let consumed = self.reaction.handle_key(ratatui_key);
+                if consumed {
+                    return Some(AllergyFormAction::ValueChanged);
+                }
+            }
+            AllergyFormField::Notes => {
+                let ratatui_key = to_ratatui_key(key);
+                let consumed = self.notes.handle_key(ratatui_key);
+                if consumed {
+                    return Some(AllergyFormAction::ValueChanged);
+                }
+            }
             _ => {}
         }
 
@@ -286,6 +397,10 @@ impl AllergyForm {
                 } else {
                     self.next_field();
                 }
+                Some(AllergyFormAction::FocusChanged)
+            }
+            KeyCode::BackTab => {
+                self.prev_field();
                 Some(AllergyFormAction::FocusChanged)
             }
             KeyCode::Up => {
@@ -301,18 +416,6 @@ impl AllergyForm {
                 Some(AllergyFormAction::Submit)
             }
             KeyCode::Esc => Some(AllergyFormAction::Cancel),
-            KeyCode::Char(c) => {
-                let mut value = self.get_value(self.focused_field);
-                value.push(c);
-                self.set_value(self.focused_field, value);
-                Some(AllergyFormAction::ValueChanged)
-            }
-            KeyCode::Backspace => {
-                let mut value = self.get_value(self.focused_field);
-                value.pop();
-                self.set_value(self.focused_field, value);
-                Some(AllergyFormAction::ValueChanged)
-            }
             _ => None,
         }
     }
@@ -321,15 +424,15 @@ impl AllergyForm {
         Allergy {
             id: uuid::Uuid::new_v4(),
             patient_id,
-            allergen: self.allergen.clone(),
+            allergen: self.allergen.value(),
             allergy_type: self.allergy_type.unwrap_or(AllergyType::Other),
             severity: self.severity.unwrap_or(Severity::Moderate),
-            reaction: Some(self.reaction.clone()).filter(|s| !s.is_empty()),
+            reaction: Some(self.reaction.value()).filter(|s| !s.is_empty()),
             onset_date: self
                 .onset_date
                 .as_deref()
                 .and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()),
-            notes: Some(self.notes.clone()).filter(|s| !s.is_empty()),
+            notes: Some(self.notes.value()).filter(|s| !s.is_empty()),
             is_active: true,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -373,6 +476,32 @@ impl Widget for AllergyForm {
             }
 
             let is_focused = field == self.focused_field;
+
+            // TextareaWidget fields: render using TextareaWidget.
+            if field.is_textarea() {
+                let textarea_state = match field {
+                    AllergyFormField::Allergen => &self.allergen,
+                    AllergyFormField::Reaction => &self.reaction,
+                    AllergyFormField::Notes => &self.notes,
+                    _ => unreachable!(),
+                };
+                let field_height = textarea_state.height();
+                let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
+                TextareaWidget::new(textarea_state, self.theme.clone())
+                    .focused(is_focused)
+                    .render(field_area, buf);
+                y += field_height;
+
+                if let Some(error_msg) = self.error(field) {
+                    if y <= max_y {
+                        let error_style = Style::default().fg(self.theme.colors.error);
+                        buf.set_string(inner.x + 1, y, format!("  {}", error_msg), error_style);
+                        y += 1;
+                    }
+                }
+                continue;
+            }
+
             let has_error = self.error(field).is_some();
 
             let label_style = if is_focused {
@@ -425,7 +554,7 @@ impl Widget for AllergyForm {
                     }
                     y += 3;
                 }
-                _ => {
+                AllergyFormField::OnsetDate => {
                     let value = self.get_value(field);
                     let value_style = if has_error {
                         Style::default().fg(self.theme.colors.error)
@@ -449,6 +578,9 @@ impl Widget for AllergyForm {
 
                     y += 2;
                 }
+                _ => {
+                    y += 2;
+                }
             }
         }
 
@@ -460,7 +592,7 @@ impl Widget for AllergyForm {
         buf.set_string(
             inner.x + 1,
             help_y,
-            "Tab: Next | Enter: Submit | Esc: Cancel",
+            "Tab: Next | Ctrl+Enter: Submit | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
     }
@@ -541,5 +673,39 @@ mod tests {
         assert_eq!(fields[3], AllergyFormField::Reaction);
         assert_eq!(fields[4], AllergyFormField::OnsetDate);
         assert_eq!(fields[5], AllergyFormField::Notes);
+    }
+
+    #[test]
+    fn test_allergy_form_textarea_fields_accept_input() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let theme = Theme::dark();
+        let mut form = AllergyForm::new(theme);
+
+        let key = KeyEvent::new(KeyCode::Char('P'), KeyModifiers::NONE);
+        let action = form.handle_key(key);
+        assert!(action.is_some());
+
+        let key = KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE);
+        form.handle_key(key);
+
+        assert!(form.get_value(AllergyFormField::Allergen).contains('P'));
+    }
+
+    #[test]
+    fn test_allergy_form_get_value_uses_textarea() {
+        let theme = Theme::dark();
+        let mut form = AllergyForm::new(theme);
+
+        form.set_value(AllergyFormField::Allergen, "Penicillin".to_string());
+        form.set_value(AllergyFormField::Reaction, "Rash".to_string());
+        form.set_value(AllergyFormField::Notes, "Severe reaction noted".to_string());
+
+        assert_eq!(form.get_value(AllergyFormField::Allergen), "Penicillin");
+        assert_eq!(form.get_value(AllergyFormField::Reaction), "Rash");
+        assert_eq!(
+            form.get_value(AllergyFormField::Notes),
+            "Severe reaction noted"
+        );
     }
 }

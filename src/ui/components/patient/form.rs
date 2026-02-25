@@ -8,7 +8,7 @@ use chrono::NaiveDate;
 use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
@@ -16,7 +16,64 @@ use crate::domain::patient::{Address, EmergencyContact, NewPatientData, Patient}
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
-use crate::ui::widgets::{DropdownAction, DropdownOption, DropdownWidget};
+use crate::ui::widgets::{
+    DropdownAction, DropdownOption, DropdownWidget, HeightMode, TextareaState, TextareaWidget,
+};
+
+// Key conversion helpers (crossterm -> ratatui crossterm)
+type RatatuiKeyEvent = ratatui::crossterm::event::KeyEvent;
+type RatatuiKeyCode = ratatui::crossterm::event::KeyCode;
+type RatatuiKeyModifiers = ratatui::crossterm::event::KeyModifiers;
+type RatatuiKeyEventKind = ratatui::crossterm::event::KeyEventKind;
+type RatatuiKeyEventState = ratatui::crossterm::event::KeyEventState;
+
+fn to_ratatui_key(key: KeyEvent) -> RatatuiKeyEvent {
+    let code = match key.code {
+        crossterm::event::KeyCode::Backspace => RatatuiKeyCode::Backspace,
+        crossterm::event::KeyCode::Enter => RatatuiKeyCode::Enter,
+        crossterm::event::KeyCode::Left => RatatuiKeyCode::Left,
+        crossterm::event::KeyCode::Right => RatatuiKeyCode::Right,
+        crossterm::event::KeyCode::Up => RatatuiKeyCode::Up,
+        crossterm::event::KeyCode::Down => RatatuiKeyCode::Down,
+        crossterm::event::KeyCode::Home => RatatuiKeyCode::Home,
+        crossterm::event::KeyCode::End => RatatuiKeyCode::End,
+        crossterm::event::KeyCode::PageUp => RatatuiKeyCode::PageUp,
+        crossterm::event::KeyCode::PageDown => RatatuiKeyCode::PageDown,
+        crossterm::event::KeyCode::Tab => RatatuiKeyCode::Tab,
+        crossterm::event::KeyCode::BackTab => RatatuiKeyCode::BackTab,
+        crossterm::event::KeyCode::Delete => RatatuiKeyCode::Delete,
+        crossterm::event::KeyCode::Insert => RatatuiKeyCode::Insert,
+        crossterm::event::KeyCode::F(n) => RatatuiKeyCode::F(n),
+        crossterm::event::KeyCode::Char(c) => RatatuiKeyCode::Char(c),
+        crossterm::event::KeyCode::Null => RatatuiKeyCode::Null,
+        crossterm::event::KeyCode::Esc => RatatuiKeyCode::Esc,
+        crossterm::event::KeyCode::CapsLock => RatatuiKeyCode::CapsLock,
+        crossterm::event::KeyCode::ScrollLock => RatatuiKeyCode::ScrollLock,
+        crossterm::event::KeyCode::NumLock => RatatuiKeyCode::NumLock,
+        crossterm::event::KeyCode::PrintScreen => RatatuiKeyCode::PrintScreen,
+        crossterm::event::KeyCode::Pause => RatatuiKeyCode::Pause,
+        crossterm::event::KeyCode::Menu => RatatuiKeyCode::Menu,
+        crossterm::event::KeyCode::KeypadBegin => RatatuiKeyCode::KeypadBegin,
+        _ => RatatuiKeyCode::Null,
+    };
+
+    let modifiers = RatatuiKeyModifiers::from_bits_truncate(key.modifiers.bits());
+
+    let kind = match key.kind {
+        crossterm::event::KeyEventKind::Press => RatatuiKeyEventKind::Press,
+        crossterm::event::KeyEventKind::Repeat => RatatuiKeyEventKind::Repeat,
+        crossterm::event::KeyEventKind::Release => RatatuiKeyEventKind::Release,
+    };
+
+    let state = RatatuiKeyEventState::from_bits_truncate(key.state.bits());
+
+    RatatuiKeyEvent {
+        code,
+        modifiers,
+        kind,
+        state,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormMode {
@@ -130,6 +187,16 @@ impl FormField {
             FormField::FirstName | FormField::LastName | FormField::DateOfBirth | FormField::Gender
         )
     }
+
+    pub fn is_dropdown(&self) -> bool {
+        matches!(
+            self,
+            FormField::Gender
+                | FormField::ConcessionType
+                | FormField::InterpreterRequired
+                | FormField::AtsiStatus
+        )
+    }
 }
 
 pub struct PatientForm {
@@ -143,6 +210,30 @@ pub struct PatientForm {
     concession_type_dropdown: DropdownWidget,
     atsi_status_dropdown: DropdownWidget,
     interpreter_required_dropdown: DropdownWidget,
+    title: TextareaState,
+    first_name: TextareaState,
+    middle_name: TextareaState,
+    last_name: TextareaState,
+    preferred_name: TextareaState,
+    date_of_birth: TextareaState,
+    address_line1: TextareaState,
+    address_line2: TextareaState,
+    suburb: TextareaState,
+    state: TextareaState,
+    postcode: TextareaState,
+    country: TextareaState,
+    phone_home: TextareaState,
+    phone_mobile: TextareaState,
+    email: TextareaState,
+    medicare_number: TextareaState,
+    medicare_irn: TextareaState,
+    medicare_expiry: TextareaState,
+    ihi: TextareaState,
+    emergency_name: TextareaState,
+    emergency_phone: TextareaState,
+    emergency_relationship: TextareaState,
+    concession_number: TextareaState,
+    preferred_language: TextareaState,
 }
 
 impl Clone for PatientForm {
@@ -158,8 +249,36 @@ impl Clone for PatientForm {
             concession_type_dropdown: self.concession_type_dropdown.clone(),
             atsi_status_dropdown: self.atsi_status_dropdown.clone(),
             interpreter_required_dropdown: self.interpreter_required_dropdown.clone(),
+            title: self.title.clone(),
+            first_name: self.first_name.clone(),
+            middle_name: self.middle_name.clone(),
+            last_name: self.last_name.clone(),
+            preferred_name: self.preferred_name.clone(),
+            date_of_birth: self.date_of_birth.clone(),
+            address_line1: self.address_line1.clone(),
+            address_line2: self.address_line2.clone(),
+            suburb: self.suburb.clone(),
+            state: self.state.clone(),
+            postcode: self.postcode.clone(),
+            country: self.country.clone(),
+            phone_home: self.phone_home.clone(),
+            phone_mobile: self.phone_mobile.clone(),
+            email: self.email.clone(),
+            medicare_number: self.medicare_number.clone(),
+            medicare_irn: self.medicare_irn.clone(),
+            medicare_expiry: self.medicare_expiry.clone(),
+            ihi: self.ihi.clone(),
+            emergency_name: self.emergency_name.clone(),
+            emergency_phone: self.emergency_phone.clone(),
+            emergency_relationship: self.emergency_relationship.clone(),
+            concession_number: self.concession_number.clone(),
+            preferred_language: self.preferred_language.clone(),
         }
     }
+}
+
+fn single_line(label: &'static str) -> TextareaState {
+    TextareaState::new(label).with_height_mode(HeightMode::SingleLine)
 }
 
 impl PatientForm {
@@ -220,6 +339,30 @@ impl PatientForm {
             concession_type_dropdown,
             atsi_status_dropdown,
             interpreter_required_dropdown,
+            title: single_line("Title"),
+            first_name: single_line("First Name"),
+            middle_name: single_line("Middle Name"),
+            last_name: single_line("Last Name"),
+            preferred_name: single_line("Preferred Name"),
+            date_of_birth: single_line("Date of Birth"),
+            address_line1: single_line("Address Line 1"),
+            address_line2: single_line("Address Line 2"),
+            suburb: single_line("Suburb"),
+            state: single_line("State"),
+            postcode: single_line("Postcode"),
+            country: single_line("Country"),
+            phone_home: single_line("Phone (Home)"),
+            phone_mobile: single_line("Phone (Mobile)"),
+            email: single_line("Email"),
+            medicare_number: single_line("Medicare Number").max_length(10),
+            medicare_irn: single_line("Medicare IRN").max_length(1),
+            medicare_expiry: single_line("Medicare Expiry"),
+            ihi: single_line("IHI"),
+            emergency_name: single_line("Emergency Contact Name"),
+            emergency_phone: single_line("Emergency Contact Phone"),
+            emergency_relationship: single_line("Emergency Contact Relationship"),
+            concession_number: single_line("Concession Number"),
+            preferred_language: single_line("Preferred Language"),
         }
     }
 
@@ -231,7 +374,77 @@ impl PatientForm {
 
         let mut form = Self::new(theme);
         form.mode = FormMode::Edit(patient.id);
+
+        if let Some(ref t) = patient.title {
+            form.title = single_line("Title").with_value(t.clone());
+        }
+        form.first_name = single_line("First Name").with_value(patient.first_name.clone());
+        if let Some(ref mn) = patient.middle_name {
+            form.middle_name = single_line("Middle Name").with_value(mn.clone());
+        }
+        form.last_name = single_line("Last Name").with_value(patient.last_name.clone());
+        if let Some(ref pn) = patient.preferred_name {
+            form.preferred_name = single_line("Preferred Name").with_value(pn.clone());
+        }
+        form.date_of_birth = single_line("Date of Birth")
+            .with_value(patient.date_of_birth.format("%Y-%m-%d").to_string());
+        if let Some(ref l1) = patient.address.line1 {
+            form.address_line1 = single_line("Address Line 1").with_value(l1.clone());
+        }
+        if let Some(ref l2) = patient.address.line2 {
+            form.address_line2 = single_line("Address Line 2").with_value(l2.clone());
+        }
+        if let Some(ref s) = patient.address.suburb {
+            form.suburb = single_line("Suburb").with_value(s.clone());
+        }
+        if let Some(ref st) = patient.address.state {
+            form.state = single_line("State").with_value(st.clone());
+        }
+        if let Some(ref pc) = patient.address.postcode {
+            form.postcode = single_line("Postcode").with_value(pc.clone());
+        }
+        form.country = single_line("Country").with_value(patient.address.country.clone());
+        if let Some(ref ph) = patient.phone_home {
+            form.phone_home = single_line("Phone (Home)").with_value(ph.clone());
+        }
+        if let Some(ref pm) = patient.phone_mobile {
+            form.phone_mobile = single_line("Phone (Mobile)").with_value(pm.clone());
+        }
+        if let Some(ref em) = patient.email {
+            form.email = single_line("Email").with_value(em.clone());
+        }
+        if let Some(ref mn) = patient.medicare_number {
+            form.medicare_number = single_line("Medicare Number")
+                .max_length(10)
+                .with_value(mn.clone());
+        }
+        if let Some(irn) = patient.medicare_irn {
+            form.medicare_irn = single_line("Medicare IRN")
+                .max_length(1)
+                .with_value(irn.to_string());
+        }
+        if let Some(exp) = patient.medicare_expiry {
+            form.medicare_expiry =
+                single_line("Medicare Expiry").with_value(exp.format("%Y-%m-%d").to_string());
+        }
+        if let Some(ref ihi) = patient.ihi {
+            form.ihi = single_line("IHI").with_value(ihi.clone());
+        }
+        if let Some(ref ec) = patient.emergency_contact {
+            form.emergency_name = single_line("Emergency Contact Name").with_value(ec.name.clone());
+            form.emergency_phone =
+                single_line("Emergency Contact Phone").with_value(ec.phone.clone());
+            form.emergency_relationship =
+                single_line("Emergency Contact Relationship").with_value(ec.relationship.clone());
+        }
+        if let Some(ref cn) = patient.concession_number {
+            form.concession_number = single_line("Concession Number").with_value(cn.clone());
+        }
+        form.preferred_language =
+            single_line("Preferred Language").with_value(patient.preferred_language.clone());
+
         form.data = PatientFormData::from(patient);
+
         form.gender_dropdown.set_value(&gender.to_string());
         if let Some(concession) = concession_type {
             form.concession_type_dropdown
@@ -242,6 +455,7 @@ impl PatientForm {
         }
         form.interpreter_required_dropdown
             .set_value(if interpreter_required { "Yes" } else { "No" });
+
         form
     }
 
@@ -256,21 +470,74 @@ impl PatientForm {
         }
     }
 
+    pub fn get_value(&self, field: FormField) -> String {
+        match field {
+            FormField::Title => self.title.value(),
+            FormField::FirstName => self.first_name.value(),
+            FormField::MiddleName => self.middle_name.value(),
+            FormField::LastName => self.last_name.value(),
+            FormField::PreferredName => self.preferred_name.value(),
+            FormField::DateOfBirth => self.date_of_birth.value(),
+            FormField::Gender => self
+                .gender_dropdown
+                .selected_value()
+                .unwrap_or("")
+                .to_string(),
+            FormField::AddressLine1 => self.address_line1.value(),
+            FormField::AddressLine2 => self.address_line2.value(),
+            FormField::Suburb => self.suburb.value(),
+            FormField::State => self.state.value(),
+            FormField::Postcode => self.postcode.value(),
+            FormField::Country => self.country.value(),
+            FormField::PhoneHome => self.phone_home.value(),
+            FormField::PhoneMobile => self.phone_mobile.value(),
+            FormField::Email => self.email.value(),
+            FormField::MedicareNumber => self.medicare_number.value(),
+            FormField::MedicareIrn => self.medicare_irn.value(),
+            FormField::MedicareExpiry => self.medicare_expiry.value(),
+            FormField::Ihi => self.ihi.value(),
+            FormField::EmergencyName => self.emergency_name.value(),
+            FormField::EmergencyPhone => self.emergency_phone.value(),
+            FormField::EmergencyRelationship => self.emergency_relationship.value(),
+            FormField::ConcessionType => self
+                .concession_type_dropdown
+                .selected_value()
+                .unwrap_or("")
+                .to_string(),
+            FormField::ConcessionNumber => self.concession_number.value(),
+            FormField::PreferredLanguage => self.preferred_language.value(),
+            FormField::InterpreterRequired => self
+                .interpreter_required_dropdown
+                .selected_value()
+                .unwrap_or("No")
+                .to_string(),
+            FormField::AtsiStatus => self
+                .atsi_status_dropdown
+                .selected_value()
+                .unwrap_or("")
+                .to_string(),
+        }
+    }
+
     pub fn set_value(&mut self, field: FormField, value: String) {
         match field {
-            FormField::Title => self.data.title = if value.is_empty() { None } else { Some(value) },
-            FormField::FirstName => self.data.first_name = value,
-            FormField::MiddleName => {
-                self.data.middle_name = if value.is_empty() { None } else { Some(value) }
+            FormField::Title => {
+                self.title = single_line("Title").with_value(value);
             }
-            FormField::LastName => self.data.last_name = value,
+            FormField::FirstName => {
+                self.first_name = single_line("First Name").with_value(value);
+            }
+            FormField::MiddleName => {
+                self.middle_name = single_line("Middle Name").with_value(value);
+            }
+            FormField::LastName => {
+                self.last_name = single_line("Last Name").with_value(value);
+            }
             FormField::PreferredName => {
-                self.data.preferred_name = if value.is_empty() { None } else { Some(value) }
+                self.preferred_name = single_line("Preferred Name").with_value(value);
             }
             FormField::DateOfBirth => {
-                if let Ok(dob) = NaiveDate::parse_from_str(&value, "%Y-%m-%d") {
-                    self.data.date_of_birth = dob;
-                }
+                self.date_of_birth = single_line("Date of Birth").with_value(value);
             }
             FormField::Gender => {
                 self.gender_dropdown.set_value(&value);
@@ -279,56 +546,65 @@ impl PatientForm {
                 }
             }
             FormField::AddressLine1 => {
-                self.data.address_line1 = if value.is_empty() { None } else { Some(value) }
+                self.address_line1 = single_line("Address Line 1").with_value(value);
             }
             FormField::AddressLine2 => {
-                self.data.address_line2 = if value.is_empty() { None } else { Some(value) }
+                self.address_line2 = single_line("Address Line 2").with_value(value);
             }
             FormField::Suburb => {
-                self.data.suburb = if value.is_empty() { None } else { Some(value) }
+                self.suburb = single_line("Suburb").with_value(value);
             }
-            FormField::State => self.data.state = if value.is_empty() { None } else { Some(value) },
+            FormField::State => {
+                self.state = single_line("State").with_value(value);
+            }
             FormField::Postcode => {
-                self.data.postcode = if value.is_empty() { None } else { Some(value) }
+                self.postcode = single_line("Postcode").with_value(value);
             }
             FormField::Country => {
-                self.data.country = if value.is_empty() { None } else { Some(value) }
+                self.country = single_line("Country").with_value(value);
             }
             FormField::PhoneHome => {
-                self.data.phone_home = if value.is_empty() { None } else { Some(value) }
+                self.phone_home = single_line("Phone (Home)").with_value(value);
             }
             FormField::PhoneMobile => {
-                self.data.phone_mobile = if value.is_empty() { None } else { Some(value) }
+                self.phone_mobile = single_line("Phone (Mobile)").with_value(value);
             }
-            FormField::Email => self.data.email = if value.is_empty() { None } else { Some(value) },
+            FormField::Email => {
+                self.email = single_line("Email").with_value(value);
+            }
             FormField::MedicareNumber => {
-                self.data.medicare_number = if value.is_empty() { None } else { Some(value) }
+                self.medicare_number = single_line("Medicare Number")
+                    .max_length(10)
+                    .with_value(value);
             }
-            FormField::MedicareIrn => self.data.medicare_irn = value.parse().ok(),
+            FormField::MedicareIrn => {
+                self.medicare_irn = single_line("Medicare IRN").max_length(1).with_value(value);
+            }
             FormField::MedicareExpiry => {
-                self.data.medicare_expiry = NaiveDate::parse_from_str(&value, "%Y-%m-%d").ok();
+                self.medicare_expiry = single_line("Medicare Expiry").with_value(value);
             }
-            FormField::Ihi => self.data.ihi = if value.is_empty() { None } else { Some(value) },
+            FormField::Ihi => {
+                self.ihi = single_line("IHI").with_value(value);
+            }
             FormField::EmergencyName => {
-                self.data.emergency_contact_name = if value.is_empty() { None } else { Some(value) }
+                self.emergency_name = single_line("Emergency Contact Name").with_value(value);
             }
             FormField::EmergencyPhone => {
-                self.data.emergency_contact_phone =
-                    if value.is_empty() { None } else { Some(value) }
+                self.emergency_phone = single_line("Emergency Contact Phone").with_value(value);
             }
             FormField::EmergencyRelationship => {
-                self.data.emergency_contact_relationship =
-                    if value.is_empty() { None } else { Some(value) }
+                self.emergency_relationship =
+                    single_line("Emergency Contact Relationship").with_value(value);
             }
             FormField::ConcessionType => {
                 self.concession_type_dropdown.set_value(&value);
                 self.data.concession_type = value.parse().ok();
             }
             FormField::ConcessionNumber => {
-                self.data.concession_number = if value.is_empty() { None } else { Some(value) }
+                self.concession_number = single_line("Concession Number").with_value(value);
             }
             FormField::PreferredLanguage => {
-                self.data.preferred_language = if value.is_empty() { None } else { Some(value) }
+                self.preferred_language = single_line("Preferred Language").with_value(value);
             }
             FormField::InterpreterRequired => {
                 self.interpreter_required_dropdown.set_value(&value);
@@ -342,72 +618,69 @@ impl PatientForm {
         self.validate_field(&field);
     }
 
-    pub fn get_value(&self, field: FormField) -> String {
+    fn focused_textarea_mut(&mut self) -> Option<&mut TextareaState> {
+        match self.focused_field {
+            FormField::Title => Some(&mut self.title),
+            FormField::FirstName => Some(&mut self.first_name),
+            FormField::MiddleName => Some(&mut self.middle_name),
+            FormField::LastName => Some(&mut self.last_name),
+            FormField::PreferredName => Some(&mut self.preferred_name),
+            FormField::DateOfBirth => Some(&mut self.date_of_birth),
+            FormField::AddressLine1 => Some(&mut self.address_line1),
+            FormField::AddressLine2 => Some(&mut self.address_line2),
+            FormField::Suburb => Some(&mut self.suburb),
+            FormField::State => Some(&mut self.state),
+            FormField::Postcode => Some(&mut self.postcode),
+            FormField::Country => Some(&mut self.country),
+            FormField::PhoneHome => Some(&mut self.phone_home),
+            FormField::PhoneMobile => Some(&mut self.phone_mobile),
+            FormField::Email => Some(&mut self.email),
+            FormField::MedicareNumber => Some(&mut self.medicare_number),
+            FormField::MedicareIrn => Some(&mut self.medicare_irn),
+            FormField::MedicareExpiry => Some(&mut self.medicare_expiry),
+            FormField::Ihi => Some(&mut self.ihi),
+            FormField::EmergencyName => Some(&mut self.emergency_name),
+            FormField::EmergencyPhone => Some(&mut self.emergency_phone),
+            FormField::EmergencyRelationship => Some(&mut self.emergency_relationship),
+            FormField::ConcessionNumber => Some(&mut self.concession_number),
+            FormField::PreferredLanguage => Some(&mut self.preferred_language),
+            FormField::Gender
+            | FormField::ConcessionType
+            | FormField::InterpreterRequired
+            | FormField::AtsiStatus => None,
+        }
+    }
+
+    fn textarea_for(&self, field: FormField) -> Option<&TextareaState> {
         match field {
-            FormField::Title => self.data.title.clone().unwrap_or_default(),
-            FormField::FirstName => self.data.first_name.clone(),
-            FormField::MiddleName => self.data.middle_name.clone().unwrap_or_default(),
-            FormField::LastName => self.data.last_name.clone(),
-            FormField::PreferredName => self.data.preferred_name.clone().unwrap_or_default(),
-            FormField::DateOfBirth => self.data.date_of_birth.format("%Y-%m-%d").to_string(),
-            FormField::Gender => self
-                .gender_dropdown
-                .selected_value()
-                .unwrap_or("")
-                .to_string(),
-            FormField::AddressLine1 => self.data.address_line1.clone().unwrap_or_default(),
-            FormField::AddressLine2 => self.data.address_line2.clone().unwrap_or_default(),
-            FormField::Suburb => self.data.suburb.clone().unwrap_or_default(),
-            FormField::State => self.data.state.clone().unwrap_or_default(),
-            FormField::Postcode => self.data.postcode.clone().unwrap_or_default(),
-            FormField::Country => self.data.country.clone().unwrap_or_default(),
-            FormField::PhoneHome => self.data.phone_home.clone().unwrap_or_default(),
-            FormField::PhoneMobile => self.data.phone_mobile.clone().unwrap_or_default(),
-            FormField::Email => self.data.email.clone().unwrap_or_default(),
-            FormField::MedicareNumber => self.data.medicare_number.clone().unwrap_or_default(),
-            FormField::MedicareIrn => self
-                .data
-                .medicare_irn
-                .map(|n| n.to_string())
-                .unwrap_or_default(),
-            FormField::MedicareExpiry => self
-                .data
-                .medicare_expiry
-                .map(|d| d.format("%Y-%m-%d").to_string())
-                .unwrap_or_default(),
-            FormField::Ihi => self.data.ihi.clone().unwrap_or_default(),
-            FormField::EmergencyName => {
-                self.data.emergency_contact_name.clone().unwrap_or_default()
-            }
-            FormField::EmergencyPhone => self
-                .data
-                .emergency_contact_phone
-                .clone()
-                .unwrap_or_default(),
-            FormField::EmergencyRelationship => self
-                .data
-                .emergency_contact_relationship
-                .clone()
-                .unwrap_or_default(),
-            FormField::ConcessionType => self
-                .concession_type_dropdown
-                .selected_value()
-                .unwrap_or("")
-                .to_string(),
-            FormField::ConcessionNumber => self.data.concession_number.clone().unwrap_or_default(),
-            FormField::PreferredLanguage => {
-                self.data.preferred_language.clone().unwrap_or_default()
-            }
-            FormField::InterpreterRequired => self
-                .interpreter_required_dropdown
-                .selected_value()
-                .unwrap_or("No")
-                .to_string(),
-            FormField::AtsiStatus => self
-                .atsi_status_dropdown
-                .selected_value()
-                .unwrap_or("")
-                .to_string(),
+            FormField::Title => Some(&self.title),
+            FormField::FirstName => Some(&self.first_name),
+            FormField::MiddleName => Some(&self.middle_name),
+            FormField::LastName => Some(&self.last_name),
+            FormField::PreferredName => Some(&self.preferred_name),
+            FormField::DateOfBirth => Some(&self.date_of_birth),
+            FormField::AddressLine1 => Some(&self.address_line1),
+            FormField::AddressLine2 => Some(&self.address_line2),
+            FormField::Suburb => Some(&self.suburb),
+            FormField::State => Some(&self.state),
+            FormField::Postcode => Some(&self.postcode),
+            FormField::Country => Some(&self.country),
+            FormField::PhoneHome => Some(&self.phone_home),
+            FormField::PhoneMobile => Some(&self.phone_mobile),
+            FormField::Email => Some(&self.email),
+            FormField::MedicareNumber => Some(&self.medicare_number),
+            FormField::MedicareIrn => Some(&self.medicare_irn),
+            FormField::MedicareExpiry => Some(&self.medicare_expiry),
+            FormField::Ihi => Some(&self.ihi),
+            FormField::EmergencyName => Some(&self.emergency_name),
+            FormField::EmergencyPhone => Some(&self.emergency_phone),
+            FormField::EmergencyRelationship => Some(&self.emergency_relationship),
+            FormField::ConcessionNumber => Some(&self.concession_number),
+            FormField::PreferredLanguage => Some(&self.preferred_language),
+            FormField::Gender
+            | FormField::ConcessionType
+            | FormField::InterpreterRequired
+            | FormField::AtsiStatus => None,
         }
     }
 
@@ -509,6 +782,38 @@ impl PatientForm {
                 }
             }
             _ => {}
+        }
+
+        let error_msg = self.errors.get(field).cloned();
+        match field {
+            FormField::Title => self.title.set_error(error_msg),
+            FormField::FirstName => self.first_name.set_error(error_msg),
+            FormField::MiddleName => self.middle_name.set_error(error_msg),
+            FormField::LastName => self.last_name.set_error(error_msg),
+            FormField::PreferredName => self.preferred_name.set_error(error_msg),
+            FormField::DateOfBirth => self.date_of_birth.set_error(error_msg),
+            FormField::AddressLine1 => self.address_line1.set_error(error_msg),
+            FormField::AddressLine2 => self.address_line2.set_error(error_msg),
+            FormField::Suburb => self.suburb.set_error(error_msg),
+            FormField::State => self.state.set_error(error_msg),
+            FormField::Postcode => self.postcode.set_error(error_msg),
+            FormField::Country => self.country.set_error(error_msg),
+            FormField::PhoneHome => self.phone_home.set_error(error_msg),
+            FormField::PhoneMobile => self.phone_mobile.set_error(error_msg),
+            FormField::Email => self.email.set_error(error_msg),
+            FormField::MedicareNumber => self.medicare_number.set_error(error_msg),
+            FormField::MedicareIrn => self.medicare_irn.set_error(error_msg),
+            FormField::MedicareExpiry => self.medicare_expiry.set_error(error_msg),
+            FormField::Ihi => self.ihi.set_error(error_msg),
+            FormField::EmergencyName => self.emergency_name.set_error(error_msg),
+            FormField::EmergencyPhone => self.emergency_phone.set_error(error_msg),
+            FormField::EmergencyRelationship => self.emergency_relationship.set_error(error_msg),
+            FormField::ConcessionNumber => self.concession_number.set_error(error_msg),
+            FormField::PreferredLanguage => self.preferred_language.set_error(error_msg),
+            FormField::Gender
+            | FormField::ConcessionType
+            | FormField::InterpreterRequired
+            | FormField::AtsiStatus => {}
         }
     }
 
@@ -657,7 +962,12 @@ impl PatientForm {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<PatientFormAction> {
-        use crossterm::event::KeyCode;
+        use crossterm::event::{KeyCode, KeyEventKind};
+
+        // Ignore non-press key events (e.g., Release events from terminals with keyboard enhancement)
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
 
         if self.saving {
             return None;
@@ -665,6 +975,18 @@ impl PatientForm {
 
         if let Some(dropdown_action) = self.handle_dropdown_key(key) {
             return dropdown_action;
+        }
+
+        if !self.focused_field.is_dropdown() {
+            let ratatui_key = to_ratatui_key(key);
+            if let Some(textarea) = self.focused_textarea_mut() {
+                let consumed = textarea.handle_key(ratatui_key);
+                if consumed {
+                    let field = self.focused_field;
+                    self.validate_field(&field);
+                    return Some(PatientFormAction::ValueChanged);
+                }
+            }
         }
 
         match key.code {
@@ -679,8 +1001,16 @@ impl PatientForm {
                 }
                 Some(PatientFormAction::FocusChanged)
             }
-            KeyCode::Up | KeyCode::Down => {
-                self.handle_field_navigation(key.code);
+            KeyCode::BackTab => {
+                self.prev_field();
+                Some(PatientFormAction::FocusChanged)
+            }
+            KeyCode::Up => {
+                self.prev_field();
+                Some(PatientFormAction::FocusChanged)
+            }
+            KeyCode::Down => {
+                self.next_field();
                 Some(PatientFormAction::FocusChanged)
             }
             KeyCode::Enter => {
@@ -688,18 +1018,6 @@ impl PatientForm {
                 Some(PatientFormAction::Submit)
             }
             KeyCode::Esc => Some(PatientFormAction::Cancel),
-            KeyCode::Char(c) => {
-                let mut value = self.get_value(self.focused_field);
-                value.push(c);
-                self.set_value(self.focused_field, value);
-                Some(PatientFormAction::ValueChanged)
-            }
-            KeyCode::Backspace => {
-                let mut value = self.get_value(self.focused_field);
-                value.pop();
-                self.set_value(self.focused_field, value);
-                Some(PatientFormAction::ValueChanged)
-            }
             _ => None,
         }
     }
@@ -740,18 +1058,6 @@ impl PatientForm {
         None
     }
 
-    fn handle_field_navigation(&mut self, code: crossterm::event::KeyCode) {
-        match code {
-            crossterm::event::KeyCode::Up => {
-                self.prev_field();
-            }
-            crossterm::event::KeyCode::Down => {
-                self.next_field();
-            }
-            _ => {}
-        }
-    }
-
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<PatientFormAction> {
         if mouse.kind != MouseEventKind::Up(crossterm::event::MouseButton::Left) {
             return None;
@@ -768,9 +1074,6 @@ impl PatientForm {
             return None;
         }
 
-        let label_width = LABEL_WIDTH;
-        let field_start = inner.x + label_width + 2;
-
         let fields: Vec<FormField> = FormField::all();
         let mut y = inner.y + 1;
         let max_y = inner.y + inner.height - 2;
@@ -780,13 +1083,8 @@ impl PatientForm {
                 break;
             }
 
-            let field_height = if self.error(*field).is_some() { 2 } else { 1 };
-            let field_area = Rect::new(
-                field_start,
-                y,
-                inner.width.saturating_sub(label_width + 4),
-                field_height,
-            );
+            let field_height: u16 = 3;
+            let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
 
             if field_area.contains(click_pos) {
                 if *field != self.focused_field {
@@ -796,7 +1094,7 @@ impl PatientForm {
                 return None;
             }
 
-            y += 2;
+            y += field_height + 1;
         }
 
         None
@@ -870,30 +1168,10 @@ impl Widget for PatientForm {
             }
 
             let is_focused = field == self.focused_field;
-            let has_error = self.error(field).is_some();
-
-            let label_style = if is_focused {
-                Style::default()
-                    .fg(self.theme.colors.primary)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(self.theme.colors.foreground)
-            };
-
-            buf.set_string(inner.x + 1, y, field.label(), label_style);
-
-            if is_focused {
-                buf.set_string(
-                    field_start - 1,
-                    y,
-                    ">",
-                    Style::default().fg(self.theme.colors.primary),
-                );
-            }
 
             match field {
                 FormField::Gender => {
-                    let mut dropdown = self.gender_dropdown.clone();
+                    let dropdown = self.gender_dropdown.clone();
                     let dropdown_area = Rect::new(
                         field_start,
                         y,
@@ -901,9 +1179,10 @@ impl Widget for PatientForm {
                         3,
                     );
                     dropdown.render(dropdown_area, buf);
+                    y += 4;
                 }
                 FormField::ConcessionType => {
-                    let mut dropdown = self.concession_type_dropdown.clone();
+                    let dropdown = self.concession_type_dropdown.clone();
                     let dropdown_area = Rect::new(
                         field_start,
                         y,
@@ -911,9 +1190,10 @@ impl Widget for PatientForm {
                         3,
                     );
                     dropdown.render(dropdown_area, buf);
+                    y += 4;
                 }
                 FormField::AtsiStatus => {
-                    let mut dropdown = self.atsi_status_dropdown.clone();
+                    let dropdown = self.atsi_status_dropdown.clone();
                     let dropdown_area = Rect::new(
                         field_start,
                         y,
@@ -921,9 +1201,10 @@ impl Widget for PatientForm {
                         3,
                     );
                     dropdown.render(dropdown_area, buf);
+                    y += 4;
                 }
                 FormField::InterpreterRequired => {
-                    let mut dropdown = self.interpreter_required_dropdown.clone();
+                    let dropdown = self.interpreter_required_dropdown.clone();
                     let dropdown_area = Rect::new(
                         field_start,
                         y,
@@ -931,33 +1212,20 @@ impl Widget for PatientForm {
                         3,
                     );
                     dropdown.render(dropdown_area, buf);
+                    y += 4;
                 }
                 _ => {
-                    let value = self.get_value(field);
-                    let value_style = if has_error {
-                        Style::default().fg(self.theme.colors.error)
-                    } else {
-                        Style::default().fg(self.theme.colors.foreground)
-                    };
-
-                    let max_value_width = inner.width.saturating_sub(label_width + 4);
-                    let display_value = if value.len() > max_value_width as usize {
-                        &value[value.len() - max_value_width as usize..]
-                    } else {
-                        &value
-                    };
-
-                    buf.set_string(field_start, y, display_value, value_style);
-
-                    if let Some(error_msg) = self.error(field) {
-                        let error_style = Style::default().fg(self.theme.colors.error);
-                        buf.set_string(field_start, y + 1, format!("  {}", error_msg), error_style);
-                        y += 1;
+                    if let Some(textarea) = self.textarea_for(field) {
+                        let textarea_height = textarea.height();
+                        let textarea_area =
+                            Rect::new(inner.x + 1, y, inner.width - 2, textarea_height);
+                        TextareaWidget::new(textarea, self.theme.clone())
+                            .focused(is_focused)
+                            .render(textarea_area, buf);
+                        y += textarea_height + 1;
                     }
                 }
             }
-
-            y += 2;
         }
 
         let help_y = inner.y + inner.height - 1;
@@ -1007,5 +1275,63 @@ mod tests {
         form.set_value(FormField::Email, "test@example.com".to_string());
         form.validate();
         assert!(form.error(FormField::Email).is_none());
+    }
+
+    #[test]
+    fn test_text_fields_use_textarea_state() {
+        let theme = Theme::dark();
+        let mut form = PatientForm::new(theme);
+
+        form.set_value(FormField::FirstName, "Alice".to_string());
+        assert_eq!(form.get_value(FormField::FirstName), "Alice");
+        assert_eq!(form.first_name.value(), "Alice");
+    }
+
+    #[test]
+    fn test_handle_key_char_updates_textarea() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let theme = Theme::dark();
+        let mut form = PatientForm::new(theme);
+        form.focused_field = FormField::FirstName;
+
+        let key = KeyEvent::new(KeyCode::Char('J'), KeyModifiers::NONE);
+        let action = form.handle_key(key);
+        assert!(action.is_some());
+        assert_eq!(form.get_value(FormField::FirstName), "J");
+    }
+
+    #[test]
+    fn test_handle_key_tab_navigates_fields() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let theme = Theme::dark();
+        let mut form = PatientForm::new(theme);
+        assert_eq!(form.focused_field(), FormField::FirstName);
+
+        let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+        form.handle_key(key);
+        assert_eq!(form.focused_field(), FormField::MiddleName);
+    }
+
+    #[test]
+    fn test_single_line_height_mode() {
+        let theme = Theme::dark();
+        let form = PatientForm::new(theme);
+
+        assert_eq!(form.first_name.height_mode, HeightMode::SingleLine);
+        assert_eq!(form.last_name.height_mode, HeightMode::SingleLine);
+        assert_eq!(form.email.height_mode, HeightMode::SingleLine);
+        assert_eq!(form.medicare_number.height_mode, HeightMode::SingleLine);
+    }
+
+    #[test]
+    fn test_error_synced_to_textarea_state() {
+        let theme = Theme::dark();
+        let mut form = PatientForm::new(theme);
+
+        form.validate();
+        assert!(form.first_name.error.is_some());
+        assert!(form.last_name.error.is_some());
     }
 }

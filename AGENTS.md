@@ -66,6 +66,7 @@ opengp/
 - **Error handling**: `thiserror` + `color-eyre`
 - **Async**: `tokio::test` for async tests
 - **Naming**: `snake_case` files, `PascalCase` types
+- **Tests**: write tests first. TDD approach.
 
 ## RULES
 

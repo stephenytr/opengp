@@ -49,6 +49,7 @@ pub struct AppointmentUiService {
     /// Calendar query for appointments
     calendar_query: Arc<dyn AppointmentCalendarQuery>,
     /// Appointment repository for creating/updating appointments
+    #[allow(dead_code)]
     appointment_repo: Arc<dyn AppointmentRepository>,
     /// Domain appointment service for status transitions
     domain_service: Arc<AppointmentService>,

@@ -8,7 +8,7 @@ use ratatui::layout::{Constraint, Rect};
 use ratatui::prelude::Stylize;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Row, Table, Widget};
+use ratatui::widgets::{Block, Borders, Row, Table, Widget};
 use uuid::Uuid;
 
 use crate::domain::clinical::{Allergy, Consultation, MedicalHistory, VitalSigns};

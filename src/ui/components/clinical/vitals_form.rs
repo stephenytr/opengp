@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crossterm::event::{KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -13,6 +13,61 @@ use ratatui::widgets::{Block, Borders, Widget};
 use crate::domain::clinical::VitalSigns;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
+use crate::ui::widgets::{HeightMode, TextareaState, TextareaWidget};
+
+type RatatuiKeyEvent = ratatui::crossterm::event::KeyEvent;
+type RatatuiKeyCode = ratatui::crossterm::event::KeyCode;
+type RatatuiKeyModifiers = ratatui::crossterm::event::KeyModifiers;
+type RatatuiKeyEventKind = ratatui::crossterm::event::KeyEventKind;
+type RatatuiKeyEventState = ratatui::crossterm::event::KeyEventState;
+
+fn to_ratatui_key(key: KeyEvent) -> RatatuiKeyEvent {
+    let code = match key.code {
+        KeyCode::Backspace => RatatuiKeyCode::Backspace,
+        KeyCode::Enter => RatatuiKeyCode::Enter,
+        KeyCode::Left => RatatuiKeyCode::Left,
+        KeyCode::Right => RatatuiKeyCode::Right,
+        KeyCode::Up => RatatuiKeyCode::Up,
+        KeyCode::Down => RatatuiKeyCode::Down,
+        KeyCode::Home => RatatuiKeyCode::Home,
+        KeyCode::End => RatatuiKeyCode::End,
+        KeyCode::PageUp => RatatuiKeyCode::PageUp,
+        KeyCode::PageDown => RatatuiKeyCode::PageDown,
+        KeyCode::Tab => RatatuiKeyCode::Tab,
+        KeyCode::BackTab => RatatuiKeyCode::BackTab,
+        KeyCode::Delete => RatatuiKeyCode::Delete,
+        KeyCode::Insert => RatatuiKeyCode::Insert,
+        KeyCode::F(n) => RatatuiKeyCode::F(n),
+        KeyCode::Char(c) => RatatuiKeyCode::Char(c),
+        KeyCode::Null => RatatuiKeyCode::Null,
+        KeyCode::Esc => RatatuiKeyCode::Esc,
+        KeyCode::CapsLock => RatatuiKeyCode::CapsLock,
+        KeyCode::ScrollLock => RatatuiKeyCode::ScrollLock,
+        KeyCode::NumLock => RatatuiKeyCode::NumLock,
+        KeyCode::PrintScreen => RatatuiKeyCode::PrintScreen,
+        KeyCode::Pause => RatatuiKeyCode::Pause,
+        KeyCode::Menu => RatatuiKeyCode::Menu,
+        KeyCode::KeypadBegin => RatatuiKeyCode::KeypadBegin,
+        _ => RatatuiKeyCode::Null,
+    };
+
+    let modifiers = RatatuiKeyModifiers::from_bits_truncate(key.modifiers.bits());
+
+    let kind = match key.kind {
+        crossterm::event::KeyEventKind::Press => RatatuiKeyEventKind::Press,
+        crossterm::event::KeyEventKind::Repeat => RatatuiKeyEventKind::Repeat,
+        crossterm::event::KeyEventKind::Release => RatatuiKeyEventKind::Release,
+    };
+
+    let state = RatatuiKeyEventState::from_bits_truncate(key.state.bits());
+
+    RatatuiKeyEvent {
+        code,
+        modifiers,
+        kind,
+        state,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VitalSignsFormField {
@@ -81,6 +136,11 @@ impl VitalSignsFormField {
             VitalSignsFormField::Temperature | VitalSignsFormField::Weight
         )
     }
+
+    /// Returns true if this field uses TextareaWidget
+    pub fn is_textarea(&self) -> bool {
+        matches!(self, VitalSignsFormField::Notes)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -100,7 +160,7 @@ pub struct VitalSignsForm {
     pub o2_saturation: Option<u8>,
     pub height_cm: Option<u16>,
     pub weight_kg: Option<f32>,
-    pub notes: String,
+    pub notes: TextareaState,
     pub focused_field: VitalSignsFormField,
     pub calculated_bmi: Option<f32>,
     // Raw string buffers for numeric fields during editing
@@ -155,7 +215,7 @@ impl VitalSignsForm {
             o2_saturation: None,
             height_cm: None,
             weight_kg: None,
-            notes: String::new(),
+            notes: TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(4)),
             focused_field: VitalSignsFormField::SystolicBp,
             calculated_bmi: None,
             systolic_bp_buf: String::new(),
@@ -205,7 +265,7 @@ impl VitalSignsForm {
             VitalSignsFormField::O2Saturation => self.o2_saturation_buf.clone(),
             VitalSignsFormField::Height => self.height_cm_buf.clone(),
             VitalSignsFormField::Weight => self.weight_kg_buf.clone(),
-            VitalSignsFormField::Notes => self.notes.clone(),
+            VitalSignsFormField::Notes => self.notes.value(),
         }
     }
 
@@ -244,7 +304,9 @@ impl VitalSignsForm {
                 self.weight_kg = value.parse().ok();
             }
             VitalSignsFormField::Notes => {
-                self.notes = value;
+                self.notes = TextareaState::new("Notes")
+                    .with_height_mode(HeightMode::FixedLines(4))
+                    .with_value(value);
             }
         }
         self.calculate_bmi();
@@ -431,7 +493,26 @@ impl VitalSignsForm {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<VitalSignsFormAction> {
-        use crossterm::event::KeyCode;
+        use crossterm::event::{KeyCode, KeyEventKind};
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
+        // Ctrl+Enter submits the form from any field.
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Enter {
+            self.validate();
+            return Some(VitalSignsFormAction::Submit);
+        }
+
+        // For textarea field (Notes), delegate to TextareaState.
+        if self.focused_field.is_textarea() {
+            let ratatui_key = to_ratatui_key(key);
+            let consumed = self.notes.handle_key(ratatui_key);
+            if consumed {
+                return Some(VitalSignsFormAction::ValueChanged);
+            }
+        }
 
         match key.code {
             KeyCode::Tab => {
@@ -440,6 +521,10 @@ impl VitalSignsForm {
                 } else {
                     self.next_field();
                 }
+                Some(VitalSignsFormAction::FocusChanged)
+            }
+            KeyCode::BackTab => {
+                self.prev_field();
                 Some(VitalSignsFormAction::FocusChanged)
             }
             KeyCode::Up => {
@@ -476,10 +561,7 @@ impl VitalSignsForm {
                         None
                     }
                 } else {
-                    let mut value = self.get_value(field);
-                    value.push(c);
-                    self.set_value(field, value);
-                    Some(VitalSignsFormAction::ValueChanged)
+                    None
                 }
             }
             KeyCode::Backspace => {
@@ -508,7 +590,7 @@ impl VitalSignsForm {
             height_cm: self.height_cm,
             weight_kg: self.weight_kg,
             bmi: self.calculated_bmi,
-            notes: Some(self.notes.clone()).filter(|s| !s.is_empty()),
+            notes: Some(self.notes.value()).filter(|s: &String| !s.is_empty()),
             created_at: chrono::Utc::now(),
             created_by,
         }
@@ -544,6 +626,18 @@ impl Widget for VitalSignsForm {
         for field in fields {
             if y > max_y {
                 break;
+            }
+
+            // Special handling for Notes field (TextareaWidget)
+            if field.is_textarea() {
+                let notes_height = self.notes.height();
+                let notes_area = Rect::new(inner.x + 1, y, inner.width - 2, notes_height);
+                let is_focused = field == self.focused_field;
+                TextareaWidget::new(&self.notes, self.theme.clone())
+                    .focused(is_focused)
+                    .render(notes_area, buf);
+                y += notes_height;
+                continue;
             }
 
             let is_focused = field == self.focused_field;
@@ -610,7 +704,7 @@ impl Widget for VitalSignsForm {
         buf.set_string(
             inner.x + 1,
             help_y,
-            "Tab: Next | Enter: Submit | Esc: Cancel",
+            "Tab: Next | Ctrl+Enter: Submit | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
     }

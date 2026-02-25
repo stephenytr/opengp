@@ -221,6 +221,12 @@ impl SocialHistoryComponent {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<SocialHistoryAction> {
+        use crossterm::event::KeyEventKind;
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
         if !self.is_editing {
             match key.code {
                 KeyCode::Char('e') | KeyCode::Char('n') => {
@@ -245,7 +251,7 @@ impl SocialHistoryComponent {
                     _ => unreachable!(),
                 };
 
-                if let Some(action) = dropdown.handle_key(key) {
+                if let Some(_action) = dropdown.handle_key(key) {
                     return Some(SocialHistoryAction::FieldChanged);
                 }
 
@@ -256,6 +262,10 @@ impl SocialHistoryComponent {
                         } else {
                             self.next_field();
                         }
+                        return Some(SocialHistoryAction::FocusChanged);
+                    }
+                    KeyCode::BackTab => {
+                        self.prev_field();
                         return Some(SocialHistoryAction::FocusChanged);
                     }
                     KeyCode::Up | KeyCode::Down => {
@@ -273,6 +283,10 @@ impl SocialHistoryComponent {
                     } else {
                         self.next_field();
                     }
+                    Some(SocialHistoryAction::FocusChanged)
+                }
+                KeyCode::BackTab => {
+                    self.prev_field();
                     Some(SocialHistoryAction::FocusChanged)
                 }
                 KeyCode::Up => {
@@ -455,6 +469,7 @@ fn format_exercise_frequency(freq: ExerciseFrequency) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn parse_smoking_status(value: &str) -> Option<SmokingStatus> {
     match value.to_lowercase().as_str() {
         "never" | "never smoked" | "neversmoker" => Some(SmokingStatus::NeverSmoked),
@@ -464,6 +479,7 @@ fn parse_smoking_status(value: &str) -> Option<SmokingStatus> {
     }
 }
 
+#[allow(dead_code)]
 fn parse_alcohol_status(value: &str) -> Option<AlcoholStatus> {
     match value.to_lowercase().as_str() {
         "none" | "no" | "0" => Some(AlcoholStatus::None),
@@ -474,6 +490,7 @@ fn parse_alcohol_status(value: &str) -> Option<AlcoholStatus> {
     }
 }
 
+#[allow(dead_code)]
 fn parse_exercise_frequency(value: &str) -> Option<ExerciseFrequency> {
     match value.to_lowercase().as_str() {
         "none" | "no" | "0" => Some(ExerciseFrequency::None),
@@ -676,7 +693,7 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
             };
 
             let dropdown_area = Rect::new(field_start, y, max_value_width + 1, 3);
-            let mut dropdown_clone = dropdown.clone();
+            let dropdown_clone = dropdown.clone();
             dropdown_clone.render(dropdown_area, buf);
         } else {
             let value = component.get_field_value(field);

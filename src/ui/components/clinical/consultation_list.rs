@@ -2,7 +2,7 @@
 //!
 //! Displays a list of patient consultations with date, practitioner, reason, and status.
 
-use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
+use crossterm::event::{MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Position, Rect};
 use ratatui::prelude::Stylize;
@@ -12,6 +12,7 @@ use ratatui::widgets::{Block, Borders, Row, Table, Widget};
 use uuid::Uuid;
 
 use crate::domain::clinical::Consultation;
+use crate::ui::layout::HEADER_HEIGHT;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::LoadingState;
 
@@ -238,7 +239,11 @@ impl ConsultationList {
         &mut self,
         key: crossterm::event::KeyEvent,
     ) -> Option<ConsultationListAction> {
-        use crossterm::event::KeyCode;
+        use crossterm::event::{KeyCode, KeyEventKind};
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
 
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
@@ -321,11 +326,11 @@ impl ConsultationList {
             return None;
         }
 
-        if mouse.row < area.y + 2 {
+        if mouse.row < area.y + HEADER_HEIGHT {
             return None;
         }
 
-        let row_index = (mouse.row - area.y - 2) as usize;
+        let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
         let actual_index = self.scroll_offset + row_index;
         if actual_index < self.consultations.len() {
             self.selected_index = actual_index;
@@ -517,7 +522,6 @@ impl Widget for ConsultationList {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
 
     #[test]
     fn test_consultation_list_empty() {

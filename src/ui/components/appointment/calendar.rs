@@ -105,6 +105,12 @@ impl Calendar {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<CalendarAction> {
+        use crossterm::event::KeyEventKind;
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
         let registry = KeybindRegistry::global();
 
         if let Some(keybind) = registry.lookup(key, KeyContext::Calendar) {

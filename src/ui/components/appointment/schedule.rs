@@ -105,6 +105,12 @@ impl Schedule {
 
     /// Handle keyboard input and return an action if triggered.
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ScheduleAction> {
+        use crossterm::event::KeyEventKind;
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
         let registry = KeybindRegistry::global();
 
         if let Some(keybind) = registry.lookup(key, KeyContext::Schedule) {

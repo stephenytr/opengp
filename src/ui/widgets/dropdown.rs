@@ -188,6 +188,14 @@ impl DropdownWidget {
                     None
                 }
             }
+            KeyCode::BackTab => {
+                if self.is_open() {
+                    self.close();
+                    Some(DropdownAction::Closed)
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -207,7 +215,7 @@ impl DropdownWidget {
         }
 
         if self.is_open() {
-            let option_height = 1;
+            let _option_height = 1;
             let header_height = 1;
             let options_area_start = inner.y + header_height;
             let mouse_y = mouse.row;

@@ -155,7 +155,11 @@ impl TabBar {
 
     /// Handle key event
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<Tab> {
-        use crossterm::event::KeyCode;
+        use crossterm::event::{KeyCode, KeyEventKind};
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
 
         match key.code {
             KeyCode::Left => {

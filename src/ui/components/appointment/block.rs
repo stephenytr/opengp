@@ -10,7 +10,6 @@ use ratatui::widgets::Widget;
 
 use crate::domain::appointment::{AppointmentStatus, AppointmentType, CalendarAppointment};
 use crate::ui::theme::Theme;
-use crate::ui::view_models::AppointmentViewItem;
 
 /// Widget for rendering an appointment block in the calendar.
 ///

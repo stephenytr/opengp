@@ -6,11 +6,13 @@
 mod dropdown;
 mod form_field;
 mod loading;
-mod search_input;
+mod scrollable;
 mod searchable_list;
+mod textarea;
 
 pub use dropdown::{DropdownAction, DropdownOption, DropdownState, DropdownWidget};
 pub use form_field::{FieldType, FormField, FormFieldState};
 pub use loading::{LoadingIndicator, LoadingState, SpinnerStyle};
-pub use search_input::{SearchInput, SearchInputState};
+pub use scrollable::ScrollableState;
 pub use searchable_list::{Searchable, SearchableList, SearchableListAction, SearchableListState};
+pub use textarea::{HeightMode, TextareaState, TextareaWidget};

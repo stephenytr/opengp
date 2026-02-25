@@ -5,6 +5,7 @@ edition = "2021"
 description = "Open source general practice management software for Australia"
 license = "AGPL-3.0"
 authors = ["OpenGP Contributors"]
+rust-version = "1.86.0"
 
 [features]
 default = ["sqlite"]
@@ -12,9 +13,7 @@ sqlite = ["sqlx/sqlite"]
 postgres = ["sqlx/postgres"]
 
 [dependencies]
-ratatui = "0.29"
-tuirealm = { version = "3.3", features = ["derive"] }
-tui-realm-stdlib = "3.1"
+ratatui = "0.30"
 crossterm = "0.29"
 tokio = { version = "1", features = ["full"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "chrono", "uuid"] }
@@ -36,5 +35,4 @@ sublime_fuzzy = "0.7"
 strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 derive_builder = "0.20"
-ratatui-interact = "0.4.2"
-tui-textarea = "0.7"
+ratatui-textarea = "0.8"

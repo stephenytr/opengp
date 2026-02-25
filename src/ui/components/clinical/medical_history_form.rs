@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -13,7 +13,63 @@ use ratatui::widgets::{Block, Borders, Widget};
 use crate::domain::clinical::{ConditionStatus, MedicalHistory, Severity};
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{DropdownAction, DropdownOption, DropdownWidget};
+use crate::ui::widgets::{
+    DropdownAction, DropdownOption, DropdownWidget, HeightMode, TextareaState, TextareaWidget,
+};
+
+type RatatuiKeyEvent = ratatui::crossterm::event::KeyEvent;
+type RatatuiKeyCode = ratatui::crossterm::event::KeyCode;
+type RatatuiKeyModifiers = ratatui::crossterm::event::KeyModifiers;
+type RatatuiKeyEventKind = ratatui::crossterm::event::KeyEventKind;
+type RatatuiKeyEventState = ratatui::crossterm::event::KeyEventState;
+
+fn to_ratatui_key(key: KeyEvent) -> RatatuiKeyEvent {
+    let code = match key.code {
+        KeyCode::Backspace => RatatuiKeyCode::Backspace,
+        KeyCode::Enter => RatatuiKeyCode::Enter,
+        KeyCode::Left => RatatuiKeyCode::Left,
+        KeyCode::Right => RatatuiKeyCode::Right,
+        KeyCode::Up => RatatuiKeyCode::Up,
+        KeyCode::Down => RatatuiKeyCode::Down,
+        KeyCode::Home => RatatuiKeyCode::Home,
+        KeyCode::End => RatatuiKeyCode::End,
+        KeyCode::PageUp => RatatuiKeyCode::PageUp,
+        KeyCode::PageDown => RatatuiKeyCode::PageDown,
+        KeyCode::Tab => RatatuiKeyCode::Tab,
+        KeyCode::BackTab => RatatuiKeyCode::BackTab,
+        KeyCode::Delete => RatatuiKeyCode::Delete,
+        KeyCode::Insert => RatatuiKeyCode::Insert,
+        KeyCode::F(n) => RatatuiKeyCode::F(n),
+        KeyCode::Char(c) => RatatuiKeyCode::Char(c),
+        KeyCode::Null => RatatuiKeyCode::Null,
+        KeyCode::Esc => RatatuiKeyCode::Esc,
+        KeyCode::CapsLock => RatatuiKeyCode::CapsLock,
+        KeyCode::ScrollLock => RatatuiKeyCode::ScrollLock,
+        KeyCode::NumLock => RatatuiKeyCode::NumLock,
+        KeyCode::PrintScreen => RatatuiKeyCode::PrintScreen,
+        KeyCode::Pause => RatatuiKeyCode::Pause,
+        KeyCode::Menu => RatatuiKeyCode::Menu,
+        KeyCode::KeypadBegin => RatatuiKeyCode::KeypadBegin,
+        _ => RatatuiKeyCode::Null,
+    };
+
+    let modifiers = RatatuiKeyModifiers::from_bits_truncate(key.modifiers.bits());
+
+    let kind = match key.kind {
+        crossterm::event::KeyEventKind::Press => RatatuiKeyEventKind::Press,
+        crossterm::event::KeyEventKind::Repeat => RatatuiKeyEventKind::Repeat,
+        crossterm::event::KeyEventKind::Release => RatatuiKeyEventKind::Release,
+    };
+
+    let state = RatatuiKeyEventState::from_bits_truncate(key.state.bits());
+
+    RatatuiKeyEvent {
+        code,
+        modifiers,
+        kind,
+        state,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MedicalHistoryFormField {
@@ -54,11 +110,11 @@ impl MedicalHistoryFormField {
 }
 
 pub struct MedicalHistoryForm {
-    pub condition: String,
-    pub diagnosis_date: String,
+    pub condition: TextareaState,
+    pub diagnosis_date: TextareaState,
     pub status_dropdown: DropdownWidget,
     pub severity_dropdown: DropdownWidget,
-    pub notes: String,
+    pub notes: TextareaState,
     pub focused_field: MedicalHistoryFormField,
     errors: HashMap<MedicalHistoryFormField, String>,
     theme: Theme,
@@ -103,11 +159,12 @@ impl MedicalHistoryForm {
         ];
 
         Self {
-            condition: String::new(),
-            diagnosis_date: String::new(),
+            condition: TextareaState::new("Condition").with_height_mode(HeightMode::SingleLine),
+            diagnosis_date: TextareaState::new("DiagnosisDate")
+                .with_height_mode(HeightMode::SingleLine),
             status_dropdown: DropdownWidget::new("Status *", status_options, theme.clone()),
             severity_dropdown: DropdownWidget::new("Severity", severity_options, theme.clone()),
-            notes: String::new(),
+            notes: TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(4)),
             focused_field: MedicalHistoryFormField::Condition,
             errors: HashMap::new(),
             theme,
@@ -144,8 +201,8 @@ impl MedicalHistoryForm {
 
     pub fn get_value(&self, field: MedicalHistoryFormField) -> String {
         match field {
-            MedicalHistoryFormField::Condition => self.condition.clone(),
-            MedicalHistoryFormField::DiagnosisDate => self.diagnosis_date.clone(),
+            MedicalHistoryFormField::Condition => self.condition.value(),
+            MedicalHistoryFormField::DiagnosisDate => self.diagnosis_date.value(),
             MedicalHistoryFormField::Status => self
                 .status_dropdown
                 .selected_value()
@@ -156,17 +213,29 @@ impl MedicalHistoryForm {
                 .selected_value()
                 .map(String::from)
                 .unwrap_or_default(),
-            MedicalHistoryFormField::Notes => self.notes.clone(),
+            MedicalHistoryFormField::Notes => self.notes.value(),
         }
     }
 
     pub fn set_value(&mut self, field: MedicalHistoryFormField, value: String) {
         match field {
-            MedicalHistoryFormField::Condition => self.condition = value,
-            MedicalHistoryFormField::DiagnosisDate => self.diagnosis_date = value,
+            MedicalHistoryFormField::Condition => {
+                self.condition = TextareaState::new("Condition")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value)
+            }
+            MedicalHistoryFormField::DiagnosisDate => {
+                self.diagnosis_date = TextareaState::new("DiagnosisDate")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value)
+            }
             MedicalHistoryFormField::Status => self.status_dropdown.set_value(&value),
             MedicalHistoryFormField::Severity => self.severity_dropdown.set_value(&value),
-            MedicalHistoryFormField::Notes => self.notes = value,
+            MedicalHistoryFormField::Notes => {
+                self.notes = TextareaState::new("Notes")
+                    .with_height_mode(HeightMode::FixedLines(4))
+                    .with_value(value)
+            }
         }
         self.validate_field(&field);
     }
@@ -231,6 +300,12 @@ impl MedicalHistoryForm {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<MedicalHistoryFormAction> {
+        use crossterm::event::KeyEventKind;
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
         // Delegate to dropdown when focused on Status or Severity
         match self.focused_field {
             MedicalHistoryFormField::Status => {
@@ -270,6 +345,37 @@ impl MedicalHistoryForm {
             _ => {}
         }
 
+        // For text fields (Condition, DiagnosisDate, Notes), delegate to TextareaState.
+        match self.focused_field {
+            MedicalHistoryFormField::Condition => {
+                let ratatui_key = to_ratatui_key(key);
+                let consumed = self.condition.handle_key(ratatui_key);
+                if consumed {
+                    return Some(MedicalHistoryFormAction::ValueChanged);
+                }
+            }
+            MedicalHistoryFormField::DiagnosisDate => {
+                let ratatui_key = to_ratatui_key(key);
+                let consumed = self.diagnosis_date.handle_key(ratatui_key);
+                if consumed {
+                    return Some(MedicalHistoryFormAction::ValueChanged);
+                }
+            }
+            MedicalHistoryFormField::Notes => {
+                // Ctrl+Enter submits the form from any field.
+                if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Enter {
+                    self.validate();
+                    return Some(MedicalHistoryFormAction::Submit);
+                }
+                let ratatui_key = to_ratatui_key(key);
+                let consumed = self.notes.handle_key(ratatui_key);
+                if consumed {
+                    return Some(MedicalHistoryFormAction::ValueChanged);
+                }
+            }
+            _ => {}
+        }
+
         match key.code {
             KeyCode::Tab => {
                 if key
@@ -280,6 +386,10 @@ impl MedicalHistoryForm {
                 } else {
                     self.next_field();
                 }
+                Some(MedicalHistoryFormAction::FocusChanged)
+            }
+            KeyCode::BackTab => {
+                self.prev_field();
                 Some(MedicalHistoryFormAction::FocusChanged)
             }
             KeyCode::Up => {
@@ -295,18 +405,6 @@ impl MedicalHistoryForm {
                 Some(MedicalHistoryFormAction::Submit)
             }
             KeyCode::Esc => Some(MedicalHistoryFormAction::Cancel),
-            KeyCode::Char(c) => {
-                let mut value = self.get_value(self.focused_field);
-                value.push(c);
-                self.set_value(self.focused_field, value);
-                Some(MedicalHistoryFormAction::ValueChanged)
-            }
-            KeyCode::Backspace => {
-                let mut value = self.get_value(self.focused_field);
-                value.pop();
-                self.set_value(self.focused_field, value);
-                Some(MedicalHistoryFormAction::ValueChanged)
-            }
             _ => None,
         }
     }
@@ -329,16 +427,16 @@ impl MedicalHistoryForm {
             .parse::<Severity>()
             .ok();
         let diagnosis_date =
-            chrono::NaiveDate::parse_from_str(&self.diagnosis_date, "%Y-%m-%d").ok();
+            chrono::NaiveDate::parse_from_str(&self.diagnosis_date.value(), "%Y-%m-%d").ok();
 
         Some(MedicalHistory {
             id: uuid::Uuid::new_v4(),
             patient_id,
-            condition: self.condition.clone(),
+            condition: self.condition.value(),
             diagnosis_date,
             status,
             severity,
-            notes: Some(self.notes.clone()).filter(|s| !s.is_empty()),
+            notes: Some(self.notes.value()).filter(|s: &String| !s.is_empty()),
             is_active: true,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -382,7 +480,6 @@ impl Widget for MedicalHistoryForm {
             }
 
             let is_focused = field == self.focused_field;
-            let has_error = self.error(field).is_some();
 
             let label_style = if is_focused {
                 Style::default()
@@ -425,29 +522,43 @@ impl Widget for MedicalHistoryForm {
                     y += 2;
                 }
                 _ => {
-                    let value = self.get_value(field);
-                    let value_style = if has_error {
-                        Style::default().fg(self.theme.colors.error)
-                    } else {
-                        Style::default().fg(self.theme.colors.foreground)
+                    let textarea_state: &TextareaState;
+                    let height: u16;
+                    match field {
+                        MedicalHistoryFormField::Condition => {
+                            textarea_state = &self.condition;
+                            height = 3;
+                        }
+                        MedicalHistoryFormField::DiagnosisDate => {
+                            textarea_state = &self.diagnosis_date;
+                            height = 3;
+                        }
+                        MedicalHistoryFormField::Notes => {
+                            textarea_state = &self.notes;
+                            height = 6;
+                        }
+                        _ => continue,
                     };
 
-                    let max_value_width = inner.width.saturating_sub(label_width + 4);
-                    let display_value = if value.len() > max_value_width as usize {
-                        &value[value.len() - max_value_width as usize..]
-                    } else {
-                        &value
-                    };
+                    let textarea_width = inner.width.saturating_sub(label_width + 4);
+                    let textarea_area = Rect::new(field_start, y, textarea_width, height);
 
-                    buf.set_string(field_start, y, display_value, value_style);
+                    TextareaWidget::new(textarea_state, self.theme.clone())
+                        .focused(is_focused)
+                        .render(textarea_area, buf);
 
                     if let Some(error_msg) = self.error(field) {
                         let error_style = Style::default().fg(self.theme.colors.error);
-                        buf.set_string(field_start, y + 1, format!("  {}", error_msg), error_style);
+                        buf.set_string(
+                            field_start,
+                            y + height,
+                            format!("  {}", error_msg),
+                            error_style,
+                        );
                         y += 1;
                     }
 
-                    y += 2;
+                    y += height;
                 }
             }
         }
@@ -460,7 +571,7 @@ impl Widget for MedicalHistoryForm {
         buf.set_string(
             inner.x + 1,
             help_y,
-            "Tab: Next | Shift+Tab: Prev | Enter: Submit | Esc: Cancel",
+            "Tab: Next | Shift+Tab: Prev | Ctrl+Enter: Submit | Enter in notes: Newline | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
     }

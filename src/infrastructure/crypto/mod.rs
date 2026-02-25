@@ -233,6 +233,11 @@ pub enum CryptoError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// Mutex to serialize tests that mutate ENCRYPTION_KEY environment variable.
+    /// Required because std::env::set_var is not thread-safe across parallel tests.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     /// Generate a random 32-byte key for testing
     fn generate_test_key() -> String {
@@ -242,6 +247,7 @@ mod tests {
 
     #[test]
     fn test_new_with_valid_key() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let key = generate_test_key();
         std::env::set_var("ENCRYPTION_KEY", &key);
 
@@ -251,6 +257,7 @@ mod tests {
 
     #[test]
     fn test_new_without_key() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::remove_var("ENCRYPTION_KEY");
 
         let result = EncryptionService::new();
@@ -260,6 +267,7 @@ mod tests {
 
     #[test]
     fn test_new_with_invalid_hex() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("ENCRYPTION_KEY", "not_hex_data");
 
         let result = EncryptionService::new();
@@ -269,6 +277,7 @@ mod tests {
 
     #[test]
     fn test_new_with_wrong_length_key() {
+        let _guard = ENV_LOCK.lock().unwrap();
         // 16 bytes instead of 32
         let key = hex::encode([0u8; 16]);
         std::env::set_var("ENCRYPTION_KEY", &key);
@@ -283,6 +292,7 @@ mod tests {
 
     #[test]
     fn test_encrypt_decrypt() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let key = generate_test_key();
         std::env::set_var("ENCRYPTION_KEY", &key);
 
@@ -302,6 +312,7 @@ mod tests {
 
     #[test]
     fn test_encrypt_produces_different_ciphertext() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let key = generate_test_key();
         std::env::set_var("ENCRYPTION_KEY", &key);
 
@@ -322,6 +333,7 @@ mod tests {
 
     #[test]
     fn test_decrypt_with_wrong_key() {
+        let _guard = ENV_LOCK.lock().unwrap();
         // Encrypt with one key
         let key1 = generate_test_key();
         std::env::set_var("ENCRYPTION_KEY", &key1);
@@ -340,6 +352,7 @@ mod tests {
 
     #[test]
     fn test_decrypt_invalid_ciphertext() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let key = generate_test_key();
         std::env::set_var("ENCRYPTION_KEY", &key);
         let crypto = EncryptionService::new().unwrap();
@@ -362,6 +375,7 @@ mod tests {
 
     #[test]
     fn test_encrypt_empty_string() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let key = generate_test_key();
         std::env::set_var("ENCRYPTION_KEY", &key);
         let crypto = EncryptionService::new().unwrap();
@@ -373,6 +387,7 @@ mod tests {
 
     #[test]
     fn test_encrypt_unicode() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let key = generate_test_key();
         std::env::set_var("ENCRYPTION_KEY", &key);
         let crypto = EncryptionService::new().unwrap();
@@ -385,6 +400,7 @@ mod tests {
 
     #[test]
     fn test_encrypt_long_text() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let key = generate_test_key();
         std::env::set_var("ENCRYPTION_KEY", &key);
         let crypto = EncryptionService::new().unwrap();

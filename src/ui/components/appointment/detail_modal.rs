@@ -240,7 +240,11 @@ impl AppointmentDetailModal {
 
     /// Handle keyboard input and return an action if triggered.
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<AppointmentDetailModalAction> {
-        use crossterm::event::KeyCode;
+        use crossterm::event::{KeyCode, KeyEventKind};
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
 
         match key.code {
             KeyCode::Esc => Some(AppointmentDetailModalAction::Close),
@@ -250,6 +254,10 @@ impl AppointmentDetailModal {
                 } else {
                     self.next_button();
                 }
+                None
+            }
+            KeyCode::BackTab => {
+                self.prev_button();
                 None
             }
             KeyCode::Left | KeyCode::Up => {

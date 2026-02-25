@@ -1,6 +1,7 @@
 use crate::domain::clinical::Allergy;
 use crate::domain::clinical::AllergyType;
 use crate::domain::clinical::Severity;
+use crate::ui::layout::HEADER_HEIGHT;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::LoadingState;
 use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
@@ -169,7 +170,11 @@ impl AllergyList {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<AllergyListAction> {
-        use crossterm::event::KeyCode;
+        use crossterm::event::{KeyCode, KeyEventKind};
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
 
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
@@ -244,11 +249,11 @@ impl AllergyList {
             return None;
         }
 
-        if mouse.row < area.y + 2 {
+        if mouse.row < area.y + HEADER_HEIGHT {
             return None;
         }
 
-        let row_index = (mouse.row - area.y - 2) as usize;
+        let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
         let actual_index = self.scroll_offset + row_index;
         if actual_index < self.allergies.len() {
             self.selected_index = actual_index;

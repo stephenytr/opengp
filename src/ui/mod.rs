@@ -19,4 +19,4 @@ pub use components::tabs::Tab;
 pub use error::{UiComponent, UiError};
 pub use keybinds::{Action, KeybindRegistry};
 pub use theme::{ColorPalette, Theme};
-pub use widgets::{FieldType, FormField, FormFieldState, LoadingIndicator, SearchInput, SearchInputState, SpinnerStyle};
+pub use widgets::{FieldType, FormField, FormFieldState, LoadingIndicator, SpinnerStyle};
