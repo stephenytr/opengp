@@ -10,6 +10,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Color;
 use ratatui::Frame;
 
+use crate::config::CalendarConfig;
 use crate::ui::components::appointment::{
     AppointmentDetailModal, AppointmentDetailModalAction, AppointmentForm, AppointmentFormAction,
     AppointmentFormField, AppointmentState, AppointmentView, CalendarAction, ScheduleAction,
@@ -133,6 +134,7 @@ impl App {
         clinical_service: Option<Arc<crate::ui::services::ClinicalUiService>>,
     ) -> Self {
         let theme = Theme::dark();
+        let config = CalendarConfig::default();
         let mut app = Self {
             theme: theme.clone(),
             keybinds: KeybindRegistry::global(),
@@ -148,7 +150,7 @@ impl App {
             patient_form: None,
             pending_patient_data: None,
             pending_edit_patient_id: None,
-            appointment_state: AppointmentState::new(theme.clone()),
+            appointment_state: AppointmentState::new(theme.clone(), config),
             appointment_service,
             patient_service,
             pending_appointment_date: None,

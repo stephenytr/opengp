@@ -11,6 +11,7 @@ use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
+use crate::config::CalendarConfig;
 use crate::domain::appointment::{AppointmentStatus, CalendarAppointment, CalendarDayView};
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
 use crate::ui::layout::TIME_COLUMN_WIDTH;
@@ -43,7 +44,7 @@ pub enum ScheduleAction {
 /// Schedule view widget displaying practitioner columns and time slots.
 ///
 /// Shows a day's appointments across multiple practitioners with:
-/// - Time column on the left (8:00 - 18:00 in 15-minute slots)
+/// - Time column on the left (configurable time range in 15-minute slots)
 /// - One column per practitioner
 /// - Appointment blocks sized by duration
 /// - Selection highlighting for time slots and practitioner columns
@@ -54,7 +55,7 @@ pub struct Schedule {
     schedule_data: Option<CalendarDayView>,
     /// Currently selected practitioner column index
     selected_practitioner_index: usize,
-    /// Currently selected time slot (0-39 for 8am-6pm in 15-min increments)
+    /// Currently selected time slot (in 15-min increments, range depends on viewport_end_hour - viewport_start_hour)
     pub selected_time_slot: u8,
     /// First hour to display in viewport
     viewport_start_hour: u8,
@@ -64,20 +65,23 @@ pub struct Schedule {
     theme: Theme,
     /// Whether this widget has keyboard focus
     pub focused: bool,
+    /// Calendar configuration
+    config: CalendarConfig,
 }
 
 impl Schedule {
-    /// Create a new schedule component with default values.
-    pub fn new(theme: Theme) -> Self {
+    /// Create a new schedule component with the given theme and calendar configuration.
+    pub fn new(theme: Theme, config: CalendarConfig) -> Self {
         Self {
             practitioners: Vec::new(),
             schedule_data: None,
             selected_practitioner_index: 0,
-            selected_time_slot: 0, // 8:00 AM
-            viewport_start_hour: 8,
-            viewport_end_hour: 18,
+            selected_time_slot: 0,
+            viewport_start_hour: config.viewport_start_hour,
+            viewport_end_hour: config.viewport_end_hour,
             theme,
             focused: false,
+            config,
         }
     }
 
@@ -164,8 +168,8 @@ impl Schedule {
                     }
                 }
                 Action::ScrollViewportUp => {
-                    const MIN_HOUR: u8 = 6;
-                    if self.viewport_start_hour > MIN_HOUR {
+                    let min_hour = self.config.min_hour;
+                    if self.viewport_start_hour > min_hour {
                         let abs_hour = self.viewport_start_hour + (self.selected_time_slot / 4);
                         let abs_min_slot = self.selected_time_slot % 4;
 
@@ -183,13 +187,13 @@ impl Schedule {
                     None
                 }
                 Action::ScrollViewportDown => {
-                    const MAX_HOUR: u8 = 22;
-                    if self.viewport_end_hour < MAX_HOUR {
+                    let max_hour = self.config.max_hour;
+                    if self.viewport_end_hour < max_hour {
                         let abs_hour = self.viewport_start_hour + (self.selected_time_slot / 4);
                         let abs_min_slot = self.selected_time_slot % 4;
 
-                        self.viewport_start_hour = (self.viewport_start_hour + 2).min(MAX_HOUR - 2);
-                        self.viewport_end_hour = (self.viewport_end_hour + 2).min(MAX_HOUR);
+                        self.viewport_start_hour = (self.viewport_start_hour + 2).min(max_hour - 2);
+                        self.viewport_end_hour = (self.viewport_end_hour + 2).min(max_hour);
 
                         if abs_hour >= self.viewport_start_hour && abs_hour < self.viewport_end_hour
                         {
@@ -258,8 +262,8 @@ impl Schedule {
                 None
             }
             MouseEventKind::ScrollUp => {
-                const MIN_HOUR: u8 = 6;
-                if self.viewport_start_hour > MIN_HOUR {
+                let min_hour = self.config.min_hour;
+                if self.viewport_start_hour > min_hour {
                     self.viewport_start_hour = self.viewport_start_hour.saturating_sub(1);
                     self.viewport_end_hour = self.viewport_end_hour.saturating_sub(1);
                     self.scroll_viewport_to_show_selection();
@@ -267,12 +271,12 @@ impl Schedule {
                 None
             }
             MouseEventKind::ScrollDown => {
-                const MAX_HOUR: u8 = 22;
+                let max_hour = self.config.max_hour;
                 let window_hours = self.viewport_end_hour - self.viewport_start_hour;
-                if self.viewport_end_hour < MAX_HOUR {
+                if self.viewport_end_hour < max_hour {
                     self.viewport_start_hour =
-                        (self.viewport_start_hour + 1).min(MAX_HOUR - window_hours);
-                    self.viewport_end_hour = (self.viewport_end_hour + 1).min(MAX_HOUR);
+                        (self.viewport_start_hour + 1).min(max_hour - window_hours);
+                    self.viewport_end_hour = (self.viewport_end_hour + 1).min(max_hour);
                     self.scroll_viewport_to_show_selection();
                 }
                 None
@@ -698,7 +702,8 @@ mod tests {
     #[test]
     fn test_slot_to_time() {
         let theme = Theme::default();
-        let schedule = Schedule::new(theme);
+        let config = CalendarConfig::default();
+        let schedule = Schedule::new(theme, config);
 
         assert_eq!(schedule.slot_to_time(0), "08:00");
         assert_eq!(schedule.slot_to_time(4), "09:00");
@@ -709,7 +714,8 @@ mod tests {
     #[test]
     fn test_max_time_slot() {
         let theme = Theme::default();
-        let schedule = Schedule::new(theme);
+        let config = CalendarConfig::default();
+        let schedule = Schedule::new(theme, config);
 
         // 8am to 6pm = 10 hours = 40 slots (0-39)
         assert_eq!(schedule.max_time_slot(), 39);
@@ -718,7 +724,8 @@ mod tests {
     #[test]
     fn test_scroll_viewport_preserves_selection() {
         let theme = Theme::default();
-        let mut schedule = Schedule::new(theme);
+        let config = CalendarConfig::default();
+        let mut schedule = Schedule::new(theme, config);
 
         schedule.selected_time_slot = 16;
 
@@ -741,7 +748,8 @@ mod tests {
     #[test]
     fn test_viewport_clamps_at_boundaries() {
         let theme = Theme::default();
-        let mut schedule = Schedule::new(theme);
+        let config = CalendarConfig::default();
+        let mut schedule = Schedule::new(theme, config);
 
         schedule.viewport_start_hour = 8;
         schedule.viewport_end_hour = 18;

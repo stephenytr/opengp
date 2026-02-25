@@ -1,6 +1,7 @@
 use chrono::NaiveDate;
 use uuid::Uuid;
 
+use crate::config::CalendarConfig;
 use crate::domain::appointment::CalendarDayView;
 use crate::domain::user::Practitioner;
 
@@ -27,11 +28,11 @@ pub struct AppointmentState {
 }
 
 impl AppointmentState {
-    pub fn new(theme: crate::ui::theme::Theme) -> Self {
+    pub fn new(theme: crate::ui::theme::Theme, config: CalendarConfig) -> Self {
         Self {
             current_view: AppointmentView::Calendar,
             calendar: Calendar::new(theme.clone()),
-            schedule: Schedule::new(theme),
+            schedule: Schedule::new(theme, config),
             selected_date: Some(chrono::Utc::now().date_naive()),
             schedule_data: None,
             practitioners: Vec::new(),
