@@ -408,17 +408,27 @@ impl Schedule {
 
     /// Check if an appointment occupies a specific time slot.
     fn is_appointment_at_slot(&self, apt: &CalendarAppointment, slot: u8) -> bool {
-        let start_slot = self.time_to_slot(apt.start_time);
-        let end_slot = start_slot + apt.slot_span as u8 - 1;
+        let Some(start_slot) = self.time_to_slot(apt.start_time) else {
+            return false;
+        };
+        let end_slot = start_slot
+            .saturating_add(apt.slot_span as u8)
+            .saturating_sub(1);
         slot >= start_slot && slot <= end_slot
     }
 
-    /// Convert a DateTime to a time slot index (0-39).
-    fn time_to_slot(&self, time: chrono::DateTime<chrono::Utc>) -> u8 {
+    /// Convert a DateTime to a time slot index relative to viewport.
+    /// Returns None if the appointment time is before the visible viewport.
+    fn time_to_slot(&self, time: chrono::DateTime<chrono::Utc>) -> Option<u8> {
         let hour = time.hour() as u8;
         let minute = time.minute() as u8;
-        let hour_offset = hour.saturating_sub(self.viewport_start_hour);
-        (hour_offset * 4 + minute / 15) as u8
+        // Don't use saturating_sub - we need to know if hour is before viewport
+        if hour < self.viewport_start_hour {
+            return None;
+        }
+        let hour_offset = hour - self.viewport_start_hour;
+        let slot = hour_offset * 4 + minute / 15;
+        Some(slot)
     }
 
     /// Get the time string for a given slot.
@@ -568,7 +578,9 @@ impl Schedule {
         max_slot: u8,
         area: Rect,
     ) {
-        let start_slot = self.time_to_slot(apt.start_time);
+        let Some(start_slot) = self.time_to_slot(apt.start_time) else {
+            return;
+        };
         if start_slot > max_slot {
             return;
         }
