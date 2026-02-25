@@ -132,9 +132,9 @@ impl App {
         appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
         patient_service: Option<Arc<crate::ui::services::PatientUiService>>,
         clinical_service: Option<Arc<crate::ui::services::ClinicalUiService>>,
+        calendar_config: CalendarConfig,
     ) -> Self {
         let theme = Theme::dark();
-        let config = CalendarConfig::default();
         let mut app = Self {
             theme: theme.clone(),
             keybinds: KeybindRegistry::global(),
@@ -150,7 +150,7 @@ impl App {
             patient_form: None,
             pending_patient_data: None,
             pending_edit_patient_id: None,
-            appointment_state: AppointmentState::new(theme.clone(), config),
+            appointment_state: AppointmentState::new(theme.clone(), calendar_config),
             appointment_service,
             patient_service,
             pending_appointment_date: None,
@@ -1658,7 +1658,7 @@ impl App {
 
 impl Default for App {
     fn default() -> Self {
-        Self::new(None, None, None)
+        Self::new(None, None, None, CalendarConfig::default())
     }
 }
 
@@ -1668,14 +1668,14 @@ mod tests {
 
     #[test]
     fn test_app_creation() {
-        let app = App::new(None, None, None);
+        let app = App::new(None, None, None, CalendarConfig::default());
         assert_eq!(app.current_tab(), Tab::Patient);
         assert!(!app.should_quit());
     }
 
     #[test]
     fn test_tab_switching() {
-        let mut app = App::new(None, None, None);
+        let mut app = App::new(None, None, None, CalendarConfig::default());
 
         // Simulate pressing F3 to switch to Appointments tab
         let key = crossterm::event::KeyEvent::new(
@@ -1689,7 +1689,7 @@ mod tests {
 
     #[test]
     fn test_help_toggle() {
-        let mut app = App::new(None, None, None);
+        let mut app = App::new(None, None, None, CalendarConfig::default());
 
         assert!(!app.help_overlay.is_visible());
 
@@ -1710,7 +1710,7 @@ mod tests {
 
     #[test]
     fn test_quit() {
-        let mut app = App::new(None, None, None);
+        let mut app = App::new(None, None, None, CalendarConfig::default());
 
         // Simulate Ctrl+Q to quit
         let key = crossterm::event::KeyEvent::new(
@@ -1724,7 +1724,7 @@ mod tests {
 
     #[test]
     fn test_calendar_keybind_routing() {
-        let mut app = App::new(None, None, None);
+        let mut app = App::new(None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -1746,7 +1746,7 @@ mod tests {
 
     #[test]
     fn test_calendar_enter_selects_date() {
-        let mut app = App::new(None, None, None);
+        let mut app = App::new(None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -1769,7 +1769,7 @@ mod tests {
 
     #[test]
     fn test_schedule_keybind_routing() {
-        let mut app = App::new(None, None, None);
+        let mut app = App::new(None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -1801,7 +1801,7 @@ mod tests {
 
     #[test]
     fn test_q_does_not_quit_on_appointment() {
-        let mut app = App::new(None, None, None);
+        let mut app = App::new(None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -1822,7 +1822,7 @@ mod tests {
 
     #[test]
     fn test_ctrl_q_always_quits() {
-        let mut app = App::new(None, None, None);
+        let mut app = App::new(None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -1839,7 +1839,7 @@ mod tests {
 
     #[test]
     fn test_schedule_escape_returns_to_calendar() {
-        let mut app = App::new(None, None, None);
+        let mut app = App::new(None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -1871,7 +1871,7 @@ mod tests {
 
     #[test]
     fn test_patient_keybind_regression() {
-        let mut app = App::new(None, None, None);
+        let mut app = App::new(None, None, None, CalendarConfig::default());
         assert_eq!(app.current_tab(), Tab::Patient);
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('q'),

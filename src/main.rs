@@ -22,6 +22,7 @@ use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use opengp::Config;
+use opengp::config::CalendarConfig;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -115,7 +116,7 @@ async fn main() -> Result<()> {
         }
     };
 
-    run_tui(patients, patient_repo.clone(), appointment_service, patient_service, clinical_service, system_user_id).await?;
+    run_tui(patients, patient_repo.clone(), appointment_service, patient_service, clinical_service, system_user_id, config.calendar).await?;
 
     tracing::info!("OpenGP shutdown complete");
 
@@ -129,6 +130,7 @@ async fn run_tui(
     patient_service: Arc<opengp::ui::services::PatientUiService>,
     clinical_service: Arc<opengp::ui::services::ClinicalUiService>,
     system_user_id: uuid::Uuid,
+    calendar_config: CalendarConfig,
 ) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -136,7 +138,7 @@ async fn run_tui(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new(Some(appointment_service.clone()), Some(patient_service.clone()), Some(clinical_service.clone()));
+    let mut app = App::new(Some(appointment_service.clone()), Some(patient_service.clone()), Some(clinical_service.clone()), calendar_config);
     app.load_patients(patients);
 
     loop {
