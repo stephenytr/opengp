@@ -92,7 +92,7 @@ pub struct CalendarConfig {
     pub max_hour: u8,
     /// Initial viewport start hour (default: 8)
     pub viewport_start_hour: u8,
-    /// Initial viewport end hour (default: 18)
+    /// Initial viewport end hour (default: 19, shows up to 6 PM)
     pub viewport_end_hour: u8,
 }
 
@@ -102,7 +102,7 @@ impl Default for CalendarConfig {
             min_hour: 6,
             max_hour: 22,
             viewport_start_hour: 8,
-            viewport_end_hour: 18,
+            viewport_end_hour: 19,
         }
     }
 }
@@ -114,7 +114,7 @@ impl CalendarConfig {
     /// - CALENDAR_MIN_HOUR (default: 6)
     /// - CALENDAR_MAX_HOUR (default: 22)
     /// - CALENDAR_START_HOUR (default: 8)
-    /// - CALENDAR_END_HOUR (default: 18)
+    /// - CALENDAR_END_HOUR (default: 19)
     ///
     /// # Validation
     /// - viewport_start_hour >= min_hour
@@ -143,7 +143,7 @@ impl CalendarConfig {
         let viewport_end_hour = std::env::var("CALENDAR_END_HOUR")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(18);
+            .unwrap_or(19);
 
         let config = Self {
             min_hour,
@@ -209,7 +209,7 @@ mod tests {
         assert_eq!(config.min_hour, 6);
         assert_eq!(config.max_hour, 22);
         assert_eq!(config.viewport_start_hour, 8);
-        assert_eq!(config.viewport_end_hour, 18);
+        assert_eq!(config.viewport_end_hour, 19);
     }
 
     #[test]
@@ -223,7 +223,7 @@ mod tests {
         assert_eq!(config.min_hour, 6);
         assert_eq!(config.max_hour, 22);
         assert_eq!(config.viewport_start_hour, 8);
-        assert_eq!(config.viewport_end_hour, 18);
+        assert_eq!(config.viewport_end_hour, 19);
 
         std::env::remove_var("CALENDAR_MIN_HOUR");
         std::env::remove_var("CALENDAR_MAX_HOUR");
@@ -257,7 +257,7 @@ mod tests {
             min_hour: 6,
             max_hour: 22,
             viewport_start_hour: 5,
-            viewport_end_hour: 18,
+            viewport_end_hour: 19,
         };
 
         let result = config.validate();
@@ -290,8 +290,8 @@ mod tests {
         let config = CalendarConfig {
             min_hour: 6,
             max_hour: 22,
-            viewport_start_hour: 18,
-            viewport_end_hour: 18,
+            viewport_start_hour: 19,
+            viewport_end_hour: 19,
         };
 
         let result = config.validate();
@@ -308,7 +308,7 @@ mod tests {
             min_hour: 6,
             max_hour: 22,
             viewport_start_hour: 8,
-            viewport_end_hour: 18,
+            viewport_end_hour: 19,
         };
 
         let result = config.validate();

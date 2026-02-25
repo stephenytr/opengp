@@ -708,7 +708,7 @@ mod tests {
         assert_eq!(schedule.slot_to_time(0), "08:00");
         assert_eq!(schedule.slot_to_time(4), "09:00");
         assert_eq!(schedule.slot_to_time(8), "10:00");
-        assert_eq!(schedule.slot_to_time(39), "17:45");
+        assert_eq!(schedule.slot_to_time(43), "18:45");
     }
 
     #[test]
@@ -717,8 +717,8 @@ mod tests {
         let config = CalendarConfig::default();
         let schedule = Schedule::new(theme, config);
 
-        // 8am to 6pm = 10 hours = 40 slots (0-39)
-        assert_eq!(schedule.max_time_slot(), 39);
+        // 8am to 7pm = 11 hours = 44 slots (0-43)
+        assert_eq!(schedule.max_time_slot(), 43);
     }
 
     #[test]
