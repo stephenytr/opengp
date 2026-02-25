@@ -561,7 +561,9 @@ impl App {
                 Action::PrevPractitioner
                 | Action::NextPractitioner
                 | Action::PrevTimeSlot
-                | Action::NextTimeSlot => {
+                | Action::NextTimeSlot
+                | Action::ScrollViewportUp
+                | Action::ScrollViewportDown => {
                     if self.tab_bar.selected() == Tab::Appointment {
                         return self.handle_appointment_keys(key);
                     }
@@ -1288,7 +1290,7 @@ impl App {
                     // Replicate the split layout from render_content
                     let chunks = Layout::default()
                         .direction(Direction::Horizontal)
-                        .constraints([Constraint::Percentage(15), Constraint::Percentage(85)])
+                        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
                         .split(appointment_content_area);
 
                     // Route to calendar (left pane) - only handle clicks, not scroll (scroll is for schedule only)
@@ -1461,6 +1463,9 @@ impl App {
                 frame.render_widget(self.appointment_state.calendar.clone(), chunks[0]);
 
                 let schedule = &mut self.appointment_state.schedule;
+
+                let schedule_inner_height = chunks[1].height.saturating_sub(2);
+                schedule.set_inner_height(schedule_inner_height);
 
                 if let Some(ref data) = self.appointment_state.schedule_data {
                     schedule.load_schedule(data.clone());

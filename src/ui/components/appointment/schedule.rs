@@ -55,7 +55,7 @@ pub struct Schedule {
     schedule_data: Option<CalendarDayView>,
     /// Currently selected practitioner column index
     selected_practitioner_index: usize,
-    /// Currently selected time slot (in 15-min increments, range depends on viewport_end_hour - viewport_start_hour)
+    /// Currently selected time slot (in 15-min increments, relative to viewport_start_hour)
     pub selected_time_slot: u8,
     /// First hour to display in viewport
     viewport_start_hour: u8,
@@ -67,6 +67,9 @@ pub struct Schedule {
     pub focused: bool,
     /// Calendar configuration
     config: CalendarConfig,
+    /// Height of the inner render area (excluding borders), updated each frame.
+    /// Used to compute how many slots are visible so the viewport can auto-scroll.
+    last_inner_height: u16,
 }
 
 impl Schedule {
@@ -82,6 +85,68 @@ impl Schedule {
             theme,
             focused: false,
             config,
+            last_inner_height: 0,
+        }
+    }
+
+    pub fn set_inner_height(&mut self, inner_height: u16) {
+        self.last_inner_height = inner_height;
+        self.fit_viewport_to_height();
+    }
+
+    fn visible_slots(&self) -> u8 {
+        if self.last_inner_height < 2 {
+            return 1;
+        }
+        // Row 0 of inner area = practitioner header. Each slot = 2 rows.
+        // render: y = area.y + 1 + slot * 2, visible when y < area.y + area.height
+        // => slot < (inner_height - 1) / 2
+        ((self.last_inner_height.saturating_sub(1)) / 2).min(255) as u8
+    }
+
+    fn fit_viewport_to_height(&mut self) {
+        let visible = self.visible_slots();
+        // Convert visible slots to whole hours (ceiling), minimum 1 hour
+        let hours_needed = (((visible as u16 + 3) / 4) as u8).max(1);
+        let new_end = (self.viewport_start_hour + hours_needed).min(self.config.max_hour);
+        self.viewport_end_hour = new_end.max(self.viewport_start_hour + 1);
+    }
+
+    fn ensure_slot_visible(&mut self) {
+        let visible = self.visible_slots();
+        if visible == 0 {
+            return;
+        }
+        let slot = self.selected_time_slot;
+        let max_hour = self.config.max_hour;
+        let min_hour = self.config.min_hour;
+        let window = self.viewport_end_hour - self.viewport_start_hour;
+
+        if slot >= visible {
+            let abs_slot = self.viewport_start_hour as u16 * 4 + slot as u16;
+            let new_start_slot = abs_slot.saturating_sub(visible as u16 - 1);
+            let new_start_hour = ((new_start_slot / 4) as u8).min(max_hour - window);
+            let new_start_hour = new_start_hour.max(min_hour);
+            self.viewport_start_hour = new_start_hour;
+            self.viewport_end_hour = (self.viewport_start_hour + window).min(max_hour);
+            self.selected_time_slot = (abs_slot as u8).saturating_sub(self.viewport_start_hour * 4);
+        }
+    }
+
+    fn scroll_viewport_up_if_needed(&mut self) {
+        let visible = self.visible_slots();
+        if visible == 0 {
+            return;
+        }
+        let slot = self.selected_time_slot;
+        let min_hour = self.config.min_hour;
+        let window = self.viewport_end_hour - self.viewport_start_hour;
+
+        if slot == 0 && self.viewport_start_hour > min_hour {
+            let new_start = self.viewport_start_hour.saturating_sub(1).max(min_hour);
+            self.viewport_start_hour = new_start;
+            self.viewport_end_hour = (self.viewport_start_hour + window).min(self.config.max_hour);
+            self.selected_time_slot = 4;
         }
     }
 
@@ -140,6 +205,7 @@ impl Schedule {
                 Action::PrevTimeSlot => {
                     if self.selected_time_slot > 0 {
                         self.selected_time_slot -= 1;
+                        self.scroll_viewport_up_if_needed();
                     }
                     Some(ScheduleAction::NavigateTimeSlot(-1))
                 }
@@ -147,6 +213,7 @@ impl Schedule {
                     let max_slot = self.max_time_slot();
                     if self.selected_time_slot < max_slot {
                         self.selected_time_slot += 1;
+                        self.ensure_slot_visible();
                     }
                     Some(ScheduleAction::NavigateTimeSlot(1))
                 }
@@ -173,8 +240,10 @@ impl Schedule {
                         let abs_hour = self.viewport_start_hour + (self.selected_time_slot / 4);
                         let abs_min_slot = self.selected_time_slot % 4;
 
-                        self.viewport_start_hour = self.viewport_start_hour.saturating_sub(2);
-                        self.viewport_end_hour = self.viewport_end_hour.saturating_sub(2);
+                        let window = self.viewport_end_hour - self.viewport_start_hour;
+                        self.viewport_start_hour =
+                            self.viewport_start_hour.saturating_sub(2).max(min_hour);
+                        self.viewport_end_hour = self.viewport_start_hour + window;
 
                         if abs_hour >= self.viewport_start_hour && abs_hour < self.viewport_end_hour
                         {
@@ -192,8 +261,9 @@ impl Schedule {
                         let abs_hour = self.viewport_start_hour + (self.selected_time_slot / 4);
                         let abs_min_slot = self.selected_time_slot % 4;
 
-                        self.viewport_start_hour = (self.viewport_start_hour + 2).min(max_hour - 2);
+                        let window = self.viewport_end_hour - self.viewport_start_hour;
                         self.viewport_end_hour = (self.viewport_end_hour + 2).min(max_hour);
+                        self.viewport_start_hour = self.viewport_end_hour - window;
 
                         if abs_hour >= self.viewport_start_hour && abs_hour < self.viewport_end_hour
                         {
@@ -285,9 +355,8 @@ impl Schedule {
         }
     }
 
-    /// Get the maximum valid time slot index.
     fn max_time_slot(&self) -> u8 {
-        ((self.viewport_end_hour - self.viewport_start_hour) * 4 - 1) as u8
+        ((self.config.max_hour - self.viewport_start_hour) * 4 - 1) as u8
     }
 
     /// Ensure the viewport includes the currently selected time slot.
@@ -717,8 +786,7 @@ mod tests {
         let config = CalendarConfig::default();
         let schedule = Schedule::new(theme, config);
 
-        // 8am to 6pm = 10 hours = 40 slots (0-39)
-        assert_eq!(schedule.max_time_slot(), 39);
+        assert_eq!(schedule.max_time_slot(), 55);
     }
 
     #[test]
@@ -777,5 +845,39 @@ mod tests {
             schedule.viewport_end_hour <= 22,
             "viewport should not exceed 22"
         );
+    }
+
+    #[test]
+    fn test_max_slot_reaches_max_hour() {
+        let theme = Theme::default();
+
+        let config = CalendarConfig {
+            min_hour: 6,
+            max_hour: 22,
+            viewport_start_hour: 8,
+            viewport_end_hour: 18,
+        };
+        let schedule = Schedule::new(theme.clone(), config);
+        let max_slot = schedule.max_time_slot();
+
+        assert_eq!(
+            max_slot, 55,
+            "max_slot should reach max_hour=22 from start=8: (22-8)*4-1=55"
+        );
+        assert_eq!(schedule.slot_to_time(max_slot), "21:45");
+
+        let config2 = CalendarConfig {
+            min_hour: 6,
+            max_hour: 22,
+            viewport_start_hour: 6,
+            viewport_end_hour: 18,
+        };
+        let schedule2 = Schedule::new(theme, config2);
+        assert_eq!(
+            schedule2.max_time_slot(),
+            63,
+            "max_slot from start=6: (22-6)*4-1=63"
+        );
+        assert_eq!(schedule2.slot_to_time(schedule2.max_time_slot()), "21:45");
     }
 }
