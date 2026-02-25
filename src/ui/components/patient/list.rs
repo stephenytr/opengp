@@ -19,15 +19,14 @@ use crate::ui::layout::{
 };
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientListItem;
-use crate::ui::widgets::LoadingState;
+use crate::ui::widgets::{LoadingState, ScrollableState};
 
 pub struct PatientList {
     patients: Vec<PatientListItem>,
     filtered: Vec<PatientListItem>,
     search_query: String,
     searching: bool,
-    selected_index: usize,
-    scroll_offset: usize,
+    scrollable: ScrollableState,
     loading: bool,
     loading_state: LoadingState,
     theme: Theme,
@@ -40,8 +39,7 @@ impl Clone for PatientList {
             filtered: self.filtered.clone(),
             search_query: self.search_query.clone(),
             searching: self.searching,
-            selected_index: self.selected_index,
-            scroll_offset: self.scroll_offset,
+            scrollable: ScrollableState::with_items(self.scrollable.item_count()),
             loading: self.loading,
             loading_state: self.loading_state.clone(),
             theme: self.theme.clone(),
@@ -56,8 +54,7 @@ impl PatientList {
             filtered: Vec::new(),
             search_query: String::new(),
             searching: false,
-            selected_index: 0,
-            scroll_offset: 0,
+            scrollable: ScrollableState::new(),
             loading: false,
             loading_state: LoadingState::new().message("Loading patients..."),
             theme,
@@ -67,8 +64,8 @@ impl PatientList {
     pub fn set_patients(&mut self, patients: Vec<PatientListItem>) {
         self.patients = patients;
         self.apply_filter();
-        self.selected_index = 0;
-        self.scroll_offset = 0;
+        self.scrollable = ScrollableState::new();
+        self.scrollable.set_item_count(self.filtered.len());
     }
 
     pub fn patients(&self) -> &[PatientListItem] {
@@ -76,7 +73,7 @@ impl PatientList {
     }
 
     pub fn selected_patient(&self) -> Option<&PatientListItem> {
-        self.filtered.get(self.selected_index)
+        self.filtered.get(self.scrollable.selected_index())
     }
 
     pub fn selected_patient_id(&self) -> Option<Uuid> {
@@ -102,8 +99,8 @@ impl PatientList {
     pub fn set_search_query(&mut self, query: String) {
         self.search_query = query;
         self.apply_filter();
-        self.selected_index = 0;
-        self.scroll_offset = 0;
+        self.scrollable = ScrollableState::new();
+        self.scrollable.set_item_count(self.filtered.len());
     }
 
     fn apply_filter(&mut self) {
@@ -139,65 +136,47 @@ impl PatientList {
     }
 
     pub fn move_up(&mut self) {
-        if self.selected_index > 0 {
-            self.selected_index -= 1;
-        }
+        self.scrollable.move_up();
     }
 
     pub fn move_down(&mut self) {
-        if self.selected_index < self.filtered.len().saturating_sub(1) {
-            self.selected_index += 1;
-        }
+        self.scrollable.move_down();
     }
 
     pub fn move_first(&mut self) {
-        self.selected_index = 0;
+        self.scrollable.move_first();
     }
 
     pub fn move_last(&mut self) {
-        self.selected_index = self.filtered.len().saturating_sub(1);
+        self.scrollable.move_last();
     }
 
     pub fn move_by(&mut self, offset: isize) {
-        let new_index = (self.selected_index as isize + offset)
-            .clamp(0, self.filtered.len().saturating_sub(1) as isize);
-        self.selected_index = new_index as usize;
+        self.scrollable.move_by(offset);
     }
 
     pub fn adjust_scroll(&mut self, visible_rows: usize) {
-        if visible_rows == 0 {
-            return;
-        }
-        if self.selected_index < self.scroll_offset {
-            self.scroll_offset = self.selected_index;
-        } else if self.selected_index >= self.scroll_offset + visible_rows {
-            self.scroll_offset = self.selected_index.saturating_sub(visible_rows) + 1;
-        }
+        self.scrollable.adjust_scroll(visible_rows);
     }
 
     pub fn move_up_and_scroll(&mut self, visible_rows: usize) {
-        self.move_up();
-        self.adjust_scroll(visible_rows);
+        self.scrollable.move_up_and_scroll(visible_rows);
     }
 
     pub fn move_down_and_scroll(&mut self, visible_rows: usize) {
-        self.move_down();
-        self.adjust_scroll(visible_rows);
+        self.scrollable.move_down_and_scroll(visible_rows);
     }
 
     pub fn move_first_and_scroll(&mut self, visible_rows: usize) {
-        self.move_first();
-        self.adjust_scroll(visible_rows);
+        self.scrollable.move_first_and_scroll(visible_rows);
     }
 
     pub fn move_last_and_scroll(&mut self, visible_rows: usize) {
-        self.move_last();
-        self.adjust_scroll(visible_rows);
+        self.scrollable.move_last_and_scroll(visible_rows);
     }
 
     pub fn move_by_and_scroll(&mut self, offset: isize, visible_rows: usize) {
-        self.move_by(offset);
-        self.adjust_scroll(visible_rows);
+        self.scrollable.move_by_and_scroll(offset, visible_rows);
     }
 
     pub fn has_selection(&self) -> bool {
@@ -213,7 +192,7 @@ impl PatientList {
     }
 
     pub fn scroll_offset(&self) -> usize {
-        self.scroll_offset
+        self.scrollable.scroll_offset()
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<PatientListAction> {
@@ -231,17 +210,20 @@ impl PatientList {
                     self.searching = false;
                     self.search_query.clear();
                     self.apply_filter();
-                    self.selected_index = 0;
+                    self.scrollable = ScrollableState::new();
+                    self.scrollable.set_item_count(self.filtered.len());
                 }
                 KeyCode::Backspace => {
                     self.search_query.pop();
                     self.apply_filter();
-                    self.selected_index = 0;
+                    self.scrollable = ScrollableState::new();
+                    self.scrollable.set_item_count(self.filtered.len());
                 }
                 KeyCode::Char(c) => {
                     self.search_query.push(c);
                     self.apply_filter();
-                    self.selected_index = 0;
+                    self.scrollable = ScrollableState::new();
+                    self.scrollable.set_item_count(self.filtered.len());
                 }
                 KeyCode::Enter => {
                     self.searching = false;
@@ -297,15 +279,19 @@ impl PatientList {
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<PatientListAction> {
         // Handle mouse wheel for scrolling
         if let MouseEventKind::ScrollUp = mouse.kind {
-            if self.scroll_offset > 0 {
-                self.scroll_offset = self.scroll_offset.saturating_sub(3).max(0);
+            for _ in 0..3 {
+                self.scrollable.scroll_up();
             }
             return Some(PatientListAction::SelectionChanged);
         }
         if let MouseEventKind::ScrollDown = mouse.kind {
             let visible_rows = area.height.saturating_sub(3) as usize;
             let max_scroll = self.filtered.len().saturating_sub(visible_rows);
-            self.scroll_offset = (self.scroll_offset + 3).min(max_scroll);
+            for _ in 0..3 {
+                if self.scrollable.scroll_offset() < max_scroll {
+                    self.scrollable.scroll_down();
+                }
+            }
             return Some(PatientListAction::SelectionChanged);
         }
 
@@ -323,9 +309,12 @@ impl PatientList {
 
         let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
         // Account for scroll offset
-        let actual_index = self.scroll_offset + row_index;
+        let actual_index = self.scrollable.scroll_offset() + row_index;
         if actual_index < self.filtered.len() {
-            self.selected_index = actual_index;
+            // Move selection to the clicked item
+            let current_index = self.scrollable.selected_index();
+            let offset = actual_index as isize - current_index as isize;
+            self.scrollable.move_by(offset);
             Some(PatientListAction::SelectionChanged)
         } else {
             None
@@ -426,7 +415,8 @@ impl Widget for PatientList {
 
         let visible_rows = inner.height as usize;
         let max_scroll = self.filtered.len().saturating_sub(visible_rows);
-        let scroll_offset = self.scroll_offset.min(max_scroll);
+        let scroll_offset = self.scrollable.scroll_offset().min(max_scroll);
+        let selected_index = self.scrollable.selected_index();
 
         let rows: Vec<Row> = self
             .filtered
@@ -436,7 +426,7 @@ impl Widget for PatientList {
             .enumerate()
             .map(|(i, patient)| {
                 let actual_index = scroll_offset + i;
-                let style = if actual_index == self.selected_index {
+                let style = if actual_index == selected_index {
                     Style::default()
                         .bg(self.theme.colors.selected)
                         .fg(self.theme.colors.foreground)
