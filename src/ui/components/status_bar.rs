@@ -129,7 +129,7 @@ impl StatusBar {
     pub fn clinical() -> Self {
         let mut bar = Self::new();
         bar.set_left("Clinical Notes");
-        bar.set_center("Enter: View | n: New Note | /: Search");
+        bar.set_center("n: New | /: Search | 1-7: Views | Up/Down/j/k: Navigate");
         bar.set_right("F1 Help");
         bar
     }
