@@ -55,6 +55,13 @@ impl MedicalHistoryFormField {
             MedicalHistoryFormField::Condition | MedicalHistoryFormField::Status
         )
     }
+
+    pub fn is_dropdown(&self) -> bool {
+        matches!(
+            self,
+            MedicalHistoryFormField::Status | MedicalHistoryFormField::Severity
+        )
+    }
 }
 
 pub struct MedicalHistoryForm {
@@ -426,23 +433,26 @@ impl Widget for MedicalHistoryForm {
 
             let is_focused = field == self.focused_field;
 
-            let label_style = if is_focused {
-                Style::default()
-                    .fg(self.theme.colors.primary)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(self.theme.colors.foreground)
-            };
+            // Skip label and indicator for dropdown fields (they have their own title)
+            if !field.is_dropdown() {
+                let label_style = if is_focused {
+                    Style::default()
+                        .fg(self.theme.colors.primary)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(self.theme.colors.foreground)
+                };
 
-            buf.set_string(inner.x + 1, y, field.label(), label_style);
+                buf.set_string(inner.x + 1, y, field.label(), label_style);
 
-            if is_focused {
-                buf.set_string(
-                    field_start - 1,
-                    y,
-                    ">",
-                    Style::default().fg(self.theme.colors.primary),
-                );
+                if is_focused {
+                    buf.set_string(
+                        field_start - 1,
+                        y,
+                        ">",
+                        Style::default().fg(self.theme.colors.primary),
+                    );
+                }
             }
 
             match field {
@@ -453,7 +463,7 @@ impl Widget for MedicalHistoryForm {
                     if dropdown.is_open() {
                         open_dropdown = Some((dropdown.clone(), dropdown_area));
                     }
-                    dropdown.render(dropdown_area, buf);
+                    dropdown.focused(is_focused).render(dropdown_area, buf);
                     y += 2;
                 }
                 MedicalHistoryFormField::Severity => {
@@ -463,7 +473,7 @@ impl Widget for MedicalHistoryForm {
                     if dropdown.is_open() {
                         open_dropdown = Some((dropdown.clone(), dropdown_area));
                     }
-                    dropdown.render(dropdown_area, buf);
+                    dropdown.focused(is_focused).render(dropdown_area, buf);
                     y += 2;
                 }
                 _ => {

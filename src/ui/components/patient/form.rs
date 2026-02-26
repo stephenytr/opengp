@@ -1113,7 +1113,7 @@ impl Widget for PatientForm {
                         inner.width.saturating_sub(label_width + 4),
                         3,
                     );
-                    dropdown.render(dropdown_area, buf);
+                    dropdown.focused(is_focused).render(dropdown_area, buf);
                     y += 4;
                 }
                 FormField::ConcessionType => {
@@ -1124,7 +1124,7 @@ impl Widget for PatientForm {
                         inner.width.saturating_sub(label_width + 4),
                         3,
                     );
-                    dropdown.render(dropdown_area, buf);
+                    dropdown.focused(is_focused).render(dropdown_area, buf);
                     y += 4;
                 }
                 FormField::AtsiStatus => {
@@ -1135,7 +1135,7 @@ impl Widget for PatientForm {
                         inner.width.saturating_sub(label_width + 4),
                         3,
                     );
-                    dropdown.render(dropdown_area, buf);
+                    dropdown.focused(is_focused).render(dropdown_area, buf);
                     y += 4;
                 }
                 FormField::InterpreterRequired => {
@@ -1146,7 +1146,7 @@ impl Widget for PatientForm {
                         inner.width.saturating_sub(label_width + 4),
                         3,
                     );
-                    dropdown.render(dropdown_area, buf);
+                    dropdown.focused(is_focused).render(dropdown_area, buf);
                     y += 4;
                 }
                 _ => {

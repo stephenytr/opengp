@@ -39,6 +39,7 @@ pub struct DropdownWidget {
     pub placeholder: String,
     pub errors: HashMap<String, String>,
     pub theme: Theme,
+    pub focused: bool,
 }
 
 impl Clone for DropdownWidget {
@@ -52,6 +53,7 @@ impl Clone for DropdownWidget {
             placeholder: self.placeholder.clone(),
             errors: self.errors.clone(),
             theme: self.theme.clone(),
+            focused: self.focused,
         }
     }
 }
@@ -67,11 +69,17 @@ impl DropdownWidget {
             placeholder: "Select...".to_string(),
             errors: HashMap::new(),
             theme,
+            focused: false,
         }
     }
 
     pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
         self.placeholder = placeholder.into();
+        self
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
         self
     }
 
@@ -251,14 +259,20 @@ impl Widget for DropdownWidget {
             return;
         }
 
+        let border_style = if self.focused {
+            Style::default()
+                .fg(self.theme.colors.primary)
+                .bg(Color::Black)
+        } else {
+            Style::default()
+                .fg(self.theme.colors.border)
+                .bg(Color::Black)
+        };
+
         let block = Block::default()
             .title(self.label.as_str())
             .borders(Borders::ALL)
-            .border_style(
-                Style::default()
-                    .fg(self.theme.colors.border)
-                    .bg(Color::Black),
-            );
+            .border_style(border_style);
 
         block.clone().render(area, buf);
 

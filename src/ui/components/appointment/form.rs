@@ -91,6 +91,10 @@ impl AppointmentFormField {
                 | AppointmentFormField::Notes
         )
     }
+
+    pub fn is_dropdown(&self) -> bool {
+        matches!(self, AppointmentFormField::AppointmentType)
+    }
 }
 
 /// Actions returned by the appointment form's key handler.
@@ -706,23 +710,27 @@ impl Widget for AppointmentForm {
             }
 
             let has_error = self.error(field).is_some();
-            let label_style = if is_focused {
-                Style::default()
-                    .fg(self.theme.colors.primary)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(self.theme.colors.foreground)
-            };
 
-            buf.set_string(inner.x + 1, y, field.label(), label_style);
+            // Skip label and indicator for dropdown fields (they have their own title)
+            if !field.is_dropdown() {
+                let label_style = if is_focused {
+                    Style::default()
+                        .fg(self.theme.colors.primary)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(self.theme.colors.foreground)
+                };
 
-            if is_focused {
-                buf.set_string(
-                    field_start - 1,
-                    y,
-                    ">",
-                    Style::default().fg(self.theme.colors.primary),
-                );
+                buf.set_string(inner.x + 1, y, field.label(), label_style);
+
+                if is_focused {
+                    buf.set_string(
+                        field_start - 1,
+                        y,
+                        ">",
+                        Style::default().fg(self.theme.colors.primary),
+                    );
+                }
             }
 
             if field == AppointmentFormField::AppointmentType {
@@ -733,7 +741,7 @@ impl Widget for AppointmentForm {
                     3,
                 );
                 let dropdown = self.type_dropdown.clone();
-                dropdown.render(dropdown_area, buf);
+                dropdown.focused(is_focused).render(dropdown_area, buf);
 
                 if let Some(error_msg) = self.error(field) {
                     let error_style = Style::default().fg(self.theme.colors.error);

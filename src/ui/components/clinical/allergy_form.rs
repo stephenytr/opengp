@@ -65,6 +65,13 @@ impl AllergyFormField {
             AllergyFormField::Allergen | AllergyFormField::Reaction | AllergyFormField::Notes
         )
     }
+
+    pub fn is_dropdown(&self) -> bool {
+        matches!(
+            self,
+            AllergyFormField::AllergyType | AllergyFormField::Severity
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -444,23 +451,26 @@ impl Widget for AllergyForm {
 
             let has_error = self.error(field).is_some();
 
-            let label_style = if is_focused {
-                Style::default()
-                    .fg(self.theme.colors.primary)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(self.theme.colors.foreground)
-            };
+            // Skip label and indicator for dropdown fields (they have their own title)
+            if !field.is_dropdown() {
+                let label_style = if is_focused {
+                    Style::default()
+                        .fg(self.theme.colors.primary)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(self.theme.colors.foreground)
+                };
 
-            buf.set_string(inner.x + 1, y, field.label(), label_style);
+                buf.set_string(inner.x + 1, y, field.label(), label_style);
 
-            if is_focused {
-                buf.set_string(
-                    field_start - 1,
-                    y,
-                    ">",
-                    Style::default().fg(self.theme.colors.primary),
-                );
+                if is_focused {
+                    buf.set_string(
+                        field_start - 1,
+                        y,
+                        ">",
+                        Style::default().fg(self.theme.colors.primary),
+                    );
+                }
             }
 
             let max_value_width = inner.width.saturating_sub(label_width + 4);
@@ -472,7 +482,7 @@ impl Widget for AllergyForm {
                     if dropdown.is_open() {
                         open_dropdown = Some((dropdown.clone(), dropdown_area));
                     }
-                    dropdown.render(dropdown_area, buf);
+                    dropdown.focused(is_focused).render(dropdown_area, buf);
                     if let Some(error_msg) = self.error(field) {
                         let error_style = Style::default().fg(self.theme.colors.error);
                         buf.set_string(field_start, y + 3, format!("  {}", error_msg), error_style);
@@ -486,7 +496,7 @@ impl Widget for AllergyForm {
                     if dropdown.is_open() {
                         open_dropdown = Some((dropdown.clone(), dropdown_area));
                     }
-                    dropdown.render(dropdown_area, buf);
+                    dropdown.focused(is_focused).render(dropdown_area, buf);
                     if let Some(error_msg) = self.error(field) {
                         let error_style = Style::default().fg(self.theme.colors.error);
                         buf.set_string(field_start, y + 3, format!("  {}", error_msg), error_style);

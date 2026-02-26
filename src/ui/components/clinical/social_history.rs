@@ -663,23 +663,26 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
                 | SocialHistoryField::ExerciseFrequency
         );
 
-        let label_style = if is_focused {
-            Style::default()
-                .fg(component.theme.colors.primary)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(component.theme.colors.foreground)
-        };
+        // Skip label and indicator for dropdown fields (they have their own title)
+        if !is_dropdown_field {
+            let label_style = if is_focused {
+                Style::default()
+                    .fg(component.theme.colors.primary)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(component.theme.colors.foreground)
+            };
 
-        buf.set_string(inner.x + 1, y, field.label(), label_style);
+            buf.set_string(inner.x + 1, y, field.label(), label_style);
 
-        if is_focused && !is_dropdown_field {
-            buf.set_string(
-                field_start - 1,
-                y,
-                ">",
-                Style::default().fg(component.theme.colors.primary),
-            );
+            if is_focused {
+                buf.set_string(
+                    field_start - 1,
+                    y,
+                    ">",
+                    Style::default().fg(component.theme.colors.primary),
+                );
+            }
         }
 
         if is_dropdown_field {
@@ -692,7 +695,9 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
 
             let dropdown_area = Rect::new(field_start, y, max_value_width + 1, 3);
             let dropdown_clone = dropdown.clone();
-            dropdown_clone.render(dropdown_area, buf);
+            dropdown_clone
+                .focused(is_focused)
+                .render(dropdown_area, buf);
         } else {
             let value = component.get_field_value(field);
             let value_style = Style::default().fg(component.theme.colors.foreground);
