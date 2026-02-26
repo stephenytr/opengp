@@ -941,6 +941,16 @@ impl PatientForm {
             return None;
         }
 
+        // Ctrl+Enter submits the form from any field.
+        if key
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::CONTROL)
+            && key.code == KeyCode::Enter
+        {
+            self.validate();
+            return Some(PatientFormAction::Submit);
+        }
+
         if let Some(dropdown_action) = self.handle_dropdown_key(key) {
             return dropdown_action;
         }
@@ -1242,7 +1252,7 @@ impl Widget for PatientForm {
         buf.set_string(
             inner.x + 1,
             help_y,
-            "Tab: Next | Enter: Submit | Esc: Cancel",
+            "Tab: Next | Ctrl+Enter: Submit | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
     }
