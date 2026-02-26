@@ -1,6 +1,10 @@
 use crate::domain::clinical::{AlcoholStatus, ExerciseFrequency, SmokingStatus};
+use crate::ui::input::to_ratatui_key;
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{format_date, parse_date, DropdownOption, DropdownWidget, LoadingState};
+use crate::ui::widgets::{
+    format_date, parse_date, DropdownOption, DropdownWidget, HeightMode, LoadingState,
+    ScrollableFormState, TextareaState, TextareaWidget,
+};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -86,13 +90,13 @@ impl SocialHistoryField {
 pub struct SocialHistoryComponent {
     pub social_history: Option<SocialHistoryData>,
     pub is_editing: bool,
-    pub cigarettes_per_day: Option<u8>,
-    pub quit_date: Option<String>,
-    pub drinks_per_week: Option<u8>,
-    pub occupation: String,
-    pub living_situation: String,
-    pub support_network: String,
-    pub notes: String,
+    pub occupation: TextareaState,
+    pub cigarettes_per_day: TextareaState,
+    pub living_situation: TextareaState,
+    pub quit_date: TextareaState,
+    pub drinks_per_week: TextareaState,
+    pub support_network: TextareaState,
+    pub notes: TextareaState,
     pub focused_field: SocialHistoryField,
     pub loading: bool,
     loading_state: LoadingState,
@@ -100,6 +104,7 @@ pub struct SocialHistoryComponent {
     smoking_dropdown: DropdownWidget,
     alcohol_dropdown: DropdownWidget,
     exercise_dropdown: DropdownWidget,
+    scroll: ScrollableFormState,
 }
 
 impl Clone for SocialHistoryComponent {
@@ -107,11 +112,11 @@ impl Clone for SocialHistoryComponent {
         Self {
             social_history: self.social_history.clone(),
             is_editing: self.is_editing,
-            cigarettes_per_day: self.cigarettes_per_day,
-            quit_date: self.quit_date.clone(),
-            drinks_per_week: self.drinks_per_week,
             occupation: self.occupation.clone(),
+            cigarettes_per_day: self.cigarettes_per_day.clone(),
             living_situation: self.living_situation.clone(),
+            quit_date: self.quit_date.clone(),
+            drinks_per_week: self.drinks_per_week.clone(),
             support_network: self.support_network.clone(),
             notes: self.notes.clone(),
             focused_field: self.focused_field.clone(),
@@ -121,6 +126,7 @@ impl Clone for SocialHistoryComponent {
             smoking_dropdown: self.smoking_dropdown.clone(),
             alcohol_dropdown: self.alcohol_dropdown.clone(),
             exercise_dropdown: self.exercise_dropdown.clone(),
+            scroll: self.scroll.clone(),
         }
     }
 }
@@ -168,13 +174,21 @@ impl SocialHistoryComponent {
         Self {
             social_history: None,
             is_editing: false,
-            cigarettes_per_day: None,
-            quit_date: None,
-            drinks_per_week: None,
-            occupation: String::new(),
-            living_situation: String::new(),
-            support_network: String::new(),
-            notes: String::new(),
+            occupation: TextareaState::new("Occupation").with_height_mode(HeightMode::SingleLine),
+            cigarettes_per_day: TextareaState::new("Cigarettes/day")
+                .with_height_mode(HeightMode::SingleLine)
+                .max_length(3),
+            living_situation: TextareaState::new("Living situation")
+                .with_height_mode(HeightMode::SingleLine),
+            quit_date: TextareaState::new("Quit date (dd/mm/yyyy)")
+                .with_height_mode(HeightMode::SingleLine)
+                .max_length(10),
+            drinks_per_week: TextareaState::new("Drinks/week")
+                .with_height_mode(HeightMode::SingleLine)
+                .max_length(3),
+            support_network: TextareaState::new("Support network")
+                .with_height_mode(HeightMode::SingleLine),
+            notes: TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(4)),
             focused_field: SocialHistoryField::SmokingStatus,
             loading: false,
             loading_state: LoadingState::new().message("Loading social history..."),
@@ -182,6 +196,7 @@ impl SocialHistoryComponent {
             smoking_dropdown,
             alcohol_dropdown,
             exercise_dropdown,
+            scroll: ScrollableFormState::new(),
         }
     }
 
@@ -195,13 +210,45 @@ impl SocialHistoryComponent {
 
     pub fn start_editing(&mut self) {
         if let Some(ref history) = self.social_history {
-            self.cigarettes_per_day = history.cigarettes_per_day;
-            self.quit_date = history.smoking_quit_date.map(|d| format_date(d));
-            self.drinks_per_week = history.standard_drinks_per_week;
-            self.occupation = history.occupation.clone().unwrap_or_default();
-            self.living_situation = history.living_situation.clone().unwrap_or_default();
-            self.support_network = history.support_network.clone().unwrap_or_default();
-            self.notes = history.notes.clone().unwrap_or_default();
+            self.cigarettes_per_day = TextareaState::new("Cigarettes/day")
+                .with_height_mode(HeightMode::SingleLine)
+                .max_length(3)
+                .with_value(
+                    history
+                        .cigarettes_per_day
+                        .map(|n| n.to_string())
+                        .unwrap_or_default(),
+                );
+            self.quit_date = TextareaState::new("Quit date (dd/mm/yyyy)")
+                .with_height_mode(HeightMode::SingleLine)
+                .max_length(10)
+                .with_value(
+                    history
+                        .smoking_quit_date
+                        .map(|d| format_date(d))
+                        .unwrap_or_default(),
+                );
+            self.drinks_per_week = TextareaState::new("Drinks/week")
+                .with_height_mode(HeightMode::SingleLine)
+                .max_length(3)
+                .with_value(
+                    history
+                        .standard_drinks_per_week
+                        .map(|n| n.to_string())
+                        .unwrap_or_default(),
+                );
+            self.occupation = TextareaState::new("Occupation")
+                .with_height_mode(HeightMode::SingleLine)
+                .with_value(history.occupation.clone().unwrap_or_default());
+            self.living_situation = TextareaState::new("Living situation")
+                .with_height_mode(HeightMode::SingleLine)
+                .with_value(history.living_situation.clone().unwrap_or_default());
+            self.support_network = TextareaState::new("Support network")
+                .with_height_mode(HeightMode::SingleLine)
+                .with_value(history.support_network.clone().unwrap_or_default());
+            self.notes = TextareaState::new("Notes")
+                .with_height_mode(HeightMode::FixedLines(4))
+                .with_value(history.notes.clone().unwrap_or_default());
             self.smoking_dropdown
                 .set_value(&format!("{:?}", history.smoking_status));
             self.alcohol_dropdown
@@ -234,44 +281,80 @@ impl SocialHistoryComponent {
                 _ => None,
             }
         } else {
-            let is_dropdown_field = matches!(
-                self.focused_field,
-                SocialHistoryField::SmokingStatus
-                    | SocialHistoryField::AlcoholStatus
-                    | SocialHistoryField::ExerciseFrequency
-            );
+            if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Enter {
+                return Some(SocialHistoryAction::Save);
+            }
 
-            if is_dropdown_field {
-                let dropdown = match self.focused_field {
-                    SocialHistoryField::SmokingStatus => &mut self.smoking_dropdown,
-                    SocialHistoryField::AlcoholStatus => &mut self.alcohol_dropdown,
-                    SocialHistoryField::ExerciseFrequency => &mut self.exercise_dropdown,
-                    _ => unreachable!(),
-                };
-
-                if let Some(_action) = dropdown.handle_key(key) {
-                    return Some(SocialHistoryAction::FieldChanged);
+            match self.focused_field {
+                SocialHistoryField::SmokingStatus => {
+                    if let Some(_action) = self.smoking_dropdown.handle_key(key) {
+                        return Some(SocialHistoryAction::FieldChanged);
+                    }
                 }
-
-                match key.code {
-                    KeyCode::Tab => {
-                        if key.modifiers.contains(KeyModifiers::SHIFT) {
-                            self.prev_field();
-                        } else {
-                            self.next_field();
-                        }
-                        return Some(SocialHistoryAction::FocusChanged);
+                SocialHistoryField::AlcoholStatus => {
+                    if let Some(_action) = self.alcohol_dropdown.handle_key(key) {
+                        return Some(SocialHistoryAction::FieldChanged);
                     }
-                    KeyCode::BackTab => {
-                        self.prev_field();
-                        return Some(SocialHistoryAction::FocusChanged);
-                    }
-                    KeyCode::Up | KeyCode::Down => {
-                        return Some(SocialHistoryAction::FocusChanged);
-                    }
-                    _ => {}
                 }
-                return None;
+                SocialHistoryField::ExerciseFrequency => {
+                    if let Some(_action) = self.exercise_dropdown.handle_key(key) {
+                        return Some(SocialHistoryAction::FieldChanged);
+                    }
+                }
+                _ => {}
+            }
+
+            match self.focused_field {
+                SocialHistoryField::Occupation => {
+                    let ratatui_key = to_ratatui_key(key);
+                    let consumed = self.occupation.handle_key(ratatui_key);
+                    if consumed {
+                        return Some(SocialHistoryAction::FieldChanged);
+                    }
+                }
+                SocialHistoryField::CigarettesPerDay => {
+                    let ratatui_key = to_ratatui_key(key);
+                    let consumed = self.cigarettes_per_day.handle_key(ratatui_key);
+                    if consumed {
+                        return Some(SocialHistoryAction::FieldChanged);
+                    }
+                }
+                SocialHistoryField::LivingSituation => {
+                    let ratatui_key = to_ratatui_key(key);
+                    let consumed = self.living_situation.handle_key(ratatui_key);
+                    if consumed {
+                        return Some(SocialHistoryAction::FieldChanged);
+                    }
+                }
+                SocialHistoryField::QuitDate => {
+                    let ratatui_key = to_ratatui_key(key);
+                    let consumed = self.quit_date.handle_key(ratatui_key);
+                    if consumed {
+                        return Some(SocialHistoryAction::FieldChanged);
+                    }
+                }
+                SocialHistoryField::DrinksPerWeek => {
+                    let ratatui_key = to_ratatui_key(key);
+                    let consumed = self.drinks_per_week.handle_key(ratatui_key);
+                    if consumed {
+                        return Some(SocialHistoryAction::FieldChanged);
+                    }
+                }
+                SocialHistoryField::SupportNetwork => {
+                    let ratatui_key = to_ratatui_key(key);
+                    let consumed = self.support_network.handle_key(ratatui_key);
+                    if consumed {
+                        return Some(SocialHistoryAction::FieldChanged);
+                    }
+                }
+                SocialHistoryField::Notes => {
+                    let ratatui_key = to_ratatui_key(key);
+                    let consumed = self.notes.handle_key(ratatui_key);
+                    if consumed {
+                        return Some(SocialHistoryAction::FieldChanged);
+                    }
+                }
+                _ => {}
             }
 
             match key.code {
@@ -295,22 +378,18 @@ impl SocialHistoryComponent {
                     self.next_field();
                     Some(SocialHistoryAction::FocusChanged)
                 }
+                KeyCode::PageUp => {
+                    self.scroll.scroll_up();
+                    Some(SocialHistoryAction::FocusChanged)
+                }
+                KeyCode::PageDown => {
+                    self.scroll.scroll_down();
+                    Some(SocialHistoryAction::FocusChanged)
+                }
                 KeyCode::Enter => Some(SocialHistoryAction::Save),
                 KeyCode::Esc => {
                     self.stop_editing();
                     Some(SocialHistoryAction::Cancel)
-                }
-                KeyCode::Char(c) => {
-                    let mut value = self.get_field_value(&self.focused_field.clone());
-                    value.push(c);
-                    self.set_field_value(&self.focused_field.clone(), value);
-                    Some(SocialHistoryAction::FieldChanged)
-                }
-                KeyCode::Backspace => {
-                    let mut value = self.get_field_value(&self.focused_field.clone());
-                    value.pop();
-                    self.set_field_value(&self.focused_field.clone(), value);
-                    Some(SocialHistoryAction::FieldChanged)
                 }
                 _ => None,
             }
@@ -342,29 +421,23 @@ impl SocialHistoryComponent {
                 .selected_label()
                 .unwrap_or("Select...")
                 .to_string(),
-            SocialHistoryField::CigarettesPerDay => self
-                .cigarettes_per_day
-                .map(|n| n.to_string())
-                .unwrap_or_default(),
-            SocialHistoryField::QuitDate => self.quit_date.clone().unwrap_or_default(),
+            SocialHistoryField::CigarettesPerDay => self.cigarettes_per_day.value(),
+            SocialHistoryField::QuitDate => self.quit_date.value(),
             SocialHistoryField::AlcoholStatus => self
                 .alcohol_dropdown
                 .selected_label()
                 .unwrap_or("Select...")
                 .to_string(),
-            SocialHistoryField::DrinksPerWeek => self
-                .drinks_per_week
-                .map(|n| n.to_string())
-                .unwrap_or_default(),
+            SocialHistoryField::DrinksPerWeek => self.drinks_per_week.value(),
             SocialHistoryField::ExerciseFrequency => self
                 .exercise_dropdown
                 .selected_label()
                 .unwrap_or("Select...")
                 .to_string(),
-            SocialHistoryField::Occupation => self.occupation.clone(),
-            SocialHistoryField::LivingSituation => self.living_situation.clone(),
-            SocialHistoryField::SupportNetwork => self.support_network.clone(),
-            SocialHistoryField::Notes => self.notes.clone(),
+            SocialHistoryField::Occupation => self.occupation.value(),
+            SocialHistoryField::LivingSituation => self.living_situation.value(),
+            SocialHistoryField::SupportNetwork => self.support_network.value(),
+            SocialHistoryField::Notes => self.notes.value(),
         }
     }
 
@@ -374,31 +447,48 @@ impl SocialHistoryComponent {
                 self.smoking_dropdown.set_value(&value);
             }
             SocialHistoryField::CigarettesPerDay => {
-                self.cigarettes_per_day = value.parse::<u8>().ok();
+                self.cigarettes_per_day = TextareaState::new("Cigarettes/day")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .max_length(3)
+                    .with_value(value);
             }
             SocialHistoryField::QuitDate => {
-                self.quit_date = if value.is_empty() { None } else { Some(value) };
+                self.quit_date = TextareaState::new("Quit date (dd/mm/yyyy)")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .max_length(10)
+                    .with_value(value);
             }
             SocialHistoryField::AlcoholStatus => {
                 self.alcohol_dropdown.set_value(&value);
             }
             SocialHistoryField::DrinksPerWeek => {
-                self.drinks_per_week = value.parse::<u8>().ok();
+                self.drinks_per_week = TextareaState::new("Drinks/week")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .max_length(3)
+                    .with_value(value);
             }
             SocialHistoryField::ExerciseFrequency => {
                 self.exercise_dropdown.set_value(&value);
             }
             SocialHistoryField::Occupation => {
-                self.occupation = value;
+                self.occupation = TextareaState::new("Occupation")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value);
             }
             SocialHistoryField::LivingSituation => {
-                self.living_situation = value;
+                self.living_situation = TextareaState::new("Living situation")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value);
             }
             SocialHistoryField::SupportNetwork => {
-                self.support_network = value;
+                self.support_network = TextareaState::new("Support network")
+                    .with_height_mode(HeightMode::SingleLine)
+                    .with_value(value);
             }
             SocialHistoryField::Notes => {
-                self.notes = value;
+                self.notes = TextareaState::new("Notes")
+                    .with_height_mode(HeightMode::FixedLines(4))
+                    .with_value(value);
             }
         }
     }
@@ -425,17 +515,25 @@ impl SocialHistoryComponent {
             .selected_value()
             .and_then(|v: &str| v.parse::<ExerciseFrequency>().ok());
 
+        let cigarettes_value = self.cigarettes_per_day.value();
+        let drinks_value = self.drinks_per_week.value();
+        let quit_date_value = self.quit_date.value();
+        let occupation_value = self.occupation.value();
+        let living_situation_value = self.living_situation.value();
+        let support_network_value = self.support_network.value();
+        let notes_value = self.notes.value();
+
         SocialHistoryData {
             smoking_status,
-            cigarettes_per_day: self.cigarettes_per_day,
-            smoking_quit_date: self.quit_date.as_ref().and_then(|d| parse_date(d)),
+            cigarettes_per_day: cigarettes_value.parse::<u8>().ok(),
+            smoking_quit_date: parse_date(&quit_date_value),
             alcohol_status,
-            standard_drinks_per_week: self.drinks_per_week,
+            standard_drinks_per_week: drinks_value.parse::<u8>().ok(),
             exercise_frequency,
-            occupation: Some(self.occupation.clone()).filter(|s| !s.is_empty()),
-            living_situation: Some(self.living_situation.clone()).filter(|s| !s.is_empty()),
-            support_network: Some(self.support_network.clone()).filter(|s| !s.is_empty()),
-            notes: Some(self.notes.clone()).filter(|s| !s.is_empty()),
+            occupation: Some(occupation_value).filter(|s| !s.is_empty()),
+            living_situation: Some(living_situation_value).filter(|s| !s.is_empty()),
+            support_network: Some(support_network_value).filter(|s| !s.is_empty()),
+            notes: Some(notes_value).filter(|s| !s.is_empty()),
         }
     }
 }
@@ -642,10 +740,6 @@ fn render_view_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
 }
 
 fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut Buffer) {
-    const LABEL_WIDTH: u16 = 18;
-    let field_start = inner.x + LABEL_WIDTH + 2;
-    let max_value_width = inner.width.saturating_sub(LABEL_WIDTH + 4);
-
     let fields = SocialHistoryField::all();
     let mut y = inner.y + 1;
     let max_y = inner.y + inner.height.saturating_sub(2);
@@ -663,28 +757,6 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
                 | SocialHistoryField::ExerciseFrequency
         );
 
-        // Skip label and indicator for dropdown fields (they have their own title)
-        if !is_dropdown_field {
-            let label_style = if is_focused {
-                Style::default()
-                    .fg(component.theme.colors.primary)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(component.theme.colors.foreground)
-            };
-
-            buf.set_string(inner.x + 1, y, field.label(), label_style);
-
-            if is_focused {
-                buf.set_string(
-                    field_start - 1,
-                    y,
-                    ">",
-                    Style::default().fg(component.theme.colors.primary),
-                );
-            }
-        }
-
         if is_dropdown_field {
             let dropdown = match field {
                 SocialHistoryField::SmokingStatus => &component.smoking_dropdown,
@@ -693,41 +765,48 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
                 _ => unreachable!(),
             };
 
-            let dropdown_area = Rect::new(field_start, y, max_value_width + 1, 3);
+            let dropdown_area = Rect::new(inner.x + 1, y, inner.width.saturating_sub(2), 3);
             let dropdown_clone = dropdown.clone();
             dropdown_clone
                 .focused(is_focused)
                 .render(dropdown_area, buf);
         } else {
-            let value = component.get_field_value(field);
-            let value_style = Style::default().fg(component.theme.colors.foreground);
-
-            let display_value = if value.len() > max_value_width as usize {
-                value[value.len() - max_value_width as usize..].to_string()
-            } else {
-                value.clone()
+            let (textarea_state, field_height) = match field {
+                SocialHistoryField::Occupation => (
+                    component.occupation.clone().focused(is_focused),
+                    component.occupation.height(),
+                ),
+                SocialHistoryField::CigarettesPerDay => (
+                    component.cigarettes_per_day.clone().focused(is_focused),
+                    component.cigarettes_per_day.height(),
+                ),
+                SocialHistoryField::LivingSituation => (
+                    component.living_situation.clone().focused(is_focused),
+                    component.living_situation.height(),
+                ),
+                SocialHistoryField::QuitDate => (
+                    component.quit_date.clone().focused(is_focused),
+                    component.quit_date.height(),
+                ),
+                SocialHistoryField::DrinksPerWeek => (
+                    component.drinks_per_week.clone().focused(is_focused),
+                    component.drinks_per_week.height(),
+                ),
+                SocialHistoryField::SupportNetwork => (
+                    component.support_network.clone().focused(is_focused),
+                    component.support_network.height(),
+                ),
+                SocialHistoryField::Notes => (
+                    component.notes.clone().focused(is_focused),
+                    component.notes.height(),
+                ),
+                _ => unreachable!(),
             };
 
-            let display_with_cursor = if is_focused {
-                format!("{}_", display_value)
-            } else {
-                display_value
-            };
+            let field_area = Rect::new(inner.x + 1, y, inner.width.saturating_sub(2), field_height);
+            TextareaWidget::new(&textarea_state, component.theme.clone()).render(field_area, buf);
 
-            buf.set_string(field_start, y, &display_with_cursor, value_style);
-
-            if is_focused {
-                let hint = field.hint();
-                let hint_x = field_start + value.len() as u16 + 2;
-                if hint_x < inner.x + inner.width {
-                    buf.set_string(
-                        hint_x,
-                        y,
-                        format!("({})", hint),
-                        Style::default().fg(component.theme.colors.disabled),
-                    );
-                }
-            }
+            y += field_height.saturating_sub(1);
         }
 
         y += 1;
@@ -737,7 +816,7 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
     buf.set_string(
         inner.x + 1,
         help_y,
-        "Tab: Next  Enter: Save  Esc: Cancel",
+        "Tab: Next  Ctrl+Enter: Save  Esc: Cancel",
         Style::default().fg(component.theme.colors.disabled),
     );
 }
