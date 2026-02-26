@@ -51,7 +51,7 @@ impl AppointmentFormField {
             AppointmentFormField::Practitioner,
             AppointmentFormField::Date,
             AppointmentFormField::StartTime,
-            AppointmentFormField::Duration,
+            // Duration is skipped in Tab navigation but still displayed
             AppointmentFormField::AppointmentType,
             AppointmentFormField::Reason,
             AppointmentFormField::Notes,
@@ -614,6 +614,10 @@ impl AppointmentForm {
                 Some(AppointmentFormAction::FocusChanged)
             }
             KeyCode::Enter => {
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    self.validate();
+                    return Some(AppointmentFormAction::Submit);
+                }
                 if self.focused_field == AppointmentFormField::Patient
                     && !self.patient_picker.is_open()
                 {
@@ -697,6 +701,55 @@ impl Widget for AppointmentForm {
 
         for field in fields {
             let is_focused = field == self.focused_field;
+
+            // Special handling for Duration (display only, not in focus cycle)
+            if field == AppointmentFormField::Duration {
+                let field_height = 3i32;
+                if y + field_height <= inner.y as i32 || y >= max_y {
+                    y += field_height;
+                    continue;
+                }
+
+                if y >= inner.y as i32 && y < max_y {
+                    let duration_value = self.get_value(field);
+                    let has_error = self.error(field).is_some();
+                    let border_style = if has_error {
+                        Style::default().fg(self.theme.colors.error)
+                    } else {
+                        Style::default().fg(self.theme.colors.border)
+                    };
+
+                    let block = Block::default()
+                        .title(" Duration ")
+                        .borders(Borders::ALL)
+                        .border_style(border_style);
+
+                    let block_area =
+                        Rect::new(inner.x + 1, y as u16, inner.width.saturating_sub(2), 3);
+                    block.clone().render(block_area, buf);
+
+                    let inner_area = block.inner(block_area);
+                    buf.set_string(
+                        inner_area.x,
+                        inner_area.y,
+                        format!(" {} ", duration_value),
+                        Style::default().fg(self.theme.colors.foreground),
+                    );
+
+                    if let Some(error_msg) = self.error(field) {
+                        let error_style = Style::default().fg(self.theme.colors.error);
+                        buf.set_string(
+                            inner.x + 2,
+                            (y as u16) + 3,
+                            format!("  {}", error_msg),
+                            error_style,
+                        );
+                    }
+                }
+                y += 4;
+                continue;
+            }
+
             let field_height = if field == AppointmentFormField::AppointmentType {
                 4i32
             } else {
@@ -743,6 +796,74 @@ impl Widget for AppointmentForm {
             }
 
             let has_error = self.error(field).is_some();
+
+            // Patient and Practitioner fields with bordered box style at rest
+            if (field == AppointmentFormField::Patient
+                || field == AppointmentFormField::Practitioner)
+                && !self.patient_picker.is_open()
+                && !self.practitioner_picker.is_open()
+            {
+                if y >= inner.y as i32 && y < max_y {
+                    let value = self.get_value(field);
+                    let border_style = if has_error {
+                        Style::default().fg(self.theme.colors.error)
+                    } else if is_focused {
+                        Style::default()
+                            .fg(self.theme.colors.primary)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(self.theme.colors.border)
+                    };
+
+                    let title_style = if is_focused {
+                        Style::default()
+                            .fg(self.theme.colors.primary)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(self.theme.colors.foreground)
+                    };
+
+                    let block = Block::default()
+                        .title(ratatui::text::Span::styled(
+                            format!(" {} ", field.label()),
+                            title_style,
+                        ))
+                        .borders(Borders::ALL)
+                        .border_style(border_style);
+
+                    let block_area =
+                        Rect::new(inner.x + 1, y as u16, inner.width.saturating_sub(2), 3);
+                    block.clone().render(block_area, buf);
+
+                    let inner_area = block.inner(block_area);
+                    if !value.is_empty() {
+                        let max_width = inner_area.width.saturating_sub(1) as usize;
+                        let display_value = if value.len() > max_width {
+                            &value[value.len() - max_width..]
+                        } else {
+                            &value
+                        };
+                        buf.set_string(
+                            inner_area.x,
+                            inner_area.y,
+                            display_value,
+                            Style::default().fg(self.theme.colors.foreground),
+                        );
+                    }
+
+                    if let Some(error_msg) = self.error(field) {
+                        let error_style = Style::default().fg(self.theme.colors.error);
+                        buf.set_string(
+                            inner.x + 2,
+                            (y as u16) + 3,
+                            format!("  {}", error_msg),
+                            error_style,
+                        );
+                    }
+                }
+                y += 4;
+                continue;
+            }
 
             if y >= inner.y as i32 && y < max_y {
                 if !field.is_dropdown() {
