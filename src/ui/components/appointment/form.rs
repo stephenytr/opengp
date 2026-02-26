@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use chrono::{NaiveDate, NaiveTime};
+use chrono::NaiveTime;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -18,8 +18,8 @@ use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::{
-    DropdownAction, DropdownOption, DropdownWidget, HeightMode, SearchableListAction,
-    SearchableListState, TextareaState, TextareaWidget,
+    format_date, parse_date, DropdownAction, DropdownOption, DropdownWidget, HeightMode,
+    SearchableListAction, SearchableListState, TextareaState, TextareaWidget,
 };
 
 type RatatuiKeyEvent = ratatui::crossterm::event::KeyEvent;
@@ -115,7 +115,7 @@ impl AppointmentFormField {
         match self {
             AppointmentFormField::Patient => "Patient *",
             AppointmentFormField::Practitioner => "Practitioner *",
-            AppointmentFormField::Date => "Date * (YYYY-MM-DD)",
+            AppointmentFormField::Date => "Date * (dd/mm/yyyy)",
             AppointmentFormField::StartTime => "Start Time * (HH:MM)",
             AppointmentFormField::Duration => "Duration (minutes)",
             AppointmentFormField::AppointmentType => "Type *",
@@ -413,9 +413,9 @@ impl AppointmentForm {
                 let v = self.date.value();
                 if v.is_empty() {
                     self.errors.insert(*field, "Date is required".to_string());
-                } else if NaiveDate::parse_from_str(&v, "%Y-%m-%d").is_err() {
+                } else if parse_date(&v).is_none() {
                     self.errors
-                        .insert(*field, "Use YYYY-MM-DD format".to_string());
+                        .insert(*field, "Use dd/mm/yyyy format".to_string());
                 }
             }
             AppointmentFormField::StartTime => {
@@ -497,7 +497,7 @@ impl AppointmentForm {
 
         let date_str = self.date.value();
         let time_str = self.start_time.value();
-        let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d").ok()?;
+        let date = parse_date(&date_str)?;
         let time = NaiveTime::parse_from_str(&time_str, "%H:%M").ok()?;
 
         let naive_dt = date.and_time(time);
@@ -939,7 +939,7 @@ mod tests {
         form.set_value(AppointmentFormField::Date, "not-a-date".to_string());
         assert!(form.error(AppointmentFormField::Date).is_some());
 
-        form.set_value(AppointmentFormField::Date, "2026-03-15".to_string());
+        form.set_value(AppointmentFormField::Date, "15/03/2026".to_string());
         assert!(form.error(AppointmentFormField::Date).is_none());
     }
 
@@ -997,7 +997,7 @@ mod tests {
         let mut form = make_form();
         form.set_patient(Uuid::new_v4(), "Jane Doe".to_string());
         form.set_practitioner(Uuid::new_v4(), "Dr. Smith".to_string());
-        form.set_value(AppointmentFormField::Date, "2026-03-15".to_string());
+        form.set_value(AppointmentFormField::Date, "15/03/2026".to_string());
         form.set_value(AppointmentFormField::StartTime, "09:00".to_string());
         form.set_value(
             AppointmentFormField::AppointmentType,

@@ -67,7 +67,7 @@ impl AuditService {
     ///             for entry in entries {
     ///                 println!(
     ///                     "[{}] {} by {} - {}",
-    ///                     entry.changed_at.format("%Y-%m-%d %H:%M"),
+    ///                     entry.changed_at.format("%d/%m/%Y %H:%M"),
     ///                     entry.action,
     ///                     entry.changed_by,
     ///                     entry.entity_type

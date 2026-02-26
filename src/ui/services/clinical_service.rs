@@ -6,7 +6,7 @@ use crate::domain::clinical::{
     Allergy, ClinicalService, ConditionStatus, Consultation, FamilyHistory, MedicalHistory,
     NewAllergyData, NewConsultationData, NewFamilyHistoryData, NewMedicalHistoryData,
     NewVitalSignsData, ServiceError as DomainServiceError, Severity, SocialHistory,
-    UpdateSOAPNotesData, UpdateSocialHistoryData, VitalSigns,
+    UpdateSocialHistoryData, VitalSigns,
 };
 
 pub type UiResult<T> = Result<T, UiServiceError>;
@@ -72,6 +72,7 @@ impl ClinicalUiService {
             practitioner_id,
             appointment_id: None,
             reason: None,
+            clinical_notes: None,
         };
         self.service
             .create_consultation(data, user_id)
@@ -79,24 +80,15 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
-    pub async fn update_soap_notes(
+    pub async fn update_clinical_notes(
         &self,
         consultation_id: Uuid,
-        subjective: Option<String>,
-        objective: Option<String>,
-        assessment: Option<String>,
-        plan: Option<String>,
+        reason: Option<String>,
+        clinical_notes: Option<String>,
         user_id: Uuid,
     ) -> UiResult<Consultation> {
-        let data = UpdateSOAPNotesData {
-            reason: None,
-            subjective,
-            objective,
-            assessment,
-            plan,
-        };
         self.service
-            .update_soap_notes(consultation_id, data, user_id)
+            .update_clinical_notes(consultation_id, reason, clinical_notes, user_id)
             .await
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }

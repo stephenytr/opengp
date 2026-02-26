@@ -13,7 +13,7 @@ pub struct Consultation {
     pub consultation_date: DateTime<Utc>,
     pub reason: Option<String>,
 
-    pub soap_notes: SOAPNotes,
+    pub clinical_notes: Option<String>,
 
     pub is_signed: bool,
     pub signed_at: Option<DateTime<Utc>>,
@@ -39,7 +39,7 @@ impl Consultation {
             appointment_id,
             consultation_date: Utc::now(),
             reason: None,
-            soap_notes: SOAPNotes::default(),
+            clinical_notes: None,
             is_signed: false,
             signed_at: None,
             signed_by: None,
@@ -57,14 +57,6 @@ impl Consultation {
         self.updated_at = Utc::now();
         self.updated_by = Some(user_id);
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct SOAPNotes {
-    pub subjective: Option<String>,
-    pub objective: Option<String>,
-    pub assessment: Option<String>,
-    pub plan: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

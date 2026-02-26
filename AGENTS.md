@@ -72,10 +72,10 @@ opengp/
 
 - Do not use `rm` command without explicit permission.
 - Logic that may be used over and over again should be abstracted.
-- Use CodeGraphContext when needed.
 - Use Context7 for documentation.
-- You must not roll back changes without explicit permission.
+- You must not revert git changes without explicit permission.
 - Make git commits as required and update and close gitea issues.
+- If anything is unclear use the tool provided to ask questions about anything required, do not assume my intent if my instruction is unclear.
 
 ## GITEA 
 

@@ -1,6 +1,6 @@
 use crate::domain::clinical::{AlcoholStatus, ExerciseFrequency, SmokingStatus};
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{DropdownOption, DropdownWidget, LoadingState};
+use crate::ui::widgets::{format_date, parse_date, DropdownOption, DropdownWidget, LoadingState};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -56,7 +56,7 @@ impl SocialHistoryField {
         match self {
             SocialHistoryField::SmokingStatus => "Smoking",
             SocialHistoryField::CigarettesPerDay => "Cigarettes/day",
-            SocialHistoryField::QuitDate => "Quit date",
+            SocialHistoryField::QuitDate => "Quit date (dd/mm/yyyy)",
             SocialHistoryField::AlcoholStatus => "Alcohol",
             SocialHistoryField::DrinksPerWeek => "Drinks/week",
             SocialHistoryField::ExerciseFrequency => "Exercise",
@@ -71,7 +71,7 @@ impl SocialHistoryField {
         match self {
             SocialHistoryField::SmokingStatus => "never/current/ex",
             SocialHistoryField::CigarettesPerDay => "number or blank",
-            SocialHistoryField::QuitDate => "YYYY-MM-DD or blank",
+            SocialHistoryField::QuitDate => "dd/mm/yyyy or blank",
             SocialHistoryField::AlcoholStatus => "none/occasional/moderate/heavy",
             SocialHistoryField::DrinksPerWeek => "number or blank",
             SocialHistoryField::ExerciseFrequency => "none/rarely/1-2/3-5/daily",
@@ -196,9 +196,7 @@ impl SocialHistoryComponent {
     pub fn start_editing(&mut self) {
         if let Some(ref history) = self.social_history {
             self.cigarettes_per_day = history.cigarettes_per_day;
-            self.quit_date = history
-                .smoking_quit_date
-                .map(|d| d.format("%Y-%m-%d").to_string());
+            self.quit_date = history.smoking_quit_date.map(|d| format_date(d));
             self.drinks_per_week = history.standard_drinks_per_week;
             self.occupation = history.occupation.clone().unwrap_or_default();
             self.living_situation = history.living_situation.clone().unwrap_or_default();
@@ -430,7 +428,7 @@ impl SocialHistoryComponent {
         SocialHistoryData {
             smoking_status,
             cigarettes_per_day: self.cigarettes_per_day,
-            smoking_quit_date: None,
+            smoking_quit_date: self.quit_date.as_ref().and_then(|d| parse_date(d)),
             alcohol_status,
             standard_drinks_per_week: self.drinks_per_week,
             exercise_frequency,

@@ -13,16 +13,7 @@ pub struct NewConsultationData {
     pub practitioner_id: Uuid,
     pub appointment_id: Option<Uuid>,
     pub reason: Option<String>,
-}
-
-/// Data for updating SOAP notes
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateSOAPNotesData {
-    pub reason: Option<String>,
-    pub subjective: Option<String>,
-    pub objective: Option<String>,
-    pub assessment: Option<String>,
-    pub plan: Option<String>,
+    pub clinical_notes: Option<String>,
 }
 
 /// Data for adding a new allergy

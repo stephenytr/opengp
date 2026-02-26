@@ -93,14 +93,6 @@ impl ConsultationDetail {
             self.theme.colors.warning
         }
     }
-
-    fn format_soap_field(value: &Option<String>) -> String {
-        value
-            .as_ref()
-            .filter(|s| !s.is_empty())
-            .cloned()
-            .unwrap_or_else(|| "-".to_string())
-    }
 }
 
 impl Widget for ConsultationDetail {
@@ -231,88 +223,32 @@ impl Widget for ConsultationDetail {
         );
         y += 1;
 
-        // Render SOAP notes if we have a consultation
         if let Some(ref consultation) = self.consultation {
-            let soap = &consultation.soap_notes;
-
-            // Subjective
-            if y < inner.y + inner.height - 4 {
-                let subjective = Self::format_soap_field(&soap.subjective);
-                buf.set_string(
-                    inner.x + 1,
-                    y,
-                    "  Subjective:",
-                    Style::default()
-                        .fg(self.theme.colors.foreground)
-                        .add_modifier(Modifier::BOLD),
-                );
-                buf.set_string(
-                    value_x,
-                    y,
-                    subjective,
-                    Style::default().fg(self.theme.colors.foreground),
-                );
-                y += 1;
-            }
-
-            // Objective
-            if y < inner.y + inner.height - 4 {
-                let objective = Self::format_soap_field(&soap.objective);
-                buf.set_string(
-                    inner.x + 1,
-                    y,
-                    "  Objective:",
-                    Style::default()
-                        .fg(self.theme.colors.foreground)
-                        .add_modifier(Modifier::BOLD),
-                );
-                buf.set_string(
-                    value_x,
-                    y,
-                    objective,
-                    Style::default().fg(self.theme.colors.foreground),
-                );
-                y += 1;
-            }
-
-            // Assessment
-            if y < inner.y + inner.height - 4 {
-                let assessment = Self::format_soap_field(&soap.assessment);
-                buf.set_string(
-                    inner.x + 1,
-                    y,
-                    "  Assessment:",
-                    Style::default()
-                        .fg(self.theme.colors.foreground)
-                        .add_modifier(Modifier::BOLD),
-                );
-                buf.set_string(
-                    value_x,
-                    y,
-                    assessment,
-                    Style::default().fg(self.theme.colors.foreground),
-                );
-                y += 1;
-            }
-
-            // Plan
-            if y < inner.y + inner.height - 4 {
-                let plan = Self::format_soap_field(&soap.plan);
-                buf.set_string(
-                    inner.x + 1,
-                    y,
-                    "  Plan:",
-                    Style::default()
-                        .fg(self.theme.colors.foreground)
-                        .add_modifier(Modifier::BOLD),
-                );
-                buf.set_string(
-                    value_x,
-                    y,
-                    plan,
-                    Style::default().fg(self.theme.colors.foreground),
-                );
-                y += 1;
+            if let Some(ref notes) = consultation.clinical_notes {
+                if y < inner.y + inner.height - 4 {
+                    buf.set_string(
+                        inner.x + 1,
+                        y,
+                        "  Clinical Notes:",
+                        Style::default()
+                            .fg(self.theme.colors.foreground)
+                            .add_modifier(Modifier::BOLD),
+                    );
+                    y += 1;
+                    let lines: Vec<&str> = notes.lines().collect();
+                    for line in lines.iter().take(10) {
+                        if y >= inner.y + inner.height - 4 {
+                            break;
+                        }
+                        buf.set_string(
+                            value_x,
+                            y,
+                            line,
+                            Style::default().fg(self.theme.colors.foreground),
+                        );
+                        y += 1;
+                    }
+                }
             }
         } else {
             // Empty state for new consultation
@@ -320,58 +256,7 @@ impl Widget for ConsultationDetail {
                 buf.set_string(
                     inner.x + 1,
                     y,
-                    "  Subjective:",
-                    Style::default()
-                        .fg(self.theme.colors.foreground)
-                        .add_modifier(Modifier::BOLD),
-                );
-                buf.set_string(
-                    value_x,
-                    y,
-                    "-",
-                    Style::default().fg(self.theme.colors.foreground),
-                );
-                y += 1;
-            }
-            if y < inner.y + inner.height - 4 {
-                buf.set_string(
-                    inner.x + 1,
-                    y,
-                    "  Objective:",
-                    Style::default()
-                        .fg(self.theme.colors.foreground)
-                        .add_modifier(Modifier::BOLD),
-                );
-                buf.set_string(
-                    value_x,
-                    y,
-                    "-",
-                    Style::default().fg(self.theme.colors.foreground),
-                );
-                y += 1;
-            }
-            if y < inner.y + inner.height - 4 {
-                buf.set_string(
-                    inner.x + 1,
-                    y,
-                    "  Assessment:",
-                    Style::default()
-                        .fg(self.theme.colors.foreground)
-                        .add_modifier(Modifier::BOLD),
-                );
-                buf.set_string(
-                    value_x,
-                    y,
-                    "-",
-                    Style::default().fg(self.theme.colors.foreground),
-                );
-                y += 1;
-            }
-            if y < inner.y + inner.height - 4 {
-                buf.set_string(
-                    inner.x + 1,
-                    y,
-                    "  Plan:",
+                    "  Clinical Notes:",
                     Style::default()
                         .fg(self.theme.colors.foreground)
                         .add_modifier(Modifier::BOLD),

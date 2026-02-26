@@ -126,8 +126,8 @@ fn print_config(
             let days = (end - start).num_days();
             println!(
                 "  Date range: {} to {} ({} days)",
-                start.format("%Y-%m-%d"),
-                end.format("%Y-%m-%d"),
+                start.format("%d/%m/%Y"),
+                end.format("%d/%m/%Y"),
                 days
             );
         }
@@ -212,7 +212,7 @@ fn print_sample_appointments(
 
         println!(
             "  {:20} | {:20} | {:15} | {:?}",
-            appt.start_time.format("%Y-%m-%d %H:%M"),
+            appt.start_time.format("%d/%m/%Y %H:%M"),
             patient_display,
             format!("{:?}", appt.appointment_type)
                 .chars()

@@ -30,7 +30,7 @@ pub struct AppointmentState {
 impl AppointmentState {
     pub fn new(theme: crate::ui::theme::Theme, config: CalendarConfig) -> Self {
         Self {
-            current_view: AppointmentView::Calendar,
+            current_view: AppointmentView::Schedule,
             calendar: Calendar::new(theme.clone()),
             schedule: Schedule::new(theme, config),
             selected_date: Some(chrono::Utc::now().date_naive()),

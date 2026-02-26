@@ -491,10 +491,8 @@ impl PatientSummaryComponent {
                     .cloned()
                     .unwrap_or_else(|| "Unknown".to_string());
                 let reason = consultation
-                    .soap_notes
-                    .assessment
+                    .clinical_notes
                     .as_ref()
-                    .or(consultation.soap_notes.subjective.as_ref())
                     .map(|s| {
                         if s.len() > 28 {
                             format!("{}...", &s[..28])

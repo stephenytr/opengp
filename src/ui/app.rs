@@ -23,6 +23,7 @@ use crate::ui::components::tabs::{Tab, TabBar};
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
 use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
+use crate::ui::widgets::format_date;
 
 /// Application state
 pub struct App {
@@ -115,7 +116,7 @@ pub enum PendingClinicalSaveData {
         practitioner_id: uuid::Uuid,
         appointment_id: Option<uuid::Uuid>,
         reason: Option<String>,
-        soap_notes: crate::domain::clinical::SOAPNotes,
+        clinical_notes: Option<String>,
     },
 }
 
@@ -501,7 +502,15 @@ impl App {
                                 self.clinical_state.open_consultation_form();
                                 self.current_context = KeyContext::ClinicalForm;
                             }
-                            _ => {}
+                            ClinicalView::SocialHistory => {
+                                self.clinical_state.social_history_editing = true;
+                            }
+                            ClinicalView::PatientSummary => {
+                                // Navigate to Consultations to create a new consultation
+                                self.clinical_state.view = ClinicalView::Consultations;
+                                self.clinical_state.open_consultation_form();
+                                self.current_context = KeyContext::ClinicalForm;
+                            }
                         }
                     }
                 }
@@ -836,7 +845,7 @@ impl App {
                                                     practitioner_id,
                                                     appointment_id: consultation.appointment_id,
                                                     reason: consultation.reason,
-                                                    soap_notes: consultation.soap_notes,
+                                                    clinical_notes: consultation.clinical_notes,
                                                 });
                                             self.clinical_state.close_consultation_form();
                                             self.current_context = KeyContext::Clinical;
@@ -1125,10 +1134,7 @@ impl App {
                                     );
                                 }
                             }
-                            form.set_value(
-                                AppointmentFormField::Date,
-                                date.format("%Y-%m-%d").to_string(),
-                            );
+                            form.set_value(AppointmentFormField::Date, format_date(date));
                             form.set_value(AppointmentFormField::StartTime, time);
                         }
                         self.request_load_practitioners();
@@ -1616,6 +1622,7 @@ impl App {
             crate::ui::components::clinical::ClinicalView::SocialHistory => {
                 let mut component = SocialHistoryComponent::new(self.theme.clone());
                 component.loading = self.clinical_state.loading;
+                component.is_editing = self.clinical_state.social_history_editing;
                 // Convert domain SocialHistory to UI SocialHistoryData
                 if let Some(ref sh) = self.clinical_state.social_history {
                     component.social_history = Some(
@@ -1633,6 +1640,10 @@ impl App {
                         },
                     );
                 }
+                if component.is_editing && component.social_history.is_some() {
+                    component.start_editing();
+                }
+                frame.render_widget(component, area);
             }
             crate::ui::components::clinical::ClinicalView::FamilyHistory => {
                 frame.render_widget(self.clinical_state.family_history_list.clone(), area);
@@ -1736,6 +1747,13 @@ mod tests {
         );
         app.handle_key_event(key);
         assert_eq!(app.current_tab(), Tab::Appointment);
+
+        // Switch to Calendar view (default is now Schedule)
+        let key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Esc,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key_event(key);
 
         let initial_date = app.appointment_state().calendar.focused_date;
         let key = crossterm::event::KeyEvent::new(

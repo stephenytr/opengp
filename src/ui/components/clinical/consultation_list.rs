@@ -206,7 +206,7 @@ impl ConsultationList {
         self.consultations
             .iter()
             .filter(|c| {
-                let consult_date = c.consultation_date.format("%Y-%m-%d").to_string();
+                let consult_date = c.consultation_date.format("%d/%m/%Y").to_string();
                 let start_ok = self
                     .filter_start_date
                     .as_ref()
@@ -366,10 +366,8 @@ fn format_practitioner(
 
 fn format_reason(consultation: &Consultation) -> String {
     consultation
-        .soap_notes
-        .assessment
+        .clinical_notes
         .as_ref()
-        .or(consultation.soap_notes.subjective.as_ref())
         .map(|s| {
             if s.len() > 28 {
                 format!("{}...", &s[..28])
@@ -427,8 +425,8 @@ impl Widget for ConsultationList {
         };
 
         if self.filter_active || self.filter_input_mode {
-            let start_str = self.filter_start_date.as_deref().unwrap_or("YYYY-MM-DD");
-            let end_str = self.filter_end_date.as_deref().unwrap_or("YYYY-MM-DD");
+            let start_str = self.filter_start_date.as_deref().unwrap_or("dd/mm/yyyy");
+            let end_str = self.filter_end_date.as_deref().unwrap_or("dd/mm/yyyy");
 
             let filter_text = if self.filter_input_mode {
                 format!(

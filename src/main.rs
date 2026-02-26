@@ -370,7 +370,7 @@ async fn run_tui(
                     practitioner_id,
                     appointment_id,
                     reason,
-                    soap_notes,
+                    clinical_notes,
                 } => {
                     match clinical_service.create_consultation(
                         patient_id,
@@ -379,23 +379,16 @@ async fn run_tui(
                     ).await {
                         Ok(consultation) => {
                             tracing::info!("Created consultation {} for patient {}", consultation.id, patient_id);
-                            let has_soap = soap_notes.subjective.is_some()
-                                || soap_notes.objective.is_some()
-                                || soap_notes.assessment.is_some()
-                                || soap_notes.plan.is_some()
-                                || reason.is_some()
-                                || appointment_id.is_some();
-                            if has_soap {
-                                match clinical_service.update_soap_notes(
+                            let has_notes = clinical_notes.is_some() || reason.is_some() || appointment_id.is_some();
+                            if has_notes {
+                                match clinical_service.update_clinical_notes(
                                     consultation.id,
-                                    soap_notes.subjective,
-                                    soap_notes.objective,
-                                    soap_notes.assessment,
-                                    soap_notes.plan,
+                                    reason,
+                                    clinical_notes,
                                     system_user_id,
                                 ).await {
-                                    Ok(_) => tracing::info!("Updated SOAP notes for consultation {}", consultation.id),
-                                    Err(e) => tracing::error!("Failed to update SOAP notes: {}", e),
+                                    Ok(_) => tracing::info!("Updated clinical notes for consultation {}", consultation.id),
+                                    Err(e) => tracing::error!("Failed to update clinical notes: {}", e),
                                 }
                             }
                             match clinical_service.list_consultations(patient_id).await {

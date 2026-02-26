@@ -262,8 +262,8 @@ impl std::fmt::Display for AuditAction {
                 write!(
                     f,
                     "Rescheduled: {} → {}",
-                    from.format("%Y-%m-%d %H:%M"),
-                    to.format("%Y-%m-%d %H:%M")
+                    from.format("%d/%m/%Y %H:%M"),
+                    to.format("%d/%m/%Y %H:%M")
                 )
             }
             AuditAction::Cancelled { reason } => write!(f, "Cancelled: {}", reason),

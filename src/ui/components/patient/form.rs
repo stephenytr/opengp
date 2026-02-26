@@ -4,7 +4,6 @@
 
 use std::collections::HashMap;
 
-use chrono::NaiveDate;
 use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
@@ -17,7 +16,8 @@ use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
 use crate::ui::widgets::{
-    DropdownAction, DropdownOption, DropdownWidget, HeightMode, TextareaState, TextareaWidget,
+    format_date, parse_date, DropdownAction, DropdownOption, DropdownWidget, HeightMode,
+    TextareaState, TextareaWidget,
 };
 
 // Key conversion helpers (crossterm -> ratatui crossterm)
@@ -155,7 +155,7 @@ impl FormField {
             FormField::MiddleName => "Middle Name",
             FormField::LastName => "Last Name *",
             FormField::PreferredName => "Preferred Name",
-            FormField::DateOfBirth => "Date of Birth *",
+            FormField::DateOfBirth => "Date of Birth * (dd/mm/yyyy)",
             FormField::Gender => "Gender *",
             FormField::AddressLine1 => "Address Line 1",
             FormField::AddressLine2 => "Address Line 2",
@@ -168,7 +168,7 @@ impl FormField {
             FormField::Email => "Email",
             FormField::MedicareNumber => "Medicare Number",
             FormField::MedicareIrn => "Medicare IRN",
-            FormField::MedicareExpiry => "Medicare Expiry",
+            FormField::MedicareExpiry => "Medicare Expiry (dd/mm/yyyy)",
             FormField::Ihi => "IHI",
             FormField::EmergencyName => "Emergency Contact Name",
             FormField::EmergencyPhone => "Emergency Contact Phone",
@@ -386,8 +386,8 @@ impl PatientForm {
         if let Some(ref pn) = patient.preferred_name {
             form.preferred_name = single_line("Preferred Name").with_value(pn.clone());
         }
-        form.date_of_birth = single_line("Date of Birth")
-            .with_value(patient.date_of_birth.format("%Y-%m-%d").to_string());
+        form.date_of_birth =
+            single_line("Date of Birth").with_value(format_date(patient.date_of_birth));
         if let Some(ref l1) = patient.address.line1 {
             form.address_line1 = single_line("Address Line 1").with_value(l1.clone());
         }
@@ -424,8 +424,7 @@ impl PatientForm {
                 .with_value(irn.to_string());
         }
         if let Some(exp) = patient.medicare_expiry {
-            form.medicare_expiry =
-                single_line("Medicare Expiry").with_value(exp.format("%Y-%m-%d").to_string());
+            form.medicare_expiry = single_line("Medicare Expiry").with_value(format_date(exp));
         }
         if let Some(ref ihi) = patient.ihi {
             form.ihi = single_line("IHI").with_value(ihi.clone());
@@ -739,9 +738,9 @@ impl PatientForm {
                 if value.is_empty() {
                     self.errors
                         .insert(*field, "This field is required".to_string());
-                } else if NaiveDate::parse_from_str(&value, "%Y-%m-%d").is_err() {
+                } else if parse_date(&value).is_none() {
                     self.errors
-                        .insert(*field, "Use YYYY-MM-DD format".to_string());
+                        .insert(*field, "Use dd/mm/yyyy format".to_string());
                 }
             }
             FormField::Gender => {
@@ -840,8 +839,7 @@ impl PatientForm {
             return None;
         }
 
-        let dob =
-            NaiveDate::parse_from_str(&self.get_value(FormField::DateOfBirth), "%Y-%m-%d").ok()?;
+        let dob = parse_date(&self.get_value(FormField::DateOfBirth))?;
         let gender = self.get_value(FormField::Gender).parse().ok()?;
 
         let address = Address {
@@ -870,11 +868,7 @@ impl PatientForm {
             ihi: self.get_value(FormField::Ihi).empty_to_none(),
             medicare_number: self.get_value(FormField::MedicareNumber).empty_to_none(),
             medicare_irn: self.get_value(FormField::MedicareIrn).parse().ok(),
-            medicare_expiry: NaiveDate::parse_from_str(
-                &self.get_value(FormField::MedicareExpiry),
-                "%Y-%m-%d",
-            )
-            .ok(),
+            medicare_expiry: parse_date(&self.get_value(FormField::MedicareExpiry)),
             title: self.get_value(FormField::Title).empty_to_none(),
             first_name: self.get_value(FormField::FirstName),
             middle_name: self.get_value(FormField::MiddleName).empty_to_none(),
@@ -904,8 +898,7 @@ impl PatientForm {
             return None;
         }
 
-        let dob =
-            NaiveDate::parse_from_str(&self.get_value(FormField::DateOfBirth), "%Y-%m-%d").ok();
+        let dob = parse_date(&self.get_value(FormField::DateOfBirth));
         let gender = self.get_value(FormField::Gender).parse().ok();
 
         let address = Address {
@@ -934,11 +927,7 @@ impl PatientForm {
             ihi: self.get_value(FormField::Ihi).empty_to_none(),
             medicare_number: self.get_value(FormField::MedicareNumber).empty_to_none(),
             medicare_irn: self.get_value(FormField::MedicareIrn).parse().ok(),
-            medicare_expiry: NaiveDate::parse_from_str(
-                &self.get_value(FormField::MedicareExpiry),
-                "%Y-%m-%d",
-            )
-            .ok(),
+            medicare_expiry: parse_date(&self.get_value(FormField::MedicareExpiry)),
             title: self.get_value(FormField::Title).empty_to_none(),
             first_name: Some(self.get_value(FormField::FirstName)),
             middle_name: self.get_value(FormField::MiddleName).empty_to_none(),

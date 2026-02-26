@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::domain::clinical::RepositoryError;
 use crate::domain::clinical::{
     Allergy, AllergyRepository, AllergyType, ConditionStatus, Consultation, ConsultationRepository,
-    FamilyHistory, FamilyHistoryRepository, MedicalHistory, MedicalHistoryRepository, SOAPNotes,
+    FamilyHistory, FamilyHistoryRepository, MedicalHistory, MedicalHistoryRepository,
     Severity, SocialHistory, SocialHistoryRepository, VitalSigns, VitalSignsRepository,
 };
 use crate::infrastructure::crypto::EncryptionService;
@@ -42,10 +42,7 @@ struct ConsultationRow {
     appointment_id: Option<Vec<u8>>,
     consultation_date: String,
     reason: Option<String>,
-    soap_subjective: Option<Vec<u8>>,
-    soap_objective: Option<Vec<u8>>,
-    soap_assessment: Option<Vec<u8>>,
-    soap_plan: Option<Vec<u8>>,
+    clinical_notes: Option<Vec<u8>>,
     is_signed: bool,
     signed_at: Option<String>,
     signed_by: Option<Vec<u8>>,
@@ -60,21 +57,18 @@ impl ConsultationRow {
         self,
         crypto: &EncryptionService,
     ) -> Result<Consultation, RepositoryError> {
-        let decrypt_soap_field =
-            |encrypted: Option<Vec<u8>>| -> Result<Option<String>, RepositoryError> {
-                match encrypted {
-                    Some(data) => {
-                        let decrypted = crypto.decrypt(&data).map_err(|e| {
-                            RepositoryError::Decryption(format!(
-                                "Failed to decrypt SOAP note: {}",
-                                e
-                            ))
-                        })?;
-                        Ok(Some(decrypted))
-                    }
-                    None => Ok(None),
-                }
-            };
+        let clinical_notes = match self.clinical_notes {
+            Some(data) => {
+                let decrypted = crypto.decrypt(&data).map_err(|e| {
+                    RepositoryError::Decryption(format!(
+                        "Failed to decrypt clinical notes: {}",
+                        e
+                    ))
+                })?;
+                Some(decrypted)
+            }
+            None => None,
+        };
 
         Ok(Consultation {
             id: bytes_to_uuid(&self.id)?,
@@ -87,12 +81,7 @@ impl ConsultationRow {
                 .transpose()?,
             consultation_date: string_to_datetime(&self.consultation_date),
             reason: self.reason.clone(),
-            soap_notes: SOAPNotes {
-                subjective: decrypt_soap_field(self.soap_subjective)?,
-                objective: decrypt_soap_field(self.soap_objective)?,
-                assessment: decrypt_soap_field(self.soap_assessment)?,
-                plan: decrypt_soap_field(self.soap_plan)?,
-            },
+            clinical_notes,
             is_signed: self.is_signed,
             signed_at: self.signed_at.as_ref().map(|s| string_to_datetime(s)),
             signed_by: self
@@ -132,8 +121,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
             r#"
             SELECT 
                 id, patient_id, practitioner_id, appointment_id,
-                consultation_date, reason, soap_subjective, soap_objective, 
-                soap_assessment, soap_plan, is_signed, signed_at, signed_by,
+                consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
                 created_at, updated_at, created_by, updated_by
             FROM consultations
             WHERE id = ?
@@ -159,8 +147,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
             r#"
             SELECT 
                 id, patient_id, practitioner_id, appointment_id,
-                consultation_date, reason, soap_subjective, soap_objective, 
-                soap_assessment, soap_plan, is_signed, signed_at, signed_by,
+                consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
                 created_at, updated_at, created_by, updated_by
             FROM consultations
             WHERE patient_id = ?
@@ -190,8 +177,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
             r#"
             SELECT 
                 id, patient_id, practitioner_id, appointment_id,
-                consultation_date, reason, soap_subjective, soap_objective, 
-                soap_assessment, soap_plan, is_signed, signed_at, signed_by,
+                consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
                 created_at, updated_at, created_by, updated_by
             FROM consultations
             WHERE patient_id = ? AND consultation_date BETWEEN ? AND ?
@@ -219,29 +205,22 @@ impl ConsultationRepository for SqlxClinicalRepository {
         let created_at_str = datetime_to_string(&consultation.created_at);
         let updated_at_str = datetime_to_string(&consultation.updated_at);
 
-        let encrypt_soap_field =
-            |text: &Option<String>| -> Result<Option<Vec<u8>>, RepositoryError> {
-                match text {
-                    Some(t) => Ok(Some(self.crypto.encrypt(t).map_err(|e| {
-                        RepositoryError::Encryption(format!("Failed to encrypt SOAP note: {}", e))
-                    })?)),
-                    None => Ok(None),
-                }
-            };
-
-        let soap_subjective = encrypt_soap_field(&consultation.soap_notes.subjective)?;
-        let soap_objective = encrypt_soap_field(&consultation.soap_notes.objective)?;
-        let soap_assessment = encrypt_soap_field(&consultation.soap_notes.assessment)?;
-        let soap_plan = encrypt_soap_field(&consultation.soap_notes.plan)?;
+        let clinical_notes_encrypted: Option<Vec<u8>> = consultation
+            .clinical_notes
+            .as_ref()
+            .map(|n| self.crypto.encrypt(n))
+            .transpose()
+            .map_err(|e| {
+                RepositoryError::Encryption(format!("Failed to encrypt clinical notes: {}", e))
+            })?;
 
         sqlx::query(
             r#"
             INSERT INTO consultations (
                 id, patient_id, practitioner_id, appointment_id,
-                consultation_date, reason, soap_subjective, soap_objective, 
-                soap_assessment, soap_plan, is_signed, signed_at, signed_by,
+                consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
                 created_at, updated_at, created_by, updated_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(id_bytes)
@@ -250,10 +229,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
         .bind(appointment_bytes)
         .bind(&consultation_date_str)
         .bind(&consultation.reason)
-        .bind(soap_subjective)
-        .bind(soap_objective)
-        .bind(soap_assessment)
-        .bind(soap_plan)
+        .bind(clinical_notes_encrypted)
         .bind(consultation.is_signed)
         .bind(consultation.signed_at.as_ref().map(datetime_to_string))
         .bind(consultation.signed_by.as_ref().map(uuid_to_bytes))
@@ -272,37 +248,27 @@ impl ConsultationRepository for SqlxClinicalRepository {
         let updated_at_str = datetime_to_string(&consultation.updated_at);
         let updated_by_bytes = consultation.updated_by.as_ref().map(uuid_to_bytes);
 
-        let encrypt_soap_field =
-            |text: &Option<String>| -> Result<Option<Vec<u8>>, RepositoryError> {
-                match text {
-                    Some(t) => Ok(Some(self.crypto.encrypt(t).map_err(|e| {
-                        RepositoryError::Encryption(format!("Failed to encrypt SOAP note: {}", e))
-                    })?)),
-                    None => Ok(None),
-                }
-            };
-
-        let soap_subjective = encrypt_soap_field(&consultation.soap_notes.subjective)?;
-        let soap_objective = encrypt_soap_field(&consultation.soap_notes.objective)?;
-        let soap_assessment = encrypt_soap_field(&consultation.soap_notes.assessment)?;
-        let soap_plan = encrypt_soap_field(&consultation.soap_notes.plan)?;
+        let clinical_notes_encrypted: Option<Vec<u8>> = consultation
+            .clinical_notes
+            .as_ref()
+            .map(|n| self.crypto.encrypt(n))
+            .transpose()
+            .map_err(|e| {
+                RepositoryError::Encryption(format!("Failed to encrypt clinical notes: {}", e))
+            })?;
 
         sqlx::query(
             r#"
             UPDATE consultations
             SET 
-                reason = ?, soap_subjective = ?, soap_objective = ?, 
-                soap_assessment = ?, soap_plan = ?,
+                reason = ?, clinical_notes = ?,
                 is_signed = ?, signed_at = ?, signed_by = ?,
                 updated_at = ?, updated_by = ?
             WHERE id = ?
             "#,
         )
         .bind(&consultation.reason)
-        .bind(soap_subjective)
-        .bind(soap_objective)
-        .bind(soap_assessment)
-        .bind(soap_plan)
+        .bind(clinical_notes_encrypted)
         .bind(consultation.is_signed)
         .bind(consultation.signed_at.as_ref().map(datetime_to_string))
         .bind(consultation.signed_by.as_ref().map(uuid_to_bytes))

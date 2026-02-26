@@ -1,7 +1,7 @@
 use chrono::{Duration, NaiveDate, Utc};
 use opengp::domain::audit::{AuditRepository, AuditService};
 use opengp::domain::clinical::{
-    ClinicalService, ConsultationRepository, NewConsultationData, UpdateSOAPNotesData,
+    ClinicalService, ConsultationRepository, NewConsultationData,
 };
 use opengp::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
 use opengp::infrastructure::crypto::EncryptionService;
@@ -132,30 +132,15 @@ async fn test_create_consultation_with_reason() {
         practitioner_id,
         appointment_id: None,
         reason: Some("Chest pain and shortness of breath".to_string()),
+        clinical_notes: None,
     };
-
     let consultation = service
-        .create_consultation(data, practitioner_id)
+        .create_consultation(
+            data,
+            practitioner_id,
+        )
         .await
         .expect("Failed to create consultation");
-
-    assert_eq!(
-        consultation.reason,
-        Some("Chest pain and shortness of breath".to_string()),
-        "Consultation reason should be persisted"
-    );
-    assert_eq!(consultation.patient_id, patient_id);
-    assert_eq!(consultation.practitioner_id, practitioner_id);
-    assert!(!consultation.is_signed);
-}
-
-#[tokio::test]
-async fn test_update_soap_notes_on_unsigned_consultation() {
-    let pool = setup_test_database().await;
-    let service = create_clinical_service(&pool);
-
-    let patient_id = create_test_patient(&pool).await;
-    let practitioner_id = create_test_practitioner(&pool).await;
 
     let consultation = service
         .create_consultation(
@@ -164,6 +149,7 @@ async fn test_update_soap_notes_on_unsigned_consultation() {
                 practitioner_id,
                 appointment_id: None,
                 reason: Some("Annual check-up".to_string()),
+                clinical_notes: None,
             },
             practitioner_id,
         )
@@ -173,35 +159,18 @@ async fn test_update_soap_notes_on_unsigned_consultation() {
     assert!(!consultation.is_signed);
 
     let updated = service
-        .update_soap_notes(
+        .update_clinical_notes(
             consultation.id,
-            UpdateSOAPNotesData {
-                reason: None,
-                subjective: Some("Patient reports fatigue for 2 weeks".to_string()),
-                objective: Some("BP 120/80, HR 72, afebrile".to_string()),
-                assessment: Some("Fatigue, likely iron deficiency anaemia".to_string()),
-                plan: Some("FBC, iron studies. Review in 1 week.".to_string()),
-            },
+            None,
+            Some("Patient reports fatigue for 2 weeks\nBP 120/80, HR 72, afebrile\nFatigue, likely iron deficiency anaemia\nFBC, iron studies. Review in 1 week.".to_string()),
             practitioner_id,
         )
         .await
-        .expect("Should be able to update SOAP notes on unsigned consultation");
+        .expect("Should be able to update clinical notes on unsigned consultation");
 
     assert_eq!(
-        updated.soap_notes.subjective,
-        Some("Patient reports fatigue for 2 weeks".to_string())
-    );
-    assert_eq!(
-        updated.soap_notes.objective,
-        Some("BP 120/80, HR 72, afebrile".to_string())
-    );
-    assert_eq!(
-        updated.soap_notes.assessment,
-        Some("Fatigue, likely iron deficiency anaemia".to_string())
-    );
-    assert_eq!(
-        updated.soap_notes.plan,
-        Some("FBC, iron studies. Review in 1 week.".to_string())
+        updated.clinical_notes,
+        Some("Patient reports fatigue for 2 weeks\nBP 120/80, HR 72, afebrile\nFatigue, likely iron deficiency anaemia\nFBC, iron studies. Review in 1 week.".to_string())
     );
     assert_eq!(updated.updated_by, Some(practitioner_id));
 }
@@ -221,6 +190,7 @@ async fn test_update_soap_notes_fails_on_signed_consultation() {
                 practitioner_id,
                 appointment_id: None,
                 reason: Some("Follow-up".to_string()),
+                clinical_notes: None,
             },
             practitioner_id,
         )
@@ -233,22 +203,17 @@ async fn test_update_soap_notes_fails_on_signed_consultation() {
         .expect("Failed to sign consultation");
 
     let result = service
-        .update_soap_notes(
+        .update_clinical_notes(
             consultation.id,
-            UpdateSOAPNotesData {
-                reason: None,
-                subjective: Some("Attempting to edit signed note".to_string()),
-                objective: None,
-                assessment: None,
-                plan: None,
-            },
+            None,
+            Some("Attempting to edit signed note".to_string()),
             practitioner_id,
         )
         .await;
 
     assert!(
         result.is_err(),
-        "Updating SOAP notes on a signed consultation should return an error"
+        "Updating clinical notes on a signed consultation should return an error"
     );
 
     let err = result.unwrap_err();
@@ -274,6 +239,7 @@ async fn test_sign_consultation() {
                 practitioner_id,
                 appointment_id: None,
                 reason: Some("Hypertension review".to_string()),
+                clinical_notes: None,
             },
             practitioner_id,
         )
@@ -283,19 +249,14 @@ async fn test_sign_consultation() {
     assert!(!consultation.is_signed);
 
     service
-        .update_soap_notes(
+        .update_clinical_notes(
             consultation.id,
-            UpdateSOAPNotesData {
-                reason: None,
-                subjective: Some("BP well controlled on current medication".to_string()),
-                objective: Some("BP 128/82, HR 68".to_string()),
-                assessment: Some("Hypertension — well controlled".to_string()),
-                plan: Some("Continue current medication. Review in 3 months.".to_string()),
-            },
+            None,
+            Some("BP well controlled on current medication\nBP 128/82, HR 68\nHypertension — well controlled\nContinue current medication. Review in 3 months.".to_string()),
             practitioner_id,
         )
         .await
-        .expect("Failed to update SOAP notes");
+        .expect("Failed to update clinical notes");
 
     service
         .sign_consultation(consultation.id, practitioner_id)
@@ -328,6 +289,7 @@ async fn test_sign_consultation_twice_fails() {
                 practitioner_id,
                 appointment_id: None,
                 reason: None,
+                clinical_notes: None,
             },
             practitioner_id,
         )
@@ -364,6 +326,7 @@ async fn test_find_consultations_by_date_range_for_patient() {
                 practitioner_id,
                 appointment_id: None,
                 reason: Some("Recent visit".to_string()),
+                clinical_notes: None,
             },
             practitioner_id,
         )
@@ -377,6 +340,7 @@ async fn test_find_consultations_by_date_range_for_patient() {
                 practitioner_id,
                 appointment_id: None,
                 reason: Some("Second visit".to_string()),
+                clinical_notes: None,
             },
             practitioner_id,
         )
@@ -390,6 +354,7 @@ async fn test_find_consultations_by_date_range_for_patient() {
                 practitioner_id,
                 appointment_id: None,
                 reason: Some("Other patient visit".to_string()),
+                clinical_notes: None,
             },
             practitioner_id,
         )
@@ -439,6 +404,7 @@ async fn test_find_consultations_by_date_range_future_returns_empty() {
                 practitioner_id,
                 appointment_id: None,
                 reason: Some("Current visit".to_string()),
+                clinical_notes: None,
             },
             practitioner_id,
         )

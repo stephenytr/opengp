@@ -574,20 +574,8 @@ pub fn assert_consultation_eq(actual: &Consultation, expected: &Consultation) {
         "Consultation consultation_date mismatch",
     );
     assert_eq!(
-        actual.soap_notes.subjective, expected.soap_notes.subjective,
-        "Consultation SOAP subjective mismatch"
-    );
-    assert_eq!(
-        actual.soap_notes.objective, expected.soap_notes.objective,
-        "Consultation SOAP objective mismatch"
-    );
-    assert_eq!(
-        actual.soap_notes.assessment, expected.soap_notes.assessment,
-        "Consultation SOAP assessment mismatch"
-    );
-    assert_eq!(
-        actual.soap_notes.plan, expected.soap_notes.plan,
-        "Consultation SOAP plan mismatch"
+        actual.clinical_notes, expected.clinical_notes,
+        "Consultation clinical_notes mismatch"
     );
     assert_eq!(
         actual.is_signed, expected.is_signed,

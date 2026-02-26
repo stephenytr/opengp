@@ -74,30 +74,21 @@ fn to_ratatui_key(key: KeyEvent) -> RatatuiKeyEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConsultationFormField {
     Reason,
-    Subjective,
-    Objective,
-    Assessment,
-    Plan,
+    ClinicalNotes,
 }
 
 impl ConsultationFormField {
     pub fn all() -> Vec<ConsultationFormField> {
         vec![
             ConsultationFormField::Reason,
-            ConsultationFormField::Subjective,
-            ConsultationFormField::Objective,
-            ConsultationFormField::Assessment,
-            ConsultationFormField::Plan,
+            ConsultationFormField::ClinicalNotes,
         ]
     }
 
     pub fn label(&self) -> &'static str {
         match self {
             ConsultationFormField::Reason => "Reason",
-            ConsultationFormField::Subjective => "Subjective",
-            ConsultationFormField::Objective => "Objective",
-            ConsultationFormField::Assessment => "Assessment",
-            ConsultationFormField::Plan => "Plan",
+            ConsultationFormField::ClinicalNotes => "Clinical Notes",
         }
     }
 
@@ -105,15 +96,8 @@ impl ConsultationFormField {
         false
     }
 
-    /// Returns true if this field uses TextareaWidget (multi-line SOAP fields).
     pub fn is_textarea(&self) -> bool {
-        matches!(
-            self,
-            ConsultationFormField::Subjective
-                | ConsultationFormField::Objective
-                | ConsultationFormField::Assessment
-                | ConsultationFormField::Plan
-        )
+        true
     }
 }
 
@@ -126,11 +110,8 @@ pub enum ConsultationFormAction {
 }
 
 pub struct ConsultationForm {
-    pub reason: String,
-    pub subjective: TextareaState,
-    pub objective: TextareaState,
-    pub assessment: TextareaState,
-    pub plan: TextareaState,
+    pub reason: TextareaState,
+    pub clinical_notes: TextareaState,
     pub focused_field: ConsultationFormField,
     pub is_valid: bool,
     pub is_edit_mode: bool,
@@ -143,10 +124,7 @@ impl Clone for ConsultationForm {
     fn clone(&self) -> Self {
         Self {
             reason: self.reason.clone(),
-            subjective: self.subjective.clone(),
-            objective: self.objective.clone(),
-            assessment: self.assessment.clone(),
-            plan: self.plan.clone(),
+            clinical_notes: self.clinical_notes.clone(),
             focused_field: self.focused_field,
             is_valid: self.is_valid,
             is_edit_mode: self.is_edit_mode,
@@ -157,18 +135,19 @@ impl Clone for ConsultationForm {
     }
 }
 
-fn soap_textarea(label: &'static str) -> TextareaState {
-    TextareaState::new(label).with_height_mode(HeightMode::AutoGrow { min: 3, max: 8 })
+fn reason_textarea() -> TextareaState {
+    TextareaState::new("Reason").with_height_mode(HeightMode::AutoGrow { min: 2, max: 4 })
+}
+
+fn clinical_textarea() -> TextareaState {
+    TextareaState::new("Clinical Notes").with_height_mode(HeightMode::AutoGrow { min: 10, max: 20 })
 }
 
 impl ConsultationForm {
     pub fn new(theme: Theme) -> Self {
         Self {
-            reason: String::new(),
-            subjective: soap_textarea("Subjective"),
-            objective: soap_textarea("Objective"),
-            assessment: soap_textarea("Assessment"),
-            plan: soap_textarea("Plan"),
+            reason: reason_textarea(),
+            clinical_notes: clinical_textarea(),
             focused_field: ConsultationFormField::Reason,
             is_valid: true,
             is_edit_mode: false,
@@ -179,36 +158,13 @@ impl ConsultationForm {
     }
 
     pub fn from_consultation(theme: Theme, consultation: &Consultation) -> Self {
-        let subjective = soap_textarea("Subjective").with_value(
-            consultation
-                .soap_notes
-                .subjective
-                .clone()
-                .unwrap_or_default(),
-        );
-        let objective = soap_textarea("Objective").with_value(
-            consultation
-                .soap_notes
-                .objective
-                .clone()
-                .unwrap_or_default(),
-        );
-        let assessment = soap_textarea("Assessment").with_value(
-            consultation
-                .soap_notes
-                .assessment
-                .clone()
-                .unwrap_or_default(),
-        );
-        let plan = soap_textarea("Plan")
-            .with_value(consultation.soap_notes.plan.clone().unwrap_or_default());
+        let reason = reason_textarea().with_value(consultation.reason.clone().unwrap_or_default());
+        let clinical_notes =
+            clinical_textarea().with_value(consultation.clinical_notes.clone().unwrap_or_default());
 
         Self {
-            reason: consultation.reason.clone().unwrap_or_default(),
-            subjective,
-            objective,
-            assessment,
-            plan,
+            reason,
+            clinical_notes,
             focused_field: ConsultationFormField::Reason,
             is_valid: true,
             is_edit_mode: true,
@@ -244,28 +200,18 @@ impl ConsultationForm {
 
     pub fn get_value(&self, field: ConsultationFormField) -> String {
         match field {
-            ConsultationFormField::Reason => self.reason.clone(),
-            ConsultationFormField::Subjective => self.subjective.value(),
-            ConsultationFormField::Objective => self.objective.value(),
-            ConsultationFormField::Assessment => self.assessment.value(),
-            ConsultationFormField::Plan => self.plan.value(),
+            ConsultationFormField::Reason => self.reason.value(),
+            ConsultationFormField::ClinicalNotes => self.clinical_notes.value(),
         }
     }
 
     pub fn set_value(&mut self, field: ConsultationFormField, value: String) {
         match field {
-            ConsultationFormField::Reason => self.reason = value,
-            ConsultationFormField::Subjective => {
-                self.subjective = soap_textarea("Subjective").with_value(value);
+            ConsultationFormField::Reason => {
+                self.reason = reason_textarea().with_value(value);
             }
-            ConsultationFormField::Objective => {
-                self.objective = soap_textarea("Objective").with_value(value);
-            }
-            ConsultationFormField::Assessment => {
-                self.assessment = soap_textarea("Assessment").with_value(value);
-            }
-            ConsultationFormField::Plan => {
-                self.plan = soap_textarea("Plan").with_value(value);
+            ConsultationFormField::ClinicalNotes => {
+                self.clinical_notes = clinical_textarea().with_value(value);
             }
         }
         self.validate_field(&field);
@@ -302,15 +248,11 @@ impl ConsultationForm {
             return Some(ConsultationFormAction::Submit);
         }
 
-        // For textarea SOAP fields, delegate to TextareaState.
         if self.focused_field.is_textarea() {
             let ratatui_key = to_ratatui_key(key);
             let consumed = match self.focused_field {
-                ConsultationFormField::Subjective => self.subjective.handle_key(ratatui_key),
-                ConsultationFormField::Objective => self.objective.handle_key(ratatui_key),
-                ConsultationFormField::Assessment => self.assessment.handle_key(ratatui_key),
-                ConsultationFormField::Plan => self.plan.handle_key(ratatui_key),
-                _ => false,
+                ConsultationFormField::Reason => self.reason.handle_key(ratatui_key),
+                ConsultationFormField::ClinicalNotes => self.clinical_notes.handle_key(ratatui_key),
             };
             if consumed {
                 return Some(ConsultationFormAction::ValueChanged);
@@ -343,14 +285,6 @@ impl ConsultationForm {
                 Some(ConsultationFormAction::FocusChanged)
             }
             KeyCode::Esc => Some(ConsultationFormAction::Cancel),
-            KeyCode::Char(c) => {
-                self.reason.push(c);
-                Some(ConsultationFormAction::ValueChanged)
-            }
-            KeyCode::Backspace => {
-                self.reason.pop();
-                Some(ConsultationFormAction::ValueChanged)
-            }
             _ => None,
         }
     }
@@ -367,13 +301,8 @@ impl ConsultationForm {
             practitioner_id,
             appointment_id: None,
             consultation_date: chrono::Utc::now(),
-            reason: Some(self.reason.clone()).filter(|s| !s.is_empty()),
-            soap_notes: crate::domain::clinical::SOAPNotes {
-                subjective: Some(self.subjective.value()).filter(|s| !s.is_empty()),
-                objective: Some(self.objective.value()).filter(|s| !s.is_empty()),
-                assessment: Some(self.assessment.value()).filter(|s| !s.is_empty()),
-                plan: Some(self.plan.value()).filter(|s| !s.is_empty()),
-            },
+            reason: Some(self.reason.value()).filter(|s| !s.is_empty()),
+            clinical_notes: Some(self.clinical_notes.value()).filter(|s| !s.is_empty()),
             is_signed: false,
             signed_at: None,
             signed_by: None,
@@ -424,14 +353,10 @@ impl Widget for ConsultationForm {
 
             let is_focused = field == self.focused_field;
 
-            // Textarea fields (SOAP notes) use TextareaWidget.
             if field.is_textarea() {
                 let textarea = match field {
-                    ConsultationFormField::Subjective => &self.subjective,
-                    ConsultationFormField::Objective => &self.objective,
-                    ConsultationFormField::Assessment => &self.assessment,
-                    ConsultationFormField::Plan => &self.plan,
-                    _ => unreachable!(),
+                    ConsultationFormField::Reason => &self.reason,
+                    ConsultationFormField::ClinicalNotes => &self.clinical_notes,
                 };
                 let field_height = textarea.height();
                 let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
@@ -531,43 +456,37 @@ mod tests {
 
         assert_eq!(form.focused_field(), ConsultationFormField::Reason);
         form.next_field();
-        assert_eq!(form.focused_field(), ConsultationFormField::Subjective);
+        assert_eq!(form.focused_field(), ConsultationFormField::ClinicalNotes);
         form.next_field();
-        assert_eq!(form.focused_field(), ConsultationFormField::Objective);
+        assert_eq!(form.focused_field(), ConsultationFormField::Reason);
         form.prev_field();
-        assert_eq!(form.focused_field(), ConsultationFormField::Subjective);
+        assert_eq!(form.focused_field(), ConsultationFormField::ClinicalNotes);
     }
 
     #[test]
     fn test_consultation_form_all_fields_ordered() {
         let fields = ConsultationFormField::all();
         assert_eq!(fields[0], ConsultationFormField::Reason);
-        assert_eq!(fields[1], ConsultationFormField::Subjective);
-        assert_eq!(fields[2], ConsultationFormField::Objective);
-        assert_eq!(fields[3], ConsultationFormField::Assessment);
-        assert_eq!(fields[4], ConsultationFormField::Plan);
+        assert_eq!(fields[1], ConsultationFormField::ClinicalNotes);
     }
 
     #[test]
-    fn test_soap_fields_are_textarea() {
-        assert!(!ConsultationFormField::Reason.is_textarea());
-        assert!(ConsultationFormField::Subjective.is_textarea());
-        assert!(ConsultationFormField::Objective.is_textarea());
-        assert!(ConsultationFormField::Assessment.is_textarea());
-        assert!(ConsultationFormField::Plan.is_textarea());
+    fn test_clinical_notes_is_textarea() {
+        assert!(ConsultationFormField::Reason.is_textarea());
+        assert!(ConsultationFormField::ClinicalNotes.is_textarea());
     }
 
     #[test]
-    fn test_soap_field_get_set_value() {
+    fn test_clinical_notes_field_get_set_value() {
         let theme = Theme::dark();
         let mut form = ConsultationForm::new(theme);
 
         form.set_value(
-            ConsultationFormField::Subjective,
+            ConsultationFormField::ClinicalNotes,
             "Patient reports headache".to_string(),
         );
         assert_eq!(
-            form.get_value(ConsultationFormField::Subjective),
+            form.get_value(ConsultationFormField::ClinicalNotes),
             "Patient reports headache"
         );
     }

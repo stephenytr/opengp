@@ -11,7 +11,7 @@ use crate::service;
 
 use super::dto::{
     NewAllergyData, NewConsultationData, NewFamilyHistoryData, NewMedicalHistoryData,
-    NewVitalSignsData, UpdateSOAPNotesData, UpdateSocialHistoryData,
+    NewVitalSignsData, UpdateSocialHistoryData,
 };
 use super::error::ServiceError;
 use super::model::{
@@ -64,6 +64,7 @@ impl ClinicalService {
             user_id,
         );
         consultation.reason = data.reason;
+        consultation.clinical_notes = data.clinical_notes;
 
         let saved = self.consultation_repo.create(consultation).await?;
 
@@ -98,14 +99,15 @@ impl ClinicalService {
         Ok(consultations)
     }
 
-    #[instrument(skip(self, data), fields(consultation_id = %consultation_id))]
-    pub async fn update_soap_notes(
+    #[instrument(skip(self), fields(consultation_id = %consultation_id))]
+    pub async fn update_clinical_notes(
         &self,
         consultation_id: Uuid,
-        data: UpdateSOAPNotesData,
+        reason: Option<String>,
+        clinical_notes: Option<String>,
         user_id: Uuid,
     ) -> Result<Consultation, ServiceError> {
-        info!("Updating SOAP notes for consultation: {}", consultation_id);
+        info!("Updating clinical notes for consultation: {}", consultation_id);
 
         let mut consultation = self
             .consultation_repo
@@ -113,24 +115,16 @@ impl ClinicalService {
             .await?
             .ok_or_else(|| ServiceError::ConsultationNotFound(consultation_id))?;
 
-        // Business rule: Cannot edit signed consultations
         if consultation.is_signed {
             warn!("Attempted to edit signed consultation: {}", consultation_id);
             return Err(ServiceError::AlreadySigned);
         }
 
-        // Update SOAP notes
-        if let Some(subjective) = data.subjective {
-            consultation.soap_notes.subjective = Some(subjective);
+        if let Some(r) = reason {
+            consultation.reason = Some(r);
         }
-        if let Some(objective) = data.objective {
-            consultation.soap_notes.objective = Some(objective);
-        }
-        if let Some(assessment) = data.assessment {
-            consultation.soap_notes.assessment = Some(assessment);
-        }
-        if let Some(plan) = data.plan {
-            consultation.soap_notes.plan = Some(plan);
+        if let Some(notes) = clinical_notes {
+            consultation.clinical_notes = Some(notes);
         }
 
         consultation.updated_at = chrono::Utc::now();
@@ -138,19 +132,18 @@ impl ClinicalService {
 
         let updated = self.consultation_repo.update(consultation).await?;
 
-        // Audit log
         self.audit_logger
             .log(AuditEntry::new_updated(
                 "consultation",
                 updated.id,
-                "SOAP notes updated",
+                "Clinical notes updated",
                 "",
                 user_id,
             ))
             .await
             .ok();
 
-        info!("SOAP notes updated for consultation: {}", updated.id);
+        info!("Clinical notes updated for consultation: {}", updated.id);
         Ok(updated)
     }
 

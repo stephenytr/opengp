@@ -14,7 +14,7 @@ use crate::domain::clinical::{Allergy, AllergyType, Severity};
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    DropdownOption, DropdownWidget, HeightMode, TextareaState, TextareaWidget,
+    parse_date, DropdownOption, DropdownWidget, HeightMode, TextareaState, TextareaWidget,
 };
 
 type RatatuiKeyEvent = ratatui::crossterm::event::KeyEvent;
@@ -101,7 +101,7 @@ impl AllergyFormField {
             AllergyFormField::AllergyType => "Allergy Type *",
             AllergyFormField::Severity => "Severity *",
             AllergyFormField::Reaction => "Reaction",
-            AllergyFormField::OnsetDate => "Onset Date",
+            AllergyFormField::OnsetDate => "Onset Date (dd/mm/yyyy)",
             AllergyFormField::Notes => "Notes",
         }
     }
@@ -302,11 +302,9 @@ impl AllergyForm {
                 }
             }
             AllergyFormField::OnsetDate => {
-                if !value.is_empty()
-                    && chrono::NaiveDate::parse_from_str(&value, "%Y-%m-%d").is_err()
-                {
+                if !value.is_empty() && parse_date(&value).is_none() {
                     self.errors
-                        .insert(*field, "Use YYYY-MM-DD format".to_string());
+                        .insert(*field, "Use dd/mm/yyyy format".to_string());
                 }
             }
             _ => {}
@@ -428,10 +426,7 @@ impl AllergyForm {
             allergy_type: self.allergy_type.unwrap_or(AllergyType::Other),
             severity: self.severity.unwrap_or(Severity::Moderate),
             reaction: Some(self.reaction.value()).filter(|s| !s.is_empty()),
-            onset_date: self
-                .onset_date
-                .as_deref()
-                .and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()),
+            onset_date: self.onset_date.as_deref().and_then(|d| parse_date(d)),
             notes: Some(self.notes.value()).filter(|s| !s.is_empty()),
             is_active: true,
             created_at: chrono::Utc::now(),
@@ -660,7 +655,7 @@ mod tests {
         form.set_value(AllergyFormField::OnsetDate, "not-a-date".to_string());
         assert!(form.error(AllergyFormField::OnsetDate).is_some());
 
-        form.set_value(AllergyFormField::OnsetDate, "2024-01-15".to_string());
+        form.set_value(AllergyFormField::OnsetDate, "15/01/2024".to_string());
         assert!(form.error(AllergyFormField::OnsetDate).is_none());
     }
 

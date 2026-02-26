@@ -14,7 +14,8 @@ use crate::domain::clinical::{ConditionStatus, MedicalHistory, Severity};
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    DropdownAction, DropdownOption, DropdownWidget, HeightMode, TextareaState, TextareaWidget,
+    parse_date, DropdownAction, DropdownOption, DropdownWidget, HeightMode, TextareaState,
+    TextareaWidget,
 };
 
 type RatatuiKeyEvent = ratatui::crossterm::event::KeyEvent;
@@ -94,7 +95,7 @@ impl MedicalHistoryFormField {
     pub fn label(&self) -> &'static str {
         match self {
             MedicalHistoryFormField::Condition => "Condition *",
-            MedicalHistoryFormField::DiagnosisDate => "Diagnosis Date",
+            MedicalHistoryFormField::DiagnosisDate => "Diagnosis Date (dd/mm/yyyy)",
             MedicalHistoryFormField::Status => "Status *",
             MedicalHistoryFormField::Severity => "Severity",
             MedicalHistoryFormField::Notes => "Notes",
@@ -264,11 +265,9 @@ impl MedicalHistoryForm {
                 }
             }
             MedicalHistoryFormField::DiagnosisDate => {
-                if !value.is_empty()
-                    && chrono::NaiveDate::parse_from_str(&value, "%Y-%m-%d").is_err()
-                {
+                if !value.is_empty() && parse_date(&value).is_none() {
                     self.errors
-                        .insert(*field, "Use YYYY-MM-DD format".to_string());
+                        .insert(*field, "Use dd/mm/yyyy format".to_string());
                 }
             }
             MedicalHistoryFormField::Severity => {
@@ -426,8 +425,7 @@ impl MedicalHistoryForm {
             .get_value(MedicalHistoryFormField::Severity)
             .parse::<Severity>()
             .ok();
-        let diagnosis_date =
-            chrono::NaiveDate::parse_from_str(&self.diagnosis_date.value(), "%Y-%m-%d").ok();
+        let diagnosis_date = parse_date(&self.diagnosis_date.value());
 
         Some(MedicalHistory {
             id: uuid::Uuid::new_v4(),

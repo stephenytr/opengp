@@ -43,8 +43,7 @@ impl std::fmt::Debug for TextareaState {
 
 impl TextareaState {
     pub fn new(label: &'static str) -> Self {
-        let mut textarea = TextArea::default();
-        textarea.set_line_number_style(Style::default().fg(Color::Reset));
+        let textarea = TextArea::default();
         Self {
             textarea,
             label,
@@ -231,7 +230,6 @@ impl Widget for TextareaWidget<'_> {
                 .fg(self.theme.colors.foreground)
                 .bg(Color::Black),
         );
-        ta.set_line_number_style(Style::default().fg(Color::Reset));
 
         if self.focused {
             ta.set_cursor_line_style(Style::default().add_modifier(Modifier::UNDERLINED));
