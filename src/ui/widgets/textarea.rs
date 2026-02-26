@@ -112,7 +112,7 @@ impl TextareaState {
             HeightMode::FixedLines(n) => n + 2,
             HeightMode::AutoGrow { min, max } => {
                 let content_lines = self.textarea.lines().len() as u16;
-                content_lines.clamp(min, max) + 2
+                (content_lines.clamp(min, max) + 2).max(3)
             }
         }
     }
