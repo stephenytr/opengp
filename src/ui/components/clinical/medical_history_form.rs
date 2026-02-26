@@ -356,6 +356,14 @@ impl MedicalHistoryForm {
                 self.next_field();
                 Some(MedicalHistoryFormAction::FocusChanged)
             }
+            KeyCode::PageUp => {
+                self.scroll.scroll_up();
+                Some(MedicalHistoryFormAction::FocusChanged)
+            }
+            KeyCode::PageDown => {
+                self.scroll.scroll_down();
+                Some(MedicalHistoryFormAction::FocusChanged)
+            }
             KeyCode::Enter => {
                 self.validate();
                 Some(MedicalHistoryFormAction::Submit)
@@ -402,7 +410,7 @@ impl MedicalHistoryForm {
 }
 
 impl Widget for MedicalHistoryForm {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+    fn render(mut self, area: Rect, buf: &mut Buffer) {
         if area.is_empty() {
             return;
         }
@@ -424,37 +432,56 @@ impl Widget for MedicalHistoryForm {
 
         let fields = MedicalHistoryFormField::all();
 
-        let mut y = inner.y + 1;
-        let max_y = inner.y + inner.height - 2;
+        let mut total_height: u16 = 0;
+        for field in &fields {
+            if matches!(field, MedicalHistoryFormField::Notes) {
+                total_height += 7;
+            } else {
+                total_height += 3;
+            }
+        }
+        self.scroll.set_total_height(total_height);
+        self.scroll.clamp_offset(inner.height.saturating_sub(2));
+
+        let mut y: i32 = (inner.y as i32) + 1 - (self.scroll.scroll_offset as i32);
+        let max_y = inner.y as i32 + inner.height as i32 - 2;
 
         let mut open_dropdown: Option<(DropdownWidget, Rect)> = None;
 
         for field in fields {
-            if y > max_y {
-                break;
+            let field_height = if matches!(field, MedicalHistoryFormField::Notes) {
+                7i32
+            } else {
+                3i32
+            };
+
+            if y + field_height <= inner.y as i32 || y >= max_y {
+                y += field_height;
+                continue;
             }
 
             let is_focused = field == self.focused_field;
 
-            // Skip label and indicator for dropdown fields (they have their own title)
-            if !field.is_dropdown() {
-                let label_style = if is_focused {
-                    Style::default()
-                        .fg(self.theme.colors.primary)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(self.theme.colors.foreground)
-                };
+            if y >= inner.y as i32 && y < max_y {
+                if !field.is_dropdown() {
+                    let label_style = if is_focused {
+                        Style::default()
+                            .fg(self.theme.colors.primary)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(self.theme.colors.foreground)
+                    };
 
-                buf.set_string(inner.x + 1, y, field.label(), label_style);
+                    buf.set_string(inner.x + 1, y as u16, field.label(), label_style);
 
-                if is_focused {
-                    buf.set_string(
-                        field_start - 1,
-                        y,
-                        ">",
-                        Style::default().fg(self.theme.colors.primary),
-                    );
+                    if is_focused {
+                        buf.set_string(
+                            field_start - 1,
+                            y as u16,
+                            ">",
+                            Style::default().fg(self.theme.colors.primary),
+                        );
+                    }
                 }
             }
 
@@ -462,22 +489,26 @@ impl Widget for MedicalHistoryForm {
                 MedicalHistoryFormField::Status => {
                     let dropdown = self.status_dropdown.clone();
                     let dropdown_width = inner.width.saturating_sub(label_width + 4);
-                    let dropdown_area = Rect::new(field_start, y, dropdown_width, 3);
-                    if dropdown.is_open() {
-                        open_dropdown = Some((dropdown.clone(), dropdown_area));
+                    if y >= inner.y as i32 && y < max_y {
+                        let dropdown_area = Rect::new(field_start, y as u16, dropdown_width, 3);
+                        if dropdown.is_open() {
+                            open_dropdown = Some((dropdown.clone(), dropdown_area));
+                        }
+                        dropdown.focused(is_focused).render(dropdown_area, buf);
                     }
-                    dropdown.focused(is_focused).render(dropdown_area, buf);
-                    y += 2;
+                    y += 3;
                 }
                 MedicalHistoryFormField::Severity => {
                     let dropdown = self.severity_dropdown.clone();
                     let dropdown_width = inner.width.saturating_sub(label_width + 4);
-                    let dropdown_area = Rect::new(field_start, y, dropdown_width, 3);
-                    if dropdown.is_open() {
-                        open_dropdown = Some((dropdown.clone(), dropdown_area));
+                    if y >= inner.y as i32 && y < max_y {
+                        let dropdown_area = Rect::new(field_start, y as u16, dropdown_width, 3);
+                        if dropdown.is_open() {
+                            open_dropdown = Some((dropdown.clone(), dropdown_area));
+                        }
+                        dropdown.focused(is_focused).render(dropdown_area, buf);
                     }
-                    dropdown.focused(is_focused).render(dropdown_area, buf);
-                    y += 2;
+                    y += 3;
                 }
                 _ => {
                     let textarea_state: &TextareaState;
@@ -495,28 +526,33 @@ impl Widget for MedicalHistoryForm {
                             textarea_state = &self.notes;
                             height = 6;
                         }
-                        _ => continue,
+                        _ => {
+                            y += 3;
+                            continue;
+                        }
                     };
 
-                    let textarea_width = inner.width.saturating_sub(label_width + 4);
-                    let textarea_area = Rect::new(field_start, y, textarea_width, height);
+                    if y >= inner.y as i32 && y < max_y {
+                        let textarea_width = inner.width.saturating_sub(label_width + 4);
+                        let textarea_area =
+                            Rect::new(field_start, y as u16, textarea_width, height);
 
-                    TextareaWidget::new(textarea_state, self.theme.clone())
-                        .focused(is_focused)
-                        .render(textarea_area, buf);
+                        TextareaWidget::new(textarea_state, self.theme.clone())
+                            .focused(is_focused)
+                            .render(textarea_area, buf);
 
-                    if let Some(error_msg) = self.error(field) {
-                        let error_style = Style::default().fg(self.theme.colors.error);
-                        buf.set_string(
-                            field_start,
-                            y + height,
-                            format!("  {}", error_msg),
-                            error_style,
-                        );
-                        y += 1;
+                        if let Some(error_msg) = self.error(field) {
+                            let error_style = Style::default().fg(self.theme.colors.error);
+                            buf.set_string(
+                                field_start,
+                                (y as u16) + height,
+                                format!("  {}", error_msg),
+                                error_style,
+                            );
+                        }
                     }
 
-                    y += height;
+                    y += height as i32 + 1;
                 }
             }
         }
@@ -524,6 +560,8 @@ impl Widget for MedicalHistoryForm {
         if let Some((dropdown, dropdown_area)) = open_dropdown {
             dropdown.render(dropdown_area, buf);
         }
+
+        self.scroll.render_scrollbar(inner, buf);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(

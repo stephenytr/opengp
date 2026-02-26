@@ -229,6 +229,14 @@ impl ConsultationForm {
                 self.next_field();
                 Some(ConsultationFormAction::FocusChanged)
             }
+            KeyCode::PageUp => {
+                self.scroll.scroll_up();
+                Some(ConsultationFormAction::FocusChanged)
+            }
+            KeyCode::PageDown => {
+                self.scroll.scroll_down();
+                Some(ConsultationFormAction::FocusChanged)
+            }
             KeyCode::Enter => {
                 self.next_field();
                 Some(ConsultationFormAction::FocusChanged)
@@ -264,7 +272,7 @@ impl ConsultationForm {
 }
 
 impl Widget for ConsultationForm {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+    fn render(mut self, area: Rect, buf: &mut Buffer) {
         if area.is_empty() {
             return;
         }
@@ -292,12 +300,20 @@ impl Widget for ConsultationForm {
 
         let fields = ConsultationFormField::all();
 
-        let mut y = inner.y + 1;
-        let max_y = inner.y + inner.height - 2;
+        let mut total_height: u16 = 0;
+        for field in &fields {
+            total_height += 4;
+        }
+        self.scroll.set_total_height(total_height);
+        self.scroll.clamp_offset(inner.height.saturating_sub(2));
+
+        let mut y: i32 = (inner.y as i32) + 1 - (self.scroll.scroll_offset as i32);
+        let max_y = inner.y as i32 + inner.height as i32 - 2;
 
         for field in fields {
-            if y > max_y {
-                break;
+            if y + 2 <= inner.y as i32 || y >= max_y {
+                y += 4;
+                continue;
             }
 
             let is_focused = field == self.focused_field;
@@ -308,61 +324,75 @@ impl Widget for ConsultationForm {
                     ConsultationFormField::ClinicalNotes => &self.clinical_notes,
                 };
                 let field_height = textarea.height();
-                let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
-                TextareaWidget::new(textarea, self.theme.clone())
-                    .focused(is_focused)
-                    .render(field_area, buf);
-                y += field_height;
+                if y >= inner.y as i32 && y < max_y {
+                    let field_area =
+                        Rect::new(inner.x + 1, y as u16, inner.width - 2, field_height);
+                    TextareaWidget::new(textarea, self.theme.clone())
+                        .focused(is_focused)
+                        .render(field_area, buf);
+                }
+                y += field_height as i32;
                 continue;
             }
 
-            // Single-line Reason field.
             let has_error = self.error(field).is_some();
 
-            let label_style = if is_focused {
-                Style::default()
-                    .fg(self.theme.colors.primary)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(self.theme.colors.foreground)
-            };
+            if y >= inner.y as i32 && y < max_y {
+                let label_style = if is_focused {
+                    Style::default()
+                        .fg(self.theme.colors.primary)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(self.theme.colors.foreground)
+                };
 
-            buf.set_string(inner.x + 1, y, field.label(), label_style);
+                buf.set_string(inner.x + 1, y as u16, field.label(), label_style);
 
-            if is_focused {
-                buf.set_string(
-                    field_start - 1,
-                    y,
-                    ">",
-                    Style::default().fg(self.theme.colors.primary),
-                );
+                if is_focused {
+                    buf.set_string(
+                        field_start - 1,
+                        y as u16,
+                        ">",
+                        Style::default().fg(self.theme.colors.primary),
+                    );
+                }
             }
 
             let max_value_width = inner.width.saturating_sub(label_width + 4);
 
-            let value = self.get_value(field);
-            let value_style = if has_error {
-                Style::default().fg(self.theme.colors.error)
-            } else {
-                Style::default().fg(self.theme.colors.foreground)
-            };
+            if y >= inner.y as i32 && y < max_y {
+                let value = self.get_value(field);
+                let value_style = if has_error {
+                    Style::default().fg(self.theme.colors.error)
+                } else {
+                    Style::default().fg(self.theme.colors.foreground)
+                };
 
-            let display_value = if value.len() > max_value_width as usize {
-                &value[value.len() - max_value_width as usize..]
-            } else {
-                &value
-            };
+                let display_value = if value.len() > max_value_width as usize {
+                    &value[value.len() - max_value_width as usize..]
+                } else {
+                    &value
+                };
 
-            buf.set_string(field_start, y, display_value, value_style);
+                buf.set_string(field_start, y as u16, display_value, value_style);
+            }
 
-            if let Some(error_msg) = self.error(field) {
-                let error_style = Style::default().fg(self.theme.colors.error);
-                buf.set_string(field_start, y + 1, format!("  {}", error_msg), error_style);
-                y += 1;
+            if y >= inner.y as i32 && y < max_y {
+                if let Some(error_msg) = self.error(field) {
+                    let error_style = Style::default().fg(self.theme.colors.error);
+                    buf.set_string(
+                        field_start,
+                        (y as u16) + 1,
+                        format!("  {}", error_msg),
+                        error_style,
+                    );
+                }
             }
 
             y += 2;
         }
+
+        self.scroll.render_scrollbar(inner, buf);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(

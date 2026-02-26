@@ -365,6 +365,14 @@ impl AllergyForm {
                 self.next_field();
                 Some(AllergyFormAction::FocusChanged)
             }
+            KeyCode::PageUp => {
+                self.scroll.scroll_up();
+                Some(AllergyFormAction::FocusChanged)
+            }
+            KeyCode::PageDown => {
+                self.scroll.scroll_down();
+                Some(AllergyFormAction::FocusChanged)
+            }
             KeyCode::Enter => {
                 self.validate();
                 Some(AllergyFormAction::Submit)
@@ -394,7 +402,7 @@ impl AllergyForm {
 }
 
 impl Widget for AllergyForm {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+    fn render(mut self, area: Rect, buf: &mut Buffer) {
         if area.is_empty() {
             return;
         }
@@ -416,19 +424,40 @@ impl Widget for AllergyForm {
 
         let fields = AllergyFormField::all();
 
-        let mut y = inner.y + 1;
-        let max_y = inner.y + inner.height - 2;
+        let mut total_height: u16 = 0;
+        for field in &fields {
+            if field.is_textarea() {
+                total_height += 2;
+            } else if field.is_dropdown() {
+                total_height += 4;
+            } else {
+                total_height += 2;
+            }
+        }
+        self.scroll.set_total_height(total_height);
+        self.scroll.clamp_offset(inner.height.saturating_sub(2));
+
+        let mut y: i32 = (inner.y as i32) + 1 - (self.scroll.scroll_offset as i32);
+        let max_y = inner.y as i32 + inner.height as i32 - 2;
 
         let mut open_dropdown: Option<(DropdownWidget, Rect)> = None;
 
         for field in fields {
-            if y > max_y {
-                break;
+            let field_height = if field.is_textarea() {
+                2i32
+            } else if field.is_dropdown() {
+                4i32
+            } else {
+                2i32
+            };
+
+            if y + field_height <= inner.y as i32 || y >= max_y {
+                y += field_height;
+                continue;
             }
 
             let is_focused = field == self.focused_field;
 
-            // TextareaWidget fields: render using TextareaWidget.
             if field.is_textarea() {
                 let textarea_state = match field {
                     AllergyFormField::Allergen => &self.allergen,
@@ -437,43 +466,51 @@ impl Widget for AllergyForm {
                     _ => unreachable!(),
                 };
                 let field_height = textarea_state.height();
-                let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
-                TextareaWidget::new(textarea_state, self.theme.clone())
-                    .focused(is_focused)
-                    .render(field_area, buf);
-                y += field_height;
+                if y >= inner.y as i32 && y < max_y {
+                    let field_area =
+                        Rect::new(inner.x + 1, y as u16, inner.width - 2, field_height);
+                    TextareaWidget::new(textarea_state, self.theme.clone())
+                        .focused(is_focused)
+                        .render(field_area, buf);
 
-                if let Some(error_msg) = self.error(field) {
-                    if y <= max_y {
-                        let error_style = Style::default().fg(self.theme.colors.error);
-                        buf.set_string(inner.x + 1, y, format!("  {}", error_msg), error_style);
-                        y += 1;
+                    if let Some(error_msg) = self.error(field) {
+                        if (y as u16) + field_height <= inner.y + inner.height - 2 {
+                            let error_style = Style::default().fg(self.theme.colors.error);
+                            buf.set_string(
+                                inner.x + 1,
+                                (y as u16) + field_height,
+                                format!("  {}", error_msg),
+                                error_style,
+                            );
+                        }
                     }
                 }
+                y += field_height as i32;
                 continue;
             }
 
             let has_error = self.error(field).is_some();
 
-            // Skip label and indicator for dropdown fields (they have their own title)
-            if !field.is_dropdown() {
-                let label_style = if is_focused {
-                    Style::default()
-                        .fg(self.theme.colors.primary)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(self.theme.colors.foreground)
-                };
+            if y >= inner.y as i32 && y < max_y {
+                if !field.is_dropdown() {
+                    let label_style = if is_focused {
+                        Style::default()
+                            .fg(self.theme.colors.primary)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(self.theme.colors.foreground)
+                    };
 
-                buf.set_string(inner.x + 1, y, field.label(), label_style);
+                    buf.set_string(inner.x + 1, y as u16, field.label(), label_style);
 
-                if is_focused {
-                    buf.set_string(
-                        field_start - 1,
-                        y,
-                        ">",
-                        Style::default().fg(self.theme.colors.primary),
-                    );
+                    if is_focused {
+                        buf.set_string(
+                            field_start - 1,
+                            y as u16,
+                            ">",
+                            Style::default().fg(self.theme.colors.primary),
+                        );
+                    }
                 }
             }
 
@@ -482,54 +519,71 @@ impl Widget for AllergyForm {
             match field {
                 AllergyFormField::AllergyType => {
                     let dropdown = self.allergy_type_dropdown.clone();
-                    let dropdown_area = Rect::new(field_start, y, max_value_width, 3);
-                    if dropdown.is_open() {
-                        open_dropdown = Some((dropdown.clone(), dropdown_area));
+                    if y >= inner.y as i32 && y < max_y {
+                        let dropdown_area = Rect::new(field_start, y as u16, max_value_width, 3);
+                        if dropdown.is_open() {
+                            open_dropdown = Some((dropdown.clone(), dropdown_area));
+                        }
+                        dropdown.focused(is_focused).render(dropdown_area, buf);
+                        if let Some(error_msg) = self.error(field) {
+                            let error_style = Style::default().fg(self.theme.colors.error);
+                            buf.set_string(
+                                field_start,
+                                (y as u16) + 3,
+                                format!("  {}", error_msg),
+                                error_style,
+                            );
+                        }
                     }
-                    dropdown.focused(is_focused).render(dropdown_area, buf);
-                    if let Some(error_msg) = self.error(field) {
-                        let error_style = Style::default().fg(self.theme.colors.error);
-                        buf.set_string(field_start, y + 3, format!("  {}", error_msg), error_style);
-                        y += 1;
-                    }
-                    y += 3;
+                    y += 4;
                 }
                 AllergyFormField::Severity => {
                     let dropdown = self.severity_dropdown.clone();
-                    let dropdown_area = Rect::new(field_start, y, max_value_width, 3);
-                    if dropdown.is_open() {
-                        open_dropdown = Some((dropdown.clone(), dropdown_area));
+                    if y >= inner.y as i32 && y < max_y {
+                        let dropdown_area = Rect::new(field_start, y as u16, max_value_width, 3);
+                        if dropdown.is_open() {
+                            open_dropdown = Some((dropdown.clone(), dropdown_area));
+                        }
+                        dropdown.focused(is_focused).render(dropdown_area, buf);
+                        if let Some(error_msg) = self.error(field) {
+                            let error_style = Style::default().fg(self.theme.colors.error);
+                            buf.set_string(
+                                field_start,
+                                (y as u16) + 3,
+                                format!("  {}", error_msg),
+                                error_style,
+                            );
+                        }
                     }
-                    dropdown.focused(is_focused).render(dropdown_area, buf);
-                    if let Some(error_msg) = self.error(field) {
-                        let error_style = Style::default().fg(self.theme.colors.error);
-                        buf.set_string(field_start, y + 3, format!("  {}", error_msg), error_style);
-                        y += 1;
-                    }
-                    y += 3;
+                    y += 4;
                 }
                 AllergyFormField::OnsetDate => {
-                    let value = self.get_value(field);
-                    let value_style = if has_error {
-                        Style::default().fg(self.theme.colors.error)
-                    } else {
-                        Style::default().fg(self.theme.colors.foreground)
-                    };
+                    if y >= inner.y as i32 && y < max_y {
+                        let value = self.get_value(field);
+                        let value_style = if has_error {
+                            Style::default().fg(self.theme.colors.error)
+                        } else {
+                            Style::default().fg(self.theme.colors.foreground)
+                        };
 
-                    let display_value = if value.len() > max_value_width as usize {
-                        &value[value.len() - max_value_width as usize..]
-                    } else {
-                        &value
-                    };
+                        let display_value = if value.len() > max_value_width as usize {
+                            &value[value.len() - max_value_width as usize..]
+                        } else {
+                            &value
+                        };
 
-                    buf.set_string(field_start, y, display_value, value_style);
+                        buf.set_string(field_start, y as u16, display_value, value_style);
 
-                    if let Some(error_msg) = self.error(field) {
-                        let error_style = Style::default().fg(self.theme.colors.error);
-                        buf.set_string(field_start, y + 1, format!("  {}", error_msg), error_style);
-                        y += 1;
+                        if let Some(error_msg) = self.error(field) {
+                            let error_style = Style::default().fg(self.theme.colors.error);
+                            buf.set_string(
+                                field_start,
+                                (y as u16) + 1,
+                                format!("  {}", error_msg),
+                                error_style,
+                            );
+                        }
                     }
-
                     y += 2;
                 }
                 _ => {
@@ -541,6 +595,8 @@ impl Widget for AllergyForm {
         if let Some((dropdown, dropdown_area)) = open_dropdown {
             dropdown.render(dropdown_area, buf);
         }
+
+        self.scroll.render_scrollbar(inner, buf);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(

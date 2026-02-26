@@ -484,6 +484,14 @@ impl VitalSignsForm {
                 self.next_field();
                 Some(VitalSignsFormAction::FocusChanged)
             }
+            KeyCode::PageUp => {
+                self.scroll.scroll_up();
+                Some(VitalSignsFormAction::FocusChanged)
+            }
+            KeyCode::PageDown => {
+                self.scroll.scroll_down();
+                Some(VitalSignsFormAction::FocusChanged)
+            }
             KeyCode::Enter => {
                 self.validate();
                 Some(VitalSignsFormAction::Submit)
@@ -547,7 +555,7 @@ impl VitalSignsForm {
 }
 
 impl Widget for VitalSignsForm {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+    fn render(mut self, area: Rect, buf: &mut Buffer) {
         if area.is_empty() {
             return;
         }
@@ -648,6 +656,8 @@ impl Widget for VitalSignsForm {
                 );
             }
         }
+
+        self.scroll.render_scrollbar(inner, buf);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(

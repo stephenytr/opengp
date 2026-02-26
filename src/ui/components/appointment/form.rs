@@ -605,6 +605,14 @@ impl AppointmentForm {
                 self.next_field();
                 Some(AppointmentFormAction::FocusChanged)
             }
+            KeyCode::PageUp => {
+                self.scroll.scroll_up();
+                Some(AppointmentFormAction::FocusChanged)
+            }
+            KeyCode::PageDown => {
+                self.scroll.scroll_down();
+                Some(AppointmentFormAction::FocusChanged)
+            }
             KeyCode::Enter => {
                 if self.focused_field == AppointmentFormField::Patient
                     && !self.patient_picker.is_open()
@@ -652,7 +660,7 @@ impl AppointmentForm {
 // ── Widget ───────────────────────────────────────────────────────────────────
 
 impl Widget for AppointmentForm {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+    fn render(mut self, area: Rect, buf: &mut Buffer) {
         if area.is_empty() {
             return;
         }
@@ -673,15 +681,32 @@ impl Widget for AppointmentForm {
         let field_start = inner.x + label_width + 2;
 
         let fields = AppointmentFormField::all();
-        let mut y = inner.y + 1;
-        let max_y = inner.y + inner.height - 2;
+
+        let mut total_height: u16 = 0;
+        for field in &fields {
+            total_height += 2;
+            if field == &AppointmentFormField::AppointmentType {
+                total_height += 2;
+            }
+        }
+        self.scroll.set_total_height(total_height);
+        self.scroll.clamp_offset(inner.height.saturating_sub(2));
+
+        let mut y: i32 = (inner.y as i32) + 1 - (self.scroll.scroll_offset as i32);
+        let max_y = inner.y as i32 + inner.height as i32 - 2;
 
         for field in fields {
-            if y > max_y {
-                break;
-            }
-
             let is_focused = field == self.focused_field;
+            let field_height = if field == AppointmentFormField::AppointmentType {
+                4i32
+            } else {
+                2i32
+            };
+
+            if y + field_height <= inner.y as i32 || y >= max_y {
+                y += field_height;
+                continue;
+            }
 
             if field.is_textarea() {
                 let textarea_state = match field {
@@ -692,89 +717,106 @@ impl Widget for AppointmentForm {
                     _ => unreachable!(),
                 };
                 let field_height = textarea_state.height();
-                let textarea_area =
-                    Rect::new(inner.x + 1, y, inner.width.saturating_sub(2), field_height);
-                TextareaWidget::new(textarea_state, self.theme.clone())
-                    .focused(is_focused)
-                    .render(textarea_area, buf);
-
-                if let Some(error_msg) = self.error(field) {
-                    let error_style = Style::default().fg(self.theme.colors.error);
-                    buf.set_string(
-                        inner.x + 2,
-                        y + field_height,
-                        format!("  {}", error_msg),
-                        error_style,
+                if y >= inner.y as i32 && y < max_y {
+                    let textarea_area = Rect::new(
+                        inner.x + 1,
+                        y as u16,
+                        inner.width.saturating_sub(2),
+                        field_height,
                     );
-                    y += 1;
+                    TextareaWidget::new(textarea_state, self.theme.clone())
+                        .focused(is_focused)
+                        .render(textarea_area, buf);
+
+                    if let Some(error_msg) = self.error(field) {
+                        let error_style = Style::default().fg(self.theme.colors.error);
+                        buf.set_string(
+                            inner.x + 2,
+                            (y as u16) + field_height,
+                            format!("  {}", error_msg),
+                            error_style,
+                        );
+                    }
                 }
-                y += field_height + 1;
+                y += field_height as i32 + 1;
                 continue;
             }
 
             let has_error = self.error(field).is_some();
 
-            // Skip label and indicator for dropdown fields (they have their own title)
-            if !field.is_dropdown() {
-                let label_style = if is_focused {
-                    Style::default()
-                        .fg(self.theme.colors.primary)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(self.theme.colors.foreground)
-                };
+            if y >= inner.y as i32 && y < max_y {
+                if !field.is_dropdown() {
+                    let label_style = if is_focused {
+                        Style::default()
+                            .fg(self.theme.colors.primary)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(self.theme.colors.foreground)
+                    };
 
-                buf.set_string(inner.x + 1, y, field.label(), label_style);
+                    buf.set_string(inner.x + 1, y as u16, field.label(), label_style);
 
-                if is_focused {
-                    buf.set_string(
-                        field_start - 1,
-                        y,
-                        ">",
-                        Style::default().fg(self.theme.colors.primary),
-                    );
+                    if is_focused {
+                        buf.set_string(
+                            field_start - 1,
+                            y as u16,
+                            ">",
+                            Style::default().fg(self.theme.colors.primary),
+                        );
+                    }
                 }
             }
 
             if field == AppointmentFormField::AppointmentType {
-                let dropdown_area = Rect::new(
-                    field_start - 1,
-                    y,
-                    inner.width.saturating_sub(label_width + 2),
-                    3,
-                );
-                let dropdown = self.type_dropdown.clone();
-                dropdown.focused(is_focused).render(dropdown_area, buf);
+                if y >= inner.y as i32 && y < max_y {
+                    let dropdown_area = Rect::new(
+                        field_start - 1,
+                        y as u16,
+                        inner.width.saturating_sub(label_width + 2),
+                        3,
+                    );
+                    let dropdown = self.type_dropdown.clone();
+                    dropdown.focused(is_focused).render(dropdown_area, buf);
 
-                if let Some(error_msg) = self.error(field) {
-                    let error_style = Style::default().fg(self.theme.colors.error);
-                    buf.set_string(field_start, y + 3, format!("  {}", error_msg), error_style);
-                    y += 1;
+                    if let Some(error_msg) = self.error(field) {
+                        let error_style = Style::default().fg(self.theme.colors.error);
+                        buf.set_string(
+                            field_start,
+                            (y as u16) + 3,
+                            format!("  {}", error_msg),
+                            error_style,
+                        );
+                    }
                 }
                 y += 4;
             } else {
-                let value = self.get_value(field);
-                let value_style = if has_error {
-                    Style::default().fg(self.theme.colors.error)
-                } else {
-                    Style::default().fg(self.theme.colors.foreground)
-                };
+                if y >= inner.y as i32 && y < max_y {
+                    let value = self.get_value(field);
+                    let value_style = if has_error {
+                        Style::default().fg(self.theme.colors.error)
+                    } else {
+                        Style::default().fg(self.theme.colors.foreground)
+                    };
 
-                let max_value_width = inner.width.saturating_sub(label_width + 4);
-                let display_value = if value.len() > max_value_width as usize {
-                    &value[value.len() - max_value_width as usize..]
-                } else {
-                    &value
-                };
+                    let max_value_width = inner.width.saturating_sub(label_width + 4);
+                    let display_value = if value.len() > max_value_width as usize {
+                        &value[value.len() - max_value_width as usize..]
+                    } else {
+                        &value
+                    };
 
-                buf.set_string(field_start, y, display_value, value_style);
+                    buf.set_string(field_start, y as u16, display_value, value_style);
 
-                if let Some(error_msg) = self.error(field) {
-                    let error_style = Style::default().fg(self.theme.colors.error);
-                    buf.set_string(field_start, y + 1, format!("  {}", error_msg), error_style);
-                    y += 1;
+                    if let Some(error_msg) = self.error(field) {
+                        let error_style = Style::default().fg(self.theme.colors.error);
+                        buf.set_string(
+                            field_start,
+                            (y as u16) + 1,
+                            format!("  {}", error_msg),
+                            error_style,
+                        );
+                    }
                 }
-
                 y += 2;
             }
         }
@@ -807,7 +849,8 @@ impl Widget for AppointmentForm {
             picker.render(picker_area, buf);
         }
 
-        // Help bar at the bottom
+        self.scroll.render_scrollbar(inner, buf);
+
         let help_y = inner.y + inner.height - 1;
         buf.set_string(
             inner.x + 1,

@@ -247,6 +247,14 @@ impl FamilyHistoryForm {
                 self.prev_field();
                 return Some(FamilyHistoryFormAction::FocusChanged);
             }
+            KeyCode::PageUp => {
+                self.scroll.scroll_up();
+                return Some(FamilyHistoryFormAction::FocusChanged);
+            }
+            KeyCode::PageDown => {
+                self.scroll.scroll_down();
+                return Some(FamilyHistoryFormAction::FocusChanged);
+            }
             KeyCode::Esc => return Some(FamilyHistoryFormAction::Cancel),
             _ => {}
         }
@@ -281,7 +289,7 @@ impl FamilyHistoryForm {
 }
 
 impl Widget for FamilyHistoryForm {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+    fn render(mut self, area: Rect, buf: &mut Buffer) {
         if area.is_empty() {
             return;
         }
@@ -333,6 +341,8 @@ impl Widget for FamilyHistoryForm {
                 }
             }
         }
+
+        self.scroll.render_scrollbar(inner, buf);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(
