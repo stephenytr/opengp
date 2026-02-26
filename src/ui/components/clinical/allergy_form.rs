@@ -15,7 +15,8 @@ use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    parse_date, DropdownOption, DropdownWidget, HeightMode, TextareaState, TextareaWidget,
+    parse_date, DropdownOption, DropdownWidget, HeightMode, ScrollableFormState, TextareaState,
+    TextareaWidget,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -93,6 +94,7 @@ pub struct AllergyForm {
     pub is_valid: bool,
     errors: HashMap<AllergyFormField, String>,
     theme: Theme,
+    scroll: ScrollableFormState,
     allergy_type_dropdown: DropdownWidget,
     severity_dropdown: DropdownWidget,
 }
@@ -110,6 +112,7 @@ impl Clone for AllergyForm {
             is_valid: self.is_valid,
             errors: self.errors.clone(),
             theme: self.theme.clone(),
+            scroll: self.scroll.clone(),
             allergy_type_dropdown: self.allergy_type_dropdown.clone(),
             severity_dropdown: self.severity_dropdown.clone(),
         }
@@ -141,6 +144,7 @@ impl AllergyForm {
             is_valid: false,
             errors: HashMap::new(),
             theme: theme.clone(),
+            scroll: ScrollableFormState::new(),
             allergy_type_dropdown: DropdownWidget::new(
                 "Allergy Type *",
                 allergy_type_options,

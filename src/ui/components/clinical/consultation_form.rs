@@ -14,7 +14,7 @@ use crate::domain::clinical::Consultation;
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{HeightMode, TextareaState, TextareaWidget};
+use crate::ui::widgets::{HeightMode, ScrollableFormState, TextareaState, TextareaWidget};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConsultationFormField {
@@ -63,6 +63,7 @@ pub struct ConsultationForm {
     pub consultation_id: Option<uuid::Uuid>,
     errors: HashMap<ConsultationFormField, String>,
     theme: Theme,
+    scroll: ScrollableFormState,
 }
 
 impl Clone for ConsultationForm {
@@ -76,6 +77,7 @@ impl Clone for ConsultationForm {
             consultation_id: self.consultation_id,
             errors: self.errors.clone(),
             theme: self.theme.clone(),
+            scroll: self.scroll.clone(),
         }
     }
 }
@@ -99,6 +101,7 @@ impl ConsultationForm {
             consultation_id: None,
             errors: HashMap::new(),
             theme: theme.clone(),
+            scroll: ScrollableFormState::new(),
         }
     }
 
@@ -116,6 +119,7 @@ impl ConsultationForm {
             consultation_id: Some(consultation.id),
             errors: HashMap::new(),
             theme,
+            scroll: ScrollableFormState::new(),
         }
     }
 

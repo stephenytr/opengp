@@ -14,7 +14,7 @@ use crate::domain::clinical::VitalSigns;
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{HeightMode, TextareaState, TextareaWidget};
+use crate::ui::widgets::{HeightMode, ScrollableFormState, TextareaState, TextareaWidget};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VitalSignsFormField {
@@ -110,7 +110,6 @@ pub struct VitalSignsForm {
     pub notes: TextareaState,
     pub focused_field: VitalSignsFormField,
     pub calculated_bmi: Option<f32>,
-    // Raw string buffers for numeric fields during editing
     systolic_bp_buf: String,
     diastolic_bp_buf: String,
     heart_rate_buf: String,
@@ -121,6 +120,7 @@ pub struct VitalSignsForm {
     weight_kg_buf: String,
     errors: HashMap<VitalSignsFormField, String>,
     theme: Theme,
+    scroll: ScrollableFormState,
 }
 
 impl Clone for VitalSignsForm {
@@ -147,6 +147,7 @@ impl Clone for VitalSignsForm {
             weight_kg_buf: self.weight_kg_buf.clone(),
             errors: self.errors.clone(),
             theme: self.theme.clone(),
+            scroll: self.scroll.clone(),
         }
     }
 }
@@ -175,6 +176,7 @@ impl VitalSignsForm {
             weight_kg_buf: String::new(),
             errors: HashMap::new(),
             theme,
+            scroll: ScrollableFormState::new(),
         }
     }
 

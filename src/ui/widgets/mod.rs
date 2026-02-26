@@ -10,6 +10,7 @@ mod form_field;
 mod list_nav;
 mod loading;
 mod scrollable;
+mod scrollable_form;
 mod searchable_list;
 mod textarea;
 
@@ -20,5 +21,6 @@ pub use form_field::{FieldType, FormField, FormFieldState};
 pub use list_nav::{list_handle_key, list_handle_mouse, ListNavAction};
 pub use loading::{LoadingIndicator, LoadingState, SpinnerStyle};
 pub use scrollable::ScrollableState;
+pub use scrollable_form::ScrollableFormState;
 pub use searchable_list::{Searchable, SearchableList, SearchableListAction, SearchableListState};
 pub use textarea::{HeightMode, TextareaState, TextareaWidget};

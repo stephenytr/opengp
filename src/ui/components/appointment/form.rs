@@ -19,8 +19,8 @@ use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::{
-    parse_date, DropdownAction, DropdownOption, DropdownWidget, HeightMode, SearchableListAction,
-    SearchableListState, TextareaState, TextareaWidget,
+    parse_date, DropdownAction, DropdownOption, DropdownWidget, HeightMode, ScrollableFormState,
+    SearchableListAction, SearchableListState, TextareaState, TextareaWidget,
 };
 
 /// All fields in the appointment creation form, in tab order.
@@ -150,6 +150,7 @@ pub struct AppointmentForm {
     focused_field: AppointmentFormField,
     saving: bool,
     theme: Theme,
+    scroll: ScrollableFormState,
     type_dropdown: DropdownWidget,
     patient_picker: SearchableListState<PatientListItem>,
     practitioner_picker: SearchableListState<PractitionerViewItem>,
@@ -167,6 +168,7 @@ impl Clone for AppointmentForm {
             focused_field: self.focused_field,
             saving: self.saving,
             theme: self.theme.clone(),
+            scroll: self.scroll.clone(),
             type_dropdown: self.type_dropdown.clone(),
             patient_picker: self.patient_picker.clone(),
             practitioner_picker: self.practitioner_picker.clone(),
@@ -207,6 +209,7 @@ impl AppointmentForm {
             focused_field: AppointmentFormField::Patient,
             saving: false,
             theme: theme.clone(),
+            scroll: ScrollableFormState::new(),
             type_dropdown,
             patient_picker: SearchableListState::new(Vec::new()),
             practitioner_picker: SearchableListState::new(Vec::new()),

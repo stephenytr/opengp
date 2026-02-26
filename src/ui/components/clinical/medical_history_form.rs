@@ -15,8 +15,8 @@ use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    parse_date, DropdownAction, DropdownOption, DropdownWidget, HeightMode, TextareaState,
-    TextareaWidget,
+    parse_date, DropdownAction, DropdownOption, DropdownWidget, HeightMode, ScrollableFormState,
+    TextareaState, TextareaWidget,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -73,6 +73,7 @@ pub struct MedicalHistoryForm {
     pub focused_field: MedicalHistoryFormField,
     errors: HashMap<MedicalHistoryFormField, String>,
     theme: Theme,
+    scroll: ScrollableFormState,
 }
 
 impl Clone for MedicalHistoryForm {
@@ -86,6 +87,7 @@ impl Clone for MedicalHistoryForm {
             focused_field: self.focused_field,
             errors: self.errors.clone(),
             theme: self.theme.clone(),
+            scroll: self.scroll.clone(),
         }
     }
 }
@@ -123,6 +125,7 @@ impl MedicalHistoryForm {
             focused_field: MedicalHistoryFormField::Condition,
             errors: HashMap::new(),
             theme,
+            scroll: ScrollableFormState::new(),
         }
     }
 

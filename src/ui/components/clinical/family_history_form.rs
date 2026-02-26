@@ -13,7 +13,7 @@ use ratatui::widgets::{Block, Borders, Widget};
 use crate::domain::clinical::FamilyHistory;
 use crate::ui::input::to_ratatui_key;
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{HeightMode, TextareaState, TextareaWidget};
+use crate::ui::widgets::{HeightMode, ScrollableFormState, TextareaState, TextareaWidget};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FamilyHistoryFormField {
@@ -71,6 +71,7 @@ pub struct FamilyHistoryForm {
     pub is_valid: bool,
     errors: HashMap<FamilyHistoryFormField, String>,
     theme: Theme,
+    scroll: ScrollableFormState,
 }
 
 impl Clone for FamilyHistoryForm {
@@ -84,6 +85,7 @@ impl Clone for FamilyHistoryForm {
             is_valid: self.is_valid,
             errors: self.errors.clone(),
             theme: self.theme.clone(),
+            scroll: self.scroll.clone(),
         }
     }
 }
@@ -101,6 +103,7 @@ impl FamilyHistoryForm {
             is_valid: false,
             errors: HashMap::new(),
             theme,
+            scroll: ScrollableFormState::new(),
         }
     }
 
