@@ -15,8 +15,8 @@ use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    parse_date, DropdownOption, DropdownWidget, HeightMode, ScrollableFormState, TextareaState,
-    TextareaWidget,
+    parse_date, DatePickerAction, DatePickerPopup, DropdownOption, DropdownWidget, HeightMode,
+    ScrollableFormState, TextareaState, TextareaWidget,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -97,6 +97,7 @@ pub struct AllergyForm {
     scroll: ScrollableFormState,
     allergy_type_dropdown: DropdownWidget,
     severity_dropdown: DropdownWidget,
+    date_picker: DatePickerPopup,
 }
 
 impl Clone for AllergyForm {
@@ -115,6 +116,7 @@ impl Clone for AllergyForm {
             scroll: self.scroll.clone(),
             allergy_type_dropdown: self.allergy_type_dropdown.clone(),
             severity_dropdown: self.severity_dropdown.clone(),
+            date_picker: self.date_picker.clone(),
         }
     }
 }
@@ -151,6 +153,7 @@ impl AllergyForm {
                 theme.clone(),
             ),
             severity_dropdown: DropdownWidget::new("Severity *", severity_options, theme),
+            date_picker: DatePickerPopup::new(),
         }
     }
 
@@ -302,6 +305,32 @@ impl AllergyForm {
         // Ctrl+Tab exits the form from any field.
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Tab {
             return Some(AllergyFormAction::Cancel);
+        }
+
+        if self.date_picker.is_visible() {
+            if let Some(action) = self.date_picker.handle_key(key) {
+                match action {
+                    DatePickerAction::Selected(date) => {
+                        self.onset_date = Some(date.format("%Y-%m-%d").to_string());
+                        self.validate_field(&AllergyFormField::OnsetDate);
+                        return Some(AllergyFormAction::ValueChanged);
+                    }
+                    DatePickerAction::Dismissed => {
+                        return Some(AllergyFormAction::FocusChanged);
+                    }
+                }
+            }
+            return Some(AllergyFormAction::FocusChanged);
+        }
+
+        if self.focused_field == AllergyFormField::OnsetDate {
+            if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
+                let current_value = self.onset_date.as_deref().and_then(|d| {
+                    parse_date(d).or_else(|| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+                });
+                self.date_picker.open(current_value);
+                return Some(AllergyFormAction::FocusChanged);
+            }
         }
 
         match self.focused_field {
@@ -610,6 +639,10 @@ impl Widget for AllergyForm {
             "Tab: Next | Ctrl+Enter: Submit | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
+
+        if self.date_picker.is_visible() {
+            self.date_picker.render(area, buf);
+        }
     }
 }
 

@@ -19,8 +19,9 @@ use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::{
-    parse_date, DropdownAction, DropdownOption, DropdownWidget, HeightMode, ScrollableFormState,
-    SearchableListAction, SearchableListState, TextareaState, TextareaWidget,
+    parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption, DropdownWidget,
+    HeightMode, ScrollableFormState, SearchableListAction, SearchableListState, TextareaState,
+    TextareaWidget,
 };
 
 /// All fields in the appointment creation form, in tab order.
@@ -154,6 +155,7 @@ pub struct AppointmentForm {
     type_dropdown: DropdownWidget,
     patient_picker: SearchableListState<PatientListItem>,
     practitioner_picker: SearchableListState<PractitionerViewItem>,
+    date_picker: DatePickerPopup,
 }
 
 impl Clone for AppointmentForm {
@@ -172,6 +174,7 @@ impl Clone for AppointmentForm {
             type_dropdown: self.type_dropdown.clone(),
             patient_picker: self.patient_picker.clone(),
             practitioner_picker: self.practitioner_picker.clone(),
+            date_picker: self.date_picker.clone(),
         }
     }
 }
@@ -213,6 +216,7 @@ impl AppointmentForm {
             type_dropdown,
             patient_picker: SearchableListState::new(Vec::new()),
             practitioner_picker: SearchableListState::new(Vec::new()),
+            date_picker: DatePickerPopup::new(),
         }
     }
 
@@ -565,6 +569,32 @@ impl AppointmentForm {
                         return Some(AppointmentFormAction::FocusChanged);
                     }
                 }
+            }
+        }
+
+        if self.date_picker.is_visible() {
+            if let Some(action) = self.date_picker.handle_key(key) {
+                match action {
+                    DatePickerAction::Selected(date) => {
+                        self.date = TextareaState::new("Date * (YYYY-MM-DD)")
+                            .with_height_mode(HeightMode::SingleLine)
+                            .with_value(date.format("%Y-%m-%d").to_string());
+                        self.validate_field(&AppointmentFormField::Date);
+                        return Some(AppointmentFormAction::ValueChanged);
+                    }
+                    DatePickerAction::Dismissed => {
+                        return Some(AppointmentFormAction::FocusChanged);
+                    }
+                }
+            }
+            return Some(AppointmentFormAction::FocusChanged);
+        }
+
+        if self.focused_field == AppointmentFormField::Date {
+            if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
+                let current_value = parse_date(&self.date.value());
+                self.date_picker.open(current_value);
+                return Some(AppointmentFormAction::FocusChanged);
             }
         }
 
@@ -979,6 +1009,10 @@ impl Widget for AppointmentForm {
             "Tab: Next | Shift+Tab: Prev | Enter: Submit | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
+
+        if self.date_picker.is_visible() {
+            self.date_picker.render(area, buf);
+        }
     }
 }
 

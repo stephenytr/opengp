@@ -17,8 +17,8 @@ use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
 use crate::ui::widgets::{
-    format_date, parse_date, DropdownAction, DropdownOption, DropdownWidget, HeightMode,
-    ScrollableFormState, TextareaState, TextareaWidget,
+    format_date, parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption,
+    DropdownWidget, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -181,6 +181,7 @@ pub struct PatientForm {
     emergency_relationship: TextareaState,
     concession_number: TextareaState,
     preferred_language: TextareaState,
+    date_picker: DatePickerPopup,
 }
 
 impl Clone for PatientForm {
@@ -221,6 +222,7 @@ impl Clone for PatientForm {
             emergency_relationship: self.emergency_relationship.clone(),
             concession_number: self.concession_number.clone(),
             preferred_language: self.preferred_language.clone(),
+            date_picker: self.date_picker.clone(),
         }
     }
 }
@@ -312,6 +314,7 @@ impl PatientForm {
             emergency_relationship: single_line("Emergency Contact Relationship"),
             concession_number: single_line("Concession Number"),
             preferred_language: single_line("Preferred Language"),
+            date_picker: DatePickerPopup::new(),
         }
     }
 
@@ -951,6 +954,31 @@ impl PatientForm {
             return Some(PatientFormAction::Submit);
         }
 
+        if self.date_picker.is_visible() {
+            if let Some(action) = self.date_picker.handle_key(key) {
+                match action {
+                    DatePickerAction::Selected(date) => {
+                        self.date_of_birth = single_line("Date of Birth")
+                            .with_value(date.format("%Y-%m-%d").to_string());
+                        self.validate_field(&FormField::DateOfBirth);
+                        return Some(PatientFormAction::ValueChanged);
+                    }
+                    DatePickerAction::Dismissed => {
+                        return Some(PatientFormAction::FocusChanged);
+                    }
+                }
+            }
+            return Some(PatientFormAction::FocusChanged);
+        }
+
+        if self.focused_field == FormField::DateOfBirth {
+            if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
+                let current_value = parse_date(&self.date_of_birth.value());
+                self.date_picker.open(current_value);
+                return Some(PatientFormAction::FocusChanged);
+            }
+        }
+
         if let Some(dropdown_action) = self.handle_dropdown_key(key) {
             return dropdown_action;
         }
@@ -1255,6 +1283,10 @@ impl Widget for PatientForm {
             "Tab: Next | Ctrl+Enter: Submit | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
+
+        if self.date_picker.is_visible() {
+            self.date_picker.render(area, buf);
+        }
     }
 }
 
