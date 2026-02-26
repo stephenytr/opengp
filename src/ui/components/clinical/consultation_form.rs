@@ -210,6 +210,9 @@ impl ConsultationForm {
 
         match key.code {
             KeyCode::Tab => {
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    return Some(ConsultationFormAction::Cancel);
+                }
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
                     self.prev_field();
                 } else {

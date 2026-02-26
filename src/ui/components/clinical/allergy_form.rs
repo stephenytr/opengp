@@ -299,6 +299,11 @@ impl AllergyForm {
             return Some(AllergyFormAction::Submit);
         }
 
+        // Ctrl+Tab exits the form from any field.
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Tab {
+            return Some(AllergyFormAction::Cancel);
+        }
+
         match self.focused_field {
             AllergyFormField::AllergyType => {
                 if self.allergy_type_dropdown.handle_key(key).is_some() {

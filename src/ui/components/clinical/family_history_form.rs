@@ -234,6 +234,11 @@ impl FamilyHistoryForm {
             return Some(FamilyHistoryFormAction::Submit);
         }
 
+        // Ctrl+Tab exits the form from any field.
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Tab {
+            return Some(FamilyHistoryFormAction::Cancel);
+        }
+
         match key.code {
             KeyCode::Tab => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
