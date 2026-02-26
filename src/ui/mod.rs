@@ -7,6 +7,7 @@
 pub mod app;
 pub mod components;
 pub mod error;
+pub mod input;
 pub mod keybinds;
 pub mod layout;
 pub mod services;

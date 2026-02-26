@@ -12,6 +12,7 @@ use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
 use crate::domain::patient::{Address, EmergencyContact, NewPatientData, Patient};
+use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
@@ -19,61 +20,6 @@ use crate::ui::widgets::{
     format_date, parse_date, DropdownAction, DropdownOption, DropdownWidget, HeightMode,
     TextareaState, TextareaWidget,
 };
-
-// Key conversion helpers (crossterm -> ratatui crossterm)
-type RatatuiKeyEvent = ratatui::crossterm::event::KeyEvent;
-type RatatuiKeyCode = ratatui::crossterm::event::KeyCode;
-type RatatuiKeyModifiers = ratatui::crossterm::event::KeyModifiers;
-type RatatuiKeyEventKind = ratatui::crossterm::event::KeyEventKind;
-type RatatuiKeyEventState = ratatui::crossterm::event::KeyEventState;
-
-fn to_ratatui_key(key: KeyEvent) -> RatatuiKeyEvent {
-    let code = match key.code {
-        crossterm::event::KeyCode::Backspace => RatatuiKeyCode::Backspace,
-        crossterm::event::KeyCode::Enter => RatatuiKeyCode::Enter,
-        crossterm::event::KeyCode::Left => RatatuiKeyCode::Left,
-        crossterm::event::KeyCode::Right => RatatuiKeyCode::Right,
-        crossterm::event::KeyCode::Up => RatatuiKeyCode::Up,
-        crossterm::event::KeyCode::Down => RatatuiKeyCode::Down,
-        crossterm::event::KeyCode::Home => RatatuiKeyCode::Home,
-        crossterm::event::KeyCode::End => RatatuiKeyCode::End,
-        crossterm::event::KeyCode::PageUp => RatatuiKeyCode::PageUp,
-        crossterm::event::KeyCode::PageDown => RatatuiKeyCode::PageDown,
-        crossterm::event::KeyCode::Tab => RatatuiKeyCode::Tab,
-        crossterm::event::KeyCode::BackTab => RatatuiKeyCode::BackTab,
-        crossterm::event::KeyCode::Delete => RatatuiKeyCode::Delete,
-        crossterm::event::KeyCode::Insert => RatatuiKeyCode::Insert,
-        crossterm::event::KeyCode::F(n) => RatatuiKeyCode::F(n),
-        crossterm::event::KeyCode::Char(c) => RatatuiKeyCode::Char(c),
-        crossterm::event::KeyCode::Null => RatatuiKeyCode::Null,
-        crossterm::event::KeyCode::Esc => RatatuiKeyCode::Esc,
-        crossterm::event::KeyCode::CapsLock => RatatuiKeyCode::CapsLock,
-        crossterm::event::KeyCode::ScrollLock => RatatuiKeyCode::ScrollLock,
-        crossterm::event::KeyCode::NumLock => RatatuiKeyCode::NumLock,
-        crossterm::event::KeyCode::PrintScreen => RatatuiKeyCode::PrintScreen,
-        crossterm::event::KeyCode::Pause => RatatuiKeyCode::Pause,
-        crossterm::event::KeyCode::Menu => RatatuiKeyCode::Menu,
-        crossterm::event::KeyCode::KeypadBegin => RatatuiKeyCode::KeypadBegin,
-        _ => RatatuiKeyCode::Null,
-    };
-
-    let modifiers = RatatuiKeyModifiers::from_bits_truncate(key.modifiers.bits());
-
-    let kind = match key.kind {
-        crossterm::event::KeyEventKind::Press => RatatuiKeyEventKind::Press,
-        crossterm::event::KeyEventKind::Repeat => RatatuiKeyEventKind::Repeat,
-        crossterm::event::KeyEventKind::Release => RatatuiKeyEventKind::Release,
-    };
-
-    let state = RatatuiKeyEventState::from_bits_truncate(key.state.bits());
-
-    RatatuiKeyEvent {
-        code,
-        modifiers,
-        kind,
-        state,
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormMode {
