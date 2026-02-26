@@ -285,23 +285,25 @@ impl SocialHistoryComponent {
                 return Some(SocialHistoryAction::Save);
             }
 
-            match self.focused_field {
-                SocialHistoryField::SmokingStatus => {
-                    if let Some(_action) = self.smoking_dropdown.handle_key(key) {
-                        return Some(SocialHistoryAction::FieldChanged);
+            let is_dropdown_field = matches!(
+                self.focused_field,
+                SocialHistoryField::SmokingStatus
+                    | SocialHistoryField::AlcoholStatus
+                    | SocialHistoryField::ExerciseFrequency
+            );
+            if is_dropdown_field {
+                let dropdown_consumed = match self.focused_field {
+                    SocialHistoryField::SmokingStatus => self.smoking_dropdown.handle_key(key),
+                    SocialHistoryField::AlcoholStatus => self.alcohol_dropdown.handle_key(key),
+                    SocialHistoryField::ExerciseFrequency => self.exercise_dropdown.handle_key(key),
+                    _ => None,
+                };
+                if let Some(_action) = dropdown_consumed {
+                    match key.code {
+                        KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {}
+                        _ => return Some(SocialHistoryAction::FieldChanged),
                     }
                 }
-                SocialHistoryField::AlcoholStatus => {
-                    if let Some(_action) = self.alcohol_dropdown.handle_key(key) {
-                        return Some(SocialHistoryAction::FieldChanged);
-                    }
-                }
-                SocialHistoryField::ExerciseFrequency => {
-                    if let Some(_action) = self.exercise_dropdown.handle_key(key) {
-                        return Some(SocialHistoryAction::FieldChanged);
-                    }
-                }
-                _ => {}
             }
 
             match self.focused_field {
@@ -770,6 +772,7 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
             dropdown_clone
                 .focused(is_focused)
                 .render(dropdown_area, buf);
+            y += 3;
         } else {
             let (textarea_state, field_height) = match field {
                 SocialHistoryField::Occupation => (
@@ -805,11 +808,8 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
 
             let field_area = Rect::new(inner.x + 1, y, inner.width.saturating_sub(2), field_height);
             TextareaWidget::new(&textarea_state, component.theme.clone()).render(field_area, buf);
-
-            y += field_height.saturating_sub(1);
+            y += field_height;
         }
-
-        y += 1;
     }
 
     let help_y = inner.y + inner.height.saturating_sub(1);
