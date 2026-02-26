@@ -653,6 +653,7 @@ impl App {
             FamilyHistoryFormAction, MedicalHistoryFormAction, VitalSignsFormAction,
         };
         use crate::ui::keybinds::{Action as KeyAction, KeyContext, KeybindRegistry};
+        use crate::ui::widgets::SearchableListState;
         use crossterm::event::KeyCode;
 
         if self.clinical_state.is_form_open() {
@@ -872,6 +873,29 @@ impl App {
             return Action::Unknown;
         }
 
+        // Handle patient search popup if open
+        if let Some(ref mut search) = self.clinical_state.patient_search {
+            if search.is_open() {
+                use crate::ui::widgets::{SearchableList, SearchableListAction};
+                let mut picker = SearchableList::new(search, &self.theme, "Select Patient", true);
+                let action = picker.handle_key(key);
+                match action {
+                    SearchableListAction::Selected(id, _name) => {
+                        self.clinical_state.set_patient(id);
+                        self.clinical_state.patient_search = None;
+                        return Action::Enter;
+                    }
+                    SearchableListAction::Cancelled => {
+                        self.clinical_state.patient_search = None;
+                        return Action::Enter;
+                    }
+                    SearchableListAction::None => {
+                        return Action::Enter;
+                    }
+                }
+            }
+        }
+
         // First check keybinds registry for clinical-specific actions
         let registry = KeybindRegistry::global();
         if let Some(keybind) = registry.lookup(key, KeyContext::Clinical) {
@@ -928,6 +952,31 @@ impl App {
                 }
                 KeyAction::ViewSocialHistory => {
                     self.clinical_state.show_social_history();
+                    return Action::Enter;
+                }
+                KeyAction::Search => {
+                    if self.clinical_state.patient_search.is_none()
+                        && !self.clinical_state.is_form_open()
+                    {
+                        let patients: Vec<_> = self
+                            .patient_list
+                            .patients()
+                            .iter()
+                            .map(|p| crate::ui::view_models::PatientListItem {
+                                id: p.id,
+                                full_name: p.full_name.clone(),
+                                date_of_birth: p.date_of_birth,
+                                gender: p.gender.clone(),
+                                medicare_number: p.medicare_number.clone(),
+                                medicare_irn: p.medicare_irn,
+                                ihi: p.ihi.clone(),
+                                phone_mobile: p.phone_mobile.clone(),
+                            })
+                            .collect();
+                        let mut search = SearchableListState::new(patients);
+                        search.open();
+                        self.clinical_state.patient_search = Some(search);
+                    }
                     return Action::Enter;
                 }
                 _ => {}
@@ -1647,6 +1696,14 @@ impl App {
             }
             crate::ui::components::clinical::ClinicalView::FamilyHistory => {
                 frame.render_widget(self.clinical_state.family_history_list.clone(), area);
+            }
+        }
+
+        if let Some(ref mut search) = self.clinical_state.patient_search {
+            if search.is_open() {
+                use crate::ui::widgets::SearchableList;
+                let picker = SearchableList::new(search, &self.theme, "Select Patient", true);
+                frame.render_widget(picker, area);
             }
         }
     }

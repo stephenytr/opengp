@@ -7,6 +7,8 @@ use crate::ui::components::clinical::{
     FamilyHistoryList, MedicalHistoryForm, MedicalHistoryList, VitalSignsForm, VitalSignsList,
 };
 use crate::ui::theme::Theme;
+use crate::ui::view_models::PatientListItem;
+use crate::ui::widgets::SearchableListState;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Default)]
@@ -62,6 +64,7 @@ pub struct ClinicalState {
     pub medical_history_list: MedicalHistoryList,
     pub vitals_list: VitalSignsList,
     pub family_history_list: FamilyHistoryList,
+    pub patient_search: Option<SearchableListState<PatientListItem>>,
 }
 
 impl ClinicalState {
@@ -99,6 +102,7 @@ impl ClinicalState {
             medical_history_list: MedicalHistoryList::new(theme.clone()),
             vitals_list: VitalSignsList::new(theme.clone()),
             family_history_list: FamilyHistoryList::new(theme),
+            patient_search: None,
         }
     }
 

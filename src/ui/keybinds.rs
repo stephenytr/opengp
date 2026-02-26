@@ -591,6 +591,12 @@ impl KeybindRegistry {
             context: KeyContext::Clinical,
             description: "Go back / Cancel",
         });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE),
+            action: Action::Search,
+            context: KeyContext::Clinical,
+            description: "Search patients",
+        });
 
         // Clinical: Number keys 1-7 to jump to specific views
         // 1 = Patient Summary
