@@ -344,7 +344,10 @@ impl App {
     }
 
     fn calculate_visible_patient_rows(&self) -> usize {
-        15_usize.saturating_sub(5)
+        // Calculate based on terminal size: total height - tab bar (2) - header (2) - status bar (1)
+        let available_height = self.terminal_size.height.saturating_sub(2 + 2 + 1);
+        // Each patient row takes 1 line, so available_height = visible rows
+        available_height.saturating_sub(1) as usize // -1 for safety margin
     }
 
     /// Handle a key event
@@ -1391,6 +1394,53 @@ impl App {
                             ScheduleAction::CreateAtSlot { .. } => {}
                         }
                     }
+                }
+            }
+        }
+
+        // Handle clinical tab mouse events
+        if self.tab_bar.selected() == Tab::Clinical && self.clinical_state.is_form_open() == false {
+            use crate::ui::components::clinical::ClinicalView;
+            let clinical_area = Rect::new(
+                area.x,
+                area.y + 2,
+                area.width,
+                area.height.saturating_sub(2 + STATUS_BAR_HEIGHT),
+            );
+            // Route mouse events to clinical components based on current view
+            match self.clinical_state.view {
+                ClinicalView::Consultations => {
+                    let _ = self
+                        .clinical_state
+                        .consultation_list
+                        .handle_mouse(mouse, clinical_area);
+                }
+                ClinicalView::Allergies => {
+                    let _ = self
+                        .clinical_state
+                        .allergy_list
+                        .handle_mouse(mouse, clinical_area);
+                }
+                ClinicalView::MedicalHistory => {
+                    let _ = self
+                        .clinical_state
+                        .medical_history_list
+                        .handle_mouse(mouse, clinical_area);
+                }
+                ClinicalView::VitalSigns => {
+                    let _ = self
+                        .clinical_state
+                        .vitals_list
+                        .handle_mouse(mouse, clinical_area);
+                }
+                ClinicalView::FamilyHistory => {
+                    let _ = self
+                        .clinical_state
+                        .family_history_list
+                        .handle_mouse(mouse, clinical_area);
+                }
+                ClinicalView::PatientSummary | ClinicalView::SocialHistory => {
+                    // Patient summary and social history don't have mouse handling
                 }
             }
         }

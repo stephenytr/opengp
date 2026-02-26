@@ -292,11 +292,13 @@ impl Schedule {
                     vertical: 1,
                 });
 
+                // Always calculate time slot from row, regardless of which column was clicked
+                let y = mouse.row.saturating_sub(inner.y);
+                let slot = (y as u8 / 2).min(self.max_time_slot());
+                self.selected_time_slot = slot;
+
                 if mouse.column < inner.x + time_column_width {
-                    // Clicked on time column - select time slot
-                    let y = mouse.row.saturating_sub(inner.y);
-                    let slot = (y as u8 / 2).min(self.max_time_slot());
-                    self.selected_time_slot = slot;
+                    // Clicked on time column - select time slot only
                     return Some(ScheduleAction::NavigateTimeSlot(0));
                 }
 
@@ -312,9 +314,6 @@ impl Schedule {
                             self.selected_practitioner_index = practitioner_index;
 
                             // Check if clicked on an appointment
-                            let y = mouse.row.saturating_sub(inner.y);
-                            let slot = (y as u8 / 2).min(self.max_time_slot());
-
                             // Get appointment at this position for the selected practitioner
                             if let Some(apt) = self.get_appointment_at_slot_for_practitioner(
                                 slot,
