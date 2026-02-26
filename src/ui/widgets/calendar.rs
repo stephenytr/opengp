@@ -320,20 +320,26 @@ impl CalendarWidget {
     }
 
     fn get_day_index_at(&self, column: u16, row: u16, area: Rect) -> Option<usize> {
-        let start_y = area.y.saturating_add(2);
-        let cell_width = (area.width as usize / 7).max(2) as u16;
+        let border_left = 2u16;
+        let start_y = area.y.saturating_add(3);
+        let start_x = area.x.saturating_add(border_left);
+        let inner_width = area.width.saturating_sub(2);
+        let cell_width = ((inner_width as usize) / 7).max(2) as u16;
         let row_height = 2u16;
 
         if row < start_y {
             return None;
         }
 
-        if column < area.x || row >= area.bottom() || column >= area.right() {
+        let inner_right = area.x + area.width.saturating_sub(1);
+        let inner_bottom = area.y + area.height.saturating_sub(1);
+
+        if column < start_x || row >= inner_bottom || column >= inner_right {
             return None;
         }
 
         let dy = row - start_y;
-        let dx = column - area.x;
+        let dx = column - start_x;
 
         let row_idx = (dy / row_height) as usize;
         let col = (dx / cell_width) as usize;
@@ -567,7 +573,9 @@ mod tests {
         let area = Rect::new(0, 0, 30, 12);
         let first_of_month = NaiveDate::from_ymd_opt(2026, 2, 1).unwrap();
         let offset = (first_of_month.weekday().number_from_monday() - 1) as u16;
-        let column = area.x + 2 + offset * 3;
+        let inner_width = area.width.saturating_sub(2);
+        let cell_width = ((inner_width as usize) / 7).max(2) as u16;
+        let column = area.x + 2 + offset * cell_width;
         let row = area.y + 3;
         let mouse = MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
