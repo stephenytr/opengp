@@ -301,13 +301,36 @@ impl Widget for DropdownWidget {
                 .bg(Color::Black),
         );
 
-        if self.is_open() && !self.options.is_empty() {
-            let options_area = Rect::new(
-                inner.x,
-                inner.y + inner.height,
-                inner.width,
-                self.options.len() as u16 + 2,
-            );
+        // Guard against empty options: treat as closed state
+        if self.is_open() && self.options.is_empty() {
+            return;
+        }
+
+        if self.is_open() {
+            let popup_height = self.options.len() as u16 + 2;
+
+            // Try to position popup below the field
+            let mut options_area =
+                Rect::new(inner.x, inner.y + inner.height, inner.width, popup_height);
+
+            // Check if popup would extend beyond terminal bottom
+            if options_area.bottom() > buf.area.bottom() {
+                // Try repositioning above the field
+                let above_y = inner.y.saturating_sub(popup_height);
+                options_area = Rect::new(inner.x, above_y, inner.width, popup_height);
+
+                // If still out of bounds (field at top), skip rendering popup this frame
+                if options_area.bottom() > buf.area.bottom()
+                    || options_area.right() > buf.area.right()
+                {
+                    return;
+                }
+            }
+
+            // Final bounds check before rendering
+            if options_area.right() > buf.area.right() {
+                return;
+            }
 
             ratatui::widgets::Clear.render(options_area, buf);
 
@@ -425,5 +448,37 @@ mod tests {
         dropdown.confirm_selection();
         assert_eq!(dropdown.selected_index, Some(0));
         assert!(!dropdown.is_open());
+    }
+
+    #[test]
+    fn dropdown_render_no_panic_when_near_bottom() {
+        let options = vec![
+            DropdownOption::new("opt1", "Option 1"),
+            DropdownOption::new("opt2", "Option 2"),
+            DropdownOption::new("opt3", "Option 3"),
+        ];
+
+        let theme = Theme::dark();
+        let mut dropdown = DropdownWidget::new("Test", options, theme);
+        dropdown.open();
+
+        let area = Rect::new(0, 0, 40, 10);
+        let mut buf = Buffer::empty(area);
+
+        let field_area = Rect::new(2, 8, 36, 1);
+        dropdown.render(field_area, &mut buf);
+    }
+
+    #[test]
+    fn dropdown_render_no_panic_with_empty_options() {
+        let theme = Theme::dark();
+        let mut dropdown = DropdownWidget::new("Test", vec![], theme);
+        dropdown.open();
+
+        let area = Rect::new(0, 0, 40, 10);
+        let mut buf = Buffer::empty(area);
+
+        let field_area = Rect::new(2, 5, 36, 1);
+        dropdown.render(field_area, &mut buf);
     }
 }
