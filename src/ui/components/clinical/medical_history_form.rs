@@ -262,6 +262,12 @@ impl MedicalHistoryForm {
             return None;
         }
 
+        // Ctrl+Enter submits the form from any field.
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Enter {
+            self.validate();
+            return Some(MedicalHistoryFormAction::Submit);
+        }
+
         // Delegate to dropdown when focused on Status or Severity
         match self.focused_field {
             MedicalHistoryFormField::Status => {
@@ -279,7 +285,7 @@ impl MedicalHistoryForm {
                         }
                     }
                 }
-                return None;
+                // Fall through to Tab/BackTab handling if dropdown didn't consume the key
             }
             MedicalHistoryFormField::Severity => {
                 if let Some(action) = self.severity_dropdown.handle_key(key) {
@@ -296,7 +302,7 @@ impl MedicalHistoryForm {
                         }
                     }
                 }
-                return None;
+                // Fall through to Tab/BackTab handling if dropdown didn't consume the key
             }
             _ => {}
         }
@@ -318,11 +324,6 @@ impl MedicalHistoryForm {
                 }
             }
             MedicalHistoryFormField::Notes => {
-                // Ctrl+Enter submits the form from any field.
-                if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Enter {
-                    self.validate();
-                    return Some(MedicalHistoryFormAction::Submit);
-                }
                 let ratatui_key = to_ratatui_key(key);
                 let consumed = self.notes.handle_key(ratatui_key);
                 if consumed {
@@ -439,6 +440,7 @@ impl Widget for MedicalHistoryForm {
             } else {
                 total_height += 3;
             }
+            total_height += 1;
         }
         self.scroll.set_total_height(total_height);
         self.scroll.clamp_offset(inner.height.saturating_sub(2));
@@ -456,7 +458,7 @@ impl Widget for MedicalHistoryForm {
             };
 
             if y + field_height <= inner.y as i32 || y >= max_y {
-                y += field_height;
+                y += field_height + 1;
                 continue;
             }
 
@@ -496,7 +498,7 @@ impl Widget for MedicalHistoryForm {
                         }
                         dropdown.focused(is_focused).render(dropdown_area, buf);
                     }
-                    y += 3;
+                    y += 4;
                 }
                 MedicalHistoryFormField::Severity => {
                     let dropdown = self.severity_dropdown.clone();
@@ -508,7 +510,7 @@ impl Widget for MedicalHistoryForm {
                         }
                         dropdown.focused(is_focused).render(dropdown_area, buf);
                     }
-                    y += 3;
+                    y += 4;
                 }
                 _ => {
                     let textarea_state: &TextareaState;
@@ -527,7 +529,7 @@ impl Widget for MedicalHistoryForm {
                             height = 6;
                         }
                         _ => {
-                            y += 3;
+                            y += 4;
                             continue;
                         }
                     };
@@ -552,7 +554,7 @@ impl Widget for MedicalHistoryForm {
                         }
                     }
 
-                    y += height as i32 + 1;
+                    y += height as i32 + 2;
                 }
             }
         }
