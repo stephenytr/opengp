@@ -1,7 +1,7 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-02-21
-**Commit:** 73451a1
+**Generated:** 2026-03-03
+**Commit:** b57d966
 **Branch:** master
 **Project:** OpenGP - Australian General Practice Management Software
 
@@ -13,17 +13,24 @@ Rust terminal application for Australian general practice management. Clean Arch
 
 ```
 opengp/
-├── src/
-│   ├── domain/          # Business logic (10 modules)
-│   ├── infrastructure/ # DB, auth, crypto, fixtures
-│   ├── integrations/    # Medicare/PBS/AIR (stubs)
-│   └── ui/              # Ratatui terminal interface
-├── tests/               # Integration tests
-├── examples/           # Example scripts
-├── migrations/         # SQL schema
-├── wiki/               # Git-backed documentation
-└── docs/               # Implementation docs
+├── src/                      # ACTUAL SOURCE (monolithic)
+│   ├── domain/              # Business logic (10 modules)
+│   ├── infrastructure/      # DB, auth, crypto, fixtures
+│   ├── integrations/        # Medicare/PBS/AIR (stubs)
+│   └── ui/                  # Ratatui terminal interface
+├── crates/                  # Workspace crates (stubs - migration in progress)
+│   ├── opengp-domain/
+│   ├── opengp-infrastructure/
+│   ├── opengp-ui/
+│   └── opengp-config/
+├── tests/                   # Integration tests
+├── examples/                # Example scripts
+├── migrations/              # SQL schema
+├── wiki/                    # Git-backed documentation
+└── docs/                    # Implementation docs
 ```
+
+> **Note**: Dual structure - code in `/src/` but workspace crates in `/crates/` exist as stubs. Migration to pure workspace structure incomplete.
 
 ## WHERE TO LOOK
 
@@ -95,6 +102,7 @@ opengp/
 - ⚠️ Medicare/PBS/AIR integrations are empty stubs
 - ⚠️ Audit log has no hash chain (tamperable)
 - ⚠️ No MFA/TOTP implementation despite audit flags
+- ⚠️ Dual structure: `/src/` has actual code, `/crates/` are empty stubs - incomplete workspace migration
 
 ## UNIQUE STYLES
 
