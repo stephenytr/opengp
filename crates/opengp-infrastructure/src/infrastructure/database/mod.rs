@@ -33,7 +33,7 @@ pub use opengp_config::DatabaseConfig;
 ///
 /// # Example
 /// ```no_run
-/// use opengp::infrastructure::database::{DatabaseConfig, create_pool};
+/// use opengp_infrastructure::infrastructure::database::{DatabaseConfig, create_pool};
 ///
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), sqlx::Error> {

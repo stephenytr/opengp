@@ -154,7 +154,6 @@ impl App {
             family_history_repo,
             patient_service.clone(),
             audit_service,
-            crypto,
         ));
 
         Ok(Self {

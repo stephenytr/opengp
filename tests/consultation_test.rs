@@ -115,7 +115,6 @@ fn create_clinical_service(pool: &SqlitePool) -> ClinicalService {
         Arc::new(SqlxFamilyHistoryRepository::new(pool.clone(), crypto.clone())),
         patient_service,
         audit_service,
-        crypto,
     )
 }
 

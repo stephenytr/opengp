@@ -370,3 +370,12 @@ mod tests {
         assert_eq!(dt.day(), 14);
     }
 }
+
+/// Convert a sqlx::Error to RepositoryError
+/// 
+/// This function should be used in infrastructure layer instead of the `?` operator
+/// when the error type is sqlx::Error and the return type is Result<T, RepositoryError>.
+/// It converts the sqlx error to a domain-friendly string representation.
+pub fn repo_err_from_sqlx(err: sqlx::Error) -> RepositoryError {
+    RepositoryError::Database(err.to_string())
+}

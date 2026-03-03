@@ -1,5 +1,13 @@
-[package]
-name = "opengp"
+[workspace]
+resolver = "2"
+members = [
+    "crates/opengp-domain",
+    "crates/opengp-infrastructure",
+    "crates/opengp-config",
+    "crates/opengp-ui",
+]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
 description = "Open source general practice management software for Australia"
@@ -7,12 +15,7 @@ license = "AGPL-3.0"
 authors = ["OpenGP Contributors"]
 rust-version = "1.86.0"
 
-[features]
-default = ["sqlite"]
-sqlite = ["sqlx/sqlite"]
-postgres = ["sqlx/postgres"]
-
-[dependencies]
+[workspace.dependencies]
 ratatui = "0.30"
 crossterm = "0.29"
 tokio = { version = "1", features = ["full"] }

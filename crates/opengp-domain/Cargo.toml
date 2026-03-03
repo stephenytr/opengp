@@ -1,0 +1,20 @@
+[package]
+name = "opengp-domain"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+async-trait = "0.1.89"
+thiserror = "2"
+strum = { version = "0.26", features = ["derive"] }
+strum_macros = "0.26"
+derive_builder = "0.20"
+tracing = "0.1"
+tokio = { version = "1", features = ["test-util", "macros"] }

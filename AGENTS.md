@@ -72,7 +72,7 @@ opengp/
 
 - Do not use `rm` command without explicit permission.
 - Logic that may be used over and over again should be abstracted.
-- Use Context7 for documentation.
+- Use Context7 MCP for up to date information on code.
 - You must not revert git changes without explicit permission.
 - Make git commits as required and update and close gitea issues.
 - If anything is unclear use the tool provided to ask questions about anything required, do not assume my intent if my instruction is unclear.
@@ -81,6 +81,10 @@ opengp/
 
 - Open gitea issues using the gitea mcp, whenever you find problems in the codebase.
 - Close gitea issues with a commit, push and closing the gitea issue via the gitea-mcp
+
+## PLANS
+- Always make sure plan files are updated.
+- Always make git commits for any change.
 
 ## ANTI-PATTERNS (THIS PROJECT)
 

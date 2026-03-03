@@ -39,7 +39,7 @@ impl Clone for PatientList {
             filtered: self.filtered.clone(),
             search_query: self.search_query.clone(),
             searching: self.searching,
-            scrollable: ScrollableState::with_items(self.scrollable.item_count()),
+            scrollable: self.scrollable.clone(),
             loading: self.loading,
             loading_state: self.loading_state.clone(),
             theme: self.theme.clone(),

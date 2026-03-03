@@ -1,0 +1,138 @@
+-- Seed 6 users into the database: 3 doctors, 2 nurses, 1 receptionist
+-- This migration replaces the old seed_mock_users.sql with expanded user data
+-- All users are active and unlocked, with password_hash_new set to NULL for future implementation
+
+-- Insert 6 users with all required fields
+INSERT INTO users (
+    id,
+    username,
+    password_hash,
+    password_hash_new,
+    first_name,
+    last_name,
+    email,
+    role,
+    is_active,
+    is_locked,
+    failed_login_attempts,
+    last_login,
+    password_changed_at,
+    additional_permissions,
+    created_at,
+    updated_at
+)
+VALUES
+    -- Doctor 1: Sarah Johnson
+    (
+        x'a1b2c3d4e5f64789a1b2c3d4e5f64789',
+        's.johnson',
+        '$2b$12$placeholder.hash.for.development.only',
+        '$2b$12$placeholder.hash.for.development.only',
+        'Sarah',
+        'Johnson',
+        'sarah.johnson@clinic.example.com',
+        'Doctor',
+        TRUE,
+        FALSE,
+        0,
+        '$2b$12$placeholder.hash.for.development.only',
+        CURRENT_TIMESTAMP,
+        '[]',
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+    ),
+    -- Doctor 2: Michael Chen
+    (
+        x'b2c3d4e5f6a789a1b2c3d4e5f6a789a1',
+        'm.chen',
+        '$2b$12$placeholder.hash.for.development.only',
+        '$2b$12$placeholder.hash.for.development.only',
+        'Michael',
+        'Chen',
+        'michael.chen@clinic.example.com',
+        'Doctor',
+        TRUE,
+        FALSE,
+        0,
+        '$2b$12$placeholder.hash.for.development.only',
+        CURRENT_TIMESTAMP,
+        '[]',
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+    ),
+    -- Doctor 3: Emily Williams
+    (
+        x'c3d4e5f6a789a1b2c3d4e5f6a789a1b2',
+        'e.williams',
+        '$2b$12$placeholder.hash.for.development.only',
+        '$2b$12$placeholder.hash.for.development.only',
+        'Emily',
+        'Williams',
+        'emily.williams@clinic.example.com',
+        'Doctor',
+        TRUE,
+        FALSE,
+        0,
+        '$2b$12$placeholder.hash.for.development.only',
+        CURRENT_TIMESTAMP,
+        '[]',
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+    ),
+    -- Nurse 1: Lisa Brown
+    (
+        x'd4e5f6a789a1b2c3d4e5f6a789a1b2c3',
+        'l.brown',
+        '$2b$12$placeholder.hash.for.development.only',
+        '$2b$12$placeholder.hash.for.development.only',
+        'Lisa',
+        'Brown',
+        'lisa.brown@clinic.example.com',
+        'Nurse',
+        TRUE,
+        FALSE,
+        0,
+        '$2b$12$placeholder.hash.for.development.only',
+        CURRENT_TIMESTAMP,
+        '[]',
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+    ),
+    -- Nurse 2: James Taylor
+    (
+        x'e5f6a789a1b2c3d4e5f6a789a1b2c3d4',
+        'j.taylor',
+        '$2b$12$placeholder.hash.for.development.only',
+        '$2b$12$placeholder.hash.for.development.only',
+        'James',
+        'Taylor',
+        'james.taylor@clinic.example.com',
+        'Nurse',
+        TRUE,
+        FALSE,
+        0,
+        '$2b$12$placeholder.hash.for.development.only',
+        CURRENT_TIMESTAMP,
+        '[]',
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+    ),
+    -- Receptionist: Amanda White
+    (
+        x'f6a789a1b2c3d4e5f6a789a1b2c3d4e5',
+        'a.white',
+        '$2b$12$placeholder.hash.for.development.only',
+        '$2b$12$placeholder.hash.for.development.only',
+        'Amanda',
+        'White',
+        'amanda.white@clinic.example.com',
+        'Receptionist',
+        TRUE,
+        FALSE,
+        0,
+        '$2b$12$placeholder.hash.for.development.only',
+        CURRENT_TIMESTAMP,
+        '[]',
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+    );

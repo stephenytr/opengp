@@ -1,0 +1,28 @@
+//! Reusable Widgets Module
+//!
+//! Provides reusable UI widgets for the OpenGP TUI.
+//! These widgets follow consistent styling via the Theme system.
+
+mod calendar;
+mod date_picker_popup;
+mod date_utils;
+mod dropdown;
+mod form_field;
+mod list_nav;
+mod loading;
+mod scrollable;
+mod scrollable_form;
+mod searchable_list;
+mod textarea;
+
+pub use calendar::{AppointmentStyler, CalendarAction, CalendarMode, CalendarWidget};
+pub use date_picker_popup::{DatePickerAction, DatePickerPopup};
+pub use date_utils::{format_date, format_user_input, is_valid_date, parse_date};
+pub use dropdown::{DropdownAction, DropdownOption, DropdownState, DropdownWidget};
+pub use form_field::{FieldType, FormField, FormFieldState};
+pub use list_nav::{list_handle_key, list_handle_mouse, ListNavAction};
+pub use loading::{LoadingIndicator, LoadingState, SpinnerStyle};
+pub use scrollable::ScrollableState;
+pub use scrollable_form::ScrollableFormState;
+pub use searchable_list::{Searchable, SearchableList, SearchableListAction, SearchableListState};
+pub use textarea::{HeightMode, TextareaState, TextareaWidget};

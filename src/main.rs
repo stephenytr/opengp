@@ -4,25 +4,25 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use opengp::domain::patient::PatientRepository;
-use opengp::domain::user::{PractitionerRepository, UserRepository};
-use opengp::domain::appointment::AppointmentCalendarQuery;
-use opengp::infrastructure::crypto::EncryptionService;
-use opengp::infrastructure::database::{create_pool, run_migrations};
-use opengp::infrastructure::database::repositories::patient::SqlxPatientRepository;
-use opengp::infrastructure::database::repositories::practitioner::SqlxPractitionerRepository;
-use opengp::infrastructure::database::repositories::appointment::SqlxAppointmentRepository;
-use opengp::infrastructure::database::repositories::user::SqlxUserRepository;
-use opengp::ui::app::App;
-use opengp::ui::services::AppointmentUiService;
+use opengp_domain::domain::patient::PatientRepository;
+use opengp_domain::domain::user::{PractitionerRepository, UserRepository};
+use opengp_domain::domain::appointment::AppointmentCalendarQuery;
+use opengp_infrastructure::infrastructure::crypto::EncryptionService;
+use opengp_infrastructure::infrastructure::database::{create_pool, run_migrations};
+use opengp_infrastructure::infrastructure::database::repositories::patient::SqlxPatientRepository;
+use opengp_infrastructure::infrastructure::database::repositories::practitioner::SqlxPractitionerRepository;
+use opengp_infrastructure::infrastructure::database::repositories::appointment::SqlxAppointmentRepository;
+use opengp_infrastructure::infrastructure::database::repositories::user::SqlxUserRepository;
+use opengp_ui::ui::app::App;
+use opengp_ui::ui::services::AppointmentUiService;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use opengp::Config;
-use opengp::config::CalendarConfig;
+use opengp_config::Config;
+use opengp_config::CalendarConfig;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -47,14 +47,14 @@ async fn main() -> Result<()> {
     // Create appointment-related repositories and service
     let practitioner_repo: Arc<dyn PractitionerRepository> = Arc::new(SqlxPractitionerRepository::new(db_pool.clone()));
     let appointment_repo_impl = Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
-    let appointment_repo_for_create: Arc<dyn opengp::domain::appointment::AppointmentRepository> = appointment_repo_impl.clone();
+    let appointment_repo_for_create: Arc<dyn opengp_domain::domain::appointment::AppointmentRepository> = appointment_repo_impl.clone();
     let appointment_repo: Arc<dyn AppointmentCalendarQuery> = appointment_repo_impl.clone();
     
     // Create domain appointment service for status transitions
-    let audit_service = Arc::new(opengp::domain::audit::AuditService::new(
-        Arc::new(opengp::infrastructure::database::repositories::audit::SqlxAuditRepository::new(db_pool.clone()))
+    let audit_service = Arc::new(opengp_domain::domain::audit::AuditService::new(
+        Arc::new(opengp_infrastructure::infrastructure::database::repositories::audit::SqlxAuditRepository::new(db_pool.clone()))
     ));
-    let domain_appointment_service = Arc::new(opengp::domain::appointment::AppointmentService::new(
+    let domain_appointment_service = Arc::new(opengp_domain::domain::appointment::AppointmentService::new(
         appointment_repo_for_create.clone(),
         audit_service,
         appointment_repo.clone(),
@@ -68,35 +68,34 @@ async fn main() -> Result<()> {
     ));
 
     // Create patient service
-    let patient_service = Arc::new(opengp::ui::services::PatientUiService::new(
-        Arc::new(opengp::domain::patient::PatientService::new(patient_repo.clone()))
+    let patient_service = Arc::new(opengp_ui::ui::services::PatientUiService::new(
+        Arc::new(opengp_domain::domain::patient::PatientService::new(patient_repo.clone()))
     ));
 
     // Create clinical service repositories
-    let consultation_repo: Arc<dyn opengp::domain::clinical::ConsultationRepository> = Arc::new(opengp::infrastructure::database::repositories::clinical::SqlxClinicalRepository::new(db_pool.clone(), crypto.clone()));
-    let allergy_repo: Arc<dyn opengp::domain::clinical::AllergyRepository> = Arc::new(opengp::infrastructure::database::repositories::clinical::SqlxAllergyRepository::new(db_pool.clone(), crypto.clone()));
-    let medical_history_repo: Arc<dyn opengp::domain::clinical::MedicalHistoryRepository> = Arc::new(opengp::infrastructure::database::repositories::clinical::SqlxMedicalHistoryRepository::new(db_pool.clone(), crypto.clone()));
-    let vital_signs_repo: Arc<dyn opengp::domain::clinical::VitalSignsRepository> = Arc::new(opengp::infrastructure::database::repositories::clinical::SqlxVitalSignsRepository::new(db_pool.clone(), crypto.clone()));
-    let social_history_repo: Arc<dyn opengp::domain::clinical::SocialHistoryRepository> = Arc::new(opengp::infrastructure::database::repositories::clinical::SqlxSocialHistoryRepository::new(db_pool.clone(), crypto.clone()));
-    let family_history_repo: Arc<dyn opengp::domain::clinical::FamilyHistoryRepository> = Arc::new(opengp::infrastructure::database::repositories::clinical::SqlxFamilyHistoryRepository::new(db_pool.clone(), crypto.clone()));
+    let consultation_repo: Arc<dyn opengp_domain::domain::clinical::ConsultationRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxClinicalRepository::new(db_pool.clone(), crypto.clone()));
+    let allergy_repo: Arc<dyn opengp_domain::domain::clinical::AllergyRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxAllergyRepository::new(db_pool.clone(), crypto.clone()));
+    let medical_history_repo: Arc<dyn opengp_domain::domain::clinical::MedicalHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxMedicalHistoryRepository::new(db_pool.clone(), crypto.clone()));
+    let vital_signs_repo: Arc<dyn opengp_domain::domain::clinical::VitalSignsRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxVitalSignsRepository::new(db_pool.clone(), crypto.clone()));
+    let social_history_repo: Arc<dyn opengp_domain::domain::clinical::SocialHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxSocialHistoryRepository::new(db_pool.clone(), crypto.clone()));
+    let family_history_repo: Arc<dyn opengp_domain::domain::clinical::FamilyHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxFamilyHistoryRepository::new(db_pool.clone(), crypto.clone()));
     
-    let clinical_service = Arc::new(opengp::ui::services::ClinicalUiService::new(
-        Arc::new(opengp::domain::clinical::ClinicalService::new(
+    let clinical_service = Arc::new(opengp_ui::ui::services::ClinicalUiService::new(
+        Arc::new(opengp_domain::domain::clinical::ClinicalService::new(
             consultation_repo,
             allergy_repo,
             medical_history_repo,
             vital_signs_repo,
             social_history_repo,
             family_history_repo,
-            Arc::new(opengp::domain::patient::PatientService::new(patient_repo.clone())),
-            Arc::new(opengp::domain::audit::AuditService::new(
-                Arc::new(opengp::infrastructure::database::repositories::audit::SqlxAuditRepository::new(db_pool.clone()))
+            Arc::new(opengp_domain::domain::patient::PatientService::new(patient_repo.clone())),
+            Arc::new(opengp_domain::domain::audit::AuditService::new(
+                Arc::new(opengp_infrastructure::infrastructure::database::repositories::audit::SqlxAuditRepository::new(db_pool.clone()))
             )),
-            crypto.clone(),
         ))
     ));
 
-    let patients: Vec<opengp::domain::patient::Patient> = patient_repo.list_active().await?;
+    let patients: Vec<opengp_domain::domain::patient::Patient> = patient_repo.list_active().await?;
     tracing::info!("Loaded {} patients from database", patients.len());
 
     let user_repo = SqlxUserRepository::new(db_pool.clone());
@@ -124,11 +123,11 @@ async fn main() -> Result<()> {
 }
 
 async fn run_tui(
-    patients: Vec<opengp::domain::patient::Patient>,
+    patients: Vec<opengp_domain::domain::patient::Patient>,
     patient_repo: Arc<SqlxPatientRepository>,
     appointment_service: Arc<AppointmentUiService>,
-    patient_service: Arc<opengp::ui::services::PatientUiService>,
-    clinical_service: Arc<opengp::ui::services::ClinicalUiService>,
+    patient_service: Arc<opengp_ui::ui::services::PatientUiService>,
+    clinical_service: Arc<opengp_ui::ui::services::ClinicalUiService>,
     system_user_id: uuid::Uuid,
     calendar_config: CalendarConfig,
 ) -> Result<()> {
@@ -148,14 +147,14 @@ async fn run_tui(
 
         // Check if there's pending patient data to save
         if let Some(pending) = app.take_pending_patient_data() {
-            use opengp::domain::patient::Patient;
+            use opengp_domain::domain::patient::Patient;
             match pending {
-                opengp::ui::app::PendingPatientData::New(data) => {
+                opengp_ui::ui::app::PendingPatientData::New(data) => {
                     let patient = Patient::from_dto(data)?;
                     patient_repo.create(patient).await?;
                     tracing::info!("Created new patient in database");
                 }
-                opengp::ui::app::PendingPatientData::Update { id, data } => {
+                opengp_ui::ui::app::PendingPatientData::Update { id, data } => {
                     let mut patient = patient_repo.find_by_id(id).await?.ok_or_else(|| color_eyre::eyre::eyre!("Patient not found"))?;
                     patient.update(data)?;
                     patient_repo.update(patient).await?;
@@ -222,16 +221,16 @@ async fn run_tui(
                     }
                 }
             }
-            let practitioner_items: Vec<opengp::ui::view_models::PractitionerViewItem> = 
+            let practitioner_items: Vec<opengp_ui::ui::view_models::PractitionerViewItem> = 
                 app.practitioners().iter()
-                    .map(|p: &opengp::domain::user::Practitioner| opengp::ui::view_models::PractitionerViewItem::from(p.clone()))
+                    .map(|p: &opengp_domain::domain::user::Practitioner| opengp_ui::ui::view_models::PractitionerViewItem::from(p.clone()))
                     .collect();
             app.appointment_form_set_practitioners(practitioner_items);
         }
 
         // Pass patients to appointment form if it exists
         if app.has_appointment_form() {
-            let patient_items: Vec<opengp::ui::view_models::PatientListItem> = 
+            let patient_items: Vec<opengp_ui::ui::view_models::PatientListItem> = 
                 app.patient_list_patients().to_vec();
             app.appointment_form_set_patients(patient_items);
         }
@@ -255,13 +254,13 @@ async fn run_tui(
 
         if let Some((appointment_id, transition)) = app.take_pending_appointment_status_transition() {
             let result = match transition {
-                opengp::ui::app::AppointmentStatusTransition::MarkArrived => {
+                opengp_ui::ui::app::AppointmentStatusTransition::MarkArrived => {
                     appointment_service.mark_arrived(appointment_id, system_user_id).await
                 }
-                opengp::ui::app::AppointmentStatusTransition::MarkInProgress => {
+                opengp_ui::ui::app::AppointmentStatusTransition::MarkInProgress => {
                     appointment_service.mark_in_progress(appointment_id, system_user_id).await
                 }
-                opengp::ui::app::AppointmentStatusTransition::MarkCompleted => {
+                opengp_ui::ui::app::AppointmentStatusTransition::MarkCompleted => {
                     appointment_service.mark_completed(appointment_id, system_user_id).await
                 }
             };
@@ -283,7 +282,7 @@ async fn run_tui(
 
         if let Some(pending) = app.take_pending_clinical_save_data() {
             match pending {
-                opengp::ui::app::PendingClinicalSaveData::Allergy { patient_id, allergy } => {
+                opengp_ui::ui::app::PendingClinicalSaveData::Allergy { patient_id, allergy } => {
                     match clinical_service.add_allergy(
                         patient_id,
                         allergy.allergen,
@@ -303,7 +302,7 @@ async fn run_tui(
                         Err(e) => tracing::error!("Failed to save allergy: {}", e),
                     }
                 }
-                opengp::ui::app::PendingClinicalSaveData::MedicalHistory { patient_id, history } => {
+                opengp_ui::ui::app::PendingClinicalSaveData::MedicalHistory { patient_id, history } => {
                     match clinical_service.add_medical_history(
                         patient_id,
                         history.condition,
@@ -322,7 +321,7 @@ async fn run_tui(
                         Err(e) => tracing::error!("Failed to save medical history: {}", e),
                     }
                 }
-                opengp::ui::app::PendingClinicalSaveData::VitalSigns { patient_id, vitals } => {
+                opengp_ui::ui::app::PendingClinicalSaveData::VitalSigns { patient_id, vitals } => {
                     match clinical_service.record_vitals(
                         patient_id,
                         vitals.systolic_bp,
@@ -346,7 +345,7 @@ async fn run_tui(
                         Err(e) => tracing::error!("Failed to save vital signs: {}", e),
                     }
                 }
-                opengp::ui::app::PendingClinicalSaveData::FamilyHistory { patient_id, entry } => {
+                opengp_ui::ui::app::PendingClinicalSaveData::FamilyHistory { patient_id, entry } => {
                     match clinical_service.add_family_history(
                         patient_id,
                         entry.relative_relationship,
@@ -365,7 +364,7 @@ async fn run_tui(
                         Err(e) => tracing::error!("Failed to save family history: {}", e),
                     }
                 }
-                opengp::ui::app::PendingClinicalSaveData::Consultation {
+                opengp_ui::ui::app::PendingClinicalSaveData::Consultation {
                     patient_id,
                     practitioner_id,
                     appointment_id,
@@ -464,7 +463,7 @@ async fn run_tui(
                 Event::Key(key) => {
                     let action = app.handle_key_event(key);
 
-                    if action == opengp::ui::keybinds::Action::Quit || app.should_quit() {
+                    if action == opengp_ui::ui::keybinds::Action::Quit || app.should_quit() {
                         break;
                     }
                 }

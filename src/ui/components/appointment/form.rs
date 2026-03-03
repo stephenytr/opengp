@@ -598,6 +598,12 @@ impl AppointmentForm {
             }
         }
 
+        // Ctrl+Enter submits the form from any field.
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Enter {
+            self.validate();
+            return Some(AppointmentFormAction::Submit);
+        }
+
         if self.focused_field.is_textarea() {
             let ratatui_key = to_ratatui_key(key);
             let textarea = match self.focused_field {
@@ -644,10 +650,6 @@ impl AppointmentForm {
                 Some(AppointmentFormAction::FocusChanged)
             }
             KeyCode::Enter => {
-                if key.modifiers.contains(KeyModifiers::CONTROL) {
-                    self.validate();
-                    return Some(AppointmentFormAction::Submit);
-                }
                 if self.focused_field == AppointmentFormField::Patient
                     && !self.patient_picker.is_open()
                 {
