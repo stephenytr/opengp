@@ -3,11 +3,11 @@ use chrono::Utc;
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
-use crate::domain::user::{Permission, Role, User, UserRepository, UserRepositoryError};
+use opengp_domain::domain::user::{Permission, Role, User, UserRepository, UserRepositoryError};
 use crate::infrastructure::database::helpers::{
-use crate::infrastructure::database::sqlx_to_user_error;
     bytes_to_uuid, datetime_to_string, string_to_datetime, uuid_to_bytes,
 };
+use crate::infrastructure::database::sqlx_to_user_error;
 
 #[derive(Debug, FromRow)]
 struct UserRow {
@@ -124,7 +124,7 @@ impl UserRepository for SqlxUserRepository {
         ))
         .fetch_all(&self.pool)
         .await
-            .map_err(sqlx_to_user_error)?;
+        .map_err(sqlx_to_user_error)?;
 
         rows.into_iter().map(|r| r.into_user()).collect()
     }
@@ -139,7 +139,7 @@ impl UserRepository for SqlxUserRepository {
         .bind(role_str)
         .fetch_all(&self.pool)
         .await
-            .map_err(sqlx_to_user_error)?;
+        .map_err(sqlx_to_user_error)?;
 
         rows.into_iter().map(|r| r.into_user()).collect()
     }

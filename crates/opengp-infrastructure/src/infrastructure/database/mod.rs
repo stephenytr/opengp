@@ -20,7 +20,7 @@ use std::time::Duration;
 use tracing::info;
 
 // Re-export DatabaseConfig from config crate
-pub use crate::config::DatabaseConfig;
+pub use opengp_config::DatabaseConfig;
 
 /// Create a configured database connection pool
 ///
@@ -129,7 +129,7 @@ mod tests {
 }
 
 // Re-export domain error types for infrastructure use
-pub use crate::domain::error::RepositoryError;
+pub use opengp_domain::domain::error::RepositoryError;
 
 /// Convert sqlx::Error to domain RepositoryError
 pub fn sqlx_to_repository_error(err: sqlx::Error) -> RepositoryError {
@@ -137,26 +137,26 @@ pub fn sqlx_to_repository_error(err: sqlx::Error) -> RepositoryError {
 }
 
 /// Convert sqlx::Error to domain AuditRepositoryError
-pub fn sqlx_to_audit_error(err: sqlx::Error) -> crate::domain::audit::AuditRepositoryError {
-    crate::domain::audit::AuditRepositoryError::Database(err.to_string())
+pub fn sqlx_to_audit_error(err: sqlx::Error) -> opengp_domain::domain::audit::AuditRepositoryError {
+    opengp_domain::domain::audit::AuditRepositoryError::Database(err.to_string())
 }
 
 /// Convert sqlx::Error to domain clinical RepositoryError
-pub fn sqlx_to_clinical_error(err: sqlx::Error) -> crate::domain::clinical::RepositoryError {
-    crate::domain::clinical::RepositoryError::Database(err.to_string())
+pub fn sqlx_to_clinical_error(err: sqlx::Error) -> opengp_domain::domain::clinical::RepositoryError {
+    opengp_domain::domain::clinical::RepositoryError::Database(err.to_string())
 }
 
 /// Convert sqlx::Error to domain patient RepositoryError
-pub fn sqlx_to_patient_error(err: sqlx::Error) -> crate::domain::patient::RepositoryError {
-    crate::domain::patient::RepositoryError::Database(err.to_string())
+pub fn sqlx_to_patient_error(err: sqlx::Error) -> opengp_domain::domain::patient::RepositoryError {
+    opengp_domain::domain::patient::RepositoryError::Database(err.to_string())
 }
 
 /// Convert sqlx::Error to domain user UserRepositoryError
-pub fn sqlx_to_user_error(err: sqlx::Error) -> crate::domain::user::UserRepositoryError {
-    crate::domain::user::UserRepositoryError::Database(err.to_string())
+pub fn sqlx_to_user_error(err: sqlx::Error) -> opengp_domain::domain::user::UserRepositoryError {
+    opengp_domain::domain::user::UserRepositoryError::Database(err.to_string())
 }
 
 /// Convert sqlx::Error to domain appointment RepositoryError
-pub fn sqlx_to_appointment_error(err: sqlx::Error) -> crate::domain::appointment::RepositoryError {
-    crate::domain::appointment::RepositoryError::Database(err.to_string())
+pub fn sqlx_to_appointment_error(err: sqlx::Error) -> opengp_domain::domain::appointment::RepositoryError {
+    opengp_domain::domain::appointment::RepositoryError::Database(err.to_string())
 }

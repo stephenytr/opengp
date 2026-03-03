@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
-use crate::domain::appointment::{
+use opengp_domain::domain::appointment::{
     Appointment, AppointmentCalendarQuery, AppointmentRepository, AppointmentSearchCriteria,
     AppointmentStatus, AppointmentType, CalendarAppointment, RepositoryError,
 };

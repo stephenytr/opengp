@@ -5,7 +5,7 @@ use chrono::NaiveDate;
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
-use crate::domain::patient::{
+use opengp_domain::domain::patient::{
     Address, EmergencyContact, Gender, Patient, PatientRepository, RepositoryError,
 };
 use crate::infrastructure::crypto::EncryptionService;
@@ -152,7 +152,7 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(id_bytes)
         .fetch_optional(&self.pool)
         .await
-            .map_err(sqlx_to_patient_error)?;
+        .map_err(sqlx_to_patient_error)?;
 
         match row {
             Some(r) => Ok(Some(r.into_patient(&self.crypto)?)),
@@ -163,8 +163,7 @@ impl PatientRepository for SqlxPatientRepository {
     async fn find_by_medicare(&self, medicare: &str) -> Result<Option<Patient>, RepositoryError> {
         // With encryption, we cannot search directly on medicare number
         // We must fetch all patients and filter in memory
-        let patients = self.list_active().await
-            .map_err(sqlx_to_patient_error)?;
+        let patients = self.list_active().await?;
         Ok(patients.into_iter().find(|p| {
             p.medicare_number
                 .as_ref()
@@ -180,7 +179,7 @@ impl PatientRepository for SqlxPatientRepository {
         ))
         .fetch_all(&self.pool)
         .await
-            .map_err(sqlx_to_patient_error)?;
+        .map_err(sqlx_to_patient_error)?;
 
         rows.into_iter()
             .map(|r| r.into_patient(&self.crypto))
@@ -188,8 +187,7 @@ impl PatientRepository for SqlxPatientRepository {
     }
 
     async fn search(&self, query: &str) -> Result<Vec<Patient>, RepositoryError> {
-        let all_patients = self.list_active().await
-            .map_err(sqlx_to_patient_error)?;
+        let all_patients = self.list_active().await?;
 
         if query.is_empty() {
             return Ok(all_patients);

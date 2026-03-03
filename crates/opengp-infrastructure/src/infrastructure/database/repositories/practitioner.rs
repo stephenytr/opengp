@@ -3,7 +3,7 @@ use chrono::Utc;
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
-use crate::domain::user::{Practitioner, PractitionerRepository, RepositoryError};
+use opengp_domain::domain::user::{Practitioner, PractitionerRepository, RepositoryError};
 use crate::infrastructure::database::helpers::{bytes_to_uuid, uuid_to_bytes};
 
 #[derive(Debug, FromRow)]

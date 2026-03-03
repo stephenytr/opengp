@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
-use crate::domain::audit::{AuditAction, AuditEntry, AuditRepository, AuditRepositoryError};
+use opengp_domain::domain::audit::{AuditAction, AuditEntry, AuditRepository, AuditRepositoryError};
 use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::sqlx_to_audit_error;
 

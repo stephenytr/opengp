@@ -5,8 +5,8 @@ use chrono::{DateTime, Utc};
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
-use crate::domain::clinical::RepositoryError;
-use crate::domain::clinical::{
+use opengp_domain::domain::clinical::RepositoryError;
+use opengp_domain::domain::clinical::{
     Allergy, AllergyRepository, AllergyType, ConditionStatus, Consultation, ConsultationRepository,
     FamilyHistory, FamilyHistoryRepository, MedicalHistory, MedicalHistoryRepository,
     Severity, SocialHistory, SocialHistoryRepository, VitalSigns, VitalSignsRepository,
@@ -338,7 +338,7 @@ impl SocialHistoryRow {
         self,
         crypto: &EncryptionService,
     ) -> Result<SocialHistory, RepositoryError> {
-        use crate::domain::clinical::{AlcoholStatus, SmokingStatus};
+        use opengp_domain::domain::clinical::{AlcoholStatus, SmokingStatus};
 
         let notes = match self.notes {
             Some(encrypted) => {
