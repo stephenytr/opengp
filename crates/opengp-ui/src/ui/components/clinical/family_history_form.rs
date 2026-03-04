@@ -1,6 +1,6 @@
 //! Family History Form Component
 //!
-//! Form for creating new patient family history entries.
+//! Form for creating or editing patient family history entries.
 
 use std::collections::HashMap;
 
@@ -9,6 +9,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
+use uuid::Uuid;
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::theme::Theme;
@@ -16,6 +17,13 @@ use crate::ui::widgets::{
     FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::FamilyHistory;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FormMode {
+    #[default]
+    Create,
+    Edit(Uuid),
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FamilyHistoryFormField {
@@ -65,6 +73,7 @@ pub enum FamilyHistoryFormAction {
 }
 
 pub struct FamilyHistoryForm {
+    mode: FormMode,
     pub relationship: TextareaState,
     pub condition: TextareaState,
     pub age_at_diagnosis: TextareaState,
@@ -79,6 +88,7 @@ pub struct FamilyHistoryForm {
 impl Clone for FamilyHistoryForm {
     fn clone(&self) -> Self {
         Self {
+            mode: self.mode,
             relationship: self.relationship.clone(),
             condition: self.condition.clone(),
             age_at_diagnosis: self.age_at_diagnosis.clone(),
@@ -147,6 +157,7 @@ impl FormNavigation for FamilyHistoryForm {
 impl FamilyHistoryForm {
     pub fn new(theme: Theme) -> Self {
         Self {
+            mode: FormMode::Create,
             relationship: TextareaState::new("Relationship *")
                 .with_height_mode(HeightMode::SingleLine),
             condition: TextareaState::new("Condition *").with_height_mode(HeightMode::SingleLine),
@@ -158,6 +169,46 @@ impl FamilyHistoryForm {
             errors: HashMap::new(),
             theme,
             scroll: ScrollableFormState::new(),
+        }
+    }
+
+    pub fn from_family_history(family_history: FamilyHistory, theme: Theme) -> Self {
+        let mut form = Self::new(theme);
+        form.mode = FormMode::Edit(family_history.id);
+
+        form.set_value(
+            FamilyHistoryFormField::Relationship,
+            family_history.relative_relationship,
+        );
+
+        form.set_value(
+            FamilyHistoryFormField::Condition,
+            family_history.condition,
+        );
+
+        if let Some(age) = family_history.age_at_diagnosis {
+            form.set_value(
+                FamilyHistoryFormField::AgeAtDiagnosis,
+                age.to_string(),
+            );
+        }
+
+        if let Some(notes) = family_history.notes {
+            form.set_value(FamilyHistoryFormField::Notes, notes);
+        }
+
+        form
+    }
+
+
+    pub fn is_edit_mode(&self) -> bool {
+        matches!(self.mode, FormMode::Edit(_))
+    }
+
+    pub fn family_history_id(&self) -> Option<Uuid> {
+        match self.mode {
+            FormMode::Edit(id) => Some(id),
+            FormMode::Create => None,
         }
     }
 
@@ -322,8 +373,14 @@ impl Widget for FamilyHistoryForm {
             return;
         }
 
+        let title = if self.is_edit_mode() {
+            " Edit Family History "
+        } else {
+            " New Family History "
+        };
+
         let block = Block::default()
-            .title(" New Family History ")
+            .title(title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(self.theme.colors.border));
 

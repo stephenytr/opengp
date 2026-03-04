@@ -40,7 +40,7 @@ impl ConsultationFormField {
     }
 
     pub fn is_required(&self) -> bool {
-        false
+        true
     }
 
     pub fn is_textarea(&self) -> bool {
@@ -150,6 +150,22 @@ impl ConsultationForm {
 
     fn validate_field(&mut self, field: &ConsultationFormField) {
         self.errors.remove(field);
+
+        let value = self.get_value(*field);
+
+        match field {
+            ConsultationFormField::Reason => {
+                if value.trim().is_empty() {
+                    self.errors.insert(*field, "Reason is required".to_string());
+                }
+            }
+            ConsultationFormField::ClinicalNotes => {
+                if value.trim().is_empty() {
+                    self.errors
+                        .insert(*field, "Clinical notes are required".to_string());
+                }
+            }
+        }
     }
 
     pub fn error(&self, field: ConsultationFormField) -> Option<&String> {

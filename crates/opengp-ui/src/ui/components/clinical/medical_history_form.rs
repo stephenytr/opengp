@@ -1,6 +1,6 @@
 //! Medical History Form Component
 //!
-//! Form for creating a new medical history entry for a patient.
+//! Form for creating or editing a medical history entry for a patient.
 
 use std::collections::HashMap;
 
@@ -9,6 +9,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
+use uuid::Uuid;
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
@@ -18,6 +19,13 @@ use crate::ui::widgets::{
     HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::{ConditionStatus, MedicalHistory, Severity};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FormMode {
+    #[default]
+    Create,
+    Edit(Uuid),
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MedicalHistoryFormField {
@@ -65,6 +73,7 @@ impl MedicalHistoryFormField {
 }
 
 pub struct MedicalHistoryForm {
+    mode: FormMode,
     pub condition: TextareaState,
     pub diagnosis_date: TextareaState,
     pub status_dropdown: DropdownWidget,
@@ -79,6 +88,7 @@ pub struct MedicalHistoryForm {
 impl Clone for MedicalHistoryForm {
     fn clone(&self) -> Self {
         Self {
+            mode: self.mode,
             condition: self.condition.clone(),
             diagnosis_date: self.diagnosis_date.clone(),
             status_dropdown: self.status_dropdown.clone(),
@@ -116,6 +126,7 @@ impl MedicalHistoryForm {
         ];
 
         Self {
+            mode: FormMode::Create,
             condition: TextareaState::new("Condition").with_height_mode(HeightMode::SingleLine),
             diagnosis_date: TextareaState::new("DiagnosisDate")
                 .with_height_mode(HeightMode::SingleLine),
@@ -126,6 +137,49 @@ impl MedicalHistoryForm {
             errors: HashMap::new(),
             theme,
             scroll: ScrollableFormState::new(),
+        }
+    }
+
+    pub fn from_medical_history(medical_history: MedicalHistory, theme: Theme) -> Self {
+        let mut form = Self::new(theme);
+        form.mode = FormMode::Edit(medical_history.id);
+
+        form.set_value(
+            MedicalHistoryFormField::Condition,
+            medical_history.condition.clone(),
+        );
+
+        if let Some(diagnosis_date) = medical_history.diagnosis_date {
+            form.set_value(
+                MedicalHistoryFormField::DiagnosisDate,
+                format!("{}", diagnosis_date.format("%d/%m/%Y")),
+            );
+        }
+
+        form.set_value(
+            MedicalHistoryFormField::Status,
+            medical_history.status.to_string(),
+        );
+
+        if let Some(severity) = medical_history.severity {
+            form.set_value(MedicalHistoryFormField::Severity, severity.to_string());
+        }
+
+        if let Some(notes) = medical_history.notes {
+            form.set_value(MedicalHistoryFormField::Notes, notes);
+        }
+
+        form
+    }
+
+    pub fn is_edit_mode(&self) -> bool {
+        matches!(self.mode, FormMode::Edit(_))
+    }
+
+    pub fn medical_history_id(&self) -> Option<Uuid> {
+        match self.mode {
+            FormMode::Edit(id) => Some(id),
+            FormMode::Create => None,
         }
     }
 
@@ -439,8 +493,14 @@ impl Widget for MedicalHistoryForm {
             return;
         }
 
+        let title = if self.is_edit_mode() {
+            " Edit Medical History "
+        } else {
+            " New Medical History "
+        };
+
         let block = Block::default()
-            .title(" New Medical History ")
+            .title(title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(self.theme.colors.border));
 

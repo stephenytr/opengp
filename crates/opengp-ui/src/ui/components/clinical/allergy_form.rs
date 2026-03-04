@@ -1,14 +1,16 @@
 //! Allergy Form Component
 //!
-//! Form for creating new patient allergies.
+//! Form for creating or editing a patient allergy.
 
 use std::collections::HashMap;
 
+use chrono::NaiveDate;
 use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
+use uuid::Uuid;
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
@@ -18,6 +20,13 @@ use crate::ui::widgets::{
     FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::{Allergy, AllergyType, Severity};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FormMode {
+    #[default]
+    Create,
+    Edit(Uuid),
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AllergyFormField {
@@ -84,14 +93,15 @@ pub enum AllergyFormAction {
 }
 
 pub struct AllergyForm {
-    pub allergen: TextareaState,
-    pub allergy_type: Option<AllergyType>,
-    pub severity: Option<Severity>,
-    pub reaction: TextareaState,
-    pub onset_date: Option<String>,
-    pub notes: TextareaState,
-    pub focused_field: AllergyFormField,
-    pub is_valid: bool,
+    mode: FormMode,
+    allergen: TextareaState,
+    allergy_type: Option<AllergyType>,
+    severity: Option<Severity>,
+    reaction: TextareaState,
+    onset_date: Option<NaiveDate>,
+    notes: TextareaState,
+    focused_field: AllergyFormField,
+    is_valid: bool,
     errors: HashMap<AllergyFormField, String>,
     theme: Theme,
     scroll: ScrollableFormState,
@@ -103,11 +113,12 @@ pub struct AllergyForm {
 impl Clone for AllergyForm {
     fn clone(&self) -> Self {
         Self {
+            mode: self.mode,
             allergen: self.allergen.clone(),
             allergy_type: self.allergy_type,
             severity: self.severity,
             reaction: self.reaction.clone(),
-            onset_date: self.onset_date.clone(),
+            onset_date: self.onset_date,
             notes: self.notes.clone(),
             focused_field: self.focused_field,
             is_valid: self.is_valid,
@@ -136,6 +147,7 @@ impl AllergyForm {
         ];
 
         Self {
+            mode: FormMode::Create,
             allergen: TextareaState::new("Allergen *").with_height_mode(HeightMode::SingleLine),
             allergy_type: None,
             severity: None,
@@ -157,6 +169,50 @@ impl AllergyForm {
         }
     }
 
+    pub fn from_allergy(allergy: Allergy, theme: Theme) -> Self {
+        let mut form = Self::new(theme);
+        form.mode = FormMode::Edit(allergy.id);
+
+        form.allergen = TextareaState::new("Allergen *")
+            .with_height_mode(HeightMode::SingleLine)
+            .with_value(allergy.allergen);
+
+        form.allergy_type = Some(allergy.allergy_type);
+        form.allergy_type_dropdown
+            .set_value(&allergy.allergy_type.to_string());
+
+        form.severity = Some(allergy.severity);
+        form.severity_dropdown
+            .set_value(&allergy.severity.to_string());
+
+        if let Some(reaction) = allergy.reaction {
+            form.reaction = TextareaState::new("Reaction")
+                .with_height_mode(HeightMode::SingleLine)
+                .with_value(reaction);
+        }
+
+        form.onset_date = allergy.onset_date;
+
+        if let Some(notes) = allergy.notes {
+            form.notes = TextareaState::new("Notes")
+                .with_height_mode(HeightMode::FixedLines(3))
+                .with_value(notes);
+        }
+
+        form
+    }
+
+    pub fn is_edit_mode(&self) -> bool {
+        matches!(self.mode, FormMode::Edit(_))
+    }
+
+    pub fn allergy_id(&self) -> Option<Uuid> {
+        match self.mode {
+            FormMode::Edit(id) => Some(id),
+            FormMode::Create => None,
+        }
+    }
+
     pub fn focused_field(&self) -> AllergyFormField {
         self.focused_field
     }
@@ -175,7 +231,10 @@ impl AllergyForm {
                 .map(|s: &str| s.to_string())
                 .unwrap_or_default(),
             AllergyFormField::Reaction => self.reaction.value(),
-            AllergyFormField::OnsetDate => self.onset_date.clone().unwrap_or_default(),
+            AllergyFormField::OnsetDate => self
+                .onset_date
+                .map(|d| d.format("%d/%m/%Y").to_string())
+                .unwrap_or_default(),
             AllergyFormField::Notes => self.notes.value(),
         }
     }
@@ -201,7 +260,19 @@ impl AllergyForm {
                     .with_value(value);
             }
             AllergyFormField::OnsetDate => {
-                self.onset_date = if value.is_empty() { None } else { Some(value) };
+                let parsed = if value.is_empty() {
+                    None
+                } else {
+                    parse_date(&value)
+                };
+                self.onset_date = parsed;
+                if !value.is_empty() && parsed.is_none() {
+                    self.errors.insert(
+                        AllergyFormField::OnsetDate,
+                        "Use dd/mm/yyyy format".to_string(),
+                    );
+                    return;
+                }
             }
             AllergyFormField::Notes => {
                 self.notes = TextareaState::new("Notes")
@@ -271,8 +342,8 @@ impl AllergyForm {
             return Some(AllergyFormAction::Submit);
         }
 
-        // Ctrl+Tab exits the form from any field.
-        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Tab {
+        // Esc cancels the form
+        if key.code == KeyCode::Esc {
             return Some(AllergyFormAction::Cancel);
         }
 
@@ -280,7 +351,7 @@ impl AllergyForm {
             if let Some(action) = self.date_picker.handle_key(key) {
                 match action {
                     DatePickerAction::Selected(date) => {
-                        self.onset_date = Some(date.format("%Y-%m-%d").to_string());
+                        self.onset_date = Some(date);
                         self.validate_field(&AllergyFormField::OnsetDate);
                         return Some(AllergyFormAction::ValueChanged);
                     }
@@ -294,9 +365,7 @@ impl AllergyForm {
 
         if self.focused_field == AllergyFormField::OnsetDate {
             if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
-                let current_value = self.onset_date.as_deref().and_then(|d| {
-                    parse_date(d).or_else(|| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
-                });
+                let current_value = self.onset_date;
                 self.date_picker.open(current_value);
                 return Some(AllergyFormAction::FocusChanged);
             }
@@ -393,7 +462,7 @@ impl AllergyForm {
             allergy_type: self.allergy_type.unwrap_or(AllergyType::Other),
             severity: self.severity.unwrap_or(Severity::Moderate),
             reaction: Some(self.reaction.value()).filter(|s| !s.is_empty()),
-            onset_date: self.onset_date.as_deref().and_then(|d| parse_date(d)),
+            onset_date: self.onset_date,
             notes: Some(self.notes.value()).filter(|s| !s.is_empty()),
             is_active: true,
             created_at: chrono::Utc::now(),
