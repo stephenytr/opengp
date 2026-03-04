@@ -11,15 +11,15 @@ use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
-use opengp_domain::domain::patient::{Address, EmergencyContact, NewPatientData, Patient};
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
 use crate::ui::widgets::{
     format_date, parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption,
-    DropdownWidget, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+    DropdownWidget, FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
 };
+use opengp_domain::domain::patient::{Address, EmergencyContact, NewPatientData, Patient};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormMode {
@@ -223,6 +223,54 @@ impl Clone for PatientForm {
             concession_number: self.concession_number.clone(),
             preferred_language: self.preferred_language.clone(),
             date_picker: self.date_picker.clone(),
+        }
+    }
+}
+
+impl FormNavigation for PatientForm {
+    type FormField = FormField;
+
+    fn validate(&mut self) -> bool {
+        self.errors.clear();
+
+        for field in FormField::all() {
+            self.validate_field(&field);
+        }
+
+        self.errors.is_empty()
+    }
+
+    fn current_field(&self) -> Self::FormField {
+        self.focused_field
+    }
+
+    fn fields(&self) -> &[Self::FormField] {
+        &[]
+    }
+
+    fn set_current_field(&mut self, field: Self::FormField) {
+        self.focused_field = field;
+    }
+}
+
+impl PatientForm {
+    pub fn next_field(&mut self) {
+        let fields = FormField::all();
+        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
+            let next_idx = (current_idx + 1) % fields.len();
+            self.focused_field = fields[next_idx];
+        }
+    }
+
+    pub fn prev_field(&mut self) {
+        let fields = FormField::all();
+        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
+            let prev_idx = if current_idx == 0 {
+                fields.len() - 1
+            } else {
+                current_idx - 1
+            };
+            self.focused_field = fields[prev_idx];
         }
     }
 }
@@ -643,26 +691,6 @@ impl PatientForm {
         self.focused_field = field;
     }
 
-    pub fn next_field(&mut self) {
-        let fields = FormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let next_idx = (current_idx + 1) % fields.len();
-            self.focused_field = fields[next_idx];
-        }
-    }
-
-    pub fn prev_field(&mut self) {
-        let fields = FormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let prev_idx = if current_idx == 0 {
-                fields.len() - 1
-            } else {
-                current_idx - 1
-            };
-            self.focused_field = fields[prev_idx];
-        }
-    }
-
     fn get_field_position(&self, field: FormField) -> (u16, u16) {
         let fields = FormField::all();
         let mut y: u16 = 0;
@@ -796,16 +824,6 @@ impl PatientForm {
             | FormField::InterpreterRequired
             | FormField::AtsiStatus => {}
         }
-    }
-
-    pub fn validate(&mut self) -> bool {
-        self.errors.clear();
-
-        for field in FormField::all() {
-            self.validate_field(&field);
-        }
-
-        self.errors.is_empty()
     }
 
     pub fn error(&self, field: FormField) -> Option<&String> {
