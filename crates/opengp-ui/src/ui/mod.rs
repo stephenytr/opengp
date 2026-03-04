@@ -15,6 +15,9 @@ pub mod theme;
 pub mod view_models;
 pub mod widgets;
 
+#[cfg(test)]
+mod tests;
+
 pub use app::App;
 pub use components::tabs::Tab;
 pub use error::{UiComponent, UiError};

@@ -128,9 +128,9 @@ impl Widget for AppointmentBlock {
         };
 
         let text_style = if self.is_selected {
-            Style::default().fg(ratatui::style::Color::Black).bold()
+            Style::default().fg(self.theme.colors.foreground).bold()
         } else {
-            Style::default().fg(ratatui::style::Color::Black)
+            Style::default().fg(self.theme.colors.foreground)
         };
 
         buf.set_string(
