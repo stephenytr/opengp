@@ -131,7 +131,9 @@ impl PatientRepository for MockPatientRepository {
             storage[pos] = patient.clone();
             Ok(patient)
         } else {
-            Err(PatientRepositoryError::NotFound)
+            Err(PatientRepositoryError::Base(
+                opengp_domain::domain::error::RepositoryError::NotFound,
+            ))
         }
     }
 
@@ -141,7 +143,9 @@ impl PatientRepository for MockPatientRepository {
             patient.is_active = false;
             Ok(())
         } else {
-            Err(PatientRepositoryError::NotFound)
+            Err(PatientRepositoryError::Base(
+                opengp_domain::domain::error::RepositoryError::NotFound,
+            ))
         }
     }
 }
