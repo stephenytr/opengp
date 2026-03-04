@@ -10,10 +10,12 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 
-use opengp_domain::domain::clinical::FamilyHistory;
 use crate::ui::input::to_ratatui_key;
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{HeightMode, ScrollableFormState, TextareaState, TextareaWidget};
+use crate::ui::widgets::{
+    FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+};
+use opengp_domain::domain::clinical::FamilyHistory;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FamilyHistoryFormField {
@@ -90,6 +92,53 @@ impl Clone for FamilyHistoryForm {
     }
 }
 
+impl FormNavigation for FamilyHistoryForm {
+    type FormField = FamilyHistoryFormField;
+
+    fn validate(&mut self) -> bool {
+        self.errors.clear();
+
+        for field in FamilyHistoryFormField::all() {
+            self.validate_field(&field);
+        }
+
+        self.is_valid = self.errors.is_empty();
+        self.is_valid
+    }
+
+    fn current_field(&self) -> Self::FormField {
+        self.focused_field
+    }
+
+    fn fields(&self) -> &[Self::FormField] {
+        &[]
+    }
+
+    fn set_current_field(&mut self, field: Self::FormField) {
+        self.focused_field = field;
+    }
+
+    fn next_field(&mut self) {
+        let fields = FamilyHistoryFormField::all();
+        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
+            let next_idx = (current_idx + 1) % fields.len();
+            self.focused_field = fields[next_idx];
+        }
+    }
+
+    fn prev_field(&mut self) {
+        let fields = FamilyHistoryFormField::all();
+        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
+            let prev_idx = if current_idx == 0 {
+                fields.len() - 1
+            } else {
+                current_idx - 1
+            };
+            self.focused_field = fields[prev_idx];
+        }
+    }
+}
+
 impl FamilyHistoryForm {
     pub fn new(theme: Theme) -> Self {
         Self {
@@ -109,26 +158,6 @@ impl FamilyHistoryForm {
 
     pub fn focused_field(&self) -> FamilyHistoryFormField {
         self.focused_field
-    }
-
-    pub fn next_field(&mut self) {
-        let fields = FamilyHistoryFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let next_idx = (current_idx + 1) % fields.len();
-            self.focused_field = fields[next_idx];
-        }
-    }
-
-    pub fn prev_field(&mut self) {
-        let fields = FamilyHistoryFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let prev_idx = if current_idx == 0 {
-                fields.len() - 1
-            } else {
-                current_idx - 1
-            };
-            self.focused_field = fields[prev_idx];
-        }
     }
 
     pub fn get_value(&self, field: FamilyHistoryFormField) -> String {

@@ -10,11 +10,13 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 
-use opengp_domain::domain::clinical::Consultation;
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{HeightMode, ScrollableFormState, TextareaState, TextareaWidget};
+use crate::ui::widgets::{
+    FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+};
+use opengp_domain::domain::clinical::Consultation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConsultationFormField {
@@ -125,26 +127,6 @@ impl ConsultationForm {
 
     pub fn focused_field(&self) -> ConsultationFormField {
         self.focused_field
-    }
-
-    pub fn next_field(&mut self) {
-        let fields = ConsultationFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let next_idx = (current_idx + 1) % fields.len();
-            self.focused_field = fields[next_idx];
-        }
-    }
-
-    pub fn prev_field(&mut self) {
-        let fields = ConsultationFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let prev_idx = if current_idx == 0 {
-                fields.len() - 1
-            } else {
-                current_idx - 1
-            };
-            self.focused_field = fields[prev_idx];
-        }
     }
 
     pub fn get_value(&self, field: ConsultationFormField) -> String {
@@ -270,6 +252,48 @@ impl ConsultationForm {
             updated_at: chrono::Utc::now(),
             created_by,
             updated_by: None,
+        }
+    }
+}
+
+impl FormNavigation for ConsultationForm {
+    type FormField = ConsultationFormField;
+
+    fn validate(&mut self) -> bool {
+        self.errors.clear();
+        self.is_valid = self.errors.is_empty();
+        self.is_valid
+    }
+
+    fn current_field(&self) -> Self::FormField {
+        self.focused_field
+    }
+
+    fn fields(&self) -> &[Self::FormField] {
+        &[]
+    }
+
+    fn set_current_field(&mut self, field: Self::FormField) {
+        self.focused_field = field;
+    }
+
+    fn next_field(&mut self) {
+        let fields = ConsultationFormField::all();
+        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
+            let next_idx = (current_idx + 1) % fields.len();
+            self.focused_field = fields[next_idx];
+        }
+    }
+
+    fn prev_field(&mut self) {
+        let fields = ConsultationFormField::all();
+        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
+            let prev_idx = if current_idx == 0 {
+                fields.len() - 1
+            } else {
+                current_idx - 1
+            };
+            self.focused_field = fields[prev_idx];
         }
     }
 }
