@@ -13,6 +13,7 @@ use sqlx::error::DatabaseError;
 use uuid::Uuid;
 
 use opengp_domain::domain::error::InfrastructureError;
+use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
 use opengp_domain::domain::patient::RepositoryError;
 
 /// Convert a UUID to a SQLite-compatible byte vector
@@ -62,8 +63,12 @@ pub fn uuid_to_bytes(id: &Uuid) -> Vec<u8> {
 /// assert_eq!(original, restored);
 /// ```
 pub fn bytes_to_uuid(bytes: &[u8]) -> Result<Uuid, RepositoryError> {
-    Uuid::from_slice(bytes)
-        .map_err(|e| RepositoryError::ConstraintViolation(format!("Invalid UUID bytes: {}", e)))
+    Uuid::from_slice(bytes).map_err(|e| {
+        RepositoryError::Base(BaseRepositoryError::ConstraintViolation(format!(
+            "Invalid UUID bytes: {}",
+            e
+        )))
+    })
 }
 
 /// Convert a DateTime to RFC3339 string format
@@ -155,20 +160,27 @@ pub fn map_db_error(db_err: Box<dyn DatabaseError>) -> RepositoryError {
 
     if err_msg.contains("UNIQUE constraint") {
         if err_msg.contains("medicare_number") {
-            RepositoryError::ConstraintViolation(
+            RepositoryError::Base(BaseRepositoryError::ConstraintViolation(
                 "Medicare number already exists in the system".to_string(),
-            )
+            ))
         } else {
-            RepositoryError::ConstraintViolation(
+            RepositoryError::Base(BaseRepositoryError::ConstraintViolation(
                 "Unique constraint violation: duplicate value".to_string(),
-            )
+            ))
         }
     } else if err_msg.contains("NOT NULL constraint") {
-        RepositoryError::ConstraintViolation("Required field is missing".to_string())
+        RepositoryError::Base(BaseRepositoryError::ConstraintViolation(
+            "Required field is missing".to_string(),
+        ))
     } else if err_msg.contains("CHECK constraint") {
-        RepositoryError::ConstraintViolation("Invalid value for field".to_string())
+        RepositoryError::Base(BaseRepositoryError::ConstraintViolation(
+            "Invalid value for field".to_string(),
+        ))
     } else {
-        RepositoryError::ConstraintViolation(format!("Database constraint violation: {}", err_msg))
+        RepositoryError::Base(BaseRepositoryError::ConstraintViolation(format!(
+            "Database constraint violation: {}",
+            err_msg
+        )))
     }
 }
 
@@ -233,7 +245,7 @@ mod tests {
         let result = bytes_to_uuid(&bytes);
         assert!(result.is_err());
         match result {
-            Err(RepositoryError::ConstraintViolation(msg)) => {
+            Err(RepositoryError::Base(BaseRepositoryError::ConstraintViolation(msg))) => {
                 assert!(msg.contains("Invalid UUID bytes"));
             }
             _ => panic!("Expected ConstraintViolation error"),
@@ -378,7 +390,7 @@ mod tests {
 /// when the error type is sqlx::Error and the return type is Result<T, RepositoryError>.
 /// It converts the sqlx error to a domain-friendly string representation.
 pub fn repo_err_from_sqlx(err: sqlx::Error) -> RepositoryError {
-    RepositoryError::Database(err.to_string())
+    RepositoryError::Base(BaseRepositoryError::Database(err.to_string()))
 }
 
 /// Generic sqlx error mapping function for any InfrastructureError type

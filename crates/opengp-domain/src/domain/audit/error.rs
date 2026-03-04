@@ -4,6 +4,12 @@ use uuid::Uuid;
 use crate::domain::error::RepositoryError as BaseRepositoryError;
 
 #[derive(Debug, Error)]
+pub enum AuditEmitterError {
+    #[error("Failed to emit audit entry: {0}")]
+    Emit(String),
+}
+
+#[derive(Debug, Error)]
 pub enum ValidationError {
     #[error("Invalid entity type: {0}")]
     InvalidEntityType(String),

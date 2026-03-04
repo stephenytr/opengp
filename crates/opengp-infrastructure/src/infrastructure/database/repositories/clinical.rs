@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
+use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
 use opengp_domain::domain::clinical::RepositoryError;
 use opengp_domain::domain::clinical::{
     Allergy, AllergyRepository, AllergyType, ConditionStatus, Consultation, ConsultationRepository,
@@ -19,7 +20,8 @@ fn uuid_to_bytes(id: &Uuid) -> Vec<u8> {
 }
 
 fn bytes_to_uuid(bytes: &[u8]) -> Result<Uuid, RepositoryError> {
-    Uuid::from_slice(bytes).map_err(|e| RepositoryError::Database(e.to_string()))
+    Uuid::from_slice(bytes)
+        .map_err(|e| RepositoryError::Base(BaseRepositoryError::Database(e.to_string())))
 }
 
 fn datetime_to_string(dt: &DateTime<Utc>) -> String {
@@ -308,7 +310,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
             .map_err(sqlx_to_clinical_error)?;
 
         if result.rows_affected() == 0 {
-            return Err(RepositoryError::NotFound(id));
+            return Err(RepositoryError::Base(BaseRepositoryError::NotFound));
         }
 
         Ok(())

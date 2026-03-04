@@ -3,7 +3,7 @@ use opengp::domain::appointment::{
     Appointment, AppointmentCalendarQuery, AppointmentRepository, AppointmentService,
     AppointmentStatus, AppointmentType,
 };
-use opengp::domain::audit::{AuditRepository, AuditService};
+use opengp::domain::audit::{AuditEmitter, AuditRepository, AuditService};
 use opengp::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
 use opengp::infrastructure::crypto::EncryptionService;
 use opengp::infrastructure::database::repositories::{
@@ -26,7 +26,7 @@ async fn setup_test_database() -> SqlitePool {
     pool
 }
 
-fn create_mock_audit_service(pool: &SqlitePool) -> Arc<AuditService> {
+fn create_mock_audit_service(pool: &SqlitePool) -> Arc<dyn AuditEmitter> {
     let audit_repository: Arc<dyn AuditRepository> =
         Arc::new(SqlxAuditRepository::new(pool.clone()));
     Arc::new(AuditService::new(audit_repository))

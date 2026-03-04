@@ -12,12 +12,12 @@ use super::error::ServiceError;
 use super::model::{Appointment, AppointmentStatus};
 use super::query::AppointmentCalendarQuery;
 use super::repository::AppointmentRepository;
-use crate::domain::audit::{AuditEntry, AuditService};
+use crate::domain::audit::{AuditEmitter, AuditEntry};
 
 service! {
     AppointmentService {
         repository: Arc<dyn AppointmentRepository>,
-        audit_service: Arc<AuditService>,
+        audit_service: Arc<dyn AuditEmitter>,
         calendar_query: Arc<dyn AppointmentCalendarQuery>,
     }
 }
@@ -104,7 +104,7 @@ impl AppointmentService {
     /// * `Ok(())` - Successfully logged
     /// * `Err(ServiceError)` - Failed to log audit entry
     async fn audit_log(&self, entry: AuditEntry) -> Result<(), ServiceError> {
-        self.audit_service.log(entry).await?;
+        self.audit_service.emit(entry).await.ok();
         Ok(())
     }
     /// Create a new appointment with overlap checking
@@ -658,10 +658,19 @@ impl AppointmentService {
 mod tests {
     use super::*;
     use crate::domain::appointment::{AppointmentType, RepositoryError};
-    use crate::domain::audit::{AuditRepository, AuditRepositoryError};
+    use crate::domain::audit::AuditEmitterError;
     use async_trait::async_trait;
     use chrono::Duration;
     use std::sync::Mutex;
+
+    struct NoOpAuditEmitter;
+
+    #[async_trait]
+    impl AuditEmitter for NoOpAuditEmitter {
+        async fn emit(&self, _entry: AuditEntry) -> Result<(), AuditEmitterError> {
+            Ok(())
+        }
+    }
 
     struct MockAppointmentRepository {
         appointments: Vec<Appointment>,
@@ -713,48 +722,6 @@ mod tests {
         }
     }
 
-    struct MockAuditRepository;
-
-    #[async_trait]
-    impl AuditRepository for MockAuditRepository {
-        async fn create(&self, entry: AuditEntry) -> Result<AuditEntry, AuditRepositoryError> {
-            Ok(entry)
-        }
-
-        async fn find_by_entity(
-            &self,
-            _entity_type: &str,
-            _entity_id: Uuid,
-        ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
-            Ok(vec![])
-        }
-
-        async fn find_by_user(
-            &self,
-            _user_id: Uuid,
-        ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
-            Ok(vec![])
-        }
-
-        async fn find_by_time_range(
-            &self,
-            _start_time: chrono::DateTime<Utc>,
-            _end_time: chrono::DateTime<Utc>,
-        ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
-            Ok(vec![])
-        }
-
-        async fn find_by_entity_and_time_range(
-            &self,
-            _entity_type: &str,
-            _entity_id: Uuid,
-            _start_time: chrono::DateTime<Utc>,
-            _end_time: chrono::DateTime<Utc>,
-        ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
-            Ok(vec![])
-        }
-    }
-
     struct MockCalendarQuery;
 
     #[async_trait]
@@ -778,7 +745,7 @@ mod tests {
                 created: Mutex::new(vec![]),
                 updated: Mutex::new(vec![]),
             }),
-            Arc::new(AuditService::new(Arc::new(MockAuditRepository))),
+            Arc::new(NoOpAuditEmitter),
             Arc::new(MockCalendarQuery),
         )
     }

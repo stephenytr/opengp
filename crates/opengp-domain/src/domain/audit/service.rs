@@ -1,16 +1,28 @@
+use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::service;
 
-use super::error::ServiceError;
+use super::emitter::AuditEmitter;
+use super::error::{AuditEmitterError, ServiceError};
 use super::model::AuditEntry;
 use super::repository::AuditRepository;
 
 service! {
     AuditService {
         repository: Arc<dyn AuditRepository>,
+    }
+}
+
+#[async_trait]
+impl AuditEmitter for AuditService {
+    async fn emit(&self, entry: AuditEntry) -> Result<(), AuditEmitterError> {
+        self.log(entry)
+            .await
+            .map(|_| ())
+            .map_err(|e| AuditEmitterError::Emit(e.to_string()))
     }
 }
 

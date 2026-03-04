@@ -1,7 +1,7 @@
 use chrono::{Duration, NaiveDate, Utc};
-use opengp::domain::audit::{AuditRepository, AuditService};
+use opengp::domain::audit::{AuditEmitter, AuditRepository, AuditService};
 use opengp::domain::clinical::{
-    ClinicalService, ConsultationRepository, NewConsultationData,
+    ClinicalRepositories, ClinicalService, ConsultationRepository, NewConsultationData,
 };
 use opengp::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
 use opengp::infrastructure::crypto::EncryptionService;
@@ -27,7 +27,7 @@ async fn setup_test_database() -> SqlitePool {
     pool
 }
 
-fn create_mock_audit_service(pool: &SqlitePool) -> Arc<AuditService> {
+fn create_mock_audit_service(pool: &SqlitePool) -> Arc<dyn AuditEmitter> {
     let audit_repository: Arc<dyn AuditRepository> =
         Arc::new(SqlxAuditRepository::new(pool.clone()));
     Arc::new(AuditService::new(audit_repository))
@@ -106,16 +106,16 @@ fn create_clinical_service(pool: &SqlitePool) -> ClinicalService {
 
     let audit_service = create_mock_audit_service(pool);
 
-    ClinicalService::new(
-        consultation_repo,
-        Arc::new(SqlxAllergyRepository::new(pool.clone(), crypto.clone())),
-        Arc::new(SqlxMedicalHistoryRepository::new(pool.clone(), crypto.clone())),
-        Arc::new(SqlxVitalSignsRepository::new(pool.clone(), crypto.clone())),
-        Arc::new(SqlxSocialHistoryRepository::new(pool.clone(), crypto.clone())),
-        Arc::new(SqlxFamilyHistoryRepository::new(pool.clone(), crypto.clone())),
-        patient_service,
-        audit_service,
-    )
+    let repos = ClinicalRepositories {
+        consultation: consultation_repo,
+        allergy: Arc::new(SqlxAllergyRepository::new(pool.clone(), crypto.clone())),
+        medical_history: Arc::new(SqlxMedicalHistoryRepository::new(pool.clone(), crypto.clone())),
+        vital_signs: Arc::new(SqlxVitalSignsRepository::new(pool.clone(), crypto.clone())),
+        social_history: Arc::new(SqlxSocialHistoryRepository::new(pool.clone(), crypto.clone())),
+        family_history: Arc::new(SqlxFamilyHistoryRepository::new(pool.clone(), crypto.clone())),
+    };
+
+    ClinicalService::new(repos, patient_service, audit_service)
 }
 
 #[tokio::test]

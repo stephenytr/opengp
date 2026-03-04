@@ -51,12 +51,12 @@ async fn main() -> Result<()> {
     let appointment_repo: Arc<dyn AppointmentCalendarQuery> = appointment_repo_impl.clone();
     
     // Create domain appointment service for status transitions
-    let audit_service = Arc::new(opengp_domain::domain::audit::AuditService::new(
+    let audit_service: std::sync::Arc<dyn opengp_domain::domain::audit::AuditEmitter> = Arc::new(opengp_domain::domain::audit::AuditService::new(
         Arc::new(opengp_infrastructure::infrastructure::database::repositories::audit::SqlxAuditRepository::new(db_pool.clone()))
     ));
     let domain_appointment_service = Arc::new(opengp_domain::domain::appointment::AppointmentService::new(
         appointment_repo_for_create.clone(),
-        audit_service,
+        audit_service.clone(),
         appointment_repo.clone(),
     ));
     
@@ -80,18 +80,19 @@ async fn main() -> Result<()> {
     let social_history_repo: Arc<dyn opengp_domain::domain::clinical::SocialHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxSocialHistoryRepository::new(db_pool.clone(), crypto.clone()));
     let family_history_repo: Arc<dyn opengp_domain::domain::clinical::FamilyHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxFamilyHistoryRepository::new(db_pool.clone(), crypto.clone()));
     
+    let clinical_repos = opengp_domain::domain::clinical::ClinicalRepositories {
+        consultation: consultation_repo,
+        allergy: allergy_repo,
+        medical_history: medical_history_repo,
+        vital_signs: vital_signs_repo,
+        social_history: social_history_repo,
+        family_history: family_history_repo,
+    };
     let clinical_service = Arc::new(opengp_ui::ui::services::ClinicalUiService::new(
         Arc::new(opengp_domain::domain::clinical::ClinicalService::new(
-            consultation_repo,
-            allergy_repo,
-            medical_history_repo,
-            vital_signs_repo,
-            social_history_repo,
-            family_history_repo,
+            clinical_repos,
             Arc::new(opengp_domain::domain::patient::PatientService::new(patient_repo.clone())),
-            Arc::new(opengp_domain::domain::audit::AuditService::new(
-                Arc::new(opengp_infrastructure::infrastructure::database::repositories::audit::SqlxAuditRepository::new(db_pool.clone()))
-            )),
+            audit_service,
         ))
     ));
 
