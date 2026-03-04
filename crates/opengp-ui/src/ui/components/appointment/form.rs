@@ -1,6 +1,6 @@
-//! Appointment Creation Form Component
+//! Appointment Creation/Editing Form Component
 //!
-//! Single-page form for creating new appointments.
+//! Single-page form for creating and editing appointments.
 //! Follows the PatientForm pattern with Tab/Shift+Tab navigation.
 
 use std::collections::HashMap;
@@ -18,11 +18,20 @@ use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::{
-    parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption, DropdownWidget,
-    FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, SearchableListAction,
-    SearchableListState, TextareaState, TextareaWidget,
+    format_date, parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption,
+    DropdownWidget, FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState,
+    SearchableListAction, SearchableListState, TextareaState, TextareaWidget,
 };
-use opengp_domain::domain::appointment::{AppointmentType, NewAppointmentData};
+use opengp_domain::domain::appointment::{
+    Appointment, AppointmentType, NewAppointmentData, UpdateAppointmentData,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FormMode {
+    #[default]
+    Create,
+    Edit(Uuid),
+}
 
 /// All fields in the appointment creation form, in tab order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -136,12 +145,13 @@ impl AppointmentFormData {
     }
 }
 
-/// Appointment creation form widget.
+/// Appointment creation/editing form widget.
 ///
 /// Mirrors the PatientForm pattern: Tab/Shift+Tab to navigate fields,
 /// Enter to submit, Esc to cancel.  Validation runs on submit and
 /// highlights required fields that are missing or malformed.
 pub struct AppointmentForm {
+    mode: FormMode,
     data: AppointmentFormData,
     date: TextareaState,
     start_time: TextareaState,
@@ -161,6 +171,7 @@ pub struct AppointmentForm {
 impl Clone for AppointmentForm {
     fn clone(&self) -> Self {
         Self {
+            mode: self.mode,
             data: self.data.clone(),
             date: self.date.clone(),
             start_time: self.start_time.clone(),
@@ -201,6 +212,7 @@ impl AppointmentForm {
         type_dropdown.set_value("Standard");
 
         Self {
+            mode: FormMode::Create,
             data: AppointmentFormData::empty(),
             date: TextareaState::new("Date * (YYYY-MM-DD)")
                 .with_height_mode(HeightMode::SingleLine),
@@ -217,6 +229,50 @@ impl AppointmentForm {
             patient_picker: SearchableListState::new(Vec::new()),
             practitioner_picker: SearchableListState::new(Vec::new()),
             date_picker: DatePickerPopup::new(),
+        }
+    }
+
+    pub fn from_appointment(appointment: Appointment, theme: Theme) -> Self {
+        let mut form = Self::new(theme);
+        form.mode = FormMode::Edit(appointment.id);
+
+        form.data.patient_id = Some(appointment.patient_id);
+        form.data.practitioner_id = Some(appointment.practitioner_id);
+
+        form.date = TextareaState::new("Date * (YYYY-MM-DD)")
+            .with_height_mode(HeightMode::SingleLine)
+            .with_value(format_date(appointment.start_time.date_naive()));
+
+        form.start_time = TextareaState::new("Start Time * (HH:MM)")
+            .with_height_mode(HeightMode::SingleLine)
+            .with_value(appointment.start_time.format("%H:%M").to_string());
+
+        form.reason = TextareaState::new("Reason")
+            .with_height_mode(HeightMode::SingleLine)
+            .with_value(appointment.reason.clone().unwrap_or_default());
+
+        form.notes = TextareaState::new("Notes")
+            .with_height_mode(HeightMode::FixedLines(3))
+            .with_value(appointment.notes.clone().unwrap_or_default());
+
+        form.type_dropdown
+            .set_value(&appointment.appointment_type.to_string());
+        form.data.appointment_type = appointment.appointment_type.to_string();
+
+        let duration_minutes = appointment.duration_minutes();
+        form.data.duration = duration_minutes.to_string();
+
+        form
+    }
+
+    pub fn is_edit_mode(&self) -> bool {
+        matches!(self.mode, FormMode::Edit(_))
+    }
+
+    pub fn appointment_id(&self) -> Option<Uuid> {
+        match self.mode {
+            FormMode::Edit(id) => Some(id),
+            FormMode::Create => None,
         }
     }
 
@@ -462,6 +518,43 @@ impl AppointmentForm {
         })
     }
 
+    pub fn to_update_appointment_data(&mut self) -> Option<(Uuid, UpdateAppointmentData)> {
+        let appointment_id = self.appointment_id()?;
+
+        if !self.validate() {
+            return None;
+        }
+
+        let appointment_type = self.data.appointment_type.parse::<AppointmentType>().ok();
+
+        let reason_str = self.reason.value();
+        let reason = if reason_str.trim().is_empty() {
+            None
+        } else {
+            Some(reason_str)
+        };
+
+        let notes_str = self.notes.value();
+        let notes = if notes_str.trim().is_empty() {
+            None
+        } else {
+            Some(notes_str)
+        };
+
+        let data = UpdateAppointmentData {
+            status: None,
+            appointment_type,
+            reason,
+            notes,
+            is_urgent: None,
+            confirmed: None,
+            reminder_sent: None,
+            cancellation_reason: None,
+        };
+
+        Some((appointment_id, data))
+    }
+
     // ── Key handling ─────────────────────────────────────────────────────────
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<AppointmentFormAction> {
@@ -675,8 +768,14 @@ impl Widget for AppointmentForm {
             return;
         }
 
+        let title = if self.is_edit_mode() {
+            " Edit Appointment "
+        } else {
+            " New Appointment "
+        };
+
         let block = Block::default()
-            .title(" New Appointment ")
+            .title(title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(self.theme.colors.border));
 
