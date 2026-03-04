@@ -294,7 +294,7 @@ impl FamilyHistoryForm {
 }
 
 impl Widget for FamilyHistoryForm {
-    fn render(mut self, area: Rect, buf: &mut Buffer) {
+    fn render(self, area: Rect, buf: &mut Buffer) {
         if area.is_empty() {
             return;
         }

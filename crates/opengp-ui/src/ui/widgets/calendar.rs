@@ -228,7 +228,7 @@ impl CalendarWidget {
 
         let cell_width = (area.width as usize / 7).max(2);
         let row_height = 2usize;
-        let (year, month) = self.current_month;
+        let (_year, month) = self.current_month;
 
         for day_index in 0..42 {
             if let Some(date) = self.day_at_index(day_index) {
@@ -270,7 +270,7 @@ impl CalendarWidget {
 
         let cell_width = (area.width as usize / 7).max(2);
         let row_height = 2usize;
-        let (year, month) = self.current_month;
+        let (_year, month) = self.current_month;
 
         for day_index in 0..42 {
             if let Some(date) = self.day_at_index(day_index) {

@@ -304,7 +304,7 @@ impl Widget for ConsultationForm {
         let fields = ConsultationFormField::all();
 
         let mut total_height: u16 = 0;
-        for field in &fields {
+        for _field in &fields {
             total_height += 4;
         }
         self.scroll.set_total_height(total_height);
