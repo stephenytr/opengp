@@ -14,7 +14,7 @@ use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+    FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::Consultation;
 
@@ -250,8 +250,33 @@ impl ConsultationForm {
     }
 }
 
+impl FormFieldMeta for ConsultationFormField {
+    fn label(&self) -> &'static str {
+        ConsultationFormField::label(self)
+    }
+
+    fn is_required(&self) -> bool {
+        ConsultationFormField::is_required(self)
+    }
+}
+
 impl FormNavigation for ConsultationForm {
     type FormField = ConsultationFormField;
+
+    fn get_error(&self, field: Self::FormField) -> Option<&str> {
+        self.errors.get(&field).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
+        match error {
+            Some(msg) => {
+                self.errors.insert(field, msg);
+            }
+            None => {
+                self.errors.remove(&field);
+            }
+        }
+    }
 
     fn validate(&mut self) -> bool {
         self.errors.clear();
@@ -263,32 +288,12 @@ impl FormNavigation for ConsultationForm {
         self.focused_field
     }
 
-    fn fields(&self) -> &[Self::FormField] {
-        &[]
+    fn fields(&self) -> Vec<Self::FormField> {
+        ConsultationFormField::all()
     }
 
     fn set_current_field(&mut self, field: Self::FormField) {
         self.focused_field = field;
-    }
-
-    fn next_field(&mut self) {
-        let fields = ConsultationFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let next_idx = (current_idx + 1) % fields.len();
-            self.focused_field = fields[next_idx];
-        }
-    }
-
-    fn prev_field(&mut self) {
-        let fields = ConsultationFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let prev_idx = if current_idx == 0 {
-                fields.len() - 1
-            } else {
-                current_idx - 1
-            };
-            self.focused_field = fields[prev_idx];
-        }
     }
 }
 

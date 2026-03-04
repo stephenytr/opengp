@@ -17,7 +17,8 @@ use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
 use crate::ui::widgets::{
     format_date, parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption,
-    DropdownWidget, FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+    DropdownWidget, FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, TextareaState,
+    TextareaWidget,
 };
 use opengp_domain::domain::patient::{Address, EmergencyContact, NewPatientData, Patient};
 
@@ -227,8 +228,33 @@ impl Clone for PatientForm {
     }
 }
 
+impl FormFieldMeta for FormField {
+    fn label(&self) -> &'static str {
+        FormField::label(self)
+    }
+
+    fn is_required(&self) -> bool {
+        FormField::is_required(self)
+    }
+}
+
 impl FormNavigation for PatientForm {
     type FormField = FormField;
+
+    fn get_error(&self, field: Self::FormField) -> Option<&str> {
+        self.errors.get(&field).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
+        match error {
+            Some(msg) => {
+                self.errors.insert(field, msg);
+            }
+            None => {
+                self.errors.remove(&field);
+            }
+        }
+    }
 
     fn validate(&mut self) -> bool {
         self.errors.clear();
@@ -244,34 +270,12 @@ impl FormNavigation for PatientForm {
         self.focused_field
     }
 
-    fn fields(&self) -> &[Self::FormField] {
-        &[]
+    fn fields(&self) -> Vec<Self::FormField> {
+        FormField::all()
     }
 
     fn set_current_field(&mut self, field: Self::FormField) {
         self.focused_field = field;
-    }
-}
-
-impl PatientForm {
-    pub fn next_field(&mut self) {
-        let fields = FormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let next_idx = (current_idx + 1) % fields.len();
-            self.focused_field = fields[next_idx];
-        }
-    }
-
-    pub fn prev_field(&mut self) {
-        let fields = FormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let prev_idx = if current_idx == 0 {
-                fields.len() - 1
-            } else {
-                current_idx - 1
-            };
-            self.focused_field = fields[prev_idx];
-        }
     }
 }
 

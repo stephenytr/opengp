@@ -21,7 +21,7 @@ pub use date_picker_popup::{DatePickerAction, DatePickerPopup};
 pub use date_utils::{format_date, format_user_input, is_valid_date, parse_date};
 pub use dropdown::{DropdownAction, DropdownOption, DropdownState, DropdownWidget};
 pub use form_field::{FieldType, FormField, FormFieldState};
-pub use form_navigation::FormNavigation;
+pub use form_navigation::{FormFieldMeta, FormNavigation};
 pub use list_nav::{list_handle_key, list_handle_mouse, ListNavAction};
 pub use loading::{LoadingIndicator, LoadingState, SpinnerStyle};
 pub use scrollable::ScrollableState;

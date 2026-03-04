@@ -13,7 +13,7 @@ use ratatui::widgets::{Block, Borders, Widget};
 use crate::ui::input::to_ratatui_key;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+    FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::FamilyHistory;
 
@@ -92,8 +92,33 @@ impl Clone for FamilyHistoryForm {
     }
 }
 
+impl FormFieldMeta for FamilyHistoryFormField {
+    fn label(&self) -> &'static str {
+        FamilyHistoryFormField::label(self)
+    }
+
+    fn is_required(&self) -> bool {
+        FamilyHistoryFormField::is_required(self)
+    }
+}
+
 impl FormNavigation for FamilyHistoryForm {
     type FormField = FamilyHistoryFormField;
+
+    fn get_error(&self, field: Self::FormField) -> Option<&str> {
+        self.errors.get(&field).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
+        match error {
+            Some(msg) => {
+                self.errors.insert(field, msg);
+            }
+            None => {
+                self.errors.remove(&field);
+            }
+        }
+    }
 
     fn validate(&mut self) -> bool {
         self.errors.clear();
@@ -110,32 +135,12 @@ impl FormNavigation for FamilyHistoryForm {
         self.focused_field
     }
 
-    fn fields(&self) -> &[Self::FormField] {
-        &[]
+    fn fields(&self) -> Vec<Self::FormField> {
+        FamilyHistoryFormField::all()
     }
 
     fn set_current_field(&mut self, field: Self::FormField) {
         self.focused_field = field;
-    }
-
-    fn next_field(&mut self) {
-        let fields = FamilyHistoryFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let next_idx = (current_idx + 1) % fields.len();
-            self.focused_field = fields[next_idx];
-        }
-    }
-
-    fn prev_field(&mut self) {
-        let fields = FamilyHistoryFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let prev_idx = if current_idx == 0 {
-                fields.len() - 1
-            } else {
-                current_idx - 1
-            };
-            self.focused_field = fields[prev_idx];
-        }
     }
 }
 

@@ -14,8 +14,8 @@ use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    parse_date, DropdownAction, DropdownOption, DropdownWidget, FormNavigation, HeightMode,
-    ScrollableFormState, TextareaState, TextareaWidget,
+    parse_date, DropdownAction, DropdownOption, DropdownWidget, FormFieldMeta, FormNavigation,
+    HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::{ConditionStatus, MedicalHistory, Severity};
 
@@ -345,8 +345,33 @@ impl MedicalHistoryForm {
     }
 }
 
+impl FormFieldMeta for MedicalHistoryFormField {
+    fn label(&self) -> &'static str {
+        MedicalHistoryFormField::label(self)
+    }
+
+    fn is_required(&self) -> bool {
+        MedicalHistoryFormField::is_required(self)
+    }
+}
+
 impl FormNavigation for MedicalHistoryForm {
     type FormField = MedicalHistoryFormField;
+
+    fn get_error(&self, field: Self::FormField) -> Option<&str> {
+        self.errors.get(&field).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
+        match error {
+            Some(msg) => {
+                self.errors.insert(field, msg);
+            }
+            None => {
+                self.errors.remove(&field);
+            }
+        }
+    }
 
     fn validate(&mut self) -> bool {
         self.errors.clear();
@@ -362,8 +387,8 @@ impl FormNavigation for MedicalHistoryForm {
         self.focused_field
     }
 
-    fn fields(&self) -> &[Self::FormField] {
-        &[]
+    fn fields(&self) -> Vec<Self::FormField> {
+        MedicalHistoryFormField::all()
     }
 
     fn set_current_field(&mut self, field: Self::FormField) {
@@ -372,26 +397,6 @@ impl FormNavigation for MedicalHistoryForm {
 }
 
 impl MedicalHistoryForm {
-    pub fn next_field(&mut self) {
-        let fields = MedicalHistoryFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let next_idx = (current_idx + 1) % fields.len();
-            self.focused_field = fields[next_idx];
-        }
-    }
-
-    pub fn prev_field(&mut self) {
-        let fields = MedicalHistoryFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let prev_idx = if current_idx == 0 {
-                fields.len() - 1
-            } else {
-                current_idx - 1
-            };
-            self.focused_field = fields[prev_idx];
-        }
-    }
-
     pub fn to_medical_history(
         &mut self,
         patient_id: uuid::Uuid,

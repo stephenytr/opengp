@@ -19,8 +19,8 @@ use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::{
     parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption, DropdownWidget,
-    FormNavigation, HeightMode, ScrollableFormState, SearchableListAction, SearchableListState,
-    TextareaState, TextareaWidget,
+    FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, SearchableListAction,
+    SearchableListState, TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::appointment::{AppointmentType, NewAppointmentData};
 
@@ -330,23 +330,6 @@ impl AppointmentForm {
             }
         }
         self.validate_field(&field);
-    }
-
-    // ── Navigation ───────────────────────────────────────────────────────────
-
-    pub fn next_field(&mut self) {
-        let fields = AppointmentFormField::all();
-        if let Some(idx) = fields.iter().position(|f| *f == self.focused_field) {
-            self.focused_field = fields[(idx + 1) % fields.len()];
-        }
-    }
-
-    pub fn prev_field(&mut self) {
-        let fields = AppointmentFormField::all();
-        if let Some(idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let prev = if idx == 0 { fields.len() - 1 } else { idx - 1 };
-            self.focused_field = fields[prev];
-        }
     }
 
     // ── Validation ───────────────────────────────────────────────────────────
@@ -1009,10 +992,33 @@ impl Widget for AppointmentForm {
     }
 }
 
-// ── FormNavigation Implementation ────────────────────────────────────────────
+impl FormFieldMeta for AppointmentFormField {
+    fn label(&self) -> &'static str {
+        AppointmentFormField::label(self)
+    }
+
+    fn is_required(&self) -> bool {
+        AppointmentFormField::is_required(self)
+    }
+}
 
 impl FormNavigation for AppointmentForm {
     type FormField = AppointmentFormField;
+
+    fn get_error(&self, field: Self::FormField) -> Option<&str> {
+        self.errors.get(&field).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
+        match error {
+            Some(msg) => {
+                self.errors.insert(field, msg);
+            }
+            None => {
+                self.errors.remove(&field);
+            }
+        }
+    }
 
     fn validate(&mut self) -> bool {
         self.errors.clear();
@@ -1028,8 +1034,8 @@ impl FormNavigation for AppointmentForm {
         self.focused_field
     }
 
-    fn fields(&self) -> &[Self::FormField] {
-        &[]
+    fn fields(&self) -> Vec<Self::FormField> {
+        AppointmentFormField::all()
     }
 
     fn set_current_field(&mut self, field: Self::FormField) {

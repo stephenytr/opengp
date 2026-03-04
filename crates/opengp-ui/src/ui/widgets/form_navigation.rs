@@ -1,7 +1,30 @@
+pub trait FormFieldMeta {
+    fn label(&self) -> &'static str;
+    fn is_required(&self) -> bool;
+}
+
 pub trait FormNavigation {
-    type FormField: Copy + PartialEq;
+    type FormField: Copy + PartialEq + FormFieldMeta;
+
+    fn fields(&self) -> Vec<Self::FormField>;
 
     fn validate(&mut self) -> bool;
+
+    fn current_field(&self) -> Self::FormField;
+
+    fn set_current_field(&mut self, field: Self::FormField);
+
+    fn get_error(&self, field: Self::FormField) -> Option<&str>;
+
+    fn set_error(&mut self, field: Self::FormField, error: Option<String>);
+
+    fn field_label(&self, field: Self::FormField) -> &'static str {
+        field.label()
+    }
+
+    fn field_is_required(&self, field: Self::FormField) -> bool {
+        field.is_required()
+    }
 
     fn next_field(&mut self) {
         let fields = self.fields();
@@ -36,10 +59,4 @@ pub trait FormNavigation {
             self.set_current_field(fields[prev_idx]);
         }
     }
-
-    fn current_field(&self) -> Self::FormField;
-
-    fn fields(&self) -> &[Self::FormField];
-
-    fn set_current_field(&mut self, field: Self::FormField);
 }

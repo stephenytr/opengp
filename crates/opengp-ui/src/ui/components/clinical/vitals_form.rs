@@ -14,7 +14,7 @@ use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+    FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::VitalSigns;
 
@@ -178,26 +178,6 @@ impl VitalSignsForm {
 
     pub fn focused_field(&self) -> VitalSignsFormField {
         self.focused_field
-    }
-
-    pub fn next_field(&mut self) {
-        let fields = VitalSignsFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let next_idx = (current_idx + 1) % fields.len();
-            self.focused_field = fields[next_idx];
-        }
-    }
-
-    pub fn prev_field(&mut self) {
-        let fields = VitalSignsFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let prev_idx = if current_idx == 0 {
-                fields.len() - 1
-            } else {
-                current_idx - 1
-            };
-            self.focused_field = fields[prev_idx];
-        }
     }
 
     pub fn get_value(&self, field: VitalSignsFormField) -> String {
@@ -593,8 +573,33 @@ impl VitalSignsForm {
     }
 }
 
+impl FormFieldMeta for VitalSignsFormField {
+    fn label(&self) -> &'static str {
+        VitalSignsFormField::label(self)
+    }
+
+    fn is_required(&self) -> bool {
+        VitalSignsFormField::is_required(self)
+    }
+}
+
 impl FormNavigation for VitalSignsForm {
     type FormField = VitalSignsFormField;
+
+    fn get_error(&self, field: Self::FormField) -> Option<&str> {
+        self.errors.get(&field).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
+        match error {
+            Some(msg) => {
+                self.errors.insert(field, msg);
+            }
+            None => {
+                self.errors.remove(&field);
+            }
+        }
+    }
 
     fn validate(&mut self) -> bool {
         self.errors.clear();
@@ -617,8 +622,8 @@ impl FormNavigation for VitalSignsForm {
         self.focused_field
     }
 
-    fn fields(&self) -> &[Self::FormField] {
-        &[]
+    fn fields(&self) -> Vec<Self::FormField> {
+        VitalSignsFormField::all()
     }
 
     fn set_current_field(&mut self, field: Self::FormField) {
