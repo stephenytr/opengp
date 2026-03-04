@@ -181,16 +181,10 @@ impl FamilyHistoryForm {
             family_history.relative_relationship,
         );
 
-        form.set_value(
-            FamilyHistoryFormField::Condition,
-            family_history.condition,
-        );
+        form.set_value(FamilyHistoryFormField::Condition, family_history.condition);
 
         if let Some(age) = family_history.age_at_diagnosis {
-            form.set_value(
-                FamilyHistoryFormField::AgeAtDiagnosis,
-                age.to_string(),
-            );
+            form.set_value(FamilyHistoryFormField::AgeAtDiagnosis, age.to_string());
         }
 
         if let Some(notes) = family_history.notes {
@@ -199,7 +193,6 @@ impl FamilyHistoryForm {
 
         form
     }
-
 
     pub fn is_edit_mode(&self) -> bool {
         matches!(self.mode, FormMode::Edit(_))
@@ -355,7 +348,7 @@ impl FamilyHistoryForm {
         created_by: uuid::Uuid,
     ) -> FamilyHistory {
         FamilyHistory {
-            id: uuid::Uuid::new_v4(),
+            id: self.family_history_id().unwrap_or_else(uuid::Uuid::new_v4),
             patient_id,
             relative_relationship: self.relationship.value(),
             condition: self.condition.value(),
