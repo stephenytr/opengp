@@ -13,16 +13,16 @@ use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
-use opengp_domain::domain::appointment::{AppointmentType, NewAppointmentData};
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::{
     parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption, DropdownWidget,
-    HeightMode, ScrollableFormState, SearchableListAction, SearchableListState, TextareaState,
-    TextareaWidget,
+    FormNavigation, HeightMode, ScrollableFormState, SearchableListAction, SearchableListState,
+    TextareaState, TextareaWidget,
 };
+use opengp_domain::domain::appointment::{AppointmentType, NewAppointmentData};
 
 /// All fields in the appointment creation form, in tab order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1015,6 +1015,34 @@ impl Widget for AppointmentForm {
         if self.date_picker.is_visible() {
             self.date_picker.render(area, buf);
         }
+    }
+}
+
+// ── FormNavigation Implementation ────────────────────────────────────────────
+
+impl FormNavigation for AppointmentForm {
+    type FormField = AppointmentFormField;
+
+    fn validate(&mut self) -> bool {
+        self.errors.clear();
+
+        for field in AppointmentFormField::all() {
+            self.validate_field(&field);
+        }
+
+        self.errors.is_empty()
+    }
+
+    fn current_field(&self) -> Self::FormField {
+        self.focused_field
+    }
+
+    fn fields(&self) -> &[Self::FormField] {
+        &[]
+    }
+
+    fn set_current_field(&mut self, field: Self::FormField) {
+        self.focused_field = field;
     }
 }
 
