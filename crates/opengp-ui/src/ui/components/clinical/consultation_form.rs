@@ -152,12 +152,6 @@ impl ConsultationForm {
         self.errors.remove(field);
     }
 
-    pub fn validate(&mut self) -> bool {
-        self.errors.clear();
-        self.is_valid = self.errors.is_empty();
-        self.is_valid
-    }
-
     pub fn error(&self, field: ConsultationFormField) -> Option<&String> {
         self.errors.get(&field)
     }

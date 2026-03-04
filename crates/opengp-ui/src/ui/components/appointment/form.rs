@@ -423,15 +423,6 @@ impl AppointmentForm {
         }
     }
 
-    /// Validate all fields and return true if the form is error-free.
-    pub fn validate(&mut self) -> bool {
-        self.errors.clear();
-        for field in AppointmentFormField::all() {
-            self.validate_field(&field);
-        }
-        self.errors.is_empty()
-    }
-
     pub fn error(&self, field: AppointmentFormField) -> Option<&String> {
         self.errors.get(&field)
     }

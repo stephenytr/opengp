@@ -423,24 +423,6 @@ impl VitalSignsForm {
         }
     }
 
-    /// Validates the form. Returns true if at least one measurement is filled and no field errors.
-    pub fn validate(&mut self) -> bool {
-        self.errors.clear();
-
-        for field in VitalSignsFormField::all() {
-            self.validate_field(&field);
-        }
-
-        if self.errors.is_empty() && !self.has_any_measurement() {
-            self.errors.insert(
-                VitalSignsFormField::SystolicBp,
-                "At least one measurement is required".to_string(),
-            );
-        }
-
-        self.errors.is_empty()
-    }
-
     /// Returns true if at least one numeric measurement field has a value.
     pub fn has_any_measurement(&self) -> bool {
         self.systolic_bp.is_some()

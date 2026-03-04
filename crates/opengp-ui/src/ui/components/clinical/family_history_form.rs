@@ -232,17 +232,6 @@ impl FamilyHistoryForm {
         }
     }
 
-    pub fn validate(&mut self) -> bool {
-        self.errors.clear();
-
-        for field in FamilyHistoryFormField::all() {
-            self.validate_field(&field);
-        }
-
-        self.is_valid = self.errors.is_empty();
-        self.is_valid
-    }
-
     pub fn error(&self, field: FamilyHistoryFormField) -> Option<&String> {
         self.errors.get(&field)
     }

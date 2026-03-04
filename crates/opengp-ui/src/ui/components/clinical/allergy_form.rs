@@ -161,30 +161,6 @@ impl AllergyForm {
         self.focused_field
     }
 
-    pub fn next_field(&mut self) {
-        let fields = AllergyFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let next_idx = (current_idx + 1) % fields.len();
-            self.focused_field = fields[next_idx];
-        }
-    }
-
-    pub fn prev_field(&mut self) {
-        let fields = AllergyFormField::all();
-        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
-            let prev_idx = if current_idx == 0 {
-                fields.len() - 1
-            } else {
-                current_idx - 1
-            };
-            self.focused_field = fields[prev_idx];
-        }
-    }
-
-    pub fn set_current_field(&mut self, field: AllergyFormField) {
-        self.focused_field = field;
-    }
-
     pub fn get_value(&self, field: AllergyFormField) -> String {
         match field {
             AllergyFormField::Allergen => self.allergen.value(),
