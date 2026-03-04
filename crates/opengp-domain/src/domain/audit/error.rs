@@ -60,3 +60,9 @@ impl From<BaseRepositoryError> for AuditRepositoryError {
         }
     }
 }
+
+impl crate::domain::error::InfrastructureError for AuditRepositoryError {
+    fn map_sqlx_error<E: std::error::Error + Send + Sync + 'static>(error: E) -> Self {
+        AuditRepositoryError::Database(error.to_string())
+    }
+}

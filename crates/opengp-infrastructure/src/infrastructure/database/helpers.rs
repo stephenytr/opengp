@@ -12,6 +12,7 @@ use chrono::{DateTime, Utc};
 use sqlx::error::DatabaseError;
 use uuid::Uuid;
 
+use opengp_domain::domain::error::InfrastructureError;
 use opengp_domain::domain::patient::RepositoryError;
 
 /// Convert a UUID to a SQLite-compatible byte vector
@@ -372,10 +373,77 @@ mod tests {
 }
 
 /// Convert a sqlx::Error to RepositoryError
-/// 
+///
 /// This function should be used in infrastructure layer instead of the `?` operator
 /// when the error type is sqlx::Error and the return type is Result<T, RepositoryError>.
 /// It converts the sqlx error to a domain-friendly string representation.
 pub fn repo_err_from_sqlx(err: sqlx::Error) -> RepositoryError {
     RepositoryError::Database(err.to_string())
 }
+
+/// Generic sqlx error mapping function for any InfrastructureError type
+///
+/// Maps sqlx database errors to domain error types that implement InfrastructureError.
+/// Analyzes constraint violations (UNIQUE, NOT NULL, CHECK) and provides meaningful
+/// error messages. Falls back to generic Database error for other sqlx errors.
+///
+/// # Arguments
+/// * `err` - The sqlx error to map
+///
+/// # Returns
+/// A domain error of type E that implements InfrastructureError
+///
+/// # Type Parameters
+/// * `E` - The target error type that implements InfrastructureError
+///
+/// # Supported Mappings
+/// - UNIQUE constraint violations → `E::map_sqlx_error` with constraint message
+/// - NOT NULL constraint violations → `E::map_sqlx_error` with constraint message
+/// - CHECK constraint violations → `E::map_sqlx_error` with constraint message
+/// - Other errors → `E::map_sqlx_error` with generic database error message
+///
+/// # Example
+/// ```ignore
+/// use opengp_infrastructure::infrastructure::database::helpers::map_sqlx_error;
+/// use opengp_domain::domain::error::RepositoryError;
+///
+/// // In a repository implementation
+/// let result = sqlx::query("INSERT INTO patients ...").execute(&pool).await;
+/// let err = result.map_err(|e| map_sqlx_error::<RepositoryError>(e))?;
+/// ```
+pub fn map_sqlx_error<E: InfrastructureError>(err: sqlx::Error) -> E {
+    // Try to extract database error details if available
+    if let sqlx::Error::Database(db_err) = &err {
+        let err_msg = db_err.message();
+
+        // Map specific constraint violations by creating a wrapper error
+        if err_msg.contains("UNIQUE constraint") {
+            let msg = if err_msg.contains("medicare_number") {
+                "Medicare number already exists in the system"
+            } else {
+                "Unique constraint violation: duplicate value"
+            };
+            return E::map_sqlx_error(ConstraintError(msg.to_string()));
+        } else if err_msg.contains("NOT NULL constraint") {
+            return E::map_sqlx_error(ConstraintError("Required field is missing".to_string()));
+        } else if err_msg.contains("CHECK constraint") {
+            return E::map_sqlx_error(ConstraintError("Invalid value for field".to_string()));
+        }
+    }
+
+    // Fall back to generic database error
+    E::map_sqlx_error(err)
+}
+
+/// Wrapper error type for constraint violations
+/// Implements std::error::Error to satisfy InfrastructureError trait bounds
+#[derive(Debug)]
+struct ConstraintError(String);
+
+impl std::fmt::Display for ConstraintError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for ConstraintError {}

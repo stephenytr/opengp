@@ -281,9 +281,9 @@ impl SocialHistoryComponent {
                 _ => None,
             }
         } else {
-            // Also handle Ctrl+M (some terminals send Ctrl+M instead of Ctrl+Enter)
+            // Ctrl+S saves the form
             if key.modifiers.contains(KeyModifiers::CONTROL)
-                && (key.code == KeyCode::Enter || matches!(key.code, KeyCode::Char('m')))
+                && matches!(key.code, KeyCode::Char('s'))
             {
                 return Some(SocialHistoryAction::Save);
             }
@@ -819,7 +819,7 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
     buf.set_string(
         inner.x + 1,
         help_y,
-        "Tab: Next  Ctrl+Enter: Save  Esc: Cancel",
+        "Tab: Next  Ctrl+S: Save  Esc: Cancel",
         Style::default().fg(component.theme.colors.disabled),
     );
 }

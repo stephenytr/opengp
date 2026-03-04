@@ -66,3 +66,9 @@ impl From<BaseRepositoryError> for RepositoryError {
         }
     }
 }
+
+impl crate::domain::error::InfrastructureError for RepositoryError {
+    fn map_sqlx_error<E: std::error::Error + Send + Sync + 'static>(error: E) -> Self {
+        RepositoryError::Database(error.to_string())
+    }
+}

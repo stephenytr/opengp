@@ -296,10 +296,8 @@ impl FamilyHistoryForm {
             return None;
         }
 
-        // Also handle Ctrl+M (some terminals send Ctrl+M instead of Ctrl+Enter)
-        if key.modifiers.contains(KeyModifiers::CONTROL)
-            && (key.code == KeyCode::Enter || matches!(key.code, KeyCode::Char('m')))
-        {
+        // Ctrl+S submits the form from any field
+        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
             self.validate();
             return Some(FamilyHistoryFormAction::Submit);
         }
@@ -429,7 +427,7 @@ impl Widget for FamilyHistoryForm {
         buf.set_string(
             inner.x + 1,
             help_y,
-            "Tab: Next | Ctrl+Enter: Submit | Esc: Cancel",
+            "Tab: Next | Ctrl+S: Submit | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
     }
@@ -568,13 +566,13 @@ mod tests {
     }
 
     #[test]
-    fn test_family_history_form_ctrl_enter_submits() {
+    fn test_family_history_form_ctrl_s_submits() {
         use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
         let theme = Theme::dark();
         let mut form = FamilyHistoryForm::new(theme);
 
-        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL);
+        let key = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
         let action = form.handle_key(key);
         assert!(matches!(action, Some(FamilyHistoryFormAction::Submit)));
     }

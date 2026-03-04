@@ -183,19 +183,8 @@ impl ConsultationForm {
             return None;
         }
 
-        // DEBUG: Log every key press to trace the issue
-        tracing::debug!(
-            "ConsultationForm received key: {:?}, modifiers: {:?}",
-            key.code,
-            key.modifiers
-        );
-
-        // Ctrl+Enter submits the form from any field.
-        // Also handle Ctrl+M (some terminals send Ctrl+M instead of Ctrl+Enter)
-        if key.modifiers.contains(KeyModifiers::CONTROL)
-            && (key.code == KeyCode::Enter || matches!(key.code, KeyCode::Char('m')))
-        {
-            tracing::info!("ConsultationForm: Ctrl+Enter detected, submitting");
+        // Ctrl+S submits the form from any field
+        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
             self.validate();
             return Some(ConsultationFormAction::Submit);
         }
@@ -243,10 +232,7 @@ impl ConsultationForm {
                 self.scroll.scroll_down();
                 Some(ConsultationFormAction::FocusChanged)
             }
-            KeyCode::Enter => {
-                // Enter does nothing - only Ctrl+Enter submits
-                None
-            }
+            KeyCode::Enter => None,
             KeyCode::Esc => Some(ConsultationFormAction::Cancel),
             _ => None,
         }
@@ -451,7 +437,7 @@ impl Widget for ConsultationForm {
         buf.set_string(
             inner.x + 1,
             help_y,
-            "Tab: Next | Ctrl+Enter: Submit | Esc: Cancel",
+            "Tab: Next | Ctrl+S: Submit | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
     }
@@ -524,13 +510,13 @@ mod tests {
     }
 
     #[test]
-    fn test_consultation_form_ctrl_enter_submits() {
+    fn test_consultation_form_ctrl_s_submits() {
         use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
         let theme = Theme::dark();
         let mut form = ConsultationForm::new(theme);
 
-        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL);
+        let key = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
         let action = form.handle_key(key);
         assert!(matches!(action, Some(ConsultationFormAction::Submit)));
     }

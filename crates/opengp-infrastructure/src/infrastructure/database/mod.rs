@@ -3,9 +3,11 @@
 //! This module manages database connections, connection pooling, and migrations.
 
 pub mod helpers;
+pub mod query;
 pub mod repositories;
 
 pub use helpers::*;
+pub use query::*;
 
 #[cfg(test)]
 pub mod mocks;

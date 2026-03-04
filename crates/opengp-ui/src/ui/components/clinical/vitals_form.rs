@@ -498,11 +498,8 @@ impl VitalSignsForm {
             return None;
         }
 
-        // Ctrl+Enter submits the form from any field.
-        // Also handle Ctrl+M (some terminals send Ctrl+M instead of Ctrl+Enter)
-        if key.modifiers.contains(KeyModifiers::CONTROL)
-            && (key.code == KeyCode::Enter || matches!(key.code, KeyCode::Char('m')))
-        {
+        // Ctrl+S submits the form from any field
+        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
             self.validate();
             return Some(VitalSignsFormAction::Submit);
         }
@@ -859,7 +856,7 @@ impl Widget for VitalSignsForm {
         buf.set_string(
             inner.x + 1,
             help_y,
-            "Tab: Next | Ctrl+Enter: Submit | Esc: Cancel",
+            "Tab: Next | Ctrl+S: Submit | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
     }
