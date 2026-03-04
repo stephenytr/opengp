@@ -653,3 +653,201 @@ impl AppointmentService {
         Ok(updated)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::appointment::{AppointmentType, RepositoryError};
+    use crate::domain::audit::{AuditRepository, AuditRepositoryError};
+    use async_trait::async_trait;
+    use chrono::Duration;
+    use std::sync::Mutex;
+
+    struct MockAppointmentRepository {
+        appointments: Vec<Appointment>,
+        overlapping: Vec<Appointment>,
+        created: Mutex<Vec<Appointment>>,
+        updated: Mutex<Vec<Appointment>>,
+    }
+
+    #[async_trait]
+    impl AppointmentRepository for MockAppointmentRepository {
+        async fn find_by_id(&self, id: Uuid) -> Result<Option<Appointment>, RepositoryError> {
+            Ok(self.appointments.iter().find(|a| a.id == id).cloned())
+        }
+
+        async fn create(&self, appointment: Appointment) -> Result<Appointment, RepositoryError> {
+            self.created
+                .lock()
+                .expect("created lock poisoned")
+                .push(appointment.clone());
+            Ok(appointment)
+        }
+
+        async fn update(&self, appointment: Appointment) -> Result<Appointment, RepositoryError> {
+            self.updated
+                .lock()
+                .expect("updated lock poisoned")
+                .push(appointment.clone());
+            Ok(appointment)
+        }
+
+        async fn delete(&self, _id: Uuid) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+
+        async fn find_by_criteria(
+            &self,
+            _criteria: &AppointmentSearchCriteria,
+        ) -> Result<Vec<Appointment>, RepositoryError> {
+            Ok(self.appointments.clone())
+        }
+
+        async fn find_overlapping(
+            &self,
+            _practitioner_id: Uuid,
+            _start_time: chrono::DateTime<Utc>,
+            _end_time: chrono::DateTime<Utc>,
+        ) -> Result<Vec<Appointment>, RepositoryError> {
+            Ok(self.overlapping.clone())
+        }
+    }
+
+    struct MockAuditRepository;
+
+    #[async_trait]
+    impl AuditRepository for MockAuditRepository {
+        async fn create(&self, entry: AuditEntry) -> Result<AuditEntry, AuditRepositoryError> {
+            Ok(entry)
+        }
+
+        async fn find_by_entity(
+            &self,
+            _entity_type: &str,
+            _entity_id: Uuid,
+        ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn find_by_user(
+            &self,
+            _user_id: Uuid,
+        ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn find_by_time_range(
+            &self,
+            _start_time: chrono::DateTime<Utc>,
+            _end_time: chrono::DateTime<Utc>,
+        ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn find_by_entity_and_time_range(
+            &self,
+            _entity_type: &str,
+            _entity_id: Uuid,
+            _start_time: chrono::DateTime<Utc>,
+            _end_time: chrono::DateTime<Utc>,
+        ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
+            Ok(vec![])
+        }
+    }
+
+    struct MockCalendarQuery;
+
+    #[async_trait]
+    impl AppointmentCalendarQuery for MockCalendarQuery {
+        async fn find_calendar_appointments(
+            &self,
+            _criteria: &AppointmentSearchCriteria,
+        ) -> Result<Vec<CalendarAppointment>, RepositoryError> {
+            Ok(vec![])
+        }
+    }
+
+    fn new_service(
+        appointments: Vec<Appointment>,
+        overlapping: Vec<Appointment>,
+    ) -> AppointmentService {
+        AppointmentService::new(
+            Arc::new(MockAppointmentRepository {
+                appointments,
+                overlapping,
+                created: Mutex::new(vec![]),
+                updated: Mutex::new(vec![]),
+            }),
+            Arc::new(AuditService::new(Arc::new(MockAuditRepository))),
+            Arc::new(MockCalendarQuery),
+        )
+    }
+
+    fn test_new_appointment_data(
+        practitioner_id: Uuid,
+        start_time: chrono::DateTime<Utc>,
+    ) -> NewAppointmentData {
+        NewAppointmentData {
+            patient_id: Uuid::new_v4(),
+            practitioner_id,
+            start_time,
+            duration: Duration::minutes(15),
+            appointment_type: AppointmentType::Standard,
+            reason: Some("Checkup".to_string()),
+            is_urgent: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_appointment_prevents_double_booking() {
+        let practitioner_id = Uuid::new_v4();
+        let start_time = Utc::now() + Duration::hours(1);
+        let overlapping = Appointment::new(
+            Uuid::new_v4(),
+            practitioner_id,
+            start_time,
+            Duration::minutes(15),
+            AppointmentType::Standard,
+            Some(Uuid::new_v4()),
+        );
+
+        let service = new_service(vec![], vec![overlapping]);
+
+        let result = service
+            .create_appointment(
+                test_new_appointment_data(practitioner_id, start_time),
+                Uuid::new_v4(),
+            )
+            .await;
+
+        assert!(matches!(result, Err(ServiceError::Conflict(_))));
+    }
+
+    #[tokio::test]
+    async fn test_reschedule_allows_existing_appointment_when_excluded() {
+        let practitioner_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let original_start = Utc::now() + Duration::hours(2);
+
+        let existing = Appointment::new(
+            Uuid::new_v4(),
+            practitioner_id,
+            original_start,
+            Duration::minutes(15),
+            AppointmentType::Standard,
+            Some(user_id),
+        );
+
+        let service = new_service(vec![existing.clone()], vec![existing.clone()]);
+
+        let new_start = original_start + Duration::hours(1);
+        let result = service
+            .reschedule_appointment(existing.id, new_start, 30, user_id)
+            .await;
+
+        assert!(result.is_ok());
+        let updated = result.expect("reschedule should succeed when only self overlaps");
+        assert_eq!(updated.start_time, new_start);
+        assert_eq!(updated.end_time, new_start + Duration::minutes(30));
+    }
+}

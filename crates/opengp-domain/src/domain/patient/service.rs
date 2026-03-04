@@ -103,3 +103,148 @@ impl PatientService {
         Ok(patients)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::patient::{Address, Gender, PatientRepository, RepositoryError};
+    use async_trait::async_trait;
+    use chrono::NaiveDate;
+    use std::sync::Mutex;
+
+    struct MockPatientRepository {
+        existing_patients: Vec<Patient>,
+        created_patients: Mutex<Vec<Patient>>,
+    }
+
+    #[async_trait]
+    impl PatientRepository for MockPatientRepository {
+        async fn find_by_id(&self, id: Uuid) -> Result<Option<Patient>, RepositoryError> {
+            Ok(self.existing_patients.iter().find(|p| p.id == id).cloned())
+        }
+
+        async fn find_by_medicare(&self, medicare: &str) -> Result<Option<Patient>, RepositoryError> {
+            Ok(self
+                .existing_patients
+                .iter()
+                .find(|p| p.medicare_number.as_deref() == Some(medicare))
+                .cloned())
+        }
+
+        async fn list_active(&self) -> Result<Vec<Patient>, RepositoryError> {
+            Ok(self.existing_patients.clone())
+        }
+
+        async fn search(&self, query: &str) -> Result<Vec<Patient>, RepositoryError> {
+            Ok(self
+                .existing_patients
+                .iter()
+                .filter(|p| p.first_name.contains(query) || p.last_name.contains(query))
+                .cloned()
+                .collect())
+        }
+
+        async fn create(&self, patient: Patient) -> Result<Patient, RepositoryError> {
+            self.created_patients
+                .lock()
+                .expect("created_patients lock poisoned")
+                .push(patient.clone());
+            Ok(patient)
+        }
+
+        async fn update(&self, patient: Patient) -> Result<Patient, RepositoryError> {
+            Ok(patient)
+        }
+
+        async fn deactivate(&self, _id: Uuid) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+    }
+
+    fn create_new_patient_data(medicare_number: Option<&str>) -> NewPatientData {
+        NewPatientData {
+            ihi: Some("8003600000000000".to_string()),
+            medicare_number: medicare_number.map(ToString::to_string),
+            medicare_irn: Some(1),
+            medicare_expiry: None,
+            title: None,
+            first_name: "Sam".to_string(),
+            middle_name: None,
+            last_name: "Test".to_string(),
+            preferred_name: None,
+            date_of_birth: NaiveDate::from_ymd_opt(1988, 5, 20).expect("valid date"),
+            gender: Gender::Other,
+            address: Address::default(),
+            phone_home: None,
+            phone_mobile: Some("0400000000".to_string()),
+            email: None,
+            emergency_contact: None,
+            concession_type: None,
+            concession_number: None,
+            preferred_language: Some("English".to_string()),
+            interpreter_required: Some(false),
+            aboriginal_torres_strait_islander: None,
+        }
+    }
+
+    fn create_existing_patient_with_medicare(medicare_number: &str) -> Patient {
+        Patient::new(
+            "Alex".to_string(),
+            "Existing".to_string(),
+            NaiveDate::from_ymd_opt(1970, 1, 1).expect("valid date"),
+            Gender::Male,
+            Some("8003601111111111".to_string()),
+            Some(medicare_number.to_string()),
+            Some(1),
+            None,
+            None,
+            None,
+            None,
+            Address::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("English".to_string()),
+            Some(false),
+            None,
+        )
+        .expect("valid existing patient")
+    }
+
+    #[tokio::test]
+    async fn test_register_patient_rejects_duplicate_medicare_number() {
+        let duplicate_medicare = "1234567890";
+        let repo = Arc::new(MockPatientRepository {
+            existing_patients: vec![create_existing_patient_with_medicare(duplicate_medicare)],
+            created_patients: Mutex::new(vec![]),
+        });
+        let service = PatientService::new(repo);
+
+        let result = service
+            .register_patient(create_new_patient_data(Some(duplicate_medicare)))
+            .await;
+
+        assert!(matches!(result, Err(ServiceError::DuplicatePatient)));
+    }
+
+    #[tokio::test]
+    async fn test_register_patient_allows_unique_medicare_number() {
+        let repo = Arc::new(MockPatientRepository {
+            existing_patients: vec![create_existing_patient_with_medicare("9999999999")],
+            created_patients: Mutex::new(vec![]),
+        });
+        let service = PatientService::new(repo);
+
+        let result = service
+            .register_patient(create_new_patient_data(Some("1234567890")))
+            .await;
+
+        assert!(result.is_ok());
+        let patient = result.expect("patient should be created");
+        assert_eq!(patient.first_name, "Sam");
+        assert_eq!(patient.medicare_number.as_deref(), Some("1234567890"));
+    }
+}
