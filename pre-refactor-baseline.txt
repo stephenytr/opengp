@@ -1,0 +1,208 @@
+   Compiling libc v0.2.181
+   Compiling tracing-core v0.1.36
+   Compiling tokio v1.49.0
+   Compiling tracing v0.1.44
+   Compiling getrandom v0.3.4
+   Compiling uuid v1.20.0
+   Compiling opengp-domain v0.1.0 (/home/stephenp/Documents/opengp/crates/opengp-domain)
+warning: trait `TestRepository` is more private than the item `SingleFieldService::repository`
+  --> crates/opengp-domain/src/domain/macros.rs:61:15
+   |
+61 |               $(pub $field: $type),*
+   |                 ^^^^^^^^^^^^^^^^^ field `SingleFieldService::repository` is reachable at visibility `pub(in crate::domain::macros)`
+...
+84 | /     service! {
+85 | |         SingleFieldService {
+86 | |             repository: Arc<dyn TestRepository>,
+87 | |         }
+88 | |     }
+   | |_____- in this macro invocation
+   |
+note: but trait `TestRepository` is only usable at visibility `pub(self)`
+  --> crates/opengp-domain/src/domain/macros.rs:79:5
+   |
+79 |     trait TestRepository: Send + Sync {}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: `#[warn(private_interfaces)]` on by default
+   = note: this warning originates in the macro `service` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: trait `TestRepository` is more private than the item `SingleFieldService::new`
+  --> crates/opengp-domain/src/domain/macros.rs:65:13
+   |
+65 |               pub fn new($($field: $type),*) -> Self {
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ associated function `SingleFieldService::new` is reachable at visibility `pub(in crate::domain::macros)`
+...
+84 | /     service! {
+85 | |         SingleFieldService {
+86 | |             repository: Arc<dyn TestRepository>,
+87 | |         }
+88 | |     }
+   | |_____- in this macro invocation
+   |
+note: but trait `TestRepository` is only usable at visibility `pub(self)`
+  --> crates/opengp-domain/src/domain/macros.rs:79:5
+   |
+79 |     trait TestRepository: Send + Sync {}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this warning originates in the macro `service` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: trait `TestRepository` is more private than the item `MultiFieldService::repository`
+  --> crates/opengp-domain/src/domain/macros.rs:61:15
+   |
+61 |               $(pub $field: $type),*
+   |                 ^^^^^^^^^^^^^^^^^ field `MultiFieldService::repository` is reachable at visibility `pub(in crate::domain::macros)`
+...
+91 | /     service! {
+92 | |         MultiFieldService {
+93 | |             repository: Arc<dyn TestRepository>,
+94 | |             audit_service: Arc<TestRepo>,
+...  |
+97 | |     }
+   | |_____- in this macro invocation
+   |
+note: but trait `TestRepository` is only usable at visibility `pub(self)`
+  --> crates/opengp-domain/src/domain/macros.rs:79:5
+   |
+79 |     trait TestRepository: Send + Sync {}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this warning originates in the macro `service` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: type `TestRepo` is more private than the item `MultiFieldService::audit_service`
+  --> crates/opengp-domain/src/domain/macros.rs:61:15
+   |
+61 |               $(pub $field: $type),*
+   |                 ^^^^^^^^^^^^^^^^^ field `MultiFieldService::audit_service` is reachable at visibility `pub(in crate::domain::macros)`
+...
+91 | /     service! {
+92 | |         MultiFieldService {
+93 | |             repository: Arc<dyn TestRepository>,
+94 | |             audit_service: Arc<TestRepo>,
+...  |
+97 | |     }
+   | |_____- in this macro invocation
+   |
+note: but type `TestRepo` is only usable at visibility `pub(self)`
+  --> crates/opengp-domain/src/domain/macros.rs:80:5
+   |
+80 |     struct TestRepo;
+   |     ^^^^^^^^^^^^^^^
+   = note: this warning originates in the macro `service` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: type `TestRepo` is more private than the item `MultiFieldService::query_service`
+  --> crates/opengp-domain/src/domain/macros.rs:61:15
+   |
+61 |               $(pub $field: $type),*
+   |                 ^^^^^^^^^^^^^^^^^ field `MultiFieldService::query_service` is reachable at visibility `pub(in crate::domain::macros)`
+...
+91 | /     service! {
+92 | |         MultiFieldService {
+93 | |             repository: Arc<dyn TestRepository>,
+94 | |             audit_service: Arc<TestRepo>,
+...  |
+97 | |     }
+   | |_____- in this macro invocation
+   |
+note: but type `TestRepo` is only usable at visibility `pub(self)`
+  --> crates/opengp-domain/src/domain/macros.rs:80:5
+   |
+80 |     struct TestRepo;
+   |     ^^^^^^^^^^^^^^^
+   = note: this warning originates in the macro `service` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: trait `TestRepository` is more private than the item `MultiFieldService::new`
+  --> crates/opengp-domain/src/domain/macros.rs:65:13
+   |
+65 |               pub fn new($($field: $type),*) -> Self {
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ associated function `MultiFieldService::new` is reachable at visibility `pub(in crate::domain::macros)`
+...
+91 | /     service! {
+92 | |         MultiFieldService {
+93 | |             repository: Arc<dyn TestRepository>,
+94 | |             audit_service: Arc<TestRepo>,
+...  |
+97 | |     }
+   | |_____- in this macro invocation
+   |
+note: but trait `TestRepository` is only usable at visibility `pub(self)`
+  --> crates/opengp-domain/src/domain/macros.rs:79:5
+   |
+79 |     trait TestRepository: Send + Sync {}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this warning originates in the macro `service` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: type `TestRepo` is more private than the item `MultiFieldService::new`
+  --> crates/opengp-domain/src/domain/macros.rs:65:13
+   |
+65 |               pub fn new($($field: $type),*) -> Self {
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ associated function `MultiFieldService::new` is reachable at visibility `pub(in crate::domain::macros)`
+...
+91 | /     service! {
+92 | |         MultiFieldService {
+93 | |             repository: Arc<dyn TestRepository>,
+94 | |             audit_service: Arc<TestRepo>,
+...  |
+97 | |     }
+   | |_____- in this macro invocation
+   |
+note: but type `TestRepo` is only usable at visibility `pub(self)`
+  --> crates/opengp-domain/src/domain/macros.rs:80:5
+   |
+80 |     struct TestRepo;
+   |     ^^^^^^^^^^^^^^^
+   = note: this warning originates in the macro `service` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: `opengp-domain` (lib test) generated 7 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.67s
+     Running unittests src/lib.rs (target/debug/deps/opengp_domain-84e090ef7c0020d6)
+
+running 34 tests
+test domain::appointment::model::tests::test_arrived_can_transition_to_in_progress ... ok
+test domain::appointment::model::tests::test_arrived_cannot_transition_to_completed ... ok
+test domain::appointment::model::tests::test_cancelled_cannot_transition_to_any_status ... ok
+test domain::appointment::model::tests::test_confirmed_can_transition_to_arrived ... ok
+test domain::appointment::model::tests::test_arrived_can_transition_to_no_show ... ok
+test domain::appointment::model::tests::test_completed_cannot_transition_to_any_status ... ok
+test domain::appointment::model::tests::test_confirmed_can_transition_to_cancelled ... ok
+test domain::appointment::model::tests::test_confirmed_cannot_transition_to_completed ... ok
+test domain::appointment::model::tests::test_in_progress_can_transition_to_completed ... ok
+test domain::appointment::model::tests::test_in_progress_cannot_transition_to_cancelled ... ok
+test domain::appointment::model::tests::test_no_show_cannot_transition_to_any_status ... ok
+test domain::appointment::model::tests::test_same_status_transition_is_idempotent ... ok
+test domain::appointment::model::tests::test_scheduled_can_transition_to_arrived ... ok
+test domain::appointment::model::tests::test_scheduled_can_transition_to_cancelled ... ok
+test domain::appointment::model::tests::test_scheduled_can_transition_to_confirmed ... ok
+test domain::appointment::model::tests::test_scheduled_can_transition_to_rescheduled ... ok
+test domain::appointment::model::tests::test_transition_error_message_format ... ok
+test domain::audit::model::tests::test_audit_action_display ... ok
+test domain::audit::model::tests::test_new_created_audit_entry ... ok
+test domain::audit::model::tests::test_new_cancelled_audit_entry ... ok
+test domain::audit::model::tests::test_new_rescheduled_audit_entry ... ok
+test domain::audit::model::tests::test_new_status_changed_audit_entry ... ok
+test domain::audit::model::tests::test_new_updated_audit_entry ... ok
+test domain::macros::tests::test_multi_field_service ... ok
+test domain::audit::service::tests::test_get_user_activity ... ok
+test domain::audit::service::tests::test_log_audit_entry ... ok
+test domain::clinical::service::tests::test_service_error_display ... ok
+test domain::prescription::service::tests::test_cancel_prescription ... ok
+test domain::prescription::service::tests::test_pbs_authority_validation ... ok
+test domain::prescription::service::tests::test_create_prescription ... ok
+test domain::prescription::service::tests::test_cancel_already_cancelled_prescription ... ok
+test domain::macros::tests::test_single_field_service ... ok
+test domain::prescription::service::tests::test_pbs_authority_validation_with_approval ... ok
+test domain::audit::service::tests::test_get_appointment_history ... ok
+
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests opengp_domain
+
+running 7 tests
+test crates/opengp-domain/src/domain/appointment/query.rs - domain::appointment::query::AppointmentCalendarQuery::find_calendar_appointments (line 33) ... ignored
+test crates/opengp-domain/src/domain/audit/mod.rs - domain::audit (line 34) ... ignored
+test crates/opengp-domain/src/domain/audit/service.rs - domain::audit::service::AuditService::get_appointment_history (line 57) ... ignored
+test crates/opengp-domain/src/domain/macros.rs - domain::macros (line 19) ... ignored
+test crates/opengp-domain/src/domain/macros.rs - domain::macros (line 9) ... ignored
+test crates/opengp-domain/src/domain/macros.rs - domain::macros::service (line 44) ... ignored
+test crates/opengp-domain/src/domain/audit/repository.rs - domain::audit::repository::AuditRepository (line 18) ... ok
+
+test result: ok. 1 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
