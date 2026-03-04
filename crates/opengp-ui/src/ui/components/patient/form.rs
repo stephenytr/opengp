@@ -1408,4 +1408,36 @@ mod tests {
         assert!(form.first_name.error.is_some());
         assert!(form.last_name.error.is_some());
     }
+
+    #[test]
+    fn test_to_new_patient_data_valid() {
+        let theme = Theme::dark();
+        let mut form = PatientForm::new(theme);
+
+        form.set_value(FormField::FirstName, "Alice".to_string());
+        form.set_value(FormField::LastName, "Smith".to_string());
+        form.set_value(FormField::DateOfBirth, "15/05/1990".to_string());
+        form.set_value(FormField::Gender, "Female".to_string());
+        form.set_value(FormField::Email, "alice@test.com".to_string());
+        form.set_value(FormField::PhoneMobile, "0412345678".to_string());
+        form.set_value(FormField::PreferredLanguage, "English".to_string());
+
+        let result = form.to_new_patient_data();
+        assert!(result.is_some());
+        let data = result.unwrap();
+        assert_eq!(data.first_name, "Alice");
+        assert_eq!(data.last_name, "Smith");
+    }
+
+    #[test]
+    fn test_to_new_patient_data_invalid_returns_none() {
+        let theme = Theme::dark();
+        let mut form = PatientForm::new(theme);
+
+        form.set_value(FormField::FirstName, "Alice".to_string());
+        form.set_value(FormField::LastName, "".to_string());
+
+        let result = form.to_new_patient_data();
+        assert!(result.is_none());
+    }
 }
