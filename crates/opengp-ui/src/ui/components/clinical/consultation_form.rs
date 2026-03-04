@@ -183,8 +183,19 @@ impl ConsultationForm {
             return None;
         }
 
+        // DEBUG: Log every key press to trace the issue
+        tracing::debug!(
+            "ConsultationForm received key: {:?}, modifiers: {:?}",
+            key.code,
+            key.modifiers
+        );
+
         // Ctrl+Enter submits the form from any field.
-        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Enter {
+        // Also handle Ctrl+M (some terminals send Ctrl+M instead of Ctrl+Enter)
+        if key.modifiers.contains(KeyModifiers::CONTROL)
+            && (key.code == KeyCode::Enter || matches!(key.code, KeyCode::Char('m')))
+        {
+            tracing::info!("ConsultationForm: Ctrl+Enter detected, submitting");
             self.validate();
             return Some(ConsultationFormAction::Submit);
         }
@@ -510,5 +521,17 @@ mod tests {
             form.get_value(ConsultationFormField::ClinicalNotes),
             "Patient reports headache"
         );
+    }
+
+    #[test]
+    fn test_consultation_form_ctrl_enter_submits() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let theme = Theme::dark();
+        let mut form = ConsultationForm::new(theme);
+
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL);
+        let action = form.handle_key(key);
+        assert!(matches!(action, Some(ConsultationFormAction::Submit)));
     }
 }

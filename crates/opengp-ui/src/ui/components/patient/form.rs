@@ -967,10 +967,11 @@ impl PatientForm {
         }
 
         // Ctrl+Enter submits the form from any field.
+        // Also handle Ctrl+M (some terminals send Ctrl+M instead of Ctrl+Enter)
         if key
             .modifiers
             .contains(crossterm::event::KeyModifiers::CONTROL)
-            && key.code == KeyCode::Enter
+            && (key.code == KeyCode::Enter || matches!(key.code, KeyCode::Char('m')))
         {
             self.validate();
             return Some(PatientFormAction::Submit);

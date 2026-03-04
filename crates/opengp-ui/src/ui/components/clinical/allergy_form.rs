@@ -337,7 +337,10 @@ impl AllergyForm {
         }
 
         // Ctrl+Enter submits the form from any field.
-        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Enter {
+        // Also handle Ctrl+M (some terminals send Ctrl+M instead of Ctrl+Enter)
+        if key.modifiers.contains(KeyModifiers::CONTROL)
+            && (key.code == KeyCode::Enter || matches!(key.code, KeyCode::Char('m')))
+        {
             self.validate();
             return Some(AllergyFormAction::Submit);
         }
