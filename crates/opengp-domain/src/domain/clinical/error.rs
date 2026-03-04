@@ -41,14 +41,8 @@ pub enum ServiceError {
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
-    #[error("Database error: {0}")]
-    Database(String),
-
-    #[error("Not found: {0}")]
-    NotFound(Uuid),
-
-    #[error("Constraint violation: {0}")]
-    ConstraintViolation(String),
+    #[error(transparent)]
+    Base(#[from] BaseRepositoryError),
 
     #[error("Encryption error: {0}")]
     Encryption(String),
@@ -57,18 +51,8 @@ pub enum RepositoryError {
     Decryption(String),
 }
 
-impl From<BaseRepositoryError> for RepositoryError {
-    fn from(err: BaseRepositoryError) -> Self {
-        match err {
-            BaseRepositoryError::Database(e) => RepositoryError::Database(e),
-            BaseRepositoryError::NotFound => RepositoryError::NotFound(Uuid::nil()),
-            BaseRepositoryError::ConstraintViolation(s) => RepositoryError::ConstraintViolation(s),
-        }
-    }
-}
-
 impl crate::domain::error::InfrastructureError for RepositoryError {
     fn map_sqlx_error<E: std::error::Error + Send + Sync + 'static>(error: E) -> Self {
-        RepositoryError::Database(error.to_string())
+        BaseRepositoryError::from_infrastructure(error).into()
     }
 }

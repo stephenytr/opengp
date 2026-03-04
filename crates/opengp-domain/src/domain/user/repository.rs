@@ -1,9 +1,8 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use super::error::UserRepositoryError;
+use super::error::RepositoryError;
 use super::model::{Practitioner, Role, User};
-pub use crate::domain::error::RepositoryError;
 
 /// Repository trait for practitioner persistence
 #[async_trait]
@@ -38,8 +37,8 @@ pub trait UserRepository: Send + Sync {
     /// # Returns
     /// * `Ok(Some(User))` - User found
     /// * `Ok(None)` - User not found
-    /// * `Err(UserRepositoryError)` - Database error
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, UserRepositoryError>;
+    /// * `Err(RepositoryError)` - Database error
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, RepositoryError>;
 
     /// Find user by username
     ///
@@ -49,8 +48,8 @@ pub trait UserRepository: Send + Sync {
     /// # Returns
     /// * `Ok(Some(User))` - User found
     /// * `Ok(None)` - User not found
-    /// * `Err(UserRepositoryError)` - Database error
-    async fn find_by_username(&self, username: &str) -> Result<Option<User>, UserRepositoryError>;
+    /// * `Err(RepositoryError)` - Database error
+    async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepositoryError>;
 
     /// List all users
     ///
@@ -58,8 +57,8 @@ pub trait UserRepository: Send + Sync {
     ///
     /// # Returns
     /// * `Ok(Vec<User>)` - List of all users
-    /// * `Err(UserRepositoryError)` - Database error
-    async fn find_all(&self) -> Result<Vec<User>, UserRepositoryError>;
+    /// * `Err(RepositoryError)` - Database error
+    async fn find_all(&self) -> Result<Vec<User>, RepositoryError>;
 
     /// Find users by role
     ///
@@ -68,8 +67,8 @@ pub trait UserRepository: Send + Sync {
     ///
     /// # Returns
     /// * `Ok(Vec<User>)` - List of users with the specified role
-    /// * `Err(UserRepositoryError)` - Database error
-    async fn find_by_role(&self, role: Role) -> Result<Vec<User>, UserRepositoryError>;
+    /// * `Err(RepositoryError)` - Database error
+    async fn find_by_role(&self, role: Role) -> Result<Vec<User>, RepositoryError>;
 
     /// Create a new user
     ///
@@ -78,8 +77,8 @@ pub trait UserRepository: Send + Sync {
     ///
     /// # Returns
     /// * `Ok(User)` - Created user with generated ID and timestamps
-    /// * `Err(UserRepositoryError)` - Database error or constraint violation
-    async fn create(&self, user: User) -> Result<User, UserRepositoryError>;
+    /// * `Err(RepositoryError)` - Database error or constraint violation
+    async fn create(&self, user: User) -> Result<User, RepositoryError>;
 
     /// Update an existing user
     ///
@@ -90,9 +89,9 @@ pub trait UserRepository: Send + Sync {
     ///
     /// # Returns
     /// * `Ok(User)` - Updated user
-    /// * `Err(UserRepositoryError::NotFound)` - User not found
-    /// * `Err(UserRepositoryError)` - Database error
-    async fn update(&self, user: User) -> Result<User, UserRepositoryError>;
+    /// * `Err(RepositoryError::NotFound)` - User not found
+    /// * `Err(RepositoryError)` - Database error
+    async fn update(&self, user: User) -> Result<User, RepositoryError>;
 
     /// Delete a user (soft delete)
     ///
@@ -104,7 +103,7 @@ pub trait UserRepository: Send + Sync {
     ///
     /// # Returns
     /// * `Ok(())` - User successfully deactivated
-    /// * `Err(UserRepositoryError::NotFound)` - User not found
-    /// * `Err(UserRepositoryError)` - Database error
-    async fn delete(&self, id: Uuid) -> Result<(), UserRepositoryError>;
+    /// * `Err(RepositoryError::NotFound)` - User not found
+    /// * `Err(RepositoryError)` - Database error
+    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError>;
 }
