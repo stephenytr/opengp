@@ -6,7 +6,6 @@ use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Constraint;
 use ratatui::layout::{Position, Rect};
-use ratatui::prelude::Stylize;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
@@ -457,8 +456,8 @@ impl Widget for PatientList {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use opengp_domain::domain::patient::Patient;
     use chrono::NaiveDate;
+    use opengp_domain::domain::patient::Patient;
 
     fn create_test_patient(first: &str, last: &str) -> PatientListItem {
         let patient = Patient::new(

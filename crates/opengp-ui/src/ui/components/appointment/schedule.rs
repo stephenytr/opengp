@@ -6,18 +6,17 @@ use chrono::Timelike;
 use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::prelude::Stylize;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
-use opengp_config::CalendarConfig;
-use opengp_domain::domain::appointment::{AppointmentStatus, CalendarAppointment, CalendarDayView};
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
 use crate::ui::layout::TIME_COLUMN_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PractitionerViewItem;
 use chrono::NaiveDate;
+use opengp_config::CalendarConfig;
+use opengp_domain::domain::appointment::{AppointmentStatus, CalendarAppointment, CalendarDayView};
 
 /// Actions that can be triggered from the schedule view
 #[derive(Debug, Clone)]
@@ -658,7 +657,7 @@ impl Schedule {
                         name_x,
                         content_y,
                         full_text,
-                        Style::default().fg(ratatui::style::Color::Black).bold(),
+                        Style::default().fg(self.theme.colors.foreground).bold(),
                     );
                 }
             }
@@ -683,7 +682,7 @@ impl Schedule {
                     if let Some(cell) = buf.cell_mut((col_x, row_y)) {
                         cell.set_bg(color);
                         if row == 0 {
-                            cell.set_fg(ratatui::style::Color::Black);
+                            cell.set_fg(self.theme.colors.foreground);
                         }
                     }
                 }
@@ -707,7 +706,7 @@ impl Schedule {
                         name_x,
                         content_y,
                         full_text,
-                        Style::default().fg(ratatui::style::Color::Black).bold(),
+                        Style::default().fg(self.theme.colors.foreground).bold(),
                     );
                 }
             }

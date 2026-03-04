@@ -1,11 +1,10 @@
-use opengp_domain::domain::clinical::VitalSigns;
 use crate::ui::layout::HEADER_HEIGHT;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::LoadingState;
 use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
+use opengp_domain::domain::clinical::VitalSigns;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Position, Rect};
-use ratatui::prelude::Stylize;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};

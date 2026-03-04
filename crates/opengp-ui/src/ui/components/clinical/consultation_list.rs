@@ -5,16 +5,15 @@
 use crossterm::event::{MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Position, Rect};
-use ratatui::prelude::Stylize;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
 use uuid::Uuid;
 
-use opengp_domain::domain::clinical::Consultation;
 use crate::ui::layout::HEADER_HEIGHT;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::LoadingState;
+use opengp_domain::domain::clinical::Consultation;
 
 pub struct ConsultationList {
     pub consultations: Vec<Consultation>,

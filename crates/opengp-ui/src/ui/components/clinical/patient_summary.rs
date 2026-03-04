@@ -5,15 +5,14 @@
 use chrono::Datelike;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Rect};
-use ratatui::prelude::Stylize;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
 use uuid::Uuid;
 
-use opengp_domain::domain::clinical::{Allergy, Consultation, MedicalHistory, VitalSigns};
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientListItem;
+use opengp_domain::domain::clinical::{Allergy, Consultation, MedicalHistory, VitalSigns};
 
 pub struct PatientSummaryComponent {
     pub patient: Option<PatientListItem>,

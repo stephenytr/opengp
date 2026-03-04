@@ -4,12 +4,11 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::prelude::Stylize;
 use ratatui::style::Style;
 use ratatui::widgets::Widget;
 
-use opengp_domain::domain::appointment::{AppointmentStatus, AppointmentType, CalendarAppointment};
 use crate::ui::theme::Theme;
+use opengp_domain::domain::appointment::{AppointmentStatus, AppointmentType, CalendarAppointment};
 
 /// Widget for rendering an appointment block in the calendar.
 ///
@@ -22,7 +21,6 @@ pub struct AppointmentBlock {
     /// Whether this appointment is currently selected
     is_selected: bool,
     /// Theme for colors
-    #[allow(dead_code)]
     theme: Theme,
 }
 
@@ -46,14 +44,14 @@ impl AppointmentBlock {
     /// Get the background color based on appointment status.
     fn get_status_color(&self) -> ratatui::style::Color {
         match self.appointment.status {
-            AppointmentStatus::Scheduled => ratatui::style::Color::Yellow,
-            AppointmentStatus::Confirmed => ratatui::style::Color::Green,
-            AppointmentStatus::Arrived => ratatui::style::Color::Blue,
-            AppointmentStatus::InProgress => ratatui::style::Color::Cyan,
-            AppointmentStatus::Completed => ratatui::style::Color::Gray,
-            AppointmentStatus::Cancelled => ratatui::style::Color::Red,
-            AppointmentStatus::NoShow => ratatui::style::Color::DarkGray,
-            AppointmentStatus::Rescheduled => ratatui::style::Color::LightRed,
+            AppointmentStatus::Scheduled => self.theme.colors.appointment_scheduled,
+            AppointmentStatus::Confirmed => self.theme.colors.appointment_confirmed,
+            AppointmentStatus::Arrived => self.theme.colors.appointment_arrived,
+            AppointmentStatus::InProgress => self.theme.colors.appointment_in_progress,
+            AppointmentStatus::Completed => self.theme.colors.appointment_completed,
+            AppointmentStatus::Cancelled => self.theme.colors.appointment_cancelled,
+            AppointmentStatus::NoShow => self.theme.colors.appointment_dna,
+            AppointmentStatus::Rescheduled => self.theme.colors.appointment_scheduled,
         }
     }
 
