@@ -610,10 +610,7 @@ impl VitalSignsForm {
                 self.scroll.scroll_down();
                 Some(VitalSignsFormAction::FocusChanged)
             }
-            KeyCode::Enter => {
-                self.validate();
-                Some(VitalSignsFormAction::Submit)
-            }
+            KeyCode::Enter => None,
             KeyCode::Esc => Some(VitalSignsFormAction::Cancel),
             _ => None,
         }

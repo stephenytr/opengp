@@ -1,4 +1,3 @@
-use opengp_domain::domain::clinical::{AlcoholStatus, ExerciseFrequency, SmokingStatus};
 use crate::ui::input::to_ratatui_key;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
@@ -6,6 +5,7 @@ use crate::ui::widgets::{
     ScrollableFormState, TextareaState, TextareaWidget,
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use opengp_domain::domain::clinical::{AlcoholStatus, ExerciseFrequency, SmokingStatus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -388,7 +388,7 @@ impl SocialHistoryComponent {
                     self.scroll.scroll_down();
                     Some(SocialHistoryAction::FocusChanged)
                 }
-                KeyCode::Enter => Some(SocialHistoryAction::Save),
+                KeyCode::Enter => None,
                 KeyCode::Esc => {
                     self.stop_editing();
                     Some(SocialHistoryAction::Cancel)

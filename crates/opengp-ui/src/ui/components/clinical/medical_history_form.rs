@@ -389,10 +389,7 @@ impl MedicalHistoryForm {
                 self.scroll.scroll_down();
                 Some(MedicalHistoryFormAction::FocusChanged)
             }
-            KeyCode::Enter => {
-                self.validate();
-                Some(MedicalHistoryFormAction::Submit)
-            }
+            KeyCode::Enter => None,
             KeyCode::Esc => Some(MedicalHistoryFormAction::Cancel),
             _ => None,
         }
@@ -652,7 +649,7 @@ impl Widget for MedicalHistoryForm {
         buf.set_string(
             inner.x + 1,
             help_y,
-            "Tab: Next | Shift+Tab: Prev | Ctrl+Enter: Submit | Enter in notes: Newline | Esc: Cancel",
+            "Tab: Next | Shift+Tab: Prev | Ctrl+Enter: Submit | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
     }

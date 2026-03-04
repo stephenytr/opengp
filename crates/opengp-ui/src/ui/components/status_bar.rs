@@ -95,7 +95,7 @@ impl StatusBar {
     pub fn patient_form(theme: Theme) -> Self {
         let mut bar = Self::new(theme);
         bar.set_left("New Patient");
-        bar.set_center("Tab: Next Field | Enter: Submit | Ctrl+S: Save");
+        bar.set_center("Tab: Next Field | Ctrl+Enter: Submit | Esc: Cancel");
         bar.set_right("Esc: Cancel");
         bar
     }

@@ -729,8 +729,7 @@ impl AppointmentForm {
                     self.practitioner_picker.open();
                     return Some(AppointmentFormAction::FocusChanged);
                 }
-                self.validate();
-                Some(AppointmentFormAction::Submit)
+                None
             }
             KeyCode::Esc => {
                 if self.patient_picker.is_open() {
@@ -1081,7 +1080,7 @@ impl Widget for AppointmentForm {
         buf.set_string(
             inner.x + 1,
             help_y,
-            "Tab: Next | Shift+Tab: Prev | Enter: Submit | Esc: Cancel",
+            "Tab: Next | Shift+Tab: Prev | Ctrl+Enter: Submit | Esc: Cancel",
             Style::default().fg(self.theme.colors.disabled),
         );
 

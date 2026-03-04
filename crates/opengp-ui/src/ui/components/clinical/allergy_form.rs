@@ -445,10 +445,7 @@ impl AllergyForm {
                 self.scroll.scroll_down();
                 Some(AllergyFormAction::FocusChanged)
             }
-            KeyCode::Enter => {
-                self.validate();
-                Some(AllergyFormAction::Submit)
-            }
+            KeyCode::Enter => None,
             KeyCode::Esc => Some(AllergyFormAction::Cancel),
             _ => None,
         }

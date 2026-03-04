@@ -233,8 +233,8 @@ impl ConsultationForm {
                 Some(ConsultationFormAction::FocusChanged)
             }
             KeyCode::Enter => {
-                self.next_field();
-                Some(ConsultationFormAction::FocusChanged)
+                // Enter does nothing - only Ctrl+Enter submits
+                None
             }
             KeyCode::Esc => Some(ConsultationFormAction::Cancel),
             _ => None,

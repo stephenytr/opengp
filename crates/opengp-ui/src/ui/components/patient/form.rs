@@ -1049,10 +1049,7 @@ impl PatientForm {
                 self.scroll.scroll_down();
                 Some(PatientFormAction::ValueChanged)
             }
-            KeyCode::Enter => {
-                self.validate();
-                Some(PatientFormAction::Submit)
-            }
+            KeyCode::Enter => None,
             KeyCode::Esc => Some(PatientFormAction::Cancel),
             _ => None,
         }
