@@ -9,6 +9,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
+use uuid::Uuid;
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
@@ -17,6 +18,13 @@ use crate::ui::widgets::{
     FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::VitalSigns;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FormMode {
+    #[default]
+    Create,
+    Edit(Uuid),
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VitalSignsFormField {
@@ -79,6 +87,7 @@ pub enum VitalSignsFormAction {
 }
 
 pub struct VitalSignsForm {
+    mode: FormMode,
     pub systolic_bp: Option<u16>,
     pub diastolic_bp: Option<u16>,
     pub heart_rate: Option<u16>,
@@ -106,6 +115,7 @@ pub struct VitalSignsForm {
 impl Clone for VitalSignsForm {
     fn clone(&self) -> Self {
         Self {
+            mode: self.mode,
             systolic_bp: self.systolic_bp,
             diastolic_bp: self.diastolic_bp,
             heart_rate: self.heart_rate,
@@ -135,6 +145,7 @@ impl Clone for VitalSignsForm {
 impl VitalSignsForm {
     pub fn new(theme: Theme) -> Self {
         Self {
+            mode: FormMode::Create,
             systolic_bp: None,
             diastolic_bp: None,
             heart_rate: None,
@@ -173,6 +184,63 @@ impl VitalSignsForm {
             errors: HashMap::new(),
             theme,
             scroll: ScrollableFormState::new(),
+        }
+    }
+
+    pub fn from_vitals(vitals: VitalSigns, theme: Theme) -> Self {
+        let mut form = Self::new(theme);
+        form.mode = FormMode::Edit(vitals.id);
+
+        if let Some(systolic) = vitals.systolic_bp {
+            form.set_value(VitalSignsFormField::SystolicBp, systolic.to_string());
+        }
+
+        if let Some(diastolic) = vitals.diastolic_bp {
+            form.set_value(VitalSignsFormField::DiastolicBp, diastolic.to_string());
+        }
+
+        if let Some(heart_rate) = vitals.heart_rate {
+            form.set_value(VitalSignsFormField::HeartRate, heart_rate.to_string());
+        }
+
+        if let Some(respiratory_rate) = vitals.respiratory_rate {
+            form.set_value(
+                VitalSignsFormField::RespiratoryRate,
+                respiratory_rate.to_string(),
+            );
+        }
+
+        if let Some(temperature) = vitals.temperature {
+            form.set_value(VitalSignsFormField::Temperature, temperature.to_string());
+        }
+
+        if let Some(o2_sat) = vitals.oxygen_saturation {
+            form.set_value(VitalSignsFormField::O2Saturation, o2_sat.to_string());
+        }
+
+        if let Some(height) = vitals.height_cm {
+            form.set_value(VitalSignsFormField::Height, height.to_string());
+        }
+
+        if let Some(weight) = vitals.weight_kg {
+            form.set_value(VitalSignsFormField::Weight, weight.to_string());
+        }
+
+        if let Some(notes) = vitals.notes {
+            form.set_value(VitalSignsFormField::Notes, notes);
+        }
+
+        form
+    }
+
+    pub fn is_edit_mode(&self) -> bool {
+        matches!(self.mode, FormMode::Edit(_))
+    }
+
+    pub fn vitals_id(&self) -> Option<Uuid> {
+        match self.mode {
+            FormMode::Edit(id) => Some(id),
+            FormMode::Create => None,
         }
     }
 
@@ -637,8 +705,14 @@ impl Widget for VitalSignsForm {
             return;
         }
 
+        let title = if self.is_edit_mode() {
+            " Edit Vital Signs "
+        } else {
+            " New Vital Signs "
+        };
+
         let block = Block::default()
-            .title(" Vital Signs ")
+            .title(title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(self.theme.colors.border));
 
