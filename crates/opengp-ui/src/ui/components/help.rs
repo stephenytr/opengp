@@ -8,6 +8,7 @@ use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Padding, Widget};
 
 use crate::ui::keybinds::KeyContext;
+use crate::ui::theme::Theme;
 
 /// Help overlay state
 #[derive(Debug, Clone)]
@@ -16,14 +17,17 @@ pub struct HelpOverlay {
     visible: bool,
     /// Current context for context-sensitive help
     context: KeyContext,
+    /// Theme configuration
+    theme: Theme,
 }
 
 impl HelpOverlay {
     /// Create a new help overlay
-    pub fn new() -> Self {
+    pub fn new(theme: Theme) -> Self {
         Self {
             visible: false,
             context: KeyContext::Global,
+            theme,
         }
     }
 
@@ -146,7 +150,7 @@ impl HelpOverlay {
 
 impl Default for HelpOverlay {
     fn default() -> Self {
-        Self::new()
+        Self::new(Theme::dark())
     }
 }
 
@@ -170,7 +174,7 @@ impl Widget for HelpOverlay {
         for row in area.y..area.y + area.height {
             for col in area.x..area.x + area.width {
                 if let Some(cell) = buf.cell_mut(Position::new(col, row)) {
-                    cell.set_bg(Color::Black);
+                    cell.set_bg(self.theme.colors.background);
                 }
             }
         }
@@ -179,8 +183,8 @@ impl Widget for HelpOverlay {
         let block = Block::default()
             .title(" Help (Press F1 to close) ")
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan))
-            .title_style(Style::default().fg(Color::White))
+            .border_style(Style::default().fg(self.theme.colors.primary))
+            .title_style(Style::default().fg(self.theme.colors.foreground))
             .padding(Padding::new(1, 1, 1, 1));
 
         block.render(help_area, buf);
@@ -204,12 +208,17 @@ impl Widget for HelpOverlay {
 
             if y < content_area.y + content_area.height {
                 // Render key (left column)
-                buf.set_string(x, y, *key, Style::default().fg(Color::Yellow));
+                buf.set_string(x, y, *key, Style::default().fg(self.theme.colors.warning));
 
                 // Render description (with spacing after key)
                 let desc_x = x + 12;
                 if desc_x < content_area.x + content_area.width {
-                    buf.set_string(desc_x, y, *desc, Style::default().fg(Color::White));
+                    buf.set_string(
+                        desc_x,
+                        y,
+                        *desc,
+                        Style::default().fg(self.theme.colors.foreground),
+                    );
                 }
             }
         }
@@ -234,7 +243,7 @@ mod tests {
 
     #[test]
     fn test_help_overlay_visibility() {
-        let mut help = HelpOverlay::new();
+        let mut help = HelpOverlay::new(Theme::dark());
         assert!(!help.is_visible());
 
         help.show();
@@ -252,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_help_overlay_context() {
-        let mut help = HelpOverlay::new();
+        let mut help = HelpOverlay::new(Theme::dark());
         assert_eq!(help.context, KeyContext::Global);
 
         help.set_context(KeyContext::PatientList);
@@ -261,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_get_display_keybinds() {
-        let help = HelpOverlay::new();
+        let help = HelpOverlay::new(Theme::dark());
         let keybinds = help.get_display_keybinds();
         assert!(!keybinds.is_empty());
     }

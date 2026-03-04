@@ -1,36 +1,29 @@
-//! Status Bar Component
-//!
-//! Bottom status bar displaying current context and helpful information.
-
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 
-/// Status bar content
+use crate::ui::theme::Theme;
+
 #[derive(Debug, Clone, Default)]
 pub struct StatusBar {
-    /// Left section - current context/mode
     left: String,
-    /// Center section - additional info
     center: String,
-    /// Right section - keyboard shortcut hints
     right: String,
-    /// Error message - displayed in red, overrides center when set
     error_message: Option<String>,
-    /// Whether to show the status bar
     visible: bool,
+    theme: Theme,
 }
 
 impl StatusBar {
-    /// Create a new empty status bar
-    pub fn new() -> Self {
+    pub fn new(theme: Theme) -> Self {
         Self {
             left: String::new(),
             center: String::new(),
             right: String::new(),
             error_message: None,
             visible: true,
+            theme,
         }
     }
 
@@ -90,8 +83,8 @@ impl StatusBar {
     }
 
     /// Create a status bar for the Patient list context
-    pub fn patient_list() -> Self {
-        let mut bar = Self::new();
+    pub fn patient_list(theme: Theme) -> Self {
+        let mut bar = Self::new(theme);
         bar.set_left("Patients");
         bar.set_center("Search: / | New: n | Refresh: Ctrl+R");
         bar.set_right("F1 Help");
@@ -99,8 +92,8 @@ impl StatusBar {
     }
 
     /// Create a status bar for the Patient form context
-    pub fn patient_form() -> Self {
-        let mut bar = Self::new();
+    pub fn patient_form(theme: Theme) -> Self {
+        let mut bar = Self::new(theme);
         bar.set_left("New Patient");
         bar.set_center("Tab: Next Field | Enter: Submit | Ctrl+S: Save");
         bar.set_right("Esc: Cancel");
@@ -108,8 +101,8 @@ impl StatusBar {
     }
 
     /// Create a status bar for the Calendar context
-    pub fn calendar() -> Self {
-        let mut bar = Self::new();
+    pub fn calendar(theme: Theme) -> Self {
+        let mut bar = Self::new(theme);
         bar.set_left("Calendar");
         bar.set_center("h/l: Day | j/k: Week | t: Today | Enter: Select");
         bar.set_right("F1 Help");
@@ -117,8 +110,8 @@ impl StatusBar {
     }
 
     /// Create a status bar for the Schedule context
-    pub fn schedule() -> Self {
-        let mut bar = Self::new();
+    pub fn schedule(theme: Theme) -> Self {
+        let mut bar = Self::new(theme);
         bar.set_left("Schedule");
         bar.set_center("h/l: Column | j/k: Time | n: New | Enter: Select");
         bar.set_right("F1 Help");
@@ -126,8 +119,8 @@ impl StatusBar {
     }
 
     /// Create a status bar for the Clinical context
-    pub fn clinical() -> Self {
-        let mut bar = Self::new();
+    pub fn clinical(theme: Theme) -> Self {
+        let mut bar = Self::new(theme);
         bar.set_left("Clinical Notes");
         bar.set_center("n: New | /: Search | 1-7: Views | Up/Down/j/k: Navigate");
         bar.set_right("F1 Help");
@@ -135,8 +128,8 @@ impl StatusBar {
     }
 
     /// Create a status bar for the Billing context
-    pub fn billing() -> Self {
-        let mut bar = Self::new();
+    pub fn billing(theme: Theme) -> Self {
+        let mut bar = Self::new(theme);
         bar.set_left("Billing");
         bar.set_center("Enter: View | n: New Invoice");
         bar.set_right("F1 Help");
@@ -170,7 +163,12 @@ impl Widget for StatusBar {
             } else {
                 &self.left
             };
-            buf.set_string(area.x, area.y, left_text, Style::default().fg(Color::White));
+            buf.set_string(
+                area.x,
+                area.y,
+                left_text,
+                Style::default().fg(self.theme.colors.foreground),
+            );
         }
 
         let center_start = area.x + (side_width as u16);
@@ -184,7 +182,7 @@ impl Widget for StatusBar {
                 center_start,
                 area.y,
                 error_text,
-                Style::default().fg(Color::Red),
+                Style::default().fg(self.theme.colors.error),
             );
         } else if !self.center.is_empty() {
             let center_text = if self.center.len() > center_width {
@@ -222,14 +220,14 @@ mod tests {
 
     #[test]
     fn test_status_bar_creation() {
-        let bar = StatusBar::new();
+        let bar = StatusBar::new(Theme::dark());
         assert!(bar.is_visible());
         assert!(bar.left.is_empty());
     }
 
     #[test]
     fn test_status_bar_patient_list() {
-        let bar = StatusBar::patient_list();
+        let bar = StatusBar::patient_list(Theme::dark());
         assert!(bar.is_visible());
         assert_eq!(bar.left, "Patients");
         assert!(bar.right.contains("Help"));
@@ -237,7 +235,7 @@ mod tests {
 
     #[test]
     fn test_status_bar_visibility() {
-        let mut bar = StatusBar::new();
+        let mut bar = StatusBar::new(Theme::dark());
         assert!(bar.is_visible());
 
         bar.set_visible(false);

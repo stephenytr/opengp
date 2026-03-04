@@ -139,9 +139,9 @@ impl App {
         let mut app = Self {
             theme: theme.clone(),
             keybinds: KeybindRegistry::global(),
-            tab_bar: TabBar::new(),
-            status_bar: StatusBar::patient_list(),
-            help_overlay: HelpOverlay::new(),
+            tab_bar: TabBar::new(theme.clone()),
+            status_bar: StatusBar::patient_list(theme.clone()),
+            help_overlay: HelpOverlay::new(theme.clone()),
             current_context: KeyContext::Global,
             should_quit: false,
             title: "OpenGP".to_string(),
@@ -316,10 +316,10 @@ impl App {
 
     fn refresh_status_bar(&mut self) {
         self.status_bar = match self.tab_bar.selected() {
-            Tab::Patient => StatusBar::patient_list(),
-            Tab::Appointment => StatusBar::schedule(),
-            Tab::Clinical => StatusBar::clinical(),
-            Tab::Billing => StatusBar::billing(),
+            Tab::Patient => StatusBar::patient_list(self.theme.clone()),
+            Tab::Appointment => StatusBar::schedule(self.theme.clone()),
+            Tab::Clinical => StatusBar::clinical(self.theme.clone()),
+            Tab::Billing => StatusBar::billing(self.theme.clone()),
         };
     }
 
