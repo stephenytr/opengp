@@ -8,6 +8,8 @@ use ratatui::layout::{Position, Rect};
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 
+use crate::ui::theme::Theme;
+
 /// Available tabs in the application
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Tab {
@@ -79,6 +81,8 @@ pub struct TabBar {
     focused: bool,
     /// Tab labels (with shortcuts)
     tabs: Vec<TabItem>,
+    /// Theme for colors
+    theme: Theme,
 }
 
 /// Individual tab item
@@ -90,8 +94,7 @@ struct TabItem {
 }
 
 impl TabBar {
-    /// Create a new tab bar
-    pub fn new() -> Self {
+    pub fn new(theme: Theme) -> Self {
         let tabs = Tab::all()
             .iter()
             .map(|&tab| TabItem {
@@ -105,6 +108,7 @@ impl TabBar {
             selected: Tab::default(),
             focused: false,
             tabs,
+            theme,
         }
     }
 
@@ -232,7 +236,7 @@ impl TabBar {
 
 impl Default for TabBar {
     fn default() -> Self {
-        Self::new()
+        Self::new(Theme::dark())
     }
 }
 
@@ -266,17 +270,16 @@ impl Widget for TabBar {
                 // Build the label with shortcut
                 let label = format!(" {} ", tab_item.label);
 
-                // Render the tab label
                 let style = if is_selected {
                     Style::default()
-                        .bg(ratatui::style::Color::Blue)
-                        .fg(ratatui::style::Color::White)
+                        .bg(self.theme.colors.primary)
+                        .fg(self.theme.colors.background)
                 } else if is_focused {
                     Style::default()
-                        .bg(ratatui::style::Color::DarkGray)
-                        .fg(ratatui::style::Color::White)
+                        .bg(self.theme.colors.selected)
+                        .fg(self.theme.colors.background)
                 } else {
-                    Style::default().fg(ratatui::style::Color::White)
+                    Style::default().fg(self.theme.colors.foreground)
                 };
 
                 buf.set_string(rect.x, rect.y, label, style);
@@ -291,7 +294,7 @@ mod tests {
 
     #[test]
     fn test_tab_selection() {
-        let mut tab_bar = TabBar::new();
+        let mut tab_bar = TabBar::new(Theme::dark());
         assert_eq!(tab_bar.selected(), Tab::Patient);
 
         tab_bar.select(Tab::Appointment);
@@ -300,7 +303,7 @@ mod tests {
 
     #[test]
     fn test_tab_navigation() {
-        let mut tab_bar = TabBar::new();
+        let mut tab_bar = TabBar::new(Theme::dark());
         assert_eq!(tab_bar.selected(), Tab::Patient);
 
         tab_bar.next();
