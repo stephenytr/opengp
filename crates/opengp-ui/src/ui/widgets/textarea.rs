@@ -130,11 +130,15 @@ impl TextareaState {
                 if matches!(self.height_mode, HeightMode::SingleLine) {
                     return false;
                 }
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    return false;
+                }
             }
             KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if matches!(self.height_mode, HeightMode::SingleLine) {
                     return false;
                 }
+                return false;
             }
             KeyCode::Char(_) => {
                 if let Some(limit) = self.max_length {

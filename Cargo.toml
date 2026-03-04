@@ -7,6 +7,36 @@ members = [
     "crates/opengp-ui",
 ]
 
+[package]
+name = "opengp"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+opengp-domain = { path = "crates/opengp-domain" }
+opengp-infrastructure = { path = "crates/opengp-infrastructure" }
+opengp-config = { path = "crates/opengp-config" }
+opengp-ui = { path = "crates/opengp-ui" }
+crossterm.workspace = true
+color-eyre.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+ratatui.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "opengp"
+path = "src/main.rs"
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
