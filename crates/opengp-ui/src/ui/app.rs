@@ -10,7 +10,6 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Color;
 use ratatui::Frame;
 
-use opengp_config::CalendarConfig;
 use crate::ui::components::appointment::{
     AppointmentDetailModal, AppointmentDetailModalAction, AppointmentForm, AppointmentFormAction,
     AppointmentFormField, AppointmentState, AppointmentView, CalendarAction, ScheduleAction,
@@ -23,7 +22,8 @@ use crate::ui::components::tabs::{Tab, TabBar};
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
 use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
-use crate::ui::widgets::format_date;
+use crate::ui::widgets::{format_date, FormNavigation};
+use opengp_config::CalendarConfig;
 
 /// Application state
 pub struct App {
@@ -1579,7 +1579,9 @@ impl App {
                 if !self.appointment_state.practitioners.is_empty()
                     && self.appointment_state.schedule_data.is_none()
                 {
-                    use opengp_domain::domain::appointment::{CalendarDayView, PractitionerSchedule};
+                    use opengp_domain::domain::appointment::{
+                        CalendarDayView, PractitionerSchedule,
+                    };
 
                     let date = self
                         .appointment_state

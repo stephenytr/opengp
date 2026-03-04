@@ -1,4 +1,5 @@
 use crate::ui::components::patient::{FormField, PatientForm};
+use crate::ui::widgets::FormNavigation;
 use crate::ui::Theme;
 
 #[test]

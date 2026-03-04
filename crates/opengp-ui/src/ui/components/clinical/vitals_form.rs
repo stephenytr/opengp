@@ -10,11 +10,13 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 
-use opengp_domain::domain::clinical::VitalSigns;
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{HeightMode, ScrollableFormState, TextareaState, TextareaWidget};
+use crate::ui::widgets::{
+    FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+};
+use opengp_domain::domain::clinical::VitalSigns;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VitalSignsFormField {
@@ -606,6 +608,39 @@ impl VitalSignsForm {
             created_at: chrono::Utc::now(),
             created_by,
         }
+    }
+}
+
+impl FormNavigation for VitalSignsForm {
+    type FormField = VitalSignsFormField;
+
+    fn validate(&mut self) -> bool {
+        self.errors.clear();
+
+        for field in VitalSignsFormField::all() {
+            self.validate_field(&field);
+        }
+
+        if self.errors.is_empty() && !self.has_any_measurement() {
+            self.errors.insert(
+                VitalSignsFormField::SystolicBp,
+                "At least one measurement is required".to_string(),
+            );
+        }
+
+        self.errors.is_empty()
+    }
+
+    fn current_field(&self) -> Self::FormField {
+        self.focused_field
+    }
+
+    fn fields(&self) -> &[Self::FormField] {
+        &[]
+    }
+
+    fn set_current_field(&mut self, field: Self::FormField) {
+        self.focused_field = field;
     }
 }
 
