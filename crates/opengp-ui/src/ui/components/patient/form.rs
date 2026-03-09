@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::Style;
@@ -1072,19 +1072,27 @@ impl PatientForm {
 
         if let Some((dropdown, field)) = dropdown {
             if let Some(action) = dropdown.handle_key(key) {
-                match action {
-                    DropdownAction::Selected(_) | DropdownAction::Closed => {
-                        let value = dropdown.selected_value().map(|v| v.to_string());
-                        if let Some(v) = value {
-                            self.set_value(field, v);
+                // Allow Tab/BackTab/Esc to pass through to form's navigation handler
+                match key.code {
+                    KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {
+                        // Return None so caller handles Tab for field navigation
+                        return None;
+                    }
+                    _ => match action {
+                        DropdownAction::Selected(_) | DropdownAction::Closed => {
+                            let value = dropdown.selected_value().map(|v| v.to_string());
+                            if let Some(v) = value {
+                                self.set_value(field, v);
+                            }
+                            return Some(Some(PatientFormAction::ValueChanged));
                         }
-                        return Some(Some(PatientFormAction::ValueChanged));
-                    }
-                    DropdownAction::Opened | DropdownAction::FocusChanged => {
-                        return Some(Some(PatientFormAction::ValueChanged));
-                    }
+                        DropdownAction::Opened | DropdownAction::FocusChanged => {
+                            return Some(Some(PatientFormAction::ValueChanged));
+                        }
+                    },
                 }
             }
+            match key.code { KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None, _ => {} }
             return Some(None);
         }
 

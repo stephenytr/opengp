@@ -296,34 +296,42 @@ impl MedicalHistoryForm {
         match self.focused_field {
             MedicalHistoryFormField::Status => {
                 if let Some(action) = self.status_dropdown.handle_key(key) {
-                    match action {
-                        DropdownAction::Selected(_) => {
-                            let field = self.focused_field;
-                            self.validate_field(&field);
-                            return Some(MedicalHistoryFormAction::ValueChanged);
-                        }
-                        DropdownAction::Opened
-                        | DropdownAction::Closed
-                        | DropdownAction::FocusChanged => {
-                            return Some(MedicalHistoryFormAction::FocusChanged);
-                        }
+                    // Allow Tab/BackTab/Esc to pass through to form's navigation handler
+                    match key.code {
+                        KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
+                        _ => match action {
+                            DropdownAction::Selected(_) => {
+                                let field = self.focused_field;
+                                self.validate_field(&field);
+                                return Some(MedicalHistoryFormAction::ValueChanged);
+                            }
+                            DropdownAction::Opened
+                            | DropdownAction::Closed
+                            | DropdownAction::FocusChanged => {
+                                return Some(MedicalHistoryFormAction::FocusChanged);
+                            }
+                        },
                     }
                 }
                 // Fall through to Tab/BackTab handling if dropdown didn't consume the key
             }
             MedicalHistoryFormField::Severity => {
                 if let Some(action) = self.severity_dropdown.handle_key(key) {
-                    match action {
-                        DropdownAction::Selected(_) => {
-                            let field = self.focused_field;
-                            self.validate_field(&field);
-                            return Some(MedicalHistoryFormAction::ValueChanged);
-                        }
-                        DropdownAction::Opened
-                        | DropdownAction::Closed
-                        | DropdownAction::FocusChanged => {
-                            return Some(MedicalHistoryFormAction::FocusChanged);
-                        }
+                    // Allow Tab/BackTab/Esc to pass through to form's navigation handler
+                    match key.code {
+                        KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
+                        _ => match action {
+                            DropdownAction::Selected(_) => {
+                                let field = self.focused_field;
+                                self.validate_field(&field);
+                                return Some(MedicalHistoryFormAction::ValueChanged);
+                            }
+                            DropdownAction::Opened
+                            | DropdownAction::Closed
+                            | DropdownAction::FocusChanged => {
+                                return Some(MedicalHistoryFormAction::FocusChanged);
+                            }
+                        },
                     }
                 }
                 // Fall through to Tab/BackTab handling if dropdown didn't consume the key

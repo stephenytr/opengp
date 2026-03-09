@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use chrono::NaiveDate;
-use crossterm::event::{KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -373,21 +373,39 @@ impl AllergyForm {
 
         match self.focused_field {
             AllergyFormField::AllergyType => {
-                if self.allergy_type_dropdown.handle_key(key).is_some() {
-                    if let Some(value) = self.allergy_type_dropdown.selected_value() {
-                        self.allergy_type = value.parse::<AllergyType>().ok();
-                        self.validate_field(&AllergyFormField::AllergyType);
+                if let Some(action) = self.allergy_type_dropdown.handle_key(key) {
+                    // Allow Tab/BackTab/Esc to pass through to form's navigation handler
+                    match key.code {
+                        KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {
+                            // Return None so caller handles Tab for field navigation
+                            return None;
+                        }
+                        _ => {
+                            if let Some(value) = self.allergy_type_dropdown.selected_value() {
+                                self.allergy_type = value.parse::<AllergyType>().ok();
+                                self.validate_field(&AllergyFormField::AllergyType);
+                            }
+                            return Some(AllergyFormAction::ValueChanged);
+                        }
                     }
-                    return Some(AllergyFormAction::ValueChanged);
                 }
             }
             AllergyFormField::Severity => {
-                if self.severity_dropdown.handle_key(key).is_some() {
-                    if let Some(value) = self.severity_dropdown.selected_value() {
-                        self.severity = value.parse::<Severity>().ok();
-                        self.validate_field(&AllergyFormField::Severity);
+                if let Some(action) = self.severity_dropdown.handle_key(key) {
+                    // Allow Tab/BackTab/Esc to pass through to form's navigation handler
+                    match key.code {
+                        KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {
+                            // Return None so caller handles Tab for field navigation
+                            return None;
+                        }
+                        _ => {
+                            if let Some(value) = self.severity_dropdown.selected_value() {
+                                self.severity = value.parse::<Severity>().ok();
+                                self.validate_field(&AllergyFormField::Severity);
+                            }
+                            return Some(AllergyFormAction::ValueChanged);
+                        }
                     }
-                    return Some(AllergyFormAction::ValueChanged);
                 }
             }
             // Textarea fields: delegate key handling to TextareaState.
