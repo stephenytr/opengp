@@ -368,7 +368,7 @@ async fn run_tui(
                 opengp_ui::ui::app::PendingClinicalSaveData::Consultation {
                     patient_id,
                     practitioner_id,
-                    appointment_id,
+                    appointment_id: _,
                     reason,
                     clinical_notes,
                 } => {
@@ -376,23 +376,11 @@ async fn run_tui(
                         patient_id,
                         practitioner_id,
                         system_user_id,
-                        reason.clone(),
-                        clinical_notes.clone(),
+                        reason,
+                        clinical_notes,
                     ).await {
                         Ok(consultation) => {
                             tracing::info!("Created consultation {} for patient {}", consultation.id, patient_id);
-                            let has_notes = clinical_notes.is_some() || reason.is_some() || appointment_id.is_some();
-                            if has_notes {
-                                match clinical_service.update_clinical_notes(
-                                    consultation.id,
-                                    reason,
-                                    clinical_notes,
-                                    system_user_id,
-                                ).await {
-                                    Ok(_) => tracing::info!("Updated clinical notes for consultation {}", consultation.id),
-                                    Err(e) => tracing::error!("Failed to update clinical notes: {}", e),
-                                }
-                            }
                             match clinical_service.list_consultations(patient_id).await {
                                 Ok(consultations) => {
                                     app.clinical_state_mut().consultation_list.consultations = consultations.clone();
