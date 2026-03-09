@@ -231,6 +231,11 @@ impl App {
         self.pending_clinical_save_data.take()
     }
 
+    /// Set an error message on the status bar (for use by main loop)
+    pub fn set_status_error(&mut self, message: impl Into<String>) {
+        self.status_bar.set_error(message);
+    }
+
     /// Get mutable reference to appointment state (for loading practitioners)
     pub fn appointment_state_mut(&mut self) -> &mut AppointmentState {
         &mut self.appointment_state

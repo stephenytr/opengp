@@ -297,10 +297,16 @@ async fn run_tui(
                             tracing::info!("Saved allergy for patient {}", patient_id);
                             match clinical_service.list_allergies(patient_id, false).await {
                                 Ok(allergies) => app.clinical_state_mut().allergies = allergies,
-                                Err(e) => tracing::error!("Failed to reload allergies: {}", e),
+                                Err(e) => {
+                                    tracing::error!("Failed to reload allergies: {}", e);
+                                    app.set_status_error(format!("Failed to reload allergies: {}", e));
+                                }
                             }
                         }
-                        Err(e) => tracing::error!("Failed to save allergy: {}", e),
+                        Err(e) => {
+                            tracing::error!("Failed to save allergy: {}", e);
+                            app.set_status_error(format!("Failed to save allergy: {}", e));
+                        }
                     }
                 }
                 opengp_ui::ui::app::PendingClinicalSaveData::MedicalHistory { patient_id, history } => {
@@ -316,10 +322,16 @@ async fn run_tui(
                             tracing::info!("Saved medical history for patient {}", patient_id);
                             match clinical_service.list_medical_history(patient_id, false).await {
                                 Ok(conditions) => app.clinical_state_mut().medical_history = conditions,
-                                Err(e) => tracing::error!("Failed to reload medical history: {}", e),
+                                Err(e) => {
+                                    tracing::error!("Failed to reload medical history: {}", e);
+                                    app.set_status_error(format!("Failed to reload medical history: {}", e));
+                                }
                             }
                         }
-                        Err(e) => tracing::error!("Failed to save medical history: {}", e),
+                        Err(e) => {
+                            tracing::error!("Failed to save medical history: {}", e);
+                            app.set_status_error(format!("Failed to save medical history: {}", e));
+                        }
                     }
                 }
                 opengp_ui::ui::app::PendingClinicalSaveData::VitalSigns { patient_id, vitals } => {
@@ -340,10 +352,16 @@ async fn run_tui(
                             tracing::info!("Saved vital signs for patient {}", patient_id);
                             match clinical_service.list_vitals_history(patient_id, 50).await {
                                 Ok(v) => app.clinical_state_mut().vital_signs = v,
-                                Err(e) => tracing::error!("Failed to reload vital signs: {}", e),
+                                Err(e) => {
+                                    tracing::error!("Failed to reload vital signs: {}", e);
+                                    app.set_status_error(format!("Failed to reload vital signs: {}", e));
+                                }
                             }
                         }
-                        Err(e) => tracing::error!("Failed to save vital signs: {}", e),
+                        Err(e) => {
+                            tracing::error!("Failed to save vital signs: {}", e);
+                            app.set_status_error(format!("Failed to save vital signs: {}", e));
+                        }
                     }
                 }
                 opengp_ui::ui::app::PendingClinicalSaveData::FamilyHistory { patient_id, entry } => {
@@ -359,10 +377,16 @@ async fn run_tui(
                             tracing::info!("Saved family history for patient {}", patient_id);
                             match clinical_service.list_family_history(patient_id).await {
                                 Ok(entries) => app.clinical_state_mut().family_history = entries,
-                                Err(e) => tracing::error!("Failed to reload family history: {}", e),
+                                Err(e) => {
+                                    tracing::error!("Failed to reload family history: {}", e);
+                                    app.set_status_error(format!("Failed to reload family history: {}", e));
+                                }
                             }
                         }
-                        Err(e) => tracing::error!("Failed to save family history: {}", e),
+                        Err(e) => {
+                            tracing::error!("Failed to save family history: {}", e);
+                            app.set_status_error(format!("Failed to save family history: {}", e));
+                        }
                     }
                 }
                 opengp_ui::ui::app::PendingClinicalSaveData::Consultation {
@@ -372,9 +396,10 @@ async fn run_tui(
                     reason,
                     clinical_notes,
                 } => {
+                    let effective_practitioner_id = if practitioner_id.is_nil() { system_user_id } else { practitioner_id };
                     match clinical_service.create_consultation(
                         patient_id,
-                        practitioner_id,
+                        effective_practitioner_id,
                         system_user_id,
                         reason,
                         clinical_notes,
@@ -386,10 +411,16 @@ async fn run_tui(
                                     app.clinical_state_mut().consultation_list.consultations = consultations.clone();
                                     app.clinical_state_mut().consultations = consultations;
                                 }
-                                Err(e) => tracing::error!("Failed to reload consultations: {}", e),
+                                Err(e) => {
+                                    tracing::error!("Failed to reload consultations: {}", e);
+                                    app.set_status_error(format!("Failed to reload consultations: {}", e));
+                                }
                             }
                         }
-                        Err(e) => tracing::error!("Failed to create consultation: {}", e),
+                        Err(e) => {
+                            tracing::error!("Failed to create consultation: {}", e);
+                            app.set_status_error(format!("Failed to create consultation: {}", e));
+                        }
                     }
                 }
             }
