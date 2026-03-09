@@ -618,23 +618,27 @@ impl AppointmentForm {
 
         if self.focused_field == AppointmentFormField::AppointmentType {
             if let Some(action) = self.type_dropdown.handle_key(key) {
-                match action {
-                    DropdownAction::Selected(_) => {
-                        if let Some(value) = self.type_dropdown.selected_value() {
-                            if let Ok(apt_type) = value.parse::<AppointmentType>() {
-                                let default_mins: i64 = apt_type.default_duration_minutes();
-                                self.data.duration = default_mins.to_string();
+                // Allow Tab/BackTab/Esc to pass through to form's navigation handler
+                match key.code {
+                    KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
+                    _ => match action {
+                        DropdownAction::Selected(_) => {
+                            if let Some(value) = self.type_dropdown.selected_value() {
+                                if let Ok(apt_type) = value.parse::<AppointmentType>() {
+                                    let default_mins: i64 = apt_type.default_duration_minutes();
+                                    self.data.duration = default_mins.to_string();
+                                }
+                                self.data.appointment_type = value.to_string();
                             }
-                            self.data.appointment_type = value.to_string();
+                            self.validate_field(&AppointmentFormField::AppointmentType);
+                            return Some(AppointmentFormAction::ValueChanged);
                         }
-                        self.validate_field(&AppointmentFormField::AppointmentType);
-                        return Some(AppointmentFormAction::ValueChanged);
-                    }
-                    DropdownAction::Opened
-                    | DropdownAction::Closed
-                    | DropdownAction::FocusChanged => {
-                        return Some(AppointmentFormAction::FocusChanged);
-                    }
+                        DropdownAction::Opened
+                        | DropdownAction::Closed
+                        | DropdownAction::FocusChanged => {
+                            return Some(AppointmentFormAction::FocusChanged);
+                        }
+                    },
                 }
             }
         }
