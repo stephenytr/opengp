@@ -128,9 +128,9 @@ impl Widget for AppointmentBlock {
         };
 
         let text_style = if self.is_selected {
-            Style::default().fg(self.theme.colors.foreground).bold()
+            Style::default().fg(self.theme.colors.background).bold()
         } else {
-            Style::default().fg(self.theme.colors.foreground)
+            Style::default().fg(self.theme.colors.background)
         };
 
         buf.set_string(

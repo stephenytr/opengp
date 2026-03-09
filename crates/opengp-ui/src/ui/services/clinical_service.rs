@@ -66,13 +66,15 @@ impl ClinicalUiService {
         patient_id: Uuid,
         practitioner_id: Uuid,
         user_id: Uuid,
+        reason: Option<String>,
+        clinical_notes: Option<String>,
     ) -> UiResult<Consultation> {
         let data = NewConsultationData {
             patient_id,
             practitioner_id,
             appointment_id: None,
-            reason: None,
-            clinical_notes: None,
+            reason,
+            clinical_notes,
         };
         self.service
             .create_consultation(data, user_id)

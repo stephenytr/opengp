@@ -657,7 +657,7 @@ impl Schedule {
                         name_x,
                         content_y,
                         full_text,
-                        Style::default().fg(self.theme.colors.foreground).bold(),
+                        Style::default().fg(self.theme.colors.success).bold(),
                     );
                 }
             }
@@ -706,7 +706,7 @@ impl Schedule {
                         name_x,
                         content_y,
                         full_text,
-                        Style::default().fg(self.theme.colors.foreground).bold(),
+                        Style::default().fg(self.theme.colors.background).bold(),
                     );
                 }
             }

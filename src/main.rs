@@ -376,6 +376,8 @@ async fn run_tui(
                         patient_id,
                         practitioner_id,
                         system_user_id,
+                        reason.clone(),
+                        clinical_notes.clone(),
                     ).await {
                         Ok(consultation) => {
                             tracing::info!("Created consultation {} for patient {}", consultation.id, patient_id);
