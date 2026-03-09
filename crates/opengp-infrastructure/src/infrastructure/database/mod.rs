@@ -140,22 +140,25 @@ pub fn sqlx_to_repository_error(err: sqlx::Error) -> RepositoryError {
 
 /// Convert sqlx::Error to domain AuditRepositoryError
 pub fn sqlx_to_audit_error(err: sqlx::Error) -> opengp_domain::domain::audit::AuditRepositoryError {
-    opengp_domain::domain::audit::AuditRepositoryError::Database(err.to_string())
+    use opengp_domain::domain::error::RepositoryError as Base;
+    opengp_domain::domain::audit::AuditRepositoryError::Base(Base::Database(err.to_string()))
 }
 
 /// Convert sqlx::Error to domain clinical RepositoryError
 pub fn sqlx_to_clinical_error(err: sqlx::Error) -> opengp_domain::domain::clinical::RepositoryError {
-    opengp_domain::domain::clinical::RepositoryError::Database(err.to_string())
+    use opengp_domain::domain::error::RepositoryError as Base;
+    opengp_domain::domain::clinical::RepositoryError::Base(Base::Database(err.to_string()))
 }
 
 /// Convert sqlx::Error to domain patient RepositoryError
 pub fn sqlx_to_patient_error(err: sqlx::Error) -> opengp_domain::domain::patient::RepositoryError {
-    opengp_domain::domain::patient::RepositoryError::Database(err.to_string())
+    use opengp_domain::domain::error::RepositoryError as Base;
+    opengp_domain::domain::patient::RepositoryError::Base(Base::Database(err.to_string()))
 }
 
-/// Convert sqlx::Error to domain user UserRepositoryError
-pub fn sqlx_to_user_error(err: sqlx::Error) -> opengp_domain::domain::user::UserRepositoryError {
-    opengp_domain::domain::user::UserRepositoryError::Database(err.to_string())
+/// Convert sqlx::Error to domain user RepositoryError
+pub fn sqlx_to_user_error(err: sqlx::Error) -> opengp_domain::domain::user::RepositoryError {
+    opengp_domain::domain::user::RepositoryError::Database(err.to_string())
 }
 
 /// Convert sqlx::Error to domain appointment RepositoryError

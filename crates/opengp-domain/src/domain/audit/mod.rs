@@ -60,11 +60,13 @@
 //! The service layer provides business-logic-level operations while the repository
 //! trait enables dependency injection for testing and different storage backends.
 
+mod emitter;
 mod error;
 mod model;
 mod repository;
 mod service;
 
+pub use emitter::*;
 pub use error::*;
 pub use model::*;
 pub use repository::*;

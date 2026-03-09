@@ -5,6 +5,7 @@ use chrono::NaiveDate;
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
+use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
 use opengp_domain::domain::patient::{
     Address, EmergencyContact, Gender, Patient, PatientRepository, RepositoryError,
 };
@@ -313,7 +314,9 @@ impl PatientRepository for SqlxPatientRepository {
         match result {
             Ok(_) => Ok(patient),
             Err(sqlx::Error::Database(db_err)) => Err(map_db_error(db_err)),
-            Err(e) => Err(RepositoryError::Database(e.to_string())),
+            Err(e) => Err(RepositoryError::Base(BaseRepositoryError::Database(
+                e.to_string(),
+            ))),
         }
     }
 
@@ -415,7 +418,9 @@ impl PatientRepository for SqlxPatientRepository {
         match result {
             Ok(_) => Ok(patient),
             Err(sqlx::Error::Database(db_err)) => Err(map_db_error(db_err)),
-            Err(e) => Err(RepositoryError::Database(e.to_string())),
+            Err(e) => Err(RepositoryError::Base(BaseRepositoryError::Database(
+                e.to_string(),
+            ))),
         }
     }
 

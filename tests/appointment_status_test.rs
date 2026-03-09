@@ -1,12 +1,12 @@
 use chrono::{Duration, NaiveDate, Utc};
-use opengp::domain::appointment::{
+use opengp_domain::domain::appointment::{
     Appointment, AppointmentCalendarQuery, AppointmentRepository, AppointmentService,
     AppointmentStatus, AppointmentType,
 };
-use opengp::domain::audit::{AuditRepository, AuditService};
-use opengp::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
-use opengp::infrastructure::crypto::EncryptionService;
-use opengp::infrastructure::database::repositories::{
+use opengp_domain::domain::audit::{AuditEmitter, AuditRepository, AuditService};
+use opengp_domain::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
+use opengp_infrastructure::infrastructure::crypto::EncryptionService;
+use opengp_infrastructure::infrastructure::database::repositories::{
     SqlxAppointmentRepository, SqlxAuditRepository, SqlxPatientRepository,
 };
 use sqlx::SqlitePool;
@@ -26,7 +26,7 @@ async fn setup_test_database() -> SqlitePool {
     pool
 }
 
-fn create_mock_audit_service(pool: &SqlitePool) -> Arc<AuditService> {
+fn create_mock_audit_service(pool: &SqlitePool) -> Arc<dyn AuditEmitter> {
     let audit_repository: Arc<dyn AuditRepository> =
         Arc::new(SqlxAuditRepository::new(pool.clone()));
     Arc::new(AuditService::new(audit_repository))
@@ -74,17 +74,17 @@ async fn create_test_practitioner(pool: &SqlitePool) -> Uuid {
     let username = format!("dr_{}", id);
     let now = Utc::now();
 
-    sqlx::query!(
+    sqlx::query(
         "INSERT INTO users (id, username, password_hash, role, is_active, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)",
-        id,
-        username,
-        "test_hash",
-        "Doctor",
-        true,
-        now,
-        now
     )
+    .bind(id)
+    .bind(username)
+    .bind("test_hash")
+    .bind("Doctor")
+    .bind(true)
+    .bind(now)
+    .bind(now)
     .execute(pool)
     .await
     .expect("Failed to create practitioner");

@@ -8,5 +8,6 @@ pub mod macros;
 pub mod pathology;
 pub mod patient;
 pub mod prescription;
+pub mod repository;
 pub mod referral;
 pub mod user;

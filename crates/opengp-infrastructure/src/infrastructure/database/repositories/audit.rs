@@ -3,13 +3,17 @@ use chrono::{DateTime, Utc};
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
+use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
 use opengp_domain::domain::audit::{AuditAction, AuditEntry, AuditRepository, AuditRepositoryError};
 use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::sqlx_to_audit_error;
 
 fn bytes_to_uuid(bytes: &[u8]) -> Result<Uuid, AuditRepositoryError> {
-    db_helpers::bytes_to_uuid(bytes)
-        .map_err(|_| AuditRepositoryError::ConstraintViolation("Invalid UUID bytes".to_string()))
+    db_helpers::bytes_to_uuid(bytes).map_err(|_| {
+        AuditRepositoryError::Base(BaseRepositoryError::ConstraintViolation(
+            "Invalid UUID bytes".to_string(),
+        ))
+    })
 }
 
 fn string_to_datetime(s: &str) -> DateTime<Utc> {
@@ -39,10 +43,10 @@ struct AuditLogRow {
 impl AuditLogRow {
     fn into_audit_entry(self) -> Result<AuditEntry, AuditRepositoryError> {
         let action: AuditAction = serde_json::from_str(&self.action).map_err(|e| {
-            AuditRepositoryError::ConstraintViolation(format!(
+            AuditRepositoryError::Base(BaseRepositoryError::ConstraintViolation(format!(
                 "Failed to deserialize AuditAction: {}",
                 e
-            ))
+            )))
         })?;
 
         Ok(AuditEntry {
@@ -77,10 +81,10 @@ impl AuditRepository for SqlxAuditRepository {
         let changed_at_str = entry.changed_at.to_rfc3339();
 
         let action_json = serde_json::to_string(&entry.action).map_err(|e| {
-            AuditRepositoryError::ConstraintViolation(format!(
+            AuditRepositoryError::Base(BaseRepositoryError::ConstraintViolation(format!(
                 "Failed to serialize AuditAction: {}",
                 e
-            ))
+            )))
         })?;
 
         let result = sqlx::query(
@@ -108,18 +112,22 @@ impl AuditRepository for SqlxAuditRepository {
             Err(sqlx::Error::Database(db_err)) => {
                 let err_msg = db_err.message();
                 if err_msg.contains("FOREIGN KEY constraint") {
-                    Err(AuditRepositoryError::ConstraintViolation(
+                    Err(AuditRepositoryError::Base(BaseRepositoryError::ConstraintViolation(
                         "User does not exist".to_string(),
-                    ))
+                    )))
                 } else if err_msg.contains("NOT NULL constraint") {
-                    Err(AuditRepositoryError::ConstraintViolation(
+                    Err(AuditRepositoryError::Base(BaseRepositoryError::ConstraintViolation(
                         "Required field is missing".to_string(),
-                    ))
+                    )))
                 } else {
-                    Err(AuditRepositoryError::Database(db_err.to_string()))
+                    Err(AuditRepositoryError::Base(BaseRepositoryError::Database(
+                        db_err.to_string(),
+                    )))
                 }
             }
-            Err(e) => Err(AuditRepositoryError::Database(e.to_string())),
+            Err(e) => Err(AuditRepositoryError::Base(BaseRepositoryError::Database(
+                e.to_string(),
+            ))),
         }
     }
 

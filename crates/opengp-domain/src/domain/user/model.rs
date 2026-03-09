@@ -4,7 +4,7 @@ use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
 use super::dto::NewUserData;
-use super::error::UserError;
+use super::error::ServiceError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
@@ -30,7 +30,7 @@ pub struct User {
 }
 
 impl User {
-    pub fn new(data: NewUserData) -> Result<Self, UserError> {
+    pub fn new(data: NewUserData) -> Result<Self, ServiceError> {
         Self::validate_username(&data.username)?;
         Self::validate_names(&data.first_name, &data.last_name)?;
 
@@ -59,58 +59,60 @@ impl User {
         })
     }
 
-    fn validate_username(username: &str) -> Result<(), UserError> {
+    fn validate_username(username: &str) -> Result<(), ServiceError> {
         if username.trim().is_empty() {
-            return Err(UserError::Validation(
+            return Err(ServiceError::Validation(
                 "Username cannot be empty".to_string(),
             ));
         }
         if username.len() < 3 {
-            return Err(UserError::Validation(
+            return Err(ServiceError::Validation(
                 "Username must be at least 3 characters".to_string(),
             ));
         }
         if username.len() > 50 {
-            return Err(UserError::Validation(
+            return Err(ServiceError::Validation(
                 "Username cannot exceed 50 characters".to_string(),
             ));
         }
         Ok(())
     }
 
-    fn validate_names(first_name: &str, last_name: &str) -> Result<(), UserError> {
+    fn validate_names(first_name: &str, last_name: &str) -> Result<(), ServiceError> {
         if first_name.trim().is_empty() {
-            return Err(UserError::Validation(
+            return Err(ServiceError::Validation(
                 "First name cannot be empty".to_string(),
             ));
         }
         if last_name.trim().is_empty() {
-            return Err(UserError::Validation(
+            return Err(ServiceError::Validation(
                 "Last name cannot be empty".to_string(),
             ));
         }
         if first_name.len() > 100 {
-            return Err(UserError::Validation(
+            return Err(ServiceError::Validation(
                 "First name cannot exceed 100 characters".to_string(),
             ));
         }
         if last_name.len() > 100 {
-            return Err(UserError::Validation(
+            return Err(ServiceError::Validation(
                 "Last name cannot exceed 100 characters".to_string(),
             ));
         }
         Ok(())
     }
 
-    fn validate_email(email: &str) -> Result<(), UserError> {
+    fn validate_email(email: &str) -> Result<(), ServiceError> {
         if email.trim().is_empty() {
-            return Err(UserError::Validation("Email cannot be empty".to_string()));
+            return Err(ServiceError::Validation(
+                "Email cannot be empty".to_string(),
+            ));
         }
         if !email.contains('@') {
-            return Err(UserError::Validation("Invalid email format".to_string()));
+            return Err(ServiceError::Validation("Invalid email format".to_string()));
         }
         if email.len() > 255 {
-            return Err(UserError::Validation(
+            return Err(ServiceError::Validation(
                 "Email cannot exceed 255 characters".to_string(),
             ));
         }

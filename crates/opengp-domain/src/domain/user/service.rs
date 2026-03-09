@@ -5,12 +5,12 @@ use uuid::Uuid;
 use crate::service;
 
 use super::dto::NewUserData;
-use super::error::UserError;
+use super::error::ServiceError;
 use super::model::{Practitioner, Role, User};
 use super::repository::{PractitionerRepository, UserRepository};
 
 #[derive(Debug, thiserror::Error)]
-pub enum ServiceError {
+pub enum PractitionerServiceError {
     #[error("Repository error: {0}")]
     Repository(String),
 
@@ -30,8 +30,8 @@ impl PractitionerService {
     ///
     /// # Returns
     /// * `Ok(Vec<Practitioner>)` - List of active practitioners
-    /// * `Err(ServiceError)` - Database error
-    pub async fn get_active_practitioners(&self) -> Result<Vec<Practitioner>, ServiceError> {
+    /// * `Err(PractitionerServiceError)` - Database error
+    pub async fn get_active_practitioners(&self) -> Result<Vec<Practitioner>, PractitionerServiceError> {
         info!("Fetching active practitioners");
 
         match self.repository.list_active().await {
@@ -41,7 +41,7 @@ impl PractitionerService {
             }
             Err(e) => {
                 error!("Failed to fetch practitioners: {}", e);
-                Err(ServiceError::Repository(e.to_string()))
+                Err(PractitionerServiceError::Repository(e.to_string()))
             }
         }
     }
@@ -63,11 +63,11 @@ impl UserService {
     ///
     /// # Returns
     /// * `Ok(User)` - Successfully created user
-    /// * `Err(UserError::Duplicate)` - Username already exists
-    /// * `Err(UserError::Validation)` - Invalid user data
-    /// * `Err(UserError::Repository)` - Database error
+    /// * `Err(ServiceError::Duplicate)` - Username already exists
+    /// * `Err(ServiceError::Validation)` - Invalid user data
+    /// * `Err(ServiceError::Repository)` - Database error
     #[instrument(skip(self))]
-    pub async fn create_user(&self, data: NewUserData) -> Result<User, UserError> {
+    pub async fn create_user(&self, data: NewUserData) -> Result<User, ServiceError> {
         info!("Creating new user: {}", data.username);
 
         // Check for duplicate username
@@ -78,7 +78,7 @@ impl UserService {
             .is_some()
         {
             warn!("Duplicate username attempted: {}", data.username);
-            return Err(UserError::Duplicate(format!(
+            return Err(ServiceError::Duplicate(format!(
                 "Username '{}' already exists",
                 data.username
             )));
@@ -112,10 +112,10 @@ impl UserService {
     ///
     /// # Returns
     /// * `Ok(User)` - Successfully updated user
-    /// * `Err(UserError::NotFound)` - User not found
-    /// * `Err(UserError::Repository)` - Database error
+    /// * `Err(ServiceError::NotFoundByUsername)` - User not found
+    /// * `Err(ServiceError::Repository)` - Database error
     #[instrument(skip(self), fields(user_id = %user.id))]
-    pub async fn update_user(&self, user: User) -> Result<User, UserError> {
+    pub async fn update_user(&self, user: User) -> Result<User, ServiceError> {
         info!("Updating user: {} ({})", user.username, user.id);
 
         match self.repository.update(user).await {
@@ -137,10 +137,10 @@ impl UserService {
     ///
     /// # Returns
     /// * `Ok(User)` - User found
-    /// * `Err(UserError::NotFound)` - User not found
-    /// * `Err(UserError::Repository)` - Database error
+    /// * `Err(ServiceError::NotFound)` - User not found
+    /// * `Err(ServiceError::Repository)` - Database error
     #[instrument(skip(self))]
-    pub async fn get_user_by_id(&self, id: Uuid) -> Result<User, UserError> {
+    pub async fn get_user_by_id(&self, id: Uuid) -> Result<User, ServiceError> {
         info!("Fetching user by ID: {}", id);
 
         match self.repository.find_by_id(id).await? {
@@ -150,7 +150,7 @@ impl UserService {
             }
             None => {
                 warn!("User not found: {}", id);
-                Err(UserError::NotFound(format!("User not found: {}", id)))
+                Err(ServiceError::NotFound(id))
             }
         }
     }
@@ -162,10 +162,10 @@ impl UserService {
     ///
     /// # Returns
     /// * `Ok(User)` - User found
-    /// * `Err(UserError::NotFound)` - User not found
-    /// * `Err(UserError::Repository)` - Database error
+    /// * `Err(ServiceError::NotFound)` - User not found
+    /// * `Err(ServiceError::Repository)` - Database error
     #[instrument(skip(self))]
-    pub async fn get_user_by_username(&self, username: &str) -> Result<User, UserError> {
+    pub async fn get_user_by_username(&self, username: &str) -> Result<User, ServiceError> {
         info!("Fetching user by username: {}", username);
 
         match self.repository.find_by_username(username).await? {
@@ -175,10 +175,7 @@ impl UserService {
             }
             None => {
                 warn!("User not found with username: {}", username);
-                Err(UserError::NotFound(format!(
-                    "User not found with username: {}",
-                    username
-                )))
+                Err(ServiceError::NotFoundByUsername(username.to_string()))
             }
         }
     }
@@ -189,9 +186,9 @@ impl UserService {
     ///
     /// # Returns
     /// * `Ok(Vec<User>)` - List of all users
-    /// * `Err(UserError::Repository)` - Database error
+    /// * `Err(ServiceError::Repository)` - Database error
     #[instrument(skip(self))]
-    pub async fn get_all_users(&self) -> Result<Vec<User>, UserError> {
+    pub async fn get_all_users(&self) -> Result<Vec<User>, ServiceError> {
         info!("Fetching all users");
 
         match self.repository.find_all().await {
@@ -213,9 +210,9 @@ impl UserService {
     ///
     /// # Returns
     /// * `Ok(Vec<User>)` - List of users with the specified role
-    /// * `Err(UserError::Repository)` - Database error
+    /// * `Err(ServiceError::Repository)` - Database error
     #[instrument(skip(self))]
-    pub async fn get_users_by_role(&self, role: Role) -> Result<Vec<User>, UserError> {
+    pub async fn get_users_by_role(&self, role: Role) -> Result<Vec<User>, ServiceError> {
         info!("Fetching users with role: {:?}", role);
 
         match self.repository.find_by_role(role).await {
@@ -239,10 +236,10 @@ impl UserService {
     ///
     /// # Returns
     /// * `Ok(())` - User successfully deactivated
-    /// * `Err(UserError::NotFound)` - User not found
-    /// * `Err(UserError::Repository)` - Database error
+    /// * `Err(ServiceError::NotFound)` - User not found
+    /// * `Err(ServiceError::Repository)` - Database error
     #[instrument(skip(self))]
-    pub async fn deactivate_user(&self, id: Uuid) -> Result<(), UserError> {
+    pub async fn deactivate_user(&self, id: Uuid) -> Result<(), ServiceError> {
         info!("Deactivating user: {}", id);
 
         match self.repository.delete(id).await {

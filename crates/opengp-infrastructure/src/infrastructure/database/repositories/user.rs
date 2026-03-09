@@ -3,7 +3,7 @@ use chrono::Utc;
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
-use opengp_domain::domain::user::{Permission, Role, User, UserRepository, UserRepositoryError};
+use opengp_domain::domain::user::{Permission, RepositoryError, Role, User, UserRepository};
 use crate::infrastructure::database::helpers::{
     bytes_to_uuid, datetime_to_string, string_to_datetime, uuid_to_bytes,
 };
@@ -29,11 +29,11 @@ struct UserRow {
 }
 
 impl UserRow {
-    fn into_user(self) -> Result<User, UserRepositoryError> {
+    fn into_user(self) -> Result<User, RepositoryError> {
         let additional_permissions = match self.additional_permissions {
             Some(json_str) if !json_str.trim().is_empty() => {
                 serde_json::from_str::<Vec<Permission>>(&json_str).map_err(|e| {
-                    UserRepositoryError::ConstraintViolation(format!(
+                    RepositoryError::ConstraintViolation(format!(
                         "Invalid permissions JSON: {}",
                         e
                     ))
@@ -44,7 +44,7 @@ impl UserRow {
 
         Ok(User {
             id: bytes_to_uuid(&self.id).map_err(|_| {
-                UserRepositoryError::ConstraintViolation("Invalid UUID bytes".to_string())
+                RepositoryError::ConstraintViolation("Invalid UUID bytes".to_string())
             })?,
             username: self.username,
             password_hash: self.password_hash_new,
@@ -52,7 +52,7 @@ impl UserRow {
             first_name: self.first_name,
             last_name: self.last_name,
             role: self.role.parse::<Role>().map_err(|_| {
-                UserRepositoryError::ConstraintViolation(format!("Invalid role: {}", self.role))
+                RepositoryError::ConstraintViolation(format!("Invalid role: {}", self.role))
             })?,
             additional_permissions,
             is_active: self.is_active,
@@ -89,7 +89,7 @@ impl SqlxUserRepository {
 
 #[async_trait]
 impl UserRepository for SqlxUserRepository {
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, UserRepositoryError> {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, RepositoryError> {
         let id_bytes = uuid_to_bytes(&id);
 
         let row = sqlx::query_as::<_, UserRow>(&format!("{}WHERE id = ?", USER_SELECT_QUERY))
@@ -104,7 +104,7 @@ impl UserRepository for SqlxUserRepository {
         }
     }
 
-    async fn find_by_username(&self, username: &str) -> Result<Option<User>, UserRepositoryError> {
+    async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepositoryError> {
         let row = sqlx::query_as::<_, UserRow>(&format!("{}WHERE username = ?", USER_SELECT_QUERY))
             .bind(username)
             .fetch_optional(&self.pool)
@@ -117,7 +117,7 @@ impl UserRepository for SqlxUserRepository {
         }
     }
 
-    async fn find_all(&self) -> Result<Vec<User>, UserRepositoryError> {
+    async fn find_all(&self) -> Result<Vec<User>, RepositoryError> {
         let rows = sqlx::query_as::<_, UserRow>(&format!(
             "{}ORDER BY last_name, first_name",
             USER_SELECT_QUERY
@@ -129,7 +129,7 @@ impl UserRepository for SqlxUserRepository {
         rows.into_iter().map(|r| r.into_user()).collect()
     }
 
-    async fn find_by_role(&self, role: Role) -> Result<Vec<User>, UserRepositoryError> {
+    async fn find_by_role(&self, role: Role) -> Result<Vec<User>, RepositoryError> {
         let role_str = role.to_string();
 
         let rows = sqlx::query_as::<_, UserRow>(&format!(
@@ -144,14 +144,14 @@ impl UserRepository for SqlxUserRepository {
         rows.into_iter().map(|r| r.into_user()).collect()
     }
 
-    async fn create(&self, user: User) -> Result<User, UserRepositoryError> {
+    async fn create(&self, user: User) -> Result<User, RepositoryError> {
         let id_bytes = uuid_to_bytes(&user.id);
         let role_str = user.role.to_string();
         let additional_permissions_json = if user.additional_permissions.is_empty() {
             "[]".to_string()
         } else {
             serde_json::to_string(&user.additional_permissions).map_err(|e| {
-                UserRepositoryError::ConstraintViolation(format!(
+                RepositoryError::ConstraintViolation(format!(
                     "Failed to serialize permissions: {}",
                     e
                 ))
@@ -198,37 +198,37 @@ impl UserRepository for SqlxUserRepository {
             Err(sqlx::Error::Database(db_err)) => {
                 let err_msg = db_err.message();
                 if err_msg.contains("UNIQUE constraint") && err_msg.contains("username") {
-                    Err(UserRepositoryError::ConstraintViolation(
+                    Err(RepositoryError::ConstraintViolation(
                         "Username already exists".to_string(),
                     ))
                 } else if err_msg.contains("NOT NULL constraint") {
-                    Err(UserRepositoryError::ConstraintViolation(
+                    Err(RepositoryError::ConstraintViolation(
                         "Required field is missing".to_string(),
                     ))
                 } else if err_msg.contains("CHECK constraint") {
-                    Err(UserRepositoryError::ConstraintViolation(
+                    Err(RepositoryError::ConstraintViolation(
                         "Invalid value for field".to_string(),
                     ))
                 } else if err_msg.contains("FOREIGN KEY constraint") {
-                    Err(UserRepositoryError::ConstraintViolation(
+                    Err(RepositoryError::ConstraintViolation(
                         "Referenced record does not exist".to_string(),
                     ))
                 } else {
-                    Err(UserRepositoryError::Database(db_err.to_string()))
+                    Err(RepositoryError::Database(db_err.to_string()))
                 }
             }
-            Err(e) => Err(UserRepositoryError::Database(e.to_string())),
+            Err(e) => Err(RepositoryError::Database(e.to_string())),
         }
     }
 
-    async fn update(&self, user: User) -> Result<User, UserRepositoryError> {
+    async fn update(&self, user: User) -> Result<User, RepositoryError> {
         let id_bytes = uuid_to_bytes(&user.id);
         let role_str = user.role.to_string();
         let additional_permissions_json = if user.additional_permissions.is_empty() {
             "[]".to_string()
         } else {
             serde_json::to_string(&user.additional_permissions).map_err(|e| {
-                UserRepositoryError::ConstraintViolation(format!(
+                RepositoryError::ConstraintViolation(format!(
                     "Failed to serialize permissions: {}",
                     e
                 ))
@@ -278,7 +278,7 @@ impl UserRepository for SqlxUserRepository {
         match result {
             Ok(query_result) => {
                 if query_result.rows_affected() == 0 {
-                    Err(UserRepositoryError::NotFound)
+                    Err(RepositoryError::NotFound)
                 } else {
                     Ok(user)
                 }
@@ -286,22 +286,22 @@ impl UserRepository for SqlxUserRepository {
             Err(sqlx::Error::Database(db_err)) => {
                 let err_msg = db_err.message();
                 if err_msg.contains("UNIQUE constraint") && err_msg.contains("username") {
-                    Err(UserRepositoryError::ConstraintViolation(
+                    Err(RepositoryError::ConstraintViolation(
                         "Username already exists".to_string(),
                     ))
                 } else if err_msg.contains("CHECK constraint") {
-                    Err(UserRepositoryError::ConstraintViolation(
+                    Err(RepositoryError::ConstraintViolation(
                         "Invalid value for field".to_string(),
                     ))
                 } else {
-                    Err(UserRepositoryError::Database(db_err.to_string()))
+                    Err(RepositoryError::Database(db_err.to_string()))
                 }
             }
-            Err(e) => Err(UserRepositoryError::Database(e.to_string())),
+            Err(e) => Err(RepositoryError::Database(e.to_string())),
         }
     }
 
-    async fn delete(&self, id: Uuid) -> Result<(), UserRepositoryError> {
+    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
         let id_bytes = uuid_to_bytes(&id);
         let updated_at_str = datetime_to_string(&Utc::now());
 
@@ -321,12 +321,12 @@ impl UserRepository for SqlxUserRepository {
         match result {
             Ok(query_result) => {
                 if query_result.rows_affected() == 0 {
-                    Err(UserRepositoryError::NotFound)
+                    Err(RepositoryError::NotFound)
                 } else {
                     Ok(())
                 }
             }
-            Err(e) => Err(UserRepositoryError::Database(e.to_string())),
+            Err(e) => Err(RepositoryError::Database(e.to_string())),
         }
     }
 }

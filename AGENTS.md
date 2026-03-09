@@ -125,3 +125,48 @@ cargo build --release  # Release build
 - Wiki lives in `/wiki` as git-tracked Markdown
 - SQLite db embedded at project root (`opengp.db`)
 - No CI/CD configured (early-stage project)
+
+## ARCHITECTURE UPDATES (2026-03-05)
+
+### Workspace Migration Complete
+- **Status**: Workspace crates now contain actual implementation (no longer stubs)
+- **Structure**: `crates/opengp-domain/`, `crates/opengp-infrastructure/`, `crates/opengp-ui/`, `crates/opengp-config/`
+- **Build**: `cargo build --release` produces 8.1MB binary with all features
+
+### Unified Error Handling
+- **RepositoryError Pattern**: Base error type `crate::domain::error::RepositoryError` with variants: `Database`, `NotFound`, `ConstraintViolation`
+- **Module-Specific Errors**: Each module (`patient`, `clinical`, `audit`, etc.) wraps base via `Base(#[from] BaseRepositoryError)` + module-specific variants
+- **Infrastructure Mapping**: Mocks and database implementations map errors using `RepositoryError::Base(domain::error::RepositoryError::NotFound)` pattern
+
+### AuditEmitter Trait for Decoupling
+- **Trait**: `pub trait AuditEmitter: Send + Sync` with `async fn emit(&self, entry: AuditEntry) -> Result<(), AuditRepositoryError>`
+- **Implementation**: `AuditService` implements `AuditEmitter` by delegating to `self.log()`
+- **Usage**: Services accept `Arc<dyn AuditEmitter>` instead of `Arc<AuditService>` for loose coupling
+- **Coercion**: `Arc<AuditService>` cleanly coerces to `Arc<dyn AuditEmitter>`
+
+### ClinicalService Constructor Reduction
+- **Before**: 8+ constructor arguments (clinical_repo, patient_repo, audit_service, etc.)
+- **After**: 3 arguments via `ClinicalRepositories` struct pattern
+  - `repositories: Arc<ClinicalRepositories>` (wraps clinical, patient, appointment repos)
+  - `audit_emitter: Arc<dyn AuditEmitter>`
+  - `encryption_service: Arc<EncryptionService>`
+- **Benefit**: Reduced cognitive load, easier testing, cleaner API
+
+### Completed Stub Modules
+- **Immunisation**: Full service with `record_immunisation()`, `find_by_patient()`, `get_due_schedule()` + 4 tests
+- **Referral**: Full service with `create_referral()`, `mark_sent()`, `find_by_status()` + 3 tests
+- **Pathology**: Full service with `create_order()`, `create_result()`, `find_orders_by_status()` + 3 tests
+- **Billing**: Full service with `create_invoice()`, `record_payment()`, `find_claims_by_status()` + 3 tests
+- **Pattern**: Each module follows `error.rs` → `repository.rs` → `service.rs` with inline mocks in tests
+
+### Test Coverage
+- **Domain Crate**: 52 unit tests (all passing)
+- **Infrastructure Crate**: 92 tests including fixtures and mocks (all passing)
+- **UI Crate**: 263 widget tests (all passing)
+- **Config Crate**: 7 configuration tests (all passing)
+- **Total**: 414 tests, 0 failures
+
+### Build Status
+- **Release Binary**: 8.1MB ELF executable at `target/release/opengp`
+- **Compilation**: Clean with only unused code warnings (dead code in UI calendar widget)
+- **Dependencies**: All workspace members compile successfully

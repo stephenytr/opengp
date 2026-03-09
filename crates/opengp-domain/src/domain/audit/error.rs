@@ -4,6 +4,12 @@ use uuid::Uuid;
 use crate::domain::error::RepositoryError as BaseRepositoryError;
 
 #[derive(Debug, Error)]
+pub enum AuditEmitterError {
+    #[error("Failed to emit audit entry: {0}")]
+    Emit(String),
+}
+
+#[derive(Debug, Error)]
 pub enum ValidationError {
     #[error("Invalid entity type: {0}")]
     InvalidEntityType(String),
@@ -36,33 +42,15 @@ pub enum ServiceError {
 /// Errors that can occur in the audit repository layer
 #[derive(Debug, Error)]
 pub enum AuditRepositoryError {
-    #[error("Database error: {0}")]
-    Database(String),
-
-    #[error("Not found")]
-    NotFound,
-
-    #[error("Constraint violation: {0}")]
-    ConstraintViolation(String),
+    #[error(transparent)]
+    Base(#[from] BaseRepositoryError),
 
     #[error("Audit entry cannot be modified or deleted (append-only)")]
     ImmutableViolation,
 }
 
-impl From<BaseRepositoryError> for AuditRepositoryError {
-    fn from(err: BaseRepositoryError) -> Self {
-        match err {
-            BaseRepositoryError::Database(e) => AuditRepositoryError::Database(e),
-            BaseRepositoryError::NotFound => AuditRepositoryError::NotFound,
-            BaseRepositoryError::ConstraintViolation(s) => {
-                AuditRepositoryError::ConstraintViolation(s)
-            }
-        }
-    }
-}
-
 impl crate::domain::error::InfrastructureError for AuditRepositoryError {
     fn map_sqlx_error<E: std::error::Error + Send + Sync + 'static>(error: E) -> Self {
-        AuditRepositoryError::Database(error.to_string())
+        BaseRepositoryError::from_infrastructure(error).into()
     }
 }

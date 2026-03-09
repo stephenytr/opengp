@@ -1,14 +1,18 @@
 use thiserror::Error;
+use uuid::Uuid;
 
-pub use crate::domain::error::RepositoryError as UserRepositoryError;
+pub use crate::domain::error::RepositoryError;
 
 #[derive(Debug, Error)]
-pub enum UserError {
+pub enum ServiceError {
     #[error("Validation error: {0}")]
     Validation(String),
 
     #[error("User not found: {0}")]
-    NotFound(String),
+    NotFound(Uuid),
+
+    #[error("User not found with username: {0}")]
+    NotFoundByUsername(String),
 
     #[error("Duplicate user: {0}")]
     Duplicate(String),
@@ -20,5 +24,5 @@ pub enum UserError {
     AccountLocked,
 
     #[error("Repository error: {0}")]
-    Repository(#[from] UserRepositoryError),
+    Repository(#[from] RepositoryError),
 }

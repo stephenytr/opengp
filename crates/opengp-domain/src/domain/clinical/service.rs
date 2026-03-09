@@ -1,10 +1,8 @@
-#![allow(clippy::too_many_arguments)]
-
 use std::sync::Arc;
 use tracing::{info, instrument, warn};
 use uuid::Uuid;
 
-use crate::domain::audit::{AuditEntry, AuditService};
+use crate::domain::audit::{AuditEmitter, AuditEntry};
 use crate::domain::patient::{PatientService, ServiceError as PatientServiceError};
 use crate::service;
 
@@ -21,16 +19,20 @@ use super::repository::{
     SocialHistoryRepository, VitalSignsRepository,
 };
 
+pub struct ClinicalRepositories {
+    pub consultation: Arc<dyn ConsultationRepository>,
+    pub allergy: Arc<dyn AllergyRepository>,
+    pub medical_history: Arc<dyn MedicalHistoryRepository>,
+    pub vital_signs: Arc<dyn VitalSignsRepository>,
+    pub social_history: Arc<dyn SocialHistoryRepository>,
+    pub family_history: Arc<dyn FamilyHistoryRepository>,
+}
+
 service! {
     ClinicalService {
-        consultation_repo: Arc<dyn ConsultationRepository>,
-        allergy_repo: Arc<dyn AllergyRepository>,
-        medical_history_repo: Arc<dyn MedicalHistoryRepository>,
-        vital_signs_repo: Arc<dyn VitalSignsRepository>,
-        social_history_repo: Arc<dyn SocialHistoryRepository>,
-        family_history_repo: Arc<dyn FamilyHistoryRepository>,
+        repos: ClinicalRepositories,
         patient_service: Arc<PatientService>,
-        audit_logger: Arc<AuditService>,
+        audit_logger: Arc<dyn AuditEmitter>,
     }
 }
 
@@ -64,11 +66,10 @@ impl ClinicalService {
         consultation.reason = data.reason;
         consultation.clinical_notes = data.clinical_notes;
 
-        let saved = self.consultation_repo.create(consultation).await?;
+        let saved = self.repos.consultation.create(consultation).await?;
 
-        // Audit log
         self.audit_logger
-            .log(AuditEntry::new_created(
+            .emit(AuditEntry::new_created(
                 "consultation",
                 saved.id,
                 format!("{{\"patient_id\":\"{}\"}}", saved.patient_id),
@@ -83,7 +84,7 @@ impl ClinicalService {
 
     #[instrument(skip(self), fields(consultation_id = %id))]
     pub async fn find_consultation(&self, id: Uuid) -> Result<Option<Consultation>, ServiceError> {
-        let consultation = self.consultation_repo.find_by_id(id).await?;
+        let consultation = self.repos.consultation.find_by_id(id).await?;
         Ok(consultation)
     }
 
@@ -93,7 +94,7 @@ impl ClinicalService {
         patient_id: Uuid,
     ) -> Result<Vec<Consultation>, ServiceError> {
         info!("Listing consultations for patient: {}", patient_id);
-        let consultations = self.consultation_repo.find_by_patient(patient_id).await?;
+        let consultations = self.repos.consultation.find_by_patient(patient_id).await?;
         Ok(consultations)
     }
 
@@ -107,8 +108,7 @@ impl ClinicalService {
     ) -> Result<Consultation, ServiceError> {
         info!("Updating clinical notes for consultation: {}", consultation_id);
 
-        let mut consultation = self
-            .consultation_repo
+        let mut consultation = self.repos.consultation
             .find_by_id(consultation_id)
             .await?
             .ok_or_else(|| ServiceError::ConsultationNotFound(consultation_id))?;
@@ -128,16 +128,16 @@ impl ClinicalService {
         consultation.updated_at = chrono::Utc::now();
         consultation.updated_by = Some(user_id);
 
-        let updated = self.consultation_repo.update(consultation).await?;
+        let updated = self.repos.consultation.update(consultation).await?;
 
         self.audit_logger
-            .log(AuditEntry::new_updated(
-                "consultation",
-                updated.id,
-                "Clinical notes updated",
-                "",
-                user_id,
-            ))
+                    .emit(AuditEntry::new_updated(
+                        "consultation",
+                        updated.id,
+                        "Clinical notes updated",
+                        "",
+                        user_id,
+                    ))
             .await
             .ok();
 
@@ -153,8 +153,7 @@ impl ClinicalService {
     ) -> Result<(), ServiceError> {
         info!("Signing consultation: {}", consultation_id);
 
-        let consultation = self
-            .consultation_repo
+        let consultation = self.repos.consultation
             .find_by_id(consultation_id)
             .await?
             .ok_or_else(|| ServiceError::ConsultationNotFound(consultation_id))?;
@@ -163,19 +162,19 @@ impl ClinicalService {
             return Err(ServiceError::AlreadySigned);
         }
 
-        self.consultation_repo
+        self.repos.consultation
             .sign(consultation_id, user_id)
             .await?;
 
         // Audit log
         self.audit_logger
-            .log(AuditEntry::new_status_changed(
-                "consultation",
-                consultation_id,
-                "Draft",
-                "Signed",
-                user_id,
-            ))
+                    .emit(AuditEntry::new_status_changed(
+                        "consultation",
+                        consultation_id,
+                        "Draft",
+                        "Signed",
+                        user_id,
+                    ))
             .await
             .ok();
 
@@ -219,19 +218,19 @@ impl ClinicalService {
             updated_by: None,
         };
 
-        let saved = self.allergy_repo.create(allergy).await?;
+        let saved = self.repos.allergy.create(allergy).await?;
 
         // Audit log
         self.audit_logger
-            .log(AuditEntry::new_created(
-                "allergy",
-                saved.id,
-                format!(
-                    "{{\"patient_id\":\"{}\",\"allergen\":\"{}\"}}",
-                    saved.patient_id, saved.allergen
-                ),
-                user_id,
-            ))
+                    .emit(AuditEntry::new_created(
+                        "allergy",
+                        saved.id,
+                        format!(
+                            "{{\"patient_id\":\"{}\",\"allergen\":\"{}\"}}",
+                            saved.patient_id, saved.allergen
+                        ),
+                        user_id,
+                    ))
             .await
             .ok();
 
@@ -251,9 +250,9 @@ impl ClinicalService {
         info!("Listing allergies for patient: {}", patient_id);
 
         let allergies = if active_only {
-            self.allergy_repo.find_active_by_patient(patient_id).await?
+            self.repos.allergy.find_active_by_patient(patient_id).await?
         } else {
-            self.allergy_repo.find_by_patient(patient_id).await?
+            self.repos.allergy.find_by_patient(patient_id).await?
         };
 
         Ok(allergies)
@@ -267,13 +266,13 @@ impl ClinicalService {
     ) -> Result<(), ServiceError> {
         info!("Deactivating allergy: {}", allergy_id);
 
-        self.allergy_repo.deactivate(allergy_id).await?;
+        self.repos.allergy.deactivate(allergy_id).await?;
 
         // Audit log
         self.audit_logger
-            .log(AuditEntry::new_status_changed(
-                "allergy", allergy_id, "Active", "Inactive", user_id,
-            ))
+                    .emit(AuditEntry::new_status_changed(
+                        "allergy", allergy_id, "Active", "Inactive", user_id,
+                    ))
             .await
             .ok();
 
@@ -316,19 +315,19 @@ impl ClinicalService {
             updated_by: None,
         };
 
-        let saved = self.medical_history_repo.create(history).await?;
+        let saved = self.repos.medical_history.create(history).await?;
 
         // Audit log
         self.audit_logger
-            .log(AuditEntry::new_created(
-                "medical_history",
-                saved.id,
-                format!(
-                    "{{\"patient_id\":\"{}\",\"condition\":\"{}\"}}",
-                    saved.patient_id, saved.condition
-                ),
-                user_id,
-            ))
+                    .emit(AuditEntry::new_created(
+                        "medical_history",
+                        saved.id,
+                        format!(
+                            "{{\"patient_id\":\"{}\",\"condition\":\"{}\"}}",
+                            saved.patient_id, saved.condition
+                        ),
+                        user_id,
+                    ))
             .await
             .ok();
 
@@ -348,11 +347,11 @@ impl ClinicalService {
         info!("Listing medical history for patient: {}", patient_id);
 
         let history = if active_only {
-            self.medical_history_repo
+            self.repos.medical_history
                 .find_active_by_patient(patient_id)
                 .await?
         } else {
-            self.medical_history_repo
+            self.repos.medical_history
                 .find_by_patient(patient_id)
                 .await?
         };
@@ -369,8 +368,7 @@ impl ClinicalService {
     ) -> Result<MedicalHistory, ServiceError> {
         info!("Updating condition status for history: {}", history_id);
 
-        let mut history = self
-            .medical_history_repo
+        let mut history = self.repos.medical_history
             .find_by_id(history_id)
             .await?
             .ok_or_else(|| ServiceError::MedicalHistoryNotFound(history_id))?;
@@ -380,17 +378,17 @@ impl ClinicalService {
         history.updated_at = chrono::Utc::now();
         history.updated_by = Some(user_id);
 
-        let updated = self.medical_history_repo.update(history).await?;
+        let updated = self.repos.medical_history.update(history).await?;
 
         // Audit log
         self.audit_logger
-            .log(AuditEntry::new_status_changed(
-                "medical_history",
-                history_id,
-                &old_status,
-                format!("{:?}", updated.status),
-                user_id,
-            ))
+                    .emit(AuditEntry::new_status_changed(
+                        "medical_history",
+                        history_id,
+                        &old_status,
+                        format!("{:?}", updated.status),
+                        user_id,
+                    ))
             .await
             .ok();
 
@@ -440,16 +438,16 @@ impl ClinicalService {
         // Auto-calculate BMI
         vitals.calculate_bmi();
 
-        let saved = self.vital_signs_repo.create(vitals).await?;
+        let saved = self.repos.vital_signs.create(vitals).await?;
 
         // Audit log
         self.audit_logger
-            .log(AuditEntry::new_created(
-                "vital_signs",
-                saved.id,
-                format!("{{\"patient_id\":\"{}\"}}", saved.patient_id),
-                user_id,
-            ))
+                    .emit(AuditEntry::new_created(
+                        "vital_signs",
+                        saved.id,
+                        format!("{{\"patient_id\":\"{}\"}}", saved.patient_id),
+                        user_id,
+                    ))
             .await
             .ok();
 
@@ -465,8 +463,7 @@ impl ClinicalService {
         &self,
         patient_id: Uuid,
     ) -> Result<Option<VitalSigns>, ServiceError> {
-        let vitals = self
-            .vital_signs_repo
+        let vitals = self.repos.vital_signs
             .find_latest_by_patient(patient_id)
             .await?;
         Ok(vitals)
@@ -479,8 +476,7 @@ impl ClinicalService {
         limit: usize,
     ) -> Result<Vec<VitalSigns>, ServiceError> {
         info!("Listing vital signs history for patient: {}", patient_id);
-        let vitals = self
-            .vital_signs_repo
+        let vitals = self.repos.vital_signs
             .find_by_patient(patient_id, limit)
             .await?;
         Ok(vitals)
@@ -508,7 +504,7 @@ impl ClinicalService {
             .ok_or_else(|| ServiceError::PatientNotFound(patient_id))?;
 
         // Check if social history exists
-        let existing = self.social_history_repo.find_by_patient(patient_id).await?;
+        let existing = self.repos.social_history.find_by_patient(patient_id).await?;
 
         let social_history = if let Some(mut existing) = existing {
             // Update existing
@@ -525,7 +521,7 @@ impl ClinicalService {
             existing.updated_at = chrono::Utc::now();
             existing.updated_by = user_id;
 
-            self.social_history_repo.update(existing).await?
+            self.repos.social_history.update(existing).await?
         } else {
             // Create new
             let new = SocialHistory {
@@ -545,18 +541,18 @@ impl ClinicalService {
                 updated_by: user_id,
             };
 
-            self.social_history_repo.create(new).await?
+            self.repos.social_history.create(new).await?
         };
 
         // Audit log
         self.audit_logger
-            .log(AuditEntry::new_updated(
-                "social_history",
-                social_history.id,
-                "Social history updated",
-                "",
-                user_id,
-            ))
+                    .emit(AuditEntry::new_updated(
+                        "social_history",
+                        social_history.id,
+                        "Social history updated",
+                        "",
+                        user_id,
+                    ))
             .await
             .ok();
 
@@ -569,7 +565,7 @@ impl ClinicalService {
         &self,
         patient_id: Uuid,
     ) -> Result<Option<SocialHistory>, ServiceError> {
-        let history = self.social_history_repo.find_by_patient(patient_id).await?;
+        let history = self.repos.social_history.find_by_patient(patient_id).await?;
         Ok(history)
     }
 
@@ -604,19 +600,19 @@ impl ClinicalService {
             created_by: user_id,
         };
 
-        let saved = self.family_history_repo.create(history).await?;
+        let saved = self.repos.family_history.create(history).await?;
 
         // Audit log
         self.audit_logger
-            .log(AuditEntry::new_created(
-                "family_history",
-                saved.id,
-                format!(
-                    "{{\"patient_id\":\"{}\",\"condition\":\"{}\"}}",
-                    saved.patient_id, saved.condition
-                ),
-                user_id,
-            ))
+                    .emit(AuditEntry::new_created(
+                        "family_history",
+                        saved.id,
+                        format!(
+                            "{{\"patient_id\":\"{}\",\"condition\":\"{}\"}}",
+                            saved.patient_id, saved.condition
+                        ),
+                        user_id,
+                    ))
             .await
             .ok();
 
@@ -633,7 +629,7 @@ impl ClinicalService {
         patient_id: Uuid,
     ) -> Result<Vec<FamilyHistory>, ServiceError> {
         info!("Listing family history for patient: {}", patient_id);
-        let history = self.family_history_repo.find_by_patient(patient_id).await?;
+        let history = self.repos.family_history.find_by_patient(patient_id).await?;
         Ok(history)
     }
 
@@ -645,16 +641,16 @@ impl ClinicalService {
     ) -> Result<(), ServiceError> {
         info!("Deleting family history: {}", history_id);
 
-        self.family_history_repo.delete(history_id).await?;
+        self.repos.family_history.delete(history_id).await?;
 
         // Audit log
         self.audit_logger
-            .log(AuditEntry::new_cancelled(
-                "family_history",
-                history_id,
-                "Family history entry deleted",
-                user_id,
-            ))
+                    .emit(AuditEntry::new_cancelled(
+                        "family_history",
+                        history_id,
+                        "Family history entry deleted",
+                        user_id,
+                    ))
             .await
             .ok();
 
@@ -666,14 +662,349 @@ impl ClinicalService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::audit::AuditEmitterError;
+    use crate::domain::clinical::RepositoryError;
+    use crate::domain::patient::{Address, Gender, Patient, PatientRepository};
+    use async_trait::async_trait;
+    use chrono::NaiveDate;
+    use std::sync::Mutex;
 
-    // Mock implementations would go here for unit tests
-    // For now, tests are implemented in the mocks.rs file
+    struct NoOpAuditEmitter;
+
+    #[async_trait]
+    impl AuditEmitter for NoOpAuditEmitter {
+        async fn emit(&self, _entry: AuditEntry) -> Result<(), AuditEmitterError> {
+            Ok(())
+        }
+    }
+
+    struct MockConsultationRepository {
+        consultations: Vec<Consultation>,
+        update_calls: Mutex<usize>,
+        sign_calls: Mutex<Vec<Uuid>>,
+    }
+
+    #[async_trait]
+    impl ConsultationRepository for MockConsultationRepository {
+        async fn find_by_id(&self, id: Uuid) -> Result<Option<Consultation>, RepositoryError> {
+            Ok(self.consultations.iter().find(|c| c.id == id).cloned())
+        }
+
+        async fn find_by_patient(
+            &self,
+            patient_id: Uuid,
+        ) -> Result<Vec<Consultation>, RepositoryError> {
+            Ok(self
+                .consultations
+                .iter()
+                .filter(|c| c.patient_id == patient_id)
+                .cloned()
+                .collect())
+        }
+
+        async fn find_by_date_range(
+            &self,
+            _patient_id: Uuid,
+            _start: chrono::DateTime<chrono::Utc>,
+            _end: chrono::DateTime<chrono::Utc>,
+        ) -> Result<Vec<Consultation>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn create(
+            &self,
+            consultation: Consultation,
+        ) -> Result<Consultation, RepositoryError> {
+            Ok(consultation)
+        }
+
+        async fn update(
+            &self,
+            consultation: Consultation,
+        ) -> Result<Consultation, RepositoryError> {
+            *self.update_calls.lock().expect("update_calls lock poisoned") += 1;
+            Ok(consultation)
+        }
+
+        async fn sign(&self, id: Uuid, _user_id: Uuid) -> Result<(), RepositoryError> {
+            self.sign_calls
+                .lock()
+                .expect("sign_calls lock poisoned")
+                .push(id);
+            Ok(())
+        }
+    }
+
+    struct MockAllergyRepository;
+    #[async_trait]
+    impl AllergyRepository for MockAllergyRepository {
+        async fn find_by_id(&self, _id: Uuid) -> Result<Option<Allergy>, RepositoryError> {
+            Ok(None)
+        }
+
+        async fn find_by_patient(&self, _patient_id: Uuid) -> Result<Vec<Allergy>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn find_active_by_patient(
+            &self,
+            _patient_id: Uuid,
+        ) -> Result<Vec<Allergy>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn create(&self, allergy: Allergy) -> Result<Allergy, RepositoryError> {
+            Ok(allergy)
+        }
+
+        async fn update(&self, allergy: Allergy) -> Result<Allergy, RepositoryError> {
+            Ok(allergy)
+        }
+
+        async fn deactivate(&self, _id: Uuid) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+    }
+
+    struct MockMedicalHistoryRepository;
+    #[async_trait]
+    impl MedicalHistoryRepository for MockMedicalHistoryRepository {
+        async fn find_by_id(&self, _id: Uuid) -> Result<Option<MedicalHistory>, RepositoryError> {
+            Ok(None)
+        }
+
+        async fn find_by_patient(
+            &self,
+            _patient_id: Uuid,
+        ) -> Result<Vec<MedicalHistory>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn find_active_by_patient(
+            &self,
+            _patient_id: Uuid,
+        ) -> Result<Vec<MedicalHistory>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn create(&self, history: MedicalHistory) -> Result<MedicalHistory, RepositoryError> {
+            Ok(history)
+        }
+
+        async fn update(&self, history: MedicalHistory) -> Result<MedicalHistory, RepositoryError> {
+            Ok(history)
+        }
+    }
+
+    struct MockVitalSignsRepository;
+    #[async_trait]
+    impl VitalSignsRepository for MockVitalSignsRepository {
+        async fn find_by_id(&self, _id: Uuid) -> Result<Option<VitalSigns>, RepositoryError> {
+            Ok(None)
+        }
+
+        async fn find_by_patient(
+            &self,
+            _patient_id: Uuid,
+            _limit: usize,
+        ) -> Result<Vec<VitalSigns>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn find_latest_by_patient(
+            &self,
+            _patient_id: Uuid,
+        ) -> Result<Option<VitalSigns>, RepositoryError> {
+            Ok(None)
+        }
+
+        async fn create(&self, vitals: VitalSigns) -> Result<VitalSigns, RepositoryError> {
+            Ok(vitals)
+        }
+    }
+
+    struct MockSocialHistoryRepository;
+    #[async_trait]
+    impl SocialHistoryRepository for MockSocialHistoryRepository {
+        async fn find_by_patient(
+            &self,
+            _patient_id: Uuid,
+        ) -> Result<Option<SocialHistory>, RepositoryError> {
+            Ok(None)
+        }
+
+        async fn create(&self, history: SocialHistory) -> Result<SocialHistory, RepositoryError> {
+            Ok(history)
+        }
+
+        async fn update(&self, history: SocialHistory) -> Result<SocialHistory, RepositoryError> {
+            Ok(history)
+        }
+    }
+
+    struct MockFamilyHistoryRepository;
+    #[async_trait]
+    impl FamilyHistoryRepository for MockFamilyHistoryRepository {
+        async fn find_by_id(&self, _id: Uuid) -> Result<Option<FamilyHistory>, RepositoryError> {
+            Ok(None)
+        }
+
+        async fn find_by_patient(
+            &self,
+            _patient_id: Uuid,
+        ) -> Result<Vec<FamilyHistory>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn create(&self, history: FamilyHistory) -> Result<FamilyHistory, RepositoryError> {
+            Ok(history)
+        }
+
+        async fn update(&self, history: FamilyHistory) -> Result<FamilyHistory, RepositoryError> {
+            Ok(history)
+        }
+
+        async fn delete(&self, _id: Uuid) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+    }
+
+    struct MockPatientRepository {
+        patients: Vec<Patient>,
+    }
+
+    #[async_trait]
+    impl PatientRepository for MockPatientRepository {
+        async fn find_by_id(&self, id: Uuid) -> Result<Option<Patient>, crate::domain::patient::RepositoryError> {
+            Ok(self.patients.iter().find(|p| p.id == id).cloned())
+        }
+
+        async fn find_by_medicare(
+            &self,
+            medicare: &str,
+        ) -> Result<Option<Patient>, crate::domain::patient::RepositoryError> {
+            Ok(self
+                .patients
+                .iter()
+                .find(|p| p.medicare_number.as_deref() == Some(medicare))
+                .cloned())
+        }
+
+        async fn list_active(&self) -> Result<Vec<Patient>, crate::domain::patient::RepositoryError> {
+            Ok(self.patients.clone())
+        }
+
+        async fn search(&self, query: &str) -> Result<Vec<Patient>, crate::domain::patient::RepositoryError> {
+            Ok(self
+                .patients
+                .iter()
+                .filter(|p| p.first_name.contains(query) || p.last_name.contains(query))
+                .cloned()
+                .collect())
+        }
+
+        async fn create(&self, patient: Patient) -> Result<Patient, crate::domain::patient::RepositoryError> {
+            Ok(patient)
+        }
+
+        async fn update(&self, patient: Patient) -> Result<Patient, crate::domain::patient::RepositoryError> {
+            Ok(patient)
+        }
+
+        async fn deactivate(&self, _id: Uuid) -> Result<(), crate::domain::patient::RepositoryError> {
+            Ok(())
+        }
+    }
+
+    fn create_test_patient() -> Patient {
+        Patient::new(
+            "Jane".to_string(),
+            "Citizen".to_string(),
+            NaiveDate::from_ymd_opt(1990, 1, 1).expect("valid dob"),
+            Gender::Female,
+            Some("8003601234567890".to_string()),
+            Some("1234567890".to_string()),
+            Some(1),
+            None,
+            None,
+            None,
+            None,
+            Address::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("English".to_string()),
+            Some(false),
+            None,
+        )
+        .expect("valid patient")
+    }
+
+    fn create_test_service(consultations: Vec<Consultation>, patients: Vec<Patient>) -> ClinicalService {
+        let repos = ClinicalRepositories {
+            consultation: Arc::new(MockConsultationRepository {
+                consultations,
+                update_calls: Mutex::new(0),
+                sign_calls: Mutex::new(vec![]),
+            }),
+            allergy: Arc::new(MockAllergyRepository),
+            medical_history: Arc::new(MockMedicalHistoryRepository),
+            vital_signs: Arc::new(MockVitalSignsRepository),
+            social_history: Arc::new(MockSocialHistoryRepository),
+            family_history: Arc::new(MockFamilyHistoryRepository),
+        };
+        let patient_service = Arc::new(PatientService::new(Arc::new(MockPatientRepository { patients })));
+        let audit_logger: Arc<dyn AuditEmitter> = Arc::new(NoOpAuditEmitter);
+
+        ClinicalService::new(repos, patient_service, audit_logger)
+    }
 
     #[test]
     fn test_service_error_display() {
         let id = Uuid::new_v4();
         let err = ServiceError::ConsultationNotFound(id);
         assert!(err.to_string().contains("Consultation not found"));
+    }
+
+    #[tokio::test]
+    async fn test_sign_consultation_rejects_already_signed_consultation() {
+        let patient = create_test_patient();
+        let user_id = Uuid::new_v4();
+        let mut consultation = Consultation::new(patient.id, Uuid::new_v4(), None, user_id);
+        consultation.is_signed = true;
+        consultation.signed_by = Some(user_id);
+        consultation.signed_at = Some(chrono::Utc::now());
+
+        let service = create_test_service(vec![consultation.clone()], vec![patient]);
+
+        let result = service.sign_consultation(consultation.id, user_id).await;
+
+        assert!(matches!(result, Err(ServiceError::AlreadySigned)));
+    }
+
+    #[tokio::test]
+    async fn test_update_clinical_notes_rejects_signed_consultation() {
+        let patient = create_test_patient();
+        let user_id = Uuid::new_v4();
+        let mut consultation = Consultation::new(patient.id, Uuid::new_v4(), None, user_id);
+        consultation.is_signed = true;
+        consultation.signed_by = Some(user_id);
+        consultation.signed_at = Some(chrono::Utc::now());
+
+        let service = create_test_service(vec![consultation.clone()], vec![patient]);
+
+        let result = service
+            .update_clinical_notes(
+                consultation.id,
+                Some("new reason".to_string()),
+                Some("new notes".to_string()),
+                user_id,
+            )
+            .await;
+
+        assert!(matches!(result, Err(ServiceError::AlreadySigned)));
     }
 }

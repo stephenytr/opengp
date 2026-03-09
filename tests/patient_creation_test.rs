@@ -1,10 +1,23 @@
 use chrono::NaiveDate;
-use opengp::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
-use opengp::infrastructure::crypto::EncryptionService;
-use opengp::infrastructure::database::repositories::SqlxPatientRepository;
+use opengp_domain::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
+use opengp_infrastructure::infrastructure::crypto::EncryptionService;
+use opengp_infrastructure::infrastructure::database::repositories::SqlxPatientRepository;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use uuid::Uuid;
+
+async fn setup_test_database() -> SqlitePool {
+    let pool = SqlitePool::connect(":memory:")
+        .await
+        .expect("Failed to create in-memory database");
+
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
+
+    pool
+}
 
 fn generate_unique_medicare() -> String {
     let random_num = Uuid::new_v4().as_u128() % 10000000000;
@@ -13,9 +26,7 @@ fn generate_unique_medicare() -> String {
 
 #[tokio::test]
 async fn test_create_patient_with_database() {
-    let pool = SqlitePool::connect("sqlite:opengp.db")
-        .await
-        .expect("Failed to connect to database");
+    let pool = setup_test_database().await;
 
     // Initialize encryption service for tests
     let crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
@@ -67,9 +78,7 @@ async fn test_create_patient_with_database() {
 
 #[tokio::test]
 async fn test_duplicate_medicare_number() {
-    let pool = SqlitePool::connect("sqlite:opengp.db")
-        .await
-        .expect("Failed to connect to database");
+    let pool = setup_test_database().await;
 
     // Initialize encryption service for tests
     let crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
@@ -115,9 +124,7 @@ async fn test_duplicate_medicare_number() {
 
 #[tokio::test]
 async fn test_find_patient_by_id() {
-    let pool = SqlitePool::connect("sqlite:opengp.db")
-        .await
-        .expect("Failed to connect to database");
+    let pool = setup_test_database().await;
 
     // Initialize encryption service for tests
     let crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));

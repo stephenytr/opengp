@@ -1,11 +1,11 @@
 use chrono::{Duration, NaiveDate, Utc};
-use opengp::domain::audit::{AuditRepository, AuditService};
-use opengp::domain::clinical::{
-    ClinicalService, ConsultationRepository, NewConsultationData,
+use opengp_domain::domain::audit::{AuditEmitter, AuditRepository, AuditService};
+use opengp_domain::domain::clinical::{
+    ClinicalRepositories, ClinicalService, ConsultationRepository, NewConsultationData,
 };
-use opengp::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
-use opengp::infrastructure::crypto::EncryptionService;
-use opengp::infrastructure::database::repositories::{
+use opengp_domain::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
+use opengp_infrastructure::infrastructure::crypto::EncryptionService;
+use opengp_infrastructure::infrastructure::database::repositories::{
     SqlxAllergyRepository, SqlxAuditRepository, SqlxClinicalRepository,
     SqlxFamilyHistoryRepository, SqlxMedicalHistoryRepository, SqlxPatientRepository,
     SqlxSocialHistoryRepository, SqlxVitalSignsRepository,
@@ -27,7 +27,7 @@ async fn setup_test_database() -> SqlitePool {
     pool
 }
 
-fn create_mock_audit_service(pool: &SqlitePool) -> Arc<AuditService> {
+fn create_mock_audit_service(pool: &SqlitePool) -> Arc<dyn AuditEmitter> {
     let audit_repository: Arc<dyn AuditRepository> =
         Arc::new(SqlxAuditRepository::new(pool.clone()));
     Arc::new(AuditService::new(audit_repository))
@@ -75,17 +75,17 @@ async fn create_test_practitioner(pool: &SqlitePool) -> Uuid {
     let username = format!("dr_{}", id);
     let now = Utc::now();
 
-    sqlx::query!(
+    sqlx::query(
         "INSERT INTO users (id, username, password_hash, role, is_active, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)",
-        id,
-        username,
-        "test_hash",
-        "Doctor",
-        true,
-        now,
-        now
     )
+    .bind(id)
+    .bind(username)
+    .bind("test_hash")
+    .bind("Doctor")
+    .bind(true)
+    .bind(now)
+    .bind(now)
     .execute(pool)
     .await
     .expect("Failed to create test practitioner");
@@ -106,16 +106,16 @@ fn create_clinical_service(pool: &SqlitePool) -> ClinicalService {
 
     let audit_service = create_mock_audit_service(pool);
 
-    ClinicalService::new(
-        consultation_repo,
-        Arc::new(SqlxAllergyRepository::new(pool.clone(), crypto.clone())),
-        Arc::new(SqlxMedicalHistoryRepository::new(pool.clone(), crypto.clone())),
-        Arc::new(SqlxVitalSignsRepository::new(pool.clone(), crypto.clone())),
-        Arc::new(SqlxSocialHistoryRepository::new(pool.clone(), crypto.clone())),
-        Arc::new(SqlxFamilyHistoryRepository::new(pool.clone(), crypto.clone())),
-        patient_service,
-        audit_service,
-    )
+    let repos = ClinicalRepositories {
+        consultation: consultation_repo,
+        allergy: Arc::new(SqlxAllergyRepository::new(pool.clone(), crypto.clone())),
+        medical_history: Arc::new(SqlxMedicalHistoryRepository::new(pool.clone(), crypto.clone())),
+        vital_signs: Arc::new(SqlxVitalSignsRepository::new(pool.clone(), crypto.clone())),
+        social_history: Arc::new(SqlxSocialHistoryRepository::new(pool.clone(), crypto.clone())),
+        family_history: Arc::new(SqlxFamilyHistoryRepository::new(pool.clone(), crypto.clone())),
+    };
+
+    ClinicalService::new(repos, patient_service, audit_service)
 }
 
 #[tokio::test]
