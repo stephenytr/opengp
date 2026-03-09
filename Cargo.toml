@@ -70,3 +70,6 @@ strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 derive_builder = "0.20"
 ratatui-textarea = "0.8"
+
+[dev-dependencies]
+sqlx.workspace = true
