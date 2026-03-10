@@ -748,6 +748,7 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
     let fields = SocialHistoryField::all();
     let mut y = inner.y + 1;
     let max_y = inner.y + inner.height.saturating_sub(2);
+    let mut open_dropdown: Option<(DropdownWidget, Rect)> = None;
 
     for field in &fields {
         if y > max_y {
@@ -772,9 +773,13 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
 
             let dropdown_area = Rect::new(inner.x + 1, y, inner.width.saturating_sub(2), 3);
             let dropdown_clone = dropdown.clone();
-            dropdown_clone
-                .focused(is_focused)
-                .render(dropdown_area, buf);
+            let focused_dropdown = dropdown_clone.focused(is_focused);
+
+            if focused_dropdown.is_open() {
+                open_dropdown = Some((focused_dropdown, dropdown_area));
+            } else {
+                focused_dropdown.render(dropdown_area, buf);
+            }
             y += 3;
         } else {
             let (textarea_state, field_height) = match field {
@@ -813,6 +818,11 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
             TextareaWidget::new(&textarea_state, component.theme.clone()).render(field_area, buf);
             y += field_height;
         }
+    }
+
+    // Render open dropdown on top of subsequent fields
+    if let Some((dropdown, dropdown_area)) = open_dropdown {
+        dropdown.render(dropdown_area, buf);
     }
 
     let help_y = inner.y + inner.height.saturating_sub(1);
