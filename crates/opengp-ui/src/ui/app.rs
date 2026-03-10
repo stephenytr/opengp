@@ -1138,33 +1138,11 @@ impl App {
                 }
             }
             ClinicalView::SocialHistory => {
-                use crate::ui::components::clinical::SocialHistoryAction;
-
-                let is_editing = self.clinical_state.social_history_editing;
-
-                if let Some(ref mut component) = self.clinical_state.social_history_component {
-                    if let Some(action) = component.handle_key(key) {
-                        match action {
-                            SocialHistoryAction::Edit => {
-                                component.start_editing();
-                            }
-                            SocialHistoryAction::Save => {}
-                            SocialHistoryAction::Cancel => {
-                                self.clinical_state.close_social_history_editing();
-                            }
-                            SocialHistoryAction::FieldChanged
-                            | SocialHistoryAction::FocusChanged => {}
-                        }
+                if let KeyCode::Char(c) = key.code {
+                    if c == 'e' || c == 'n' {
+                        self.clinical_state.open_social_history_form();
+                        self.current_context = KeyContext::ClinicalForm;
                         return Action::Enter;
-                    }
-                }
-
-                if !is_editing {
-                    if let KeyCode::Char(c) = key.code {
-                        if c == 'e' || c == 'n' {
-                            self.clinical_state.open_social_history_editing();
-                            return Action::Enter;
-                        }
                     }
                 }
             }
@@ -1830,46 +1808,25 @@ impl App {
                 frame.render_widget(self.clinical_state.vitals_list.clone(), area);
             }
             crate::ui::components::clinical::ClinicalView::SocialHistory => {
-                if let Some(ref mut component) = self.clinical_state.social_history_component {
-                    component.loading = self.clinical_state.loading;
-                    if let Some(ref sh) = self.clinical_state.social_history {
-                        component.social_history = Some(
-                            crate::ui::components::clinical::social_history::SocialHistoryData {
-                                smoking_status: sh.smoking_status,
-                                cigarettes_per_day: sh.cigarettes_per_day,
-                                smoking_quit_date: sh.smoking_quit_date,
-                                alcohol_status: sh.alcohol_status,
-                                standard_drinks_per_week: sh.standard_drinks_per_week,
-                                exercise_frequency: sh.exercise_frequency,
-                                occupation: sh.occupation.clone(),
-                                living_situation: sh.living_situation.clone(),
-                                support_network: sh.support_network.clone(),
-                                notes: sh.notes.clone(),
-                            },
-                        );
-                    }
-                    frame.render_widget(component.clone(), area);
-                } else {
-                    let mut component = SocialHistoryComponent::new(self.theme.clone());
-                    component.loading = self.clinical_state.loading;
-                    if let Some(ref sh) = self.clinical_state.social_history {
-                        component.social_history = Some(
-                            crate::ui::components::clinical::social_history::SocialHistoryData {
-                                smoking_status: sh.smoking_status,
-                                cigarettes_per_day: sh.cigarettes_per_day,
-                                smoking_quit_date: sh.smoking_quit_date,
-                                alcohol_status: sh.alcohol_status,
-                                standard_drinks_per_week: sh.standard_drinks_per_week,
-                                exercise_frequency: sh.exercise_frequency,
-                                occupation: sh.occupation.clone(),
-                                living_situation: sh.living_situation.clone(),
-                                support_network: sh.support_network.clone(),
-                                notes: sh.notes.clone(),
-                            },
-                        );
-                    }
-                    frame.render_widget(component, area);
+                let mut component = SocialHistoryComponent::new(self.theme.clone());
+                component.loading = self.clinical_state.loading;
+                if let Some(ref sh) = self.clinical_state.social_history {
+                    component.social_history = Some(
+                        crate::ui::components::clinical::social_history::SocialHistoryData {
+                            smoking_status: sh.smoking_status,
+                            cigarettes_per_day: sh.cigarettes_per_day,
+                            smoking_quit_date: sh.smoking_quit_date,
+                            alcohol_status: sh.alcohol_status,
+                            standard_drinks_per_week: sh.standard_drinks_per_week,
+                            exercise_frequency: sh.exercise_frequency,
+                            occupation: sh.occupation.clone(),
+                            living_situation: sh.living_situation.clone(),
+                            support_network: sh.support_network.clone(),
+                            notes: sh.notes.clone(),
+                        },
+                    );
                 }
+                frame.render_widget(component, area);
             }
             crate::ui::components::clinical::ClinicalView::FamilyHistory => {
                 frame.render_widget(self.clinical_state.family_history_list.clone(), area);
