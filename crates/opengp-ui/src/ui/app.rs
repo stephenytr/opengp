@@ -880,7 +880,71 @@ impl App {
                         }
                     }
                 }
-                ClinicalFormView::SocialHistoryForm => {}
+                ClinicalFormView::SocialHistoryForm => {
+                    use crate::ui::components::clinical::SocialHistoryAction;
+                    if let Some(ref mut form) = self.clinical_state.social_history_form {
+                        if let Some(action) = form.handle_key(key) {
+                            match action {
+                                SocialHistoryAction::Edit => {
+                                    form.start_editing();
+                                }
+                                SocialHistoryAction::Save => {
+                                    if let Some(patient_id) =
+                                        self.clinical_state.selected_patient_id
+                                    {
+                                        let system_user_id = uuid::Uuid::nil();
+                                        let social_history_data =
+                                            form.to_social_history(patient_id, system_user_id);
+                                        self.pending_clinical_save_data =
+                                            Some(PendingClinicalSaveData::SocialHistory {
+                                                patient_id,
+                                                history:
+                                                    opengp_domain::domain::clinical::SocialHistory {
+                                                        id: uuid::Uuid::new_v4(),
+                                                        patient_id,
+                                                        smoking_status: social_history_data
+                                                            .smoking_status,
+                                                        cigarettes_per_day: social_history_data
+                                                            .cigarettes_per_day,
+                                                        smoking_quit_date: social_history_data
+                                                            .smoking_quit_date,
+                                                        alcohol_status: social_history_data
+                                                            .alcohol_status,
+                                                        standard_drinks_per_week:
+                                                            social_history_data
+                                                                .standard_drinks_per_week,
+                                                        exercise_frequency: social_history_data
+                                                            .exercise_frequency,
+                                                        occupation: social_history_data.occupation,
+                                                        living_situation: social_history_data
+                                                            .living_situation,
+                                                        support_network: social_history_data
+                                                            .support_network,
+                                                        notes: social_history_data.notes,
+                                                        updated_by: system_user_id,
+                                                        updated_at:
+                                                            chrono::DateTime::<chrono::Utc>::from(
+                                                                std::time::SystemTime::now(),
+                                                            ),
+                                                    },
+                                            });
+                                        self.clinical_state.close_social_history_form();
+                                        self.current_context = KeyContext::Clinical;
+                                        self.status_bar.clear_error();
+                                    }
+                                }
+                                SocialHistoryAction::Cancel => {
+                                    self.clinical_state.close_social_history_form();
+                                    self.current_context = KeyContext::Clinical;
+                                    self.status_bar.clear_error();
+                                }
+                                SocialHistoryAction::FieldChanged
+                                | SocialHistoryAction::FocusChanged => {}
+                            }
+                            return Action::Enter;
+                        }
+                    }
+                }
                 ClinicalFormView::None => {}
             }
             return Action::Unknown;
