@@ -807,6 +807,8 @@ impl Widget for AppointmentForm {
         let mut y: i32 = (inner.y as i32) + 1 - (self.scroll.scroll_offset as i32);
         let max_y = inner.y as i32 + inner.height as i32 - 2;
 
+        let mut open_dropdown: Option<(DropdownWidget, Rect)> = None;
+
         for field in fields {
             let is_focused = field == self.focused_field;
 
@@ -1005,6 +1007,9 @@ impl Widget for AppointmentForm {
                         3,
                     );
                     let dropdown = self.type_dropdown.clone();
+                    if dropdown.is_open() {
+                        open_dropdown = Some((dropdown.clone(), dropdown_area));
+                    }
                     dropdown.focused(is_focused).render(dropdown_area, buf);
 
                     if let Some(error_msg) = self.error(field) {
@@ -1048,6 +1053,10 @@ impl Widget for AppointmentForm {
                 }
                 y += 2;
             }
+        }
+
+        if let Some((dropdown, dropdown_area)) = open_dropdown {
+            dropdown.render(dropdown_area, buf);
         }
 
         if self.patient_picker.is_open() {
