@@ -515,7 +515,7 @@ impl App {
                                 self.current_context = KeyContext::ClinicalForm;
                             }
                             ClinicalView::SocialHistory => {
-                                self.clinical_state.social_history_editing = true;
+                                self.clinical_state.open_social_history_editing();
                             }
                             ClinicalView::PatientSummary => {
                                 // Navigate to Consultations to create a new consultation
