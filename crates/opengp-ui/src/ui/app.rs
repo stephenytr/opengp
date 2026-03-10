@@ -1747,7 +1747,11 @@ impl App {
                         frame.render_widget(form.clone(), area);
                     }
                 }
-                ClinicalFormView::SocialHistoryForm => {}
+                ClinicalFormView::SocialHistoryForm => {
+                    if let Some(ref form) = self.clinical_state.social_history_form {
+                        frame.render_widget(form.clone(), area);
+                    }
+                }
                 ClinicalFormView::None => {}
             }
             return;
