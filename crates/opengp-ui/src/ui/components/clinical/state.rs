@@ -1,14 +1,15 @@
-use opengp_domain::domain::clinical::{
-    Allergy, Consultation, FamilyHistory, MedicalHistory, SocialHistory, VitalSigns,
-};
-use opengp_domain::domain::prescription::Prescription;
 use crate::ui::components::clinical::{
     AllergyForm, AllergyList, ConsultationForm, ConsultationList, FamilyHistoryForm,
-    FamilyHistoryList, MedicalHistoryForm, MedicalHistoryList, VitalSignsForm, VitalSignsList,
+    FamilyHistoryList, MedicalHistoryForm, MedicalHistoryList, SocialHistoryComponent,
+    VitalSignsForm, VitalSignsList,
 };
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientListItem;
 use crate::ui::widgets::SearchableListState;
+use opengp_domain::domain::clinical::{
+    Allergy, Consultation, FamilyHistory, MedicalHistory, SocialHistory, VitalSigns,
+};
+use opengp_domain::domain::prescription::Prescription;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Default)]
@@ -56,6 +57,7 @@ pub struct ClinicalState {
     pub medical_history_form: Option<MedicalHistoryForm>,
     pub vitals_form: Option<VitalSignsForm>,
     pub family_history_form: Option<FamilyHistoryForm>,
+    pub social_history_component: Option<SocialHistoryComponent>,
     pub consultation_filter_start: Option<String>,
     pub consultation_filter_end: Option<String>,
     pub consultation_prescriptions: Vec<Prescription>,
@@ -94,6 +96,7 @@ impl ClinicalState {
             medical_history_form: None,
             vitals_form: None,
             family_history_form: None,
+            social_history_component: None,
             consultation_filter_start: None,
             consultation_filter_end: None,
             consultation_prescriptions: Vec::new(),
@@ -163,6 +166,16 @@ impl ClinicalState {
         self.form_view = ClinicalFormView::FamilyHistoryForm;
     }
 
+    pub fn open_social_history_editing(&mut self) {
+        self.social_history_component = Some(SocialHistoryComponent::new(self.theme.clone()));
+        self.social_history_editing = true;
+    }
+
+    pub fn close_social_history_editing(&mut self) {
+        self.social_history_component = None;
+        self.social_history_editing = false;
+    }
+
     pub fn close_form(&mut self) {
         self.form_view = ClinicalFormView::None;
         self.allergy_form = None;
@@ -170,6 +183,7 @@ impl ClinicalState {
         self.medical_history_form = None;
         self.vitals_form = None;
         self.family_history_form = None;
+        self.social_history_component = None;
     }
 
     pub fn show_consultations(&mut self) {
@@ -246,6 +260,7 @@ impl ClinicalState {
         self.vital_signs.clear();
         self.social_history = None;
         self.family_history.clear();
+        self.social_history_component = None;
         self.close_form();
 
         self.consultation_list.consultations.clear();
