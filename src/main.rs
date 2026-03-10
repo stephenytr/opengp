@@ -423,6 +423,38 @@ async fn run_tui(
                         }
                     }
                 }
+                opengp_ui::ui::app::PendingClinicalSaveData::SocialHistory { patient_id, history } => {
+                    match clinical_service.update_social_history(
+                        patient_id,
+                        history.smoking_status,
+                        history.cigarettes_per_day,
+                        history.smoking_quit_date,
+                        history.alcohol_status,
+                        history.standard_drinks_per_week,
+                        history.exercise_frequency,
+                        history.occupation,
+                        history.living_situation,
+                        history.support_network,
+                        history.notes,
+                        system_user_id,
+                    ).await {
+                        Ok(_) => {
+                            tracing::info!("Saved social history for patient {}", patient_id);
+                            match clinical_service.get_social_history(patient_id).await {
+                                Ok(Some(sh)) => app.clinical_state_mut().social_history = Some(sh),
+                                Ok(None) => app.clinical_state_mut().social_history = None,
+                                Err(e) => {
+                                    tracing::error!("Failed to reload social history: {}", e);
+                                    app.set_status_error(format!("Failed to reload social history: {}", e));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to save social history: {}", e);
+                            app.set_status_error(format!("Failed to save social history: {}", e));
+                        }
+                    }
+                }
             }
         }
 
