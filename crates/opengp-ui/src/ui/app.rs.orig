@@ -1683,7 +1683,6 @@ impl App {
                         frame.render_widget(form.clone(), area);
                     }
                 }
-                ClinicalFormView::SocialHistoryForm => {}
                 ClinicalFormView::None => {}
             }
             return;

@@ -33,6 +33,7 @@ pub enum ClinicalFormView {
     MedicalHistoryForm,
     VitalSignsForm,
     FamilyHistoryForm,
+    SocialHistoryForm,
 }
 
 #[derive(Clone)]
@@ -57,6 +58,7 @@ pub struct ClinicalState {
     pub medical_history_form: Option<MedicalHistoryForm>,
     pub vitals_form: Option<VitalSignsForm>,
     pub family_history_form: Option<FamilyHistoryForm>,
+    pub social_history_form: Option<SocialHistoryComponent>,
     pub social_history_component: Option<SocialHistoryComponent>,
     pub consultation_filter_start: Option<String>,
     pub consultation_filter_end: Option<String>,
@@ -96,6 +98,7 @@ impl ClinicalState {
             medical_history_form: None,
             vitals_form: None,
             family_history_form: None,
+            social_history_form: None,
             social_history_component: None,
             consultation_filter_start: None,
             consultation_filter_end: None,
@@ -176,6 +179,16 @@ impl ClinicalState {
         self.social_history_editing = false;
     }
 
+    pub fn open_social_history_form(&mut self) {
+        self.social_history_form = Some(SocialHistoryComponent::new(self.theme.clone()));
+        self.form_view = ClinicalFormView::SocialHistoryForm;
+    }
+
+    pub fn close_social_history_form(&mut self) {
+        self.social_history_form = None;
+        self.form_view = ClinicalFormView::None;
+    }
+
     pub fn close_form(&mut self) {
         self.form_view = ClinicalFormView::None;
         self.allergy_form = None;
@@ -183,6 +196,7 @@ impl ClinicalState {
         self.medical_history_form = None;
         self.vitals_form = None;
         self.family_history_form = None;
+        self.social_history_form = None;
         self.social_history_component = None;
     }
 
