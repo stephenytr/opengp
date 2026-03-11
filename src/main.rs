@@ -6,13 +6,14 @@ use crossterm::{
 };
 use opengp_domain::domain::patient::PatientRepository;
 use opengp_domain::domain::user::{PractitionerRepository, UserRepository};
-use opengp_domain::domain::appointment::AppointmentCalendarQuery;
+use opengp_domain::domain::appointment::{AppointmentCalendarQuery, AvailabilityService};
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::{create_pool, run_migrations};
 use opengp_infrastructure::infrastructure::database::repositories::patient::SqlxPatientRepository;
 use opengp_infrastructure::infrastructure::database::repositories::practitioner::SqlxPractitionerRepository;
 use opengp_infrastructure::infrastructure::database::repositories::appointment::SqlxAppointmentRepository;
 use opengp_infrastructure::infrastructure::database::repositories::user::SqlxUserRepository;
+use opengp_infrastructure::infrastructure::database::repositories::working_hours::SqlxWorkingHoursRepository;
 use opengp_ui::ui::app::App;
 use opengp_ui::ui::services::AppointmentUiService;
 use ratatui::backend::CrosstermBackend;
@@ -60,11 +61,19 @@ async fn main() -> Result<()> {
         appointment_repo.clone(),
     ));
     
+    // Create working hours repository and availability service
+    let working_hours_repo = Arc::new(SqlxWorkingHoursRepository::new(db_pool.clone()));
+    let availability_service = Arc::new(AvailabilityService::new(
+        appointment_repo_for_create.clone(),
+        working_hours_repo,
+    ));
+    
     let appointment_service = Arc::new(AppointmentUiService::new(
         practitioner_repo,
         appointment_repo,
         appointment_repo_for_create,
         domain_appointment_service,
+        availability_service,
     ));
 
     // Create patient service
@@ -138,7 +147,7 @@ async fn run_tui(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new(Some(appointment_service.clone()), Some(patient_service.clone()), Some(clinical_service.clone()), calendar_config);
+    let mut app = App::new(Some(appointment_service.clone()), Some(patient_service.clone()), Some(clinical_service.clone()), calendar_config.clone());
     app.load_patients(patients);
 
     loop {
@@ -227,6 +236,19 @@ async fn run_tui(
                     .map(|p: &opengp_domain::domain::user::Practitioner| opengp_ui::ui::view_models::PractitionerViewItem::from(p.clone()))
                     .collect();
             app.appointment_form_set_practitioners(practitioner_items);
+        }
+
+        if let Some((practitioner_id, date, duration)) = app.take_pending_load_booked_slots() {
+            match appointment_service.get_available_slots(practitioner_id, date, duration).await {
+                Ok(available_slots) => {
+                    let booked_slots = compute_booked_slots(&available_slots, &calendar_config);
+                    app.appointment_form_set_booked_slots(booked_slots);
+                    tracing::info!("Loaded booked slots for time picker");
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load available slots: {:?}", e);
+                }
+            }
         }
 
         // Pass patients to appointment form if it exists
@@ -541,6 +563,30 @@ async fn run_tui(
     terminal.show_cursor()?;
 
     Ok(())
+}
+
+fn compute_booked_slots(
+    available_slots: &[chrono::NaiveTime],
+    calendar_config: &CalendarConfig,
+) -> Vec<chrono::NaiveTime> {
+    use chrono::NaiveTime;
+
+    let mut all_slots = Vec::new();
+
+    // Generate all 15-minute slots from min_hour to max_hour
+    for hour in calendar_config.min_hour..calendar_config.max_hour {
+        for minute in [0, 15, 30, 45].iter() {
+            if let Some(time) = NaiveTime::from_hms_opt(hour as u32, *minute, 0) {
+                all_slots.push(time);
+            }
+        }
+    }
+
+    // Booked = all slots minus available slots
+    all_slots
+        .into_iter()
+        .filter(|slot| !available_slots.contains(slot))
+        .collect()
 }
 
 fn init_logging(level: &str) {

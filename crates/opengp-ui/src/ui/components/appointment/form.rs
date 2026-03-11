@@ -116,6 +116,12 @@ pub enum AppointmentFormAction {
     Cancel,
     /// Async save completed (set externally by the caller)
     SaveComplete,
+    /// Time picker should open with booked slots to be loaded
+    OpenTimePicker {
+        practitioner_id: Uuid,
+        date: chrono::NaiveDate,
+        duration: u32,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -325,6 +331,19 @@ impl AppointmentForm {
         self.data.practitioner_id = Some(id);
         self.data.practitioner_display = display_name;
         self.errors.remove(&AppointmentFormField::Practitioner);
+    }
+
+    pub fn set_booked_slots(&mut self, booked_slots: Vec<NaiveTime>) {
+        self.time_picker.set_booked_slots(booked_slots);
+    }
+
+    pub fn open_time_picker(
+        &mut self,
+        practitioner_id: i64,
+        date: chrono::NaiveDate,
+        duration: u32,
+    ) {
+        self.time_picker.open(practitioner_id, date, duration);
     }
 
     pub fn get_value(&self, field: AppointmentFormField) -> String {
@@ -687,12 +706,15 @@ impl AppointmentForm {
             if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
                 // Need practitioner_id, date, and duration to open time picker
                 if let (Some(practitioner_id), Some(date), Ok(duration)) = (
-                    self.data.practitioner_id.map(|id| id.as_u128() as i64),
+                    self.data.practitioner_id,
                     parse_date(&self.date.value()),
                     self.data.duration.parse::<u32>(),
                 ) {
-                    self.time_picker.open(practitioner_id, date, duration);
-                    return Some(AppointmentFormAction::FocusChanged);
+                    return Some(AppointmentFormAction::OpenTimePicker {
+                        practitioner_id,
+                        date,
+                        duration,
+                    });
                 }
             }
         }

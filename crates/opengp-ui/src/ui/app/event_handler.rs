@@ -315,6 +315,17 @@ impl App {
                         self.appointment_form = None;
                         self.status_bar.clear_error();
                     }
+                    AppointmentFormAction::OpenTimePicker {
+                        practitioner_id,
+                        date,
+                        duration,
+                    } => {
+                        let practitioner_id_i64 = practitioner_id.as_u128() as i64;
+                        if let Some(ref mut form) = self.appointment_form {
+                            form.open_time_picker(practitioner_id_i64, date, duration);
+                        }
+                        self.pending_load_booked_slots = Some((practitioner_id, date, duration));
+                    }
                 }
                 return Action::Enter;
             }

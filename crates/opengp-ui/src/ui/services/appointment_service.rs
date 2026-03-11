@@ -8,10 +8,11 @@ use chrono::{NaiveDate, TimeZone, Utc};
 
 use opengp_domain::domain::appointment::{
     AppointmentSearchCriteria, AppointmentCalendarQuery, AppointmentRepository,
-    AppointmentService, CalendarAppointment, CalendarDayView, NewAppointmentData, PractitionerSchedule,
+    AppointmentService, AvailabilityService, CalendarAppointment, CalendarDayView, NewAppointmentData, PractitionerSchedule,
 };
 use opengp_domain::domain::user::{Practitioner, PractitionerRepository};
 use opengp_domain::domain::error::RepositoryError;
+use chrono::NaiveTime;
 
 /// Result type for UI operations
 pub type UiResult<T> = Result<T, UiServiceError>;
@@ -53,6 +54,8 @@ pub struct AppointmentUiService {
     appointment_repo: Arc<dyn AppointmentRepository>,
     /// Domain appointment service for status transitions
     domain_service: Arc<AppointmentService>,
+    /// Availability service for checking slot availability
+    availability_service: Arc<AvailabilityService>,
 }
 
 impl AppointmentUiService {
@@ -62,12 +65,14 @@ impl AppointmentUiService {
         calendar_query: Arc<dyn AppointmentCalendarQuery>,
         appointment_repo: Arc<dyn AppointmentRepository>,
         domain_service: Arc<AppointmentService>,
+        availability_service: Arc<AvailabilityService>,
     ) -> Self {
         Self {
             practitioner_repo,
             calendar_query,
             appointment_repo,
             domain_service,
+            availability_service,
         }
     }
 
@@ -174,6 +179,18 @@ impl AppointmentUiService {
             .mark_completed(appointment_id, user_id)
             .await
             .map(|_| ())
+            .map_err(|e| UiServiceError::Unknown(e.to_string()))
+    }
+
+    pub async fn get_available_slots(
+        &self,
+        practitioner_id: uuid::Uuid,
+        date: NaiveDate,
+        duration: u32,
+    ) -> UiResult<Vec<NaiveTime>> {
+        self.availability_service
+            .get_available_slots(practitioner_id, date, duration as i64)
+            .await
             .map_err(|e| UiServiceError::Unknown(e.to_string()))
     }
 }

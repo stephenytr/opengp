@@ -92,6 +92,18 @@ impl App {
         }
     }
 
+    /// Take pending booked slots load request (practitioner_id, date, duration)
+    pub fn take_pending_load_booked_slots(&mut self) -> Option<(uuid::Uuid, NaiveDate, u32)> {
+        self.pending_load_booked_slots.take()
+    }
+
+    /// Set booked slots in the appointment form time picker
+    pub fn appointment_form_set_booked_slots(&mut self, booked_slots: Vec<chrono::NaiveTime>) {
+        if let Some(ref mut form) = self.appointment_form {
+            form.set_booked_slots(booked_slots);
+        }
+    }
+
     pub fn clinical_state_mut(&mut self) -> &mut ClinicalState {
         &mut self.clinical_state
     }
