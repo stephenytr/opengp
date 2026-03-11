@@ -1,4 +1,4 @@
-use std::{str::FromStr, sync::Arc, time::Duration};
+use std::{str::FromStr, sync::Arc, sync::atomic::AtomicU64, time::{Duration, Instant}};
 
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::PgPool;
@@ -11,6 +11,29 @@ pub struct ApiState {
     pub pool: PgPool,
     pub services: Arc<ApiServices>,
     pub config: ApiConfig,
+    pub metrics: Arc<ApiMetrics>,
+}
+
+pub struct ApiMetrics {
+    pub request_count: AtomicU64,
+    pub error_count: AtomicU64,
+    pub active_sessions: AtomicU64,
+    pub start_time: Instant,
+}
+
+impl ApiMetrics {
+    pub fn new() -> Self {
+        Self {
+            request_count: AtomicU64::new(0),
+            error_count: AtomicU64::new(0),
+            active_sessions: AtomicU64::new(0),
+            start_time: Instant::now(),
+        }
+    }
+
+    pub fn uptime_seconds(&self) -> u64 {
+        self.start_time.elapsed().as_secs()
+    }
 }
 
 impl ApiState {
@@ -27,11 +50,13 @@ impl ApiState {
             .connect_lazy_with(connect_options);
 
         let services = Arc::new(ApiServices::new(&config)?);
+        let metrics = Arc::new(ApiMetrics::new());
 
         Ok(Self {
             pool,
             services,
             config,
+            metrics,
         })
     }
 
@@ -41,6 +66,7 @@ impl ApiState {
             pool,
             services,
             config,
+            metrics: Arc::new(ApiMetrics::new()),
         }
     }
 }
