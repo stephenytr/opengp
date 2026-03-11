@@ -2,9 +2,11 @@
 // Terminal User Interface using Ratatui
 
 pub mod ui;
+pub mod api;
 
 // Re-export all UI modules
 pub use ui::app;
+pub use api::*;
 pub use ui::components;
 pub use ui::error;
 pub use ui::input;

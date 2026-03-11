@@ -25,9 +25,13 @@ strum.workspace = true
 strum_macros.workspace = true
 derive_builder.workspace = true
 ratatui-textarea.workspace = true
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 
 [dependencies.opengp-domain]
 path = "../opengp-domain"
 
 [dependencies.opengp-config]
 path = "../opengp-config"
+
+[dev-dependencies]
+axum = "0.8"
