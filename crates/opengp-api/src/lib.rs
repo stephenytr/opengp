@@ -11,6 +11,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub use config::ApiConfig;
 pub use error::ApiError;
+pub use routes::router;
 pub use state::ApiState;
 
 pub async fn run() -> Result<()> {

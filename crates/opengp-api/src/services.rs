@@ -60,6 +60,7 @@ impl ApiServices {
             user_repository.clone(),
             password_hasher,
             session_repository,
+            config.session_timeout_minutes,
         ));
 
         let patient_repository: Arc<dyn PatientRepository> = Arc::new(MockPatientRepository::new());

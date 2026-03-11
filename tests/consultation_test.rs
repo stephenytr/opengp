@@ -171,6 +171,7 @@ async fn test_create_consultation_with_reason() {
             consultation.id,
             None,
             Some("Patient reports fatigue for 2 weeks\nBP 120/80, HR 72, afebrile\nFatigue, likely iron deficiency anaemia\nFBC, iron studies. Review in 1 week.".to_string()),
+            consultation.version,
             practitioner_id,
         )
         .await
@@ -215,6 +216,7 @@ async fn test_update_soap_notes_fails_on_signed_consultation() {
             consultation.id,
             None,
             Some("Attempting to edit signed note".to_string()),
+            consultation.version,
             practitioner_id,
         )
         .await;
@@ -261,6 +263,7 @@ async fn test_sign_consultation() {
             consultation.id,
             None,
             Some("BP well controlled on current medication\nBP 128/82, HR 68\nHypertension — well controlled\nContinue current medication. Review in 3 months.".to_string()),
+            consultation.version,
             practitioner_id,
         )
         .await

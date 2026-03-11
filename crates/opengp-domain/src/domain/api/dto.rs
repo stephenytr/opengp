@@ -84,6 +84,9 @@ pub struct PatientRequest {
     pub email: Option<String>,
     #[schema(example = "29501012341")]
     pub medicare_number: Option<String>,
+    #[schema(example = 1, default = 1)]
+    #[serde(default = "default_version")]
+    pub version: i32,
 }
 
 /// Response payload for `/api/v1/patients/{id}`.
@@ -106,6 +109,8 @@ pub struct PatientResponse {
     pub email: Option<String>,
     #[schema(example = true)]
     pub is_active: bool,
+    #[schema(example = 1)]
+    pub version: i32,
 }
 
 /// Request payload for `/api/v1/appointments`.
@@ -130,6 +135,9 @@ pub struct AppointmentRequest {
     pub reason: Option<String>,
     #[schema(example = false)]
     pub is_urgent: bool,
+    #[schema(example = 1, default = 1)]
+    #[serde(default = "default_version")]
+    pub version: i32,
 }
 
 /// Response payload for `/api/v1/appointments/{id}`.
@@ -154,6 +162,8 @@ pub struct AppointmentResponse {
     pub is_urgent: bool,
     #[schema(example = "Medication review")]
     pub reason: Option<String>,
+    #[schema(example = 1)]
+    pub version: i32,
 }
 
 /// Request payload for `/api/v1/consultations`.
@@ -174,6 +184,9 @@ pub struct ConsultationRequest {
     pub reason: Option<String>,
     #[schema(example = "BP stable. Continue current ACE inhibitor dose.")]
     pub clinical_notes: Option<String>,
+    #[schema(example = 1, default = 1)]
+    #[serde(default = "default_version")]
+    pub version: i32,
 }
 
 /// Response payload for `/api/v1/consultations/{id}`.
@@ -196,6 +209,12 @@ pub struct ConsultationResponse {
     pub clinical_notes: Option<String>,
     #[schema(example = true)]
     pub is_signed: bool,
+    #[schema(example = 1)]
+    pub version: i32,
+}
+
+fn default_version() -> i32 {
+    1
 }
 
 /// Standard API error format used across `/api/v1/*` routes.

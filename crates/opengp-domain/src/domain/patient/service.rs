@@ -78,6 +78,7 @@ impl PatientService {
         &self,
         id: Uuid,
         data: UpdatePatientData,
+        expected_version: i32,
     ) -> Result<Patient, ServiceError> {
         info!("Updating patient with ID: {}", id);
 
@@ -86,6 +87,12 @@ impl PatientService {
             .find_by_id(id)
             .await?
             .ok_or(ServiceError::NotFound(id))?;
+
+        if patient.version != expected_version {
+            return Err(ServiceError::Conflict(
+                "Resource was modified. Please refresh and try again.".to_string(),
+            ));
+        }
 
         patient.update(data)?;
 
@@ -325,7 +332,7 @@ mod tests {
 
         let service = PatientService::new(repo);
         let result = service
-            .update_patient(patient_id, update_data_with_first_name("Updated"))
+            .update_patient(patient_id, update_data_with_first_name("Updated"), 1)
             .await;
 
         assert!(matches!(result, Err(ServiceError::Conflict(_))));

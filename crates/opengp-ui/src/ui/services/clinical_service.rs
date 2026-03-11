@@ -87,10 +87,17 @@ impl ClinicalUiService {
         consultation_id: Uuid,
         reason: Option<String>,
         clinical_notes: Option<String>,
+        expected_version: i32,
         user_id: Uuid,
     ) -> UiResult<Consultation> {
         self.service
-            .update_clinical_notes(consultation_id, reason, clinical_notes, user_id)
+            .update_clinical_notes(
+                consultation_id,
+                reason,
+                clinical_notes,
+                expected_version,
+                user_id,
+            )
             .await
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }

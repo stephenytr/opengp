@@ -99,6 +99,7 @@ mod tests {
             idle_timeout_secs: 30,
             encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
                 .to_string(),
+            session_timeout_minutes: 480,
             log_level: "info".to_string(),
         };
 
@@ -122,6 +123,7 @@ mod tests {
             idle_timeout_secs: 600,
             encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
                 .to_string(),
+            session_timeout_minutes: 480,
             log_level: "info".to_string(),
         };
 

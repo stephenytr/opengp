@@ -377,11 +377,12 @@ async fn update_patient(
     Json(payload): Json<PatientRequest>,
 ) -> Result<(StatusCode, Json<PatientResponse>), (StatusCode, Json<ApiErrorResponse>)> {
     authorize_write(&context)?;
+    let expected_version = payload.version;
 
     let patient = state
         .services
         .patient_service
-        .update_patient(id, patient_request_to_update_data(payload)?)
+        .update_patient(id, patient_request_to_update_data(payload)?, expected_version)
         .await
         .map_err(patient_service_error_to_response)?;
 
@@ -533,6 +534,7 @@ async fn update_appointment(
 ) -> Result<(StatusCode, Json<AppointmentResponse>), (StatusCode, Json<ApiErrorResponse>)> {
     authorize_practitioner_write(&context)?;
     validate_appointment_booking_time(payload.start_time)?;
+    let expected_version = payload.version;
 
     let appointment = state
         .services
@@ -540,6 +542,7 @@ async fn update_appointment(
         .update_appointment(
             id,
             appointment_request_to_update_data(payload)?,
+            expected_version,
             context.user_id,
         )
         .await
@@ -684,11 +687,18 @@ async fn update_consultation(
     Json(payload): Json<ConsultationRequest>,
 ) -> Result<(StatusCode, Json<ConsultationResponse>), (StatusCode, Json<ApiErrorResponse>)> {
     authorize_practitioner_access(&context)?;
+    let expected_version = payload.version;
 
     let consultation = state
         .services
         .clinical_service
-        .update_clinical_notes(id, payload.reason, payload.clinical_notes, context.user_id)
+        .update_clinical_notes(
+            id,
+            payload.reason,
+            payload.clinical_notes,
+            expected_version,
+            context.user_id,
+        )
         .await
         .map_err(clinical_service_error_to_response)?;
 
@@ -717,6 +727,29 @@ async fn session_validation_middleware(
             unauthorized_response("unauthorized", "Missing or invalid authorization header")
         })?
         .to_string();
+
+    let now = Utc::now();
+    let session = state
+        .services
+        .auth_service
+        .session_repository
+        .find_by_token(&token)
+        .await
+        .map_err(|err| auth_error_to_response(AuthError::Repository(err)))?;
+
+    if let Some(session) = session {
+        if session.is_expired_at(now) {
+            state
+                .services
+                .auth_service
+                .session_repository
+                .delete_by_token(&token)
+                .await
+                .map_err(|err| auth_error_to_response(AuthError::Repository(err)))?;
+
+            return Err(unauthorized_response("unauthorized", "Session expired"));
+        }
+    }
 
     let user_id = state
         .services
@@ -902,9 +935,7 @@ fn patient_service_error_to_response(
         PatientServiceError::Validation(_) => {
             bad_request_response("validation_error", "Invalid patient payload")
         }
-        PatientServiceError::Conflict(_) => {
-            bad_request_response("conflict", "Patient was modified by another request")
-        }
+        PatientServiceError::Conflict(_) => optimistic_lock_conflict_response("patient_conflict"),
         PatientServiceError::Repository(_) => {
             internal_server_error_response("internal_error", "Unable to process patient request")
         }
@@ -918,9 +949,12 @@ fn appointment_service_error_to_response(
         AppointmentServiceError::NotFound(_) => {
             not_found_response("appointment_not_found", "Appointment not found")
         }
-        AppointmentServiceError::Conflict(_) => {
+        AppointmentServiceError::Conflict(message)
+            if message.to_ascii_lowercase().contains("overlapping") =>
+        {
             conflict_response("appointment_conflict", "Overlapping appointment")
         }
+        AppointmentServiceError::Conflict(_) => optimistic_lock_conflict_response("appointment_conflict"),
         AppointmentServiceError::ValidationError(_)
         | AppointmentServiceError::InvalidTransition(_) => {
             bad_request_response("validation_error", "Invalid appointment payload")
@@ -947,10 +981,9 @@ fn clinical_service_error_to_response(
         ClinicalServiceError::Validation(_) => {
             bad_request_response("validation_error", "Invalid consultation payload")
         }
-        ClinicalServiceError::Conflict(_) => conflict_response(
-            "consultation_conflict",
-            "Consultation was modified by another request",
-        ),
+        ClinicalServiceError::Conflict(_) => {
+            optimistic_lock_conflict_response("consultation_conflict")
+        }
         ClinicalServiceError::AlreadySigned => {
             bad_request_response("consultation_signed", "Consultation already signed")
         }
@@ -978,6 +1011,13 @@ fn conflict_response(code: &str, message: &str) -> (StatusCode, Json<ApiErrorRes
             message: message.to_string(),
             code: code.to_string(),
         }),
+    )
+}
+
+fn optimistic_lock_conflict_response(code: &str) -> (StatusCode, Json<ApiErrorResponse>) {
+    conflict_response(
+        code,
+        "Resource was modified. Please refresh and try again.",
     )
 }
 
@@ -1187,6 +1227,7 @@ fn patient_to_response(patient: opengp_domain::domain::patient::Patient) -> Pati
         phone_mobile: patient.phone_mobile,
         email: patient.email,
         is_active: patient.is_active,
+        version: patient.version,
     }
 }
 
@@ -1203,6 +1244,7 @@ fn appointment_to_response(
         appointment_type: appointment_type_to_string(appointment.appointment_type).to_string(),
         is_urgent: appointment.is_urgent,
         reason: appointment.reason,
+        version: appointment.version,
     }
 }
 
@@ -1218,6 +1260,7 @@ fn consultation_to_response(
         reason: consultation.reason,
         clinical_notes: consultation.clinical_notes,
         is_signed: consultation.is_signed,
+        version: consultation.version,
     }
 }
 
@@ -1333,6 +1376,7 @@ mod tests {
     use axum::http::header;
     use http::{Request, StatusCode};
     use opengp_domain::domain::api::LoginResponse;
+    use opengp_domain::domain::user::Session;
     use tower::util::ServiceExt;
 
     use crate::ApiConfig;
@@ -1352,6 +1396,7 @@ mod tests {
             idle_timeout_secs: 600,
             encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
                 .to_string(),
+            session_timeout_minutes: 480,
             log_level: "info".to_string(),
         };
 
@@ -1386,6 +1431,7 @@ mod tests {
             idle_timeout_secs: 600,
             encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
                 .to_string(),
+            session_timeout_minutes: 480,
             log_level: "info".to_string(),
         };
 
@@ -1427,6 +1473,7 @@ mod tests {
             idle_timeout_secs: 600,
             encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
                 .to_string(),
+            session_timeout_minutes: 480,
             log_level: "info".to_string(),
         };
 
@@ -1716,6 +1763,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn middleware_rejects_expired_session_with_401_and_cleans_it_up() {
+        let state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
+        let app = router(state.clone());
+
+        let token = login_token(&app, "dr_smith", "correct-horse-battery-staple").await;
+        let user_id = state
+            .services
+            .auth_service
+            .validate_session(&token)
+            .await
+            .expect("session should be valid before expiring");
+
+        state
+            .services
+            .auth_service
+            .session_repository
+            .delete_by_token(&token)
+            .await
+            .expect("existing session should be deletable");
+        state
+            .services
+            .auth_service
+            .session_repository
+            .create(Session {
+                id: Uuid::new_v4(),
+                user_id,
+                created_at: Utc::now() - Duration::hours(2),
+                expires_at: Utc::now() - Duration::hours(1),
+                token: token.clone(),
+            })
+            .await
+            .expect("expired session should be inserted");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/patients?page=1&limit=25")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let stored = state
+            .services
+            .auth_service
+            .session_repository
+            .find_by_token(&token)
+            .await
+            .expect("session lookup should succeed");
+        assert!(stored.is_none(), "expired session should be removed");
+    }
+
+    #[tokio::test]
     async fn patient_endpoints_require_authentication() {
         let state = ApiState::new(test_config())
             .await
@@ -1817,6 +1924,7 @@ mod tests {
             .expect("body should be readable");
         let created: PatientResponse =
             serde_json::from_slice(&create_body).expect("body should be valid patient JSON");
+        assert_eq!(created.version, 1);
 
         let get_response = app
             .clone()
@@ -1840,9 +1948,10 @@ mod tests {
                     .uri(format!("/api/v1/patients/{}", created.id))
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
                     .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(
-                        r#"{"first_name":"Jane","last_name":"Citizen","date_of_birth":"1984-05-12","gender":"female","phone_mobile":"0400999888","email":"jane.citizen@example.com","medicare_number":"29501012341"}"#,
-                    ))
+                    .body(Body::from(format!(
+                        "{{\"first_name\":\"Jane\",\"last_name\":\"Citizen\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"female\",\"phone_mobile\":\"0400999888\",\"email\":\"jane.citizen@example.com\",\"medicare_number\":\"29501012341\",\"version\":{}}}",
+                        created.version
+                    )))
                     .expect("request should be valid"),
             )
             .await
@@ -1919,6 +2028,86 @@ mod tests {
             .await
             .expect("request should succeed");
         assert_eq!(get_deleted_response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn patient_update_with_stale_version_returns_409_and_clear_message() {
+        let state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
+        let app = router(state);
+        let token = login_token(&app, "dr_smith", "correct-horse-battery-staple").await;
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/patients")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_patient_payload()))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(create_response.status(), StatusCode::CREATED);
+
+        let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let created: PatientResponse =
+            serde_json::from_slice(&create_body).expect("valid patient response");
+
+        let current_payload = format!(
+            "{{\"first_name\":\"Version\",\"last_name\":\"Current\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"male\",\"phone_mobile\":\"0400123456\",\"email\":\"current@example.com\",\"medicare_number\":\"29501012341\",\"version\":{}}}",
+            created.version
+        );
+
+        let first_update = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/patients/{}", created.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(current_payload))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(first_update.status(), StatusCode::OK);
+
+        let stale_version = created.version - 1;
+        let stale_payload = format!(
+            "{{\"first_name\":\"Version\",\"last_name\":\"Stale\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"male\",\"phone_mobile\":\"0400123456\",\"email\":\"stale@example.com\",\"medicare_number\":\"29501012341\",\"version\":{}}}",
+            stale_version
+        );
+
+        let stale_update = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/patients/{}", created.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(stale_payload))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(stale_update.status(), StatusCode::CONFLICT);
+        let stale_body = axum::body::to_bytes(stale_update.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let error: ApiErrorResponse =
+            serde_json::from_slice(&stale_body).expect("valid api error response");
+        assert_eq!(
+            error.message,
+            "Resource was modified. Please refresh and try again."
+        );
     }
 
     #[tokio::test]
@@ -2423,6 +2612,7 @@ mod tests {
             idle_timeout_secs: 600,
             encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
                 .to_string(),
+            session_timeout_minutes: 480,
             log_level: "info".to_string(),
         }
     }

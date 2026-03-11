@@ -99,8 +99,16 @@ impl PatientUiService {
 
     /// Update an existing patient
     pub async fn update_patient(&self, id: Uuid, data: UpdatePatientData) -> UiResult<Patient> {
+        let expected_version = self
+            .service
+            .find_patient(id)
+            .await
+            .map_err(|e| UiServiceError::Repository(e.to_string()))?
+            .ok_or_else(|| UiServiceError::NotFound(id))?
+            .version;
+
         self.service
-            .update_patient(id, data)
+            .update_patient(id, data, expected_version)
             .await
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }

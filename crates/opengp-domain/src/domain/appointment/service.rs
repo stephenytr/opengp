@@ -200,6 +200,7 @@ impl AppointmentService {
         &self,
         id: Uuid,
         data: UpdateAppointmentData,
+        expected_version: i32,
         user_id: Uuid,
     ) -> Result<Appointment, ServiceError> {
         info!("Updating appointment: {}", id);
@@ -210,6 +211,12 @@ impl AppointmentService {
             .find_by_id(id)
             .await?
             .ok_or_else(|| ServiceError::NotFound(id))?;
+
+        if appointment.version != expected_version {
+            return Err(ServiceError::Conflict(
+                "Resource was modified. Please refresh and try again.".to_string(),
+            ));
+        }
 
         let original_practitioner_id = appointment.practitioner_id;
         let original_start_time = appointment.start_time;
@@ -1118,6 +1125,7 @@ mod tests {
                     confirmed: None,
                     cancellation_reason: None,
                 },
+                1,
                 user_id,
             )
             .await;

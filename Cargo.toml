@@ -75,3 +75,5 @@ ratatui-textarea = "0.8"
 
 [dev-dependencies]
 sqlx.workspace = true
+axum = "0.8"
+tower = "0.5"

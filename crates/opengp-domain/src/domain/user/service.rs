@@ -14,7 +14,7 @@ use super::password::PasswordHasher;
 use super::repository::{PractitionerRepository, SessionRepository, UserRepository};
 
 const MAX_FAILED_LOGIN_ATTEMPTS: u8 = 5;
-const SESSION_DURATION_HOURS: i64 = 8;
+const DEFAULT_SESSION_TIMEOUT_MINUTES: i64 = 8 * 60;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PractitionerServiceError {
@@ -74,13 +74,28 @@ impl AuthService {
         user_repository: Arc<dyn UserRepository>,
         password_hasher: Arc<dyn PasswordHasher>,
         session_repository: Arc<dyn SessionRepository>,
+        session_timeout_minutes: i64,
     ) -> Self {
+        let timeout_minutes = session_timeout_minutes.max(1);
         Self {
             user_repository,
             password_hasher,
             session_repository,
-            session_duration: Duration::hours(SESSION_DURATION_HOURS),
+            session_duration: Duration::minutes(timeout_minutes),
         }
+    }
+
+    pub fn with_default_timeout(
+        user_repository: Arc<dyn UserRepository>,
+        password_hasher: Arc<dyn PasswordHasher>,
+        session_repository: Arc<dyn SessionRepository>,
+    ) -> Self {
+        Self::new(
+            user_repository,
+            password_hasher,
+            session_repository,
+            DEFAULT_SESSION_TIMEOUT_MINUTES,
+        )
     }
 
     pub async fn login(&self, request: LoginRequest) -> Result<LoginResponse, AuthError> {
@@ -578,7 +593,7 @@ mod tests {
     }
 
     fn new_auth_service(user: User) -> AuthService {
-        AuthService::new(
+        AuthService::with_default_timeout(
             Arc::new(MockUserRepository {
                 user: Mutex::new(Some(user)),
             }),

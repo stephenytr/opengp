@@ -105,6 +105,7 @@ impl ClinicalService {
         consultation_id: Uuid,
         reason: Option<String>,
         clinical_notes: Option<String>,
+        expected_version: i32,
         user_id: Uuid,
     ) -> Result<Consultation, ServiceError> {
         info!(
@@ -118,6 +119,12 @@ impl ClinicalService {
             .find_by_id(consultation_id)
             .await?
             .ok_or_else(|| ServiceError::ConsultationNotFound(consultation_id))?;
+
+        if consultation.version != expected_version {
+            return Err(ServiceError::Conflict(
+                "Resource was modified. Please refresh and try again.".to_string(),
+            ));
+        }
 
         if consultation.is_signed {
             warn!("Attempted to edit signed consultation: {}", consultation_id);
@@ -1081,6 +1088,7 @@ mod tests {
                 consultation.id,
                 Some("new reason".to_string()),
                 Some("new notes".to_string()),
+                1,
                 user_id,
             )
             .await;
@@ -1122,6 +1130,7 @@ mod tests {
                 consultation.id,
                 Some("Updated reason".to_string()),
                 Some("Updated notes".to_string()),
+                1,
                 user_id,
             )
             .await;

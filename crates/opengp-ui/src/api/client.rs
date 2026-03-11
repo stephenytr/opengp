@@ -445,6 +445,7 @@ mod tests {
                 phone_mobile: None,
                 email: None,
                 medicare_number: None,
+                version: 1,
             })
             .await;
 
@@ -764,6 +765,7 @@ mod tests {
             phone_mobile: Some("0400123456".to_string()),
             email: Some("john.citizen@example.com".to_string()),
             medicare_number: Some("29501012341".to_string()),
+            version: 1,
         }
     }
 
@@ -777,6 +779,7 @@ mod tests {
             phone_mobile: Some("0400123456".to_string()),
             email: Some("john.citizen@example.com".to_string()),
             is_active: true,
+            version: 1,
         }
     }
 
@@ -792,6 +795,7 @@ mod tests {
             appointment_type: "standard".to_string(),
             reason: Some("Medication review".to_string()),
             is_urgent: false,
+            version: 1,
         }
     }
 
@@ -812,6 +816,7 @@ mod tests {
             appointment_type: "standard".to_string(),
             is_urgent: false,
             reason: Some("Medication review".to_string()),
+            version: 1,
         }
     }
 
@@ -822,6 +827,7 @@ mod tests {
             appointment_id: Some(sample_appointment_id()),
             reason: Some("Follow-up for hypertension".to_string()),
             clinical_notes: Some("BP stable. Continue current ACE inhibitor dose.".to_string()),
+            version: 1,
         }
     }
 
@@ -838,6 +844,7 @@ mod tests {
             reason: Some("Follow-up for hypertension".to_string()),
             clinical_notes: Some("BP stable. Continue current ACE inhibitor dose.".to_string()),
             is_signed: false,
+            version: 1,
         }
     }
 }

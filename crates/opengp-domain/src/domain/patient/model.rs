@@ -200,6 +200,7 @@ impl Patient {
             .or(self.aboriginal_torres_strait_islander);
 
         self.updated_at = Utc::now();
+        self.version += 1;
 
         Ok(())
     }
