@@ -26,3 +26,18 @@ pub enum ServiceError {
     #[error("Repository error: {0}")]
     Repository(#[from] RepositoryError),
 }
+
+#[derive(Debug, Error)]
+pub enum AuthError {
+    #[error("Invalid credentials")]
+    InvalidCredentials,
+
+    #[error("Account locked")]
+    AccountLocked,
+
+    #[error("Session expired")]
+    SessionExpired,
+
+    #[error("Repository error: {0}")]
+    Repository(#[from] RepositoryError),
+}

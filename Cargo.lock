@@ -1528,6 +1528,8 @@ dependencies = [
  "async-trait",
  "chrono",
  "derive_builder",
+ "hex",
+ "rand",
  "serde",
  "strum 0.26.3",
  "strum_macros 0.26.4",
