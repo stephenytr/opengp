@@ -37,7 +37,7 @@ pub struct TimePickerPopup {
 }
 
 const GRID_COLS: u8 = 4;
-const GRID_ROWS: u8 = 6;
+const GRID_ROWS: u8 = 10; // 8 AM to 6 PM = 10 hours
 
 impl TimePickerPopup {
     pub fn new() -> Self {
@@ -246,7 +246,7 @@ impl TimePickerPopup {
         }
 
         let popup_width = 44.min(area.width.saturating_sub(4));
-        let popup_height = 16.min(area.height.saturating_sub(2));
+        let popup_height = 24.min(area.height.saturating_sub(2));
 
         if popup_width < 20 || popup_height < 8 {
             return;
