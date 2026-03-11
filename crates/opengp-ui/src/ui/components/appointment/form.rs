@@ -212,7 +212,7 @@ impl AppointmentForm {
         Self {
             mode: FormMode::Create,
             data: AppointmentFormData::empty(),
-            date: TextareaState::new("Date * (YYYY-MM-DD)")
+            date: TextareaState::new("Date * (dd/mm/yyyy)")
                 .with_height_mode(HeightMode::SingleLine),
             start_time: TextareaState::new("Start Time * (HH:MM)")
                 .with_height_mode(HeightMode::SingleLine),
@@ -238,7 +238,7 @@ impl AppointmentForm {
         form.data.patient_id = Some(appointment.patient_id);
         form.data.practitioner_id = Some(appointment.practitioner_id);
 
-        form.date = TextareaState::new("Date * (YYYY-MM-DD)")
+        form.date = TextareaState::new("Date * (dd/mm/yyyy)")
             .with_height_mode(HeightMode::SingleLine)
             .with_value(format_date(appointment.start_time.date_naive()));
 
@@ -642,9 +642,9 @@ impl AppointmentForm {
             if let Some(action) = self.date_picker.handle_key(key) {
                 match action {
                     DatePickerAction::Selected(date) => {
-                        self.date = TextareaState::new("Date * (YYYY-MM-DD)")
+                        self.date = TextareaState::new("Date * (dd/mm/yyyy)")
                             .with_height_mode(HeightMode::SingleLine)
-                            .with_value(date.format("%Y-%m-%d").to_string());
+                            .with_value(format_date(date));
                         self.validate_field(&AppointmentFormField::Date);
                         return Some(AppointmentFormAction::ValueChanged);
                     }
