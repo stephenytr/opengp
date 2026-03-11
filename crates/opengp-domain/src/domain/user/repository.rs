@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use super::error::RepositoryError;
-use super::model::{Practitioner, Role, User, WorkingHours};
+use chrono::{DateTime, Utc};
+
+use super::model::{Practitioner, Role, Session, User, WorkingHours};
 
 /// Repository trait for practitioner persistence
 #[async_trait]
@@ -106,6 +108,17 @@ pub trait UserRepository: Send + Sync {
     /// * `Err(RepositoryError::NotFound)` - User not found
     /// * `Err(RepositoryError)` - Database error
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError>;
+}
+
+#[async_trait]
+pub trait SessionRepository: Send + Sync {
+    async fn create(&self, session: Session) -> Result<Session, RepositoryError>;
+
+    async fn find_by_token(&self, token: &str) -> Result<Option<Session>, RepositoryError>;
+
+    async fn delete_by_token(&self, token: &str) -> Result<(), RepositoryError>;
+
+    async fn cleanup_expired(&self, now: DateTime<Utc>) -> Result<u64, RepositoryError>;
 }
 
 /// Repository trait for working hours persistence

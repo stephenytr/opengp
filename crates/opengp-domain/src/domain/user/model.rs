@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveTime, Utc};
+use chrono::{DateTime, Duration, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
@@ -27,6 +27,33 @@ pub struct User {
 
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Session {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub token: String,
+}
+
+impl Session {
+    pub fn new(user_id: Uuid, token: String, duration: Duration) -> Self {
+        let created_at = Utc::now();
+
+        Self {
+            id: Uuid::new_v4(),
+            user_id,
+            created_at,
+            expires_at: created_at + duration,
+            token,
+        }
+    }
+
+    pub fn is_expired_at(&self, now: DateTime<Utc>) -> bool {
+        now >= self.expires_at
+    }
 }
 
 impl User {

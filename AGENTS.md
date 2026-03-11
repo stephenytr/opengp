@@ -83,6 +83,7 @@ opengp/
 - You must not revert git changes without explicit permission.
 - Make git commits as required and update and close gitea issues.
 - If anything is unclear use the tool provided to ask questions about anything required, do not assume my intent if my instruction is unclear.
+- do not use worktrees
 
 ## GITEA 
 

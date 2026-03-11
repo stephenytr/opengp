@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use rand::{rngs::OsRng, RngCore};
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
@@ -10,11 +9,12 @@ use crate::service;
 
 use super::dto::{LoginRequest, LoginResponse, NewUserData};
 use super::error::{AuthError, ServiceError};
-use super::model::{Practitioner, Role, User};
+use super::model::{Practitioner, Role, Session, User};
 use super::password::PasswordHasher;
-use super::repository::{PractitionerRepository, UserRepository};
+use super::repository::{PractitionerRepository, SessionRepository, UserRepository};
 
 const MAX_FAILED_LOGIN_ATTEMPTS: u8 = 5;
+const SESSION_DURATION_HOURS: i64 = 8;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PractitionerServiceError {
@@ -63,18 +63,21 @@ service! {
 pub struct AuthService {
     pub user_repository: Arc<dyn UserRepository>,
     pub password_hasher: Arc<dyn PasswordHasher>,
-    pub sessions: Arc<Mutex<HashMap<String, Uuid>>>,
+    pub session_repository: Arc<dyn SessionRepository>,
+    session_duration: Duration,
 }
 
 impl AuthService {
     pub fn new(
         user_repository: Arc<dyn UserRepository>,
         password_hasher: Arc<dyn PasswordHasher>,
+        session_repository: Arc<dyn SessionRepository>,
     ) -> Self {
         Self {
             user_repository,
             password_hasher,
-            sessions: Arc::new(Mutex::new(HashMap::new())),
+            session_repository,
+            session_duration: Duration::hours(SESSION_DURATION_HOURS),
         }
     }
 
@@ -124,10 +127,8 @@ impl AuthService {
         let user = self.user_repository.update(user).await?;
 
         let session_token = Self::generate_session_token();
-        self.sessions
-            .lock()
-            .expect("session map lock poisoned")
-            .insert(session_token.clone(), user.id);
+        let session = Session::new(user.id, session_token.clone(), self.session_duration);
+        self.session_repository.create(session).await?;
 
         Ok(LoginResponse {
             user_id: user.id,
@@ -135,17 +136,38 @@ impl AuthService {
         })
     }
 
-    pub fn logout(&self, session_token: &str) -> Result<(), AuthError> {
-        let removed = self
-            .sessions
-            .lock()
-            .expect("session map lock poisoned")
-            .remove(session_token);
+    pub async fn validate_session(&self, session_token: &str) -> Result<Uuid, AuthError> {
+        let now = Utc::now();
+        self.session_repository.cleanup_expired(now).await?;
 
-        if removed.is_some() {
-            Ok(())
-        } else {
-            Err(AuthError::SessionExpired)
+        let session = self
+            .session_repository
+            .find_by_token(session_token)
+            .await?
+            .ok_or(AuthError::SessionExpired)?;
+
+        if session.is_expired_at(now) {
+            self.session_repository
+                .delete_by_token(session_token)
+                .await?;
+            return Err(AuthError::SessionExpired);
+        }
+
+        Ok(session.user_id)
+    }
+
+    pub async fn logout(&self, session_token: &str) -> Result<(), AuthError> {
+        match self.session_repository.delete_by_token(session_token).await {
+            Ok(()) => Ok(()),
+            Err(crate::domain::error::RepositoryError::NotFound) => Err(AuthError::SessionExpired),
+            Err(err) => Err(AuthError::Repository(err)),
+        }
+    }
+
+    pub async fn cleanup_expired_sessions(&self) -> Result<u64, AuthError> {
+        match self.session_repository.cleanup_expired(Utc::now()).await {
+            Ok(removed) => Ok(removed),
+            Err(err) => Err(AuthError::Repository(err)),
         }
     }
 
@@ -362,6 +384,7 @@ impl UserService {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use std::sync::Mutex;
 
     use crate::domain::error::RepositoryError;
 
@@ -389,6 +412,50 @@ mod tests {
 
     struct MockUserRepository {
         user: Mutex<Option<User>>,
+    }
+
+    struct MockSessionRepository {
+        sessions: Mutex<Vec<Session>>,
+    }
+
+    #[async_trait]
+    impl SessionRepository for MockSessionRepository {
+        async fn create(&self, session: Session) -> Result<Session, RepositoryError> {
+            self.sessions
+                .lock()
+                .expect("session lock poisoned")
+                .push(session.clone());
+            Ok(session)
+        }
+
+        async fn find_by_token(&self, token: &str) -> Result<Option<Session>, RepositoryError> {
+            Ok(self
+                .sessions
+                .lock()
+                .expect("session lock poisoned")
+                .iter()
+                .find(|s| s.token == token)
+                .cloned())
+        }
+
+        async fn delete_by_token(&self, token: &str) -> Result<(), RepositoryError> {
+            let mut sessions = self.sessions.lock().expect("session lock poisoned");
+            let before = sessions.len();
+            sessions.retain(|s| s.token != token);
+
+            if sessions.len() == before {
+                Err(RepositoryError::NotFound)
+            } else {
+                Ok(())
+            }
+        }
+
+        async fn cleanup_expired(&self, now: chrono::DateTime<Utc>) -> Result<u64, RepositoryError> {
+            let mut sessions = self.sessions.lock().expect("session lock poisoned");
+            let before = sessions.len();
+            sessions.retain(|s| !s.is_expired_at(now));
+            Ok((before - sessions.len()) as u64)
+        }
     }
 
     #[async_trait]
@@ -483,6 +550,9 @@ mod tests {
             Arc::new(MockPasswordHasher {
                 valid_hash: "valid-hash".to_string(),
             }),
+            Arc::new(MockSessionRepository {
+                sessions: Mutex::new(Vec::new()),
+            }),
         )
     }
 
@@ -502,6 +572,34 @@ mod tests {
 
         assert_eq!(response.user_id, expected_user_id);
         assert_eq!(response.session_token.len(), 64);
+        let validated_user_id = service
+            .validate_session(&response.session_token)
+            .await
+            .expect("session should be valid");
+        assert_eq!(validated_user_id, expected_user_id);
+    }
+
+    #[tokio::test]
+    async fn login_generates_unique_session_tokens() {
+        let service = new_auth_service(test_user());
+
+        let first = service
+            .login(LoginRequest {
+                username: "doctor1".to_string(),
+                password: "correct-password".to_string(),
+            })
+            .await
+            .expect("first login should succeed");
+
+        let second = service
+            .login(LoginRequest {
+                username: "doctor1".to_string(),
+                password: "correct-password".to_string(),
+            })
+            .await
+            .expect("second login should succeed");
+
+        assert_ne!(first.session_token, second.session_token);
     }
 
     #[tokio::test]
@@ -518,19 +616,86 @@ mod tests {
         assert!(matches!(result, Err(AuthError::InvalidCredentials)));
     }
 
-    #[test]
-    fn logout_invalidates_session() {
+    #[tokio::test]
+    async fn logout_invalidates_session() {
         let service = new_auth_service(test_user());
-        let token = "session-token".to_string();
+
+        let login = service
+            .login(LoginRequest {
+                username: "doctor1".to_string(),
+                password: "correct-password".to_string(),
+            })
+            .await
+            .expect("login should succeed");
+
+        assert!(service.logout(&login.session_token).await.is_ok());
+        assert!(matches!(
+            service.logout(&login.session_token).await,
+            Err(AuthError::SessionExpired)
+        ));
+    }
+
+    #[tokio::test]
+    async fn validate_session_rejects_expired_session() {
+        let service = new_auth_service(test_user());
+        let expired = Session {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            created_at: Utc::now() - Duration::hours(2),
+            expires_at: Utc::now() - Duration::hours(1),
+            token: "expired-token".to_string(),
+        };
 
         service
-            .sessions
-            .lock()
-            .expect("session map lock poisoned")
-            .insert(token.clone(), Uuid::new_v4());
+            .session_repository
+            .create(expired)
+            .await
+            .expect("session insert should succeed");
 
-        assert!(service.logout(&token).is_ok());
-        assert!(matches!(service.logout(&token), Err(AuthError::SessionExpired)));
+        let result = service.validate_session("expired-token").await;
+        assert!(matches!(result, Err(AuthError::SessionExpired)));
+    }
+
+    #[tokio::test]
+    async fn cleanup_expired_sessions_removes_only_expired() {
+        let service = new_auth_service(test_user());
+        let now = Utc::now();
+
+        service
+            .session_repository
+            .create(Session {
+                id: Uuid::new_v4(),
+                user_id: Uuid::new_v4(),
+                created_at: now - Duration::hours(2),
+                expires_at: now - Duration::minutes(1),
+                token: "expired-token".to_string(),
+            })
+            .await
+            .expect("expired session insert should succeed");
+
+        service
+            .session_repository
+            .create(Session {
+                id: Uuid::new_v4(),
+                user_id: Uuid::new_v4(),
+                created_at: now,
+                expires_at: now + Duration::hours(1),
+                token: "active-token".to_string(),
+            })
+            .await
+            .expect("active session insert should succeed");
+
+        let removed = service
+            .cleanup_expired_sessions()
+            .await
+            .expect("cleanup should succeed");
+        assert_eq!(removed, 1);
+
+        let remaining = service
+            .validate_session("active-token")
+            .await
+            .expect("active session should remain valid");
+        assert!(!remaining.is_nil());
     }
 
     #[tokio::test]

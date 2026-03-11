@@ -88,6 +88,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     // The sqlx::migrate! macro sometimes doesn't pick up new migration files at compile time
     // This fallback ensures the table is created if it doesn't exist
     ensure_working_hours_table(pool).await?;
+    ensure_sessions_have_token(pool).await?;
 
     info!("Database migrations completed successfully");
 
@@ -147,6 +148,32 @@ async fn ensure_working_hours_table(pool: &SqlitePool) -> Result<(), sqlx::Error
         .await?;
 
     info!("working_hours table created successfully");
+
+    Ok(())
+}
+
+async fn ensure_sessions_have_token(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let column_exists: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='token'",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if column_exists.0 > 0 {
+        return Ok(());
+    }
+
+    sqlx::query("ALTER TABLE sessions ADD COLUMN token TEXT")
+        .execute(pool)
+        .await?;
+
+    sqlx::query("UPDATE sessions SET token = lower(hex(randomblob(32))) WHERE token IS NULL OR token = ''")
+        .execute(pool)
+        .await?;
+
+    sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)")
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
