@@ -1,3 +1,4 @@
+pub mod api;
 pub mod appointment;
 pub mod audit;
 pub mod billing;

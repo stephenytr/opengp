@@ -4,6 +4,7 @@
 pub mod domain;
 
 // Re-export all domain modules
+pub use domain::api;
 pub use domain::appointment;
 pub use domain::audit;
 pub use domain::billing;

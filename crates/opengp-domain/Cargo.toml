@@ -20,3 +20,4 @@ tracing = "0.1"
 tokio = { version = "1", features = ["test-util", "macros"] }
 rand = "0.8"
 hex = "0.4"
+utoipa = { version = "5", features = ["chrono", "uuid"] }
