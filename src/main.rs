@@ -14,6 +14,7 @@ use opengp_infrastructure::infrastructure::database::repositories::practitioner:
 use opengp_infrastructure::infrastructure::database::repositories::appointment::SqlxAppointmentRepository;
 use opengp_infrastructure::infrastructure::database::repositories::user::SqlxUserRepository;
 use opengp_infrastructure::infrastructure::database::repositories::working_hours::SqlxWorkingHoursRepository;
+use opengp_infrastructure::infrastructure::fixtures::seed_working_hours;
 use opengp_ui::ui::app::App;
 use opengp_ui::ui::services::AppointmentUiService;
 use ratatui::backend::CrosstermBackend;
@@ -41,6 +42,9 @@ async fn main() -> Result<()> {
     run_migrations(&db_pool).await?;
 
     tracing::info!("Database pool created with {} connection(s)", db_pool.size());
+
+    seed_working_hours(&db_pool).await?;
+    tracing::info!("Practitioner working hours seeded");
 
     let crypto = Arc::new(EncryptionService::new()?);
     let patient_repo = Arc::new(SqlxPatientRepository::new(db_pool.clone(), crypto.clone()));
