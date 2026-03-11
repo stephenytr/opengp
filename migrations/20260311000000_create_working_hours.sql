@@ -22,11 +22,10 @@ CREATE TABLE IF NOT EXISTS working_hours (
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (practitioner_id) REFERENCES users(id),
-    -- Ensure only one active entry per practitioner per day
-    UNIQUE(practitioner_id, day_of_week) WHERE is_active = TRUE
+    UNIQUE(practitioner_id, day_of_week)
 );
 
 -- Indexes for common queries
 CREATE INDEX idx_working_hours_practitioner ON working_hours(practitioner_id);
 CREATE INDEX idx_working_hours_day ON working_hours(practitioner_id, day_of_week);
-CREATE INDEX idx_working_hours_active ON working_hours(is_active) WHERE is_active = TRUE;
+CREATE INDEX idx_working_hours_active ON working_hours(is_active);
