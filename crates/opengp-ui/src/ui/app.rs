@@ -29,6 +29,8 @@ pub struct App {
     help_overlay: HelpOverlay,
     current_context: KeyContext,
     should_quit: bool,
+    /// The authenticated user performing operations - used for audit logging
+    pub current_user_id: uuid::Uuid,
     #[allow(dead_code)]
     title: String,
     #[allow(dead_code)]
@@ -120,6 +122,7 @@ impl App {
             help_overlay: HelpOverlay::new(theme.clone()),
             current_context: KeyContext::Global,
             should_quit: false,
+            current_user_id: uuid::Uuid::nil(),
             title: "OpenGP".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             patient_state: PatientState::new(),

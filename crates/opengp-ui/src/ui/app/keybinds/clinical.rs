@@ -27,7 +27,7 @@ impl App {
                                         if let Some(patient_id) =
                                             self.clinical_state.selected_patient_id
                                         {
-                                            let system_user_id = uuid::Uuid::nil();
+                                            let system_user_id = self.current_user_id;
                                             let allergy =
                                                 form.to_allergy(patient_id, system_user_id);
                                             self.pending_clinical_save_data =
@@ -66,7 +66,7 @@ impl App {
                                     if let Some(patient_id) =
                                         self.clinical_state.selected_patient_id
                                     {
-                                        let system_user_id = uuid::Uuid::nil();
+                                        let system_user_id = self.current_user_id;
                                         if let Some(history) =
                                             form.to_medical_history(patient_id, system_user_id)
                                         {
@@ -108,7 +108,7 @@ impl App {
                                         if let Some(patient_id) =
                                             self.clinical_state.selected_patient_id
                                         {
-                                            let system_user_id = uuid::Uuid::nil();
+                                            let system_user_id = self.current_user_id;
                                             let vitals =
                                                 form.to_vital_signs(patient_id, system_user_id);
                                             self.pending_clinical_save_data =
@@ -149,7 +149,7 @@ impl App {
                                         if let Some(patient_id) =
                                             self.clinical_state.selected_patient_id
                                         {
-                                            let system_user_id = uuid::Uuid::nil();
+                                            let system_user_id = self.current_user_id;
                                             let entry =
                                                 form.to_family_history(patient_id, system_user_id);
                                             self.pending_clinical_save_data =
@@ -190,7 +190,7 @@ impl App {
                                         if let Some(patient_id) =
                                             self.clinical_state.selected_patient_id
                                         {
-                                            let system_user_id = uuid::Uuid::nil();
+                                            let system_user_id = self.current_user_id;
                                             let practitioner_id = uuid::Uuid::nil();
                                             let consultation = form.to_consultation(
                                                 patient_id,
@@ -237,7 +237,7 @@ impl App {
                                     if let Some(patient_id) =
                                         self.clinical_state.selected_patient_id
                                     {
-                                        let system_user_id = uuid::Uuid::nil();
+                                        let system_user_id = self.current_user_id;
                                         let social_history_data =
                                             form.to_social_history(patient_id, system_user_id);
                                         self.pending_clinical_save_data =

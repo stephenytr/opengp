@@ -152,6 +152,7 @@ async fn run_tui(
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = App::new(Some(appointment_service.clone()), Some(patient_service.clone()), Some(clinical_service.clone()), calendar_config.clone());
+    app.current_user_id = system_user_id;
     app.load_patients(patients);
 
     loop {
@@ -264,7 +265,7 @@ async fn run_tui(
 
         if let Some(data) = app.take_pending_appointment_save() {
             let appointment_date = data.start_time.date_naive();
-            match appointment_service.create_appointment(data, system_user_id).await {
+            match appointment_service.create_appointment(data, app.current_user_id).await {
                 Ok(()) => {
                     tracing::info!("Created new appointment in database");
                     let date = app.appointment_state_mut().selected_date.unwrap_or(appointment_date);
@@ -282,13 +283,13 @@ async fn run_tui(
         if let Some((appointment_id, transition)) = app.take_pending_appointment_status_transition() {
             let result = match transition {
                 opengp_ui::ui::app::AppointmentStatusTransition::MarkArrived => {
-                    appointment_service.mark_arrived(appointment_id, system_user_id).await
+                    appointment_service.mark_arrived(appointment_id, app.current_user_id).await
                 }
                 opengp_ui::ui::app::AppointmentStatusTransition::MarkInProgress => {
-                    appointment_service.mark_in_progress(appointment_id, system_user_id).await
+                    appointment_service.mark_in_progress(appointment_id, app.current_user_id).await
                 }
                 opengp_ui::ui::app::AppointmentStatusTransition::MarkCompleted => {
-                    appointment_service.mark_completed(appointment_id, system_user_id).await
+                    appointment_service.mark_completed(appointment_id, app.current_user_id).await
                 }
             };
             match result {
@@ -317,7 +318,7 @@ async fn run_tui(
                         allergy.severity,
                         allergy.reaction,
                         allergy.notes,
-                        system_user_id,
+                        app.current_user_id,
                     ).await {
                         Ok(_) => {
                             tracing::info!("Saved allergy for patient {}", patient_id);
@@ -342,7 +343,7 @@ async fn run_tui(
                         history.status,
                         history.severity,
                         history.notes,
-                        system_user_id,
+                        app.current_user_id,
                     ).await {
                         Ok(_) => {
                             tracing::info!("Saved medical history for patient {}", patient_id);
@@ -372,7 +373,7 @@ async fn run_tui(
                         vitals.height_cm,
                         vitals.weight_kg,
                         vitals.notes,
-                        system_user_id,
+                        app.current_user_id,
                     ).await {
                         Ok(_) => {
                             tracing::info!("Saved vital signs for patient {}", patient_id);
@@ -397,7 +398,7 @@ async fn run_tui(
                         entry.condition,
                         entry.age_at_diagnosis,
                         entry.notes,
-                        system_user_id,
+                        app.current_user_id,
                     ).await {
                         Ok(_) => {
                             tracing::info!("Saved family history for patient {}", patient_id);
@@ -422,11 +423,11 @@ async fn run_tui(
                     reason,
                     clinical_notes,
                 } => {
-                    let effective_practitioner_id = if practitioner_id.is_nil() { system_user_id } else { practitioner_id };
+                    let effective_practitioner_id = if practitioner_id.is_nil() { app.current_user_id } else { practitioner_id };
                     match clinical_service.create_consultation(
                         patient_id,
                         effective_practitioner_id,
-                        system_user_id,
+                        app.current_user_id,
                         reason,
                         clinical_notes,
                     ).await {
@@ -462,7 +463,7 @@ async fn run_tui(
                         history.living_situation,
                         history.support_network,
                         history.notes,
-                        system_user_id,
+                        app.current_user_id,
                     ).await {
                         Ok(_) => {
                             tracing::info!("Saved social history for patient {}", patient_id);
