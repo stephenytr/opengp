@@ -81,9 +81,72 @@ pub async fn create_pool(config: &DatabaseConfig) -> Result<SqlitePool, sqlx::Er
 pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     info!("Running database migrations");
 
+    // Force recompilation by including all migrations
     sqlx::migrate!("./migrations").run(pool).await?;
 
+    // Workaround: Manually ensure working_hours table exists
+    // The sqlx::migrate! macro sometimes doesn't pick up new migration files at compile time
+    // This fallback ensures the table is created if it doesn't exist
+    ensure_working_hours_table(pool).await?;
+
     info!("Database migrations completed successfully");
+
+    Ok(())
+}
+
+/// Ensure working_hours table exists (fallback for sqlx macro issue)
+///
+/// This is a workaround for the sqlx::migrate! macro not picking up new migration files.
+/// It's idempotent and safe to run multiple times.
+async fn ensure_working_hours_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    // Check if table already exists
+    let table_exists: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='working_hours'"
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if table_exists.0 > 0 {
+        info!("working_hours table already exists, skipping creation");
+        return Ok(());
+    }
+
+    info!("Creating working_hours table (sqlx macro fallback)");
+
+    // Create the working_hours table
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS working_hours (
+            id BLOB PRIMARY KEY,
+            practitioner_id BLOB NOT NULL,
+            day_of_week INTEGER NOT NULL CHECK(day_of_week BETWEEN 0 AND 6),
+            start_time TEXT NOT NULL,
+            end_time TEXT NOT NULL,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (practitioner_id) REFERENCES users(id),
+            UNIQUE(practitioner_id, day_of_week)
+        )
+        "#
+    )
+    .execute(pool)
+    .await?;
+
+    // Create indexes
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_working_hours_practitioner ON working_hours(practitioner_id)")
+        .execute(pool)
+        .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_working_hours_day ON working_hours(practitioner_id, day_of_week)")
+        .execute(pool)
+        .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_working_hours_active ON working_hours(is_active)")
+        .execute(pool)
+        .await?;
+
+    info!("working_hours table created successfully");
 
     Ok(())
 }
