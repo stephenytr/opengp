@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
@@ -269,5 +269,272 @@ impl Practitioner {
 
     pub fn display_name(&self) -> String {
         format!("{} {}", self.title, self.last_name)
+    }
+}
+
+/// Working hours for a practitioner on a specific day of the week
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkingHours {
+    pub id: Uuid,
+    pub practitioner_id: Uuid,
+
+    /// Day of week (0 = Monday, 6 = Sunday)
+    pub day_of_week: u8,
+
+    /// Start time of working hours
+    pub start_time: NaiveTime,
+
+    /// End time of working hours
+    pub end_time: NaiveTime,
+
+    /// Is this working hours entry active?
+    pub is_active: bool,
+
+    /// Audit fields
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl WorkingHours {
+    /// Create a new working hours entry with validation
+    ///
+    /// # Arguments
+    /// * `practitioner_id` - UUID of the practitioner
+    /// * `day_of_week` - Day of week (0-6, Monday-Sunday)
+    /// * `start_time` - Start time of working hours
+    /// * `end_time` - End time of working hours
+    ///
+    /// # Returns
+    /// * `Ok(WorkingHours)` - Valid working hours entry
+    /// * `Err(ServiceError::Validation)` - If validation fails
+    pub fn new(
+        practitioner_id: Uuid,
+        day_of_week: u8,
+        start_time: NaiveTime,
+        end_time: NaiveTime,
+    ) -> Result<Self, ServiceError> {
+        Self::validate_day_of_week(day_of_week)?;
+        Self::validate_times(start_time, end_time)?;
+
+        let now = Utc::now();
+
+        Ok(Self {
+            id: Uuid::new_v4(),
+            practitioner_id,
+            day_of_week,
+            start_time,
+            end_time,
+            is_active: true,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    /// Validate day of week (0-6)
+    fn validate_day_of_week(day_of_week: u8) -> Result<(), ServiceError> {
+        if day_of_week > 6 {
+            return Err(ServiceError::Validation(
+                "Day of week must be between 0 (Monday) and 6 (Sunday)".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Validate start and end times
+    ///
+    /// Ensures:
+    /// - end_time > start_time
+    /// - both times are within reasonable bounds (5:00 AM - 11:00 PM)
+    fn validate_times(start_time: NaiveTime, end_time: NaiveTime) -> Result<(), ServiceError> {
+        if end_time <= start_time {
+            return Err(ServiceError::Validation(
+                "End time must be after start time".to_string(),
+            ));
+        }
+
+        let min_hour = NaiveTime::from_hms_opt(5, 0, 0).unwrap();
+        let max_hour = NaiveTime::from_hms_opt(23, 0, 0).unwrap();
+
+        if start_time < min_hour {
+            return Err(ServiceError::Validation(
+                "Start time must be at or after 5:00 AM".to_string(),
+            ));
+        }
+
+        if end_time > max_hour {
+            return Err(ServiceError::Validation(
+                "End time must be at or before 11:00 PM".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Get the day of week as a string
+    pub fn day_of_week_str(&self) -> &'static str {
+        match self.day_of_week {
+            0 => "Monday",
+            1 => "Tuesday",
+            2 => "Wednesday",
+            3 => "Thursday",
+            4 => "Friday",
+            5 => "Saturday",
+            6 => "Sunday",
+            _ => "Invalid",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_working_hours_valid_creation() {
+        let practitioner_id = Uuid::new_v4();
+        let start_time = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
+        let end_time = NaiveTime::from_hms_opt(17, 0, 0).unwrap();
+
+        let result = WorkingHours::new(practitioner_id, 0, start_time, end_time);
+        assert!(result.is_ok());
+
+        let wh = result.unwrap();
+        assert_eq!(wh.practitioner_id, practitioner_id);
+        assert_eq!(wh.day_of_week, 0);
+        assert_eq!(wh.start_time, start_time);
+        assert_eq!(wh.end_time, end_time);
+        assert!(wh.is_active);
+    }
+
+    #[test]
+    fn test_working_hours_end_before_start_fails() {
+        let practitioner_id = Uuid::new_v4();
+        let start_time = NaiveTime::from_hms_opt(17, 0, 0).unwrap();
+        let end_time = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
+
+        let result = WorkingHours::new(practitioner_id, 0, start_time, end_time);
+        assert!(result.is_err());
+
+        match result {
+            Err(ServiceError::Validation(msg)) => {
+                assert!(msg.contains("End time must be after start time"));
+            }
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn test_working_hours_same_time_fails() {
+        let practitioner_id = Uuid::new_v4();
+        let time = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
+
+        let result = WorkingHours::new(practitioner_id, 0, time, time);
+        assert!(result.is_err());
+
+        match result {
+            Err(ServiceError::Validation(msg)) => {
+                assert!(msg.contains("End time must be after start time"));
+            }
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn test_working_hours_start_before_5am_fails() {
+        let practitioner_id = Uuid::new_v4();
+        let start_time = NaiveTime::from_hms_opt(4, 59, 0).unwrap();
+        let end_time = NaiveTime::from_hms_opt(17, 0, 0).unwrap();
+
+        let result = WorkingHours::new(practitioner_id, 0, start_time, end_time);
+        assert!(result.is_err());
+
+        match result {
+            Err(ServiceError::Validation(msg)) => {
+                assert!(msg.contains("Start time must be at or after 5:00 AM"));
+            }
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn test_working_hours_end_after_11pm_fails() {
+        let practitioner_id = Uuid::new_v4();
+        let start_time = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
+        let end_time = NaiveTime::from_hms_opt(23, 1, 0).unwrap();
+
+        let result = WorkingHours::new(practitioner_id, 0, start_time, end_time);
+        assert!(result.is_err());
+
+        match result {
+            Err(ServiceError::Validation(msg)) => {
+                assert!(msg.contains("End time must be at or before 11:00 PM"));
+            }
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn test_working_hours_end_at_11pm_succeeds() {
+        let practitioner_id = Uuid::new_v4();
+        let start_time = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
+        let end_time = NaiveTime::from_hms_opt(23, 0, 0).unwrap();
+
+        let result = WorkingHours::new(practitioner_id, 0, start_time, end_time);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_working_hours_start_at_5am_succeeds() {
+        let practitioner_id = Uuid::new_v4();
+        let start_time = NaiveTime::from_hms_opt(5, 0, 0).unwrap();
+        let end_time = NaiveTime::from_hms_opt(17, 0, 0).unwrap();
+
+        let result = WorkingHours::new(practitioner_id, 0, start_time, end_time);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_working_hours_invalid_day_of_week_fails() {
+        let practitioner_id = Uuid::new_v4();
+        let start_time = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
+        let end_time = NaiveTime::from_hms_opt(17, 0, 0).unwrap();
+
+        let result = WorkingHours::new(practitioner_id, 7, start_time, end_time);
+        assert!(result.is_err());
+
+        match result {
+            Err(ServiceError::Validation(msg)) => {
+                assert!(msg.contains("Day of week must be between 0 (Monday) and 6 (Sunday)"));
+            }
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn test_working_hours_all_days_of_week_valid() {
+        let practitioner_id = Uuid::new_v4();
+        let start_time = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
+        let end_time = NaiveTime::from_hms_opt(17, 0, 0).unwrap();
+
+        for day in 0..=6 {
+            let result = WorkingHours::new(practitioner_id, day, start_time, end_time);
+            assert!(result.is_ok(), "Day {} should be valid", day);
+        }
+    }
+
+    #[test]
+    fn test_working_hours_day_of_week_str() {
+        let practitioner_id = Uuid::new_v4();
+        let start_time = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
+        let end_time = NaiveTime::from_hms_opt(17, 0, 0).unwrap();
+
+        let wh = WorkingHours::new(practitioner_id, 0, start_time, end_time).unwrap();
+        assert_eq!(wh.day_of_week_str(), "Monday");
+
+        let wh = WorkingHours::new(practitioner_id, 4, start_time, end_time).unwrap();
+        assert_eq!(wh.day_of_week_str(), "Friday");
+
+        let wh = WorkingHours::new(practitioner_id, 6, start_time, end_time).unwrap();
+        assert_eq!(wh.day_of_week_str(), "Sunday");
     }
 }
