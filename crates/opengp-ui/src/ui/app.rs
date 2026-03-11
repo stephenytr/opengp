@@ -21,6 +21,17 @@ mod keybinds;
 mod renderer;
 mod state;
 
+const DEFAULT_PATIENT_PAGE_LIMIT: u32 = 100;
+const DEFAULT_APPOINTMENT_PAGE_LIMIT: u32 = 100;
+const DEFAULT_CONSULTATION_PAGE_LIMIT: u32 = 100;
+
+type PatientListFetchTask =
+    tokio::task::JoinHandle<Result<Vec<crate::ui::view_models::PatientListItem>, String>>;
+type AppointmentListFetchTask =
+    tokio::task::JoinHandle<Result<opengp_domain::domain::appointment::CalendarDayView, String>>;
+type ConsultationListFetchTask =
+    tokio::task::JoinHandle<Result<Vec<opengp_domain::domain::clinical::Consultation>, String>>;
+
 pub struct App {
     theme: Theme,
     keybinds: &'static KeybindRegistry,
@@ -58,6 +69,16 @@ pub struct App {
     clinical_state: ClinicalState,
     #[allow(dead_code)]
     clinical_service: Option<Arc<crate::ui::services::ClinicalUiService>>,
+    api_client: Option<Arc<crate::api::ApiClient>>,
+    patient_page_limit: u32,
+    appointment_page_limit: u32,
+    consultation_page_limit: u32,
+    pending_patient_list_refresh: bool,
+    pending_appointment_list_refresh: Option<NaiveDate>,
+    pending_consultation_list_refresh: Option<uuid::Uuid>,
+    patient_list_fetch_task: Option<PatientListFetchTask>,
+    appointment_list_fetch_task: Option<AppointmentListFetchTask>,
+    consultation_list_fetch_task: Option<ConsultationListFetchTask>,
     terminal_size: Rect,
 }
 
@@ -108,6 +129,7 @@ pub enum AppointmentStatusTransition {
 
 impl App {
     pub fn new(
+        api_client: Option<Arc<crate::api::ApiClient>>,
         appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
         patient_service: Option<Arc<crate::ui::services::PatientUiService>>,
         clinical_service: Option<Arc<crate::ui::services::ClinicalUiService>>,
@@ -144,6 +166,16 @@ impl App {
             pending_clinical_save_data: None,
             clinical_state: ClinicalState::with_theme(theme.clone()),
             clinical_service,
+            api_client,
+            patient_page_limit: DEFAULT_PATIENT_PAGE_LIMIT,
+            appointment_page_limit: DEFAULT_APPOINTMENT_PAGE_LIMIT,
+            consultation_page_limit: DEFAULT_CONSULTATION_PAGE_LIMIT,
+            pending_patient_list_refresh: false,
+            pending_appointment_list_refresh: None,
+            pending_consultation_list_refresh: None,
+            patient_list_fetch_task: None,
+            appointment_list_fetch_task: None,
+            consultation_list_fetch_task: None,
             terminal_size: Rect::new(0, 0, 80, 24),
         };
 
@@ -230,7 +262,7 @@ impl App {
 
 impl Default for App {
     fn default() -> Self {
-        Self::new(None, None, None, CalendarConfig::default())
+        Self::new(None, None, None, None, CalendarConfig::default())
     }
 }
 
@@ -240,14 +272,14 @@ mod tests {
 
     #[test]
     fn test_app_creation() {
-        let app = App::new(None, None, None, CalendarConfig::default());
+        let app = App::new(None, None, None, None, CalendarConfig::default());
         assert_eq!(app.current_tab(), Tab::Patient);
         assert!(!app.should_quit());
     }
 
     #[test]
     fn test_tab_switching() {
-        let mut app = App::new(None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -259,7 +291,7 @@ mod tests {
 
     #[test]
     fn test_help_toggle() {
-        let mut app = App::new(None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, None, None, None, CalendarConfig::default());
 
         assert!(!app.help_overlay.is_visible());
 
@@ -278,7 +310,7 @@ mod tests {
 
     #[test]
     fn test_quit() {
-        let mut app = App::new(None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, None, None, None, CalendarConfig::default());
 
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('q'),
@@ -291,7 +323,7 @@ mod tests {
 
     #[test]
     fn test_calendar_keybind_routing() {
-        let mut app = App::new(None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -319,7 +351,7 @@ mod tests {
 
     #[test]
     fn test_calendar_enter_selects_date() {
-        let mut app = App::new(None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -342,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_schedule_keybind_routing() {
-        let mut app = App::new(None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -374,7 +406,7 @@ mod tests {
 
     #[test]
     fn test_q_does_not_quit_on_appointment() {
-        let mut app = App::new(None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -395,7 +427,7 @@ mod tests {
 
     #[test]
     fn test_ctrl_q_always_quits() {
-        let mut app = App::new(None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -412,7 +444,7 @@ mod tests {
 
     #[test]
     fn test_schedule_escape_returns_to_calendar() {
-        let mut app = App::new(None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, None, None, None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -444,7 +476,7 @@ mod tests {
 
     #[test]
     fn test_patient_keybind_regression() {
-        let mut app = App::new(None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, None, None, None, CalendarConfig::default());
         assert_eq!(app.current_tab(), Tab::Patient);
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('q'),

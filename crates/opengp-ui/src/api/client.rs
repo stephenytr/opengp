@@ -58,7 +58,7 @@ impl ApiClient {
             .await
             .map_err(|_| ApiClientError::Unexpected)?;
 
-        self.set_session_token(Some(login_response.access_token.clone()))
+        self.update_session_token(Some(login_response.access_token.clone()))
             .await;
 
         Ok(login_response)
@@ -76,7 +76,7 @@ impl ApiClient {
             return Err(Self::map_error_response(response).await);
         }
 
-        self.set_session_token(None).await;
+        self.update_session_token(None).await;
         Ok(())
     }
 
@@ -233,7 +233,11 @@ impl ApiClient {
         )
     }
 
-    async fn set_session_token(&self, token: Option<String>) {
+    pub async fn set_session_token(&self, token: Option<String>) {
+        self.update_session_token(token).await;
+    }
+
+    async fn update_session_token(&self, token: Option<String>) {
         *self.session_token.lock().await = token;
     }
 

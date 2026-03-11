@@ -100,6 +100,25 @@ impl App {
 
                 frame.render_widget(self.appointment_state.calendar.clone(), chunks[0]);
 
+                if self.appointment_state.is_loading {
+                    use ratatui::text::Text;
+                    use ratatui::widgets::{Block, Borders, Paragraph};
+
+                    let paragraph = Paragraph::new(Text::from("Loading appointments..."))
+                        .block(
+                            Block::default()
+                                .title(" Schedule ")
+                                .borders(Borders::ALL)
+                                .border_style(
+                                    ratatui::style::Style::default().fg(self.theme.colors.border),
+                                ),
+                        )
+                        .alignment(ratatui::layout::Alignment::Center)
+                        .style(ratatui::style::Style::default().fg(self.theme.colors.foreground));
+                    frame.render_widget(paragraph, chunks[1]);
+                    return;
+                }
+
                 let schedule = &mut self.appointment_state.schedule;
 
                 let schedule_inner_height = chunks[1].height.saturating_sub(2);

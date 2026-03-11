@@ -15,6 +15,7 @@ use opengp_infrastructure::infrastructure::database::repositories::appointment::
 use opengp_infrastructure::infrastructure::database::repositories::user::SqlxUserRepository;
 use opengp_infrastructure::infrastructure::database::repositories::working_hours::SqlxWorkingHoursRepository;
 use opengp_infrastructure::infrastructure::fixtures::seed_working_hours;
+use opengp_ui::api::ApiClient;
 use opengp_ui::ui::app::App;
 use opengp_ui::ui::services::AppointmentUiService;
 use ratatui::backend::CrosstermBackend;
@@ -109,9 +110,6 @@ async fn main() -> Result<()> {
         ))
     ));
 
-    let patients: Vec<opengp_domain::domain::patient::Patient> = patient_repo.list_active().await?;
-    tracing::info!("Loaded {} patients from database", patients.len());
-
     let user_repo = SqlxUserRepository::new(db_pool.clone());
     let system_user_id = match user_repo.find_all().await {
         Ok(users) => {
@@ -129,7 +127,24 @@ async fn main() -> Result<()> {
         }
     };
 
-    run_tui(patients, patient_repo.clone(), appointment_service, patient_service, clinical_service, system_user_id, config.calendar).await?;
+    let api_base_url = std::env::var("API_BASE_URL")
+        .or_else(|_| std::env::var("OPENGP_API_BASE_URL"))
+        .unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
+    let api_client = Arc::new(ApiClient::new(api_base_url));
+    if let Ok(token) = std::env::var("API_SESSION_TOKEN") {
+        api_client.set_session_token(Some(token)).await;
+    }
+
+    run_tui(
+        api_client,
+        patient_repo.clone(),
+        appointment_service,
+        patient_service,
+        clinical_service,
+        system_user_id,
+        config.calendar,
+    )
+    .await?;
 
     tracing::info!("OpenGP shutdown complete");
 
@@ -137,7 +152,7 @@ async fn main() -> Result<()> {
 }
 
 async fn run_tui(
-    patients: Vec<opengp_domain::domain::patient::Patient>,
+    api_client: Arc<ApiClient>,
     patient_repo: Arc<SqlxPatientRepository>,
     appointment_service: Arc<AppointmentUiService>,
     patient_service: Arc<opengp_ui::ui::services::PatientUiService>,
@@ -151,11 +166,19 @@ async fn run_tui(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new(Some(appointment_service.clone()), Some(patient_service.clone()), Some(clinical_service.clone()), calendar_config.clone());
+    let mut app = App::new(
+        Some(api_client),
+        Some(appointment_service.clone()),
+        Some(patient_service.clone()),
+        Some(clinical_service.clone()),
+        calendar_config.clone(),
+    );
     app.current_user_id = system_user_id;
-    app.load_patients(patients);
+    app.request_refresh_patients();
 
     loop {
+        app.poll_api_tasks().await;
+
         terminal.draw(|frame| {
             app.render(frame);
         })?;
@@ -177,9 +200,7 @@ async fn run_tui(
                 }
             }
             
-            // Reload patients to update the list
-            let patients = patient_repo.list_active().await?;
-            app.load_patients(patients);
+            app.request_refresh_patients();
         }
 
         // Check if there's a pending patient to load for editing
@@ -200,26 +221,7 @@ async fn run_tui(
 
         // Check if there's a pending appointment date to load practitioners and schedule for
         if let Some(date) = app.take_pending_appointment_date() {
-            match appointment_service.get_practitioners().await {
-                Ok(practitioners) => {
-                    app.appointment_state_mut().practitioners = practitioners;
-                    tracing::info!("Loaded practitioners for schedule view");
-                }
-                Err(e) => {
-                    tracing::error!("Failed to load practitioners: {}", e);
-                }
-            }
-
-            // Load the schedule for the selected date
-            match appointment_service.get_schedule(date).await {
-                Ok(schedule) => {
-                    app.appointment_state_mut().schedule_data = Some(schedule);
-                    tracing::info!("Loaded schedule for date: {}", date);
-                }
-                Err(e) => {
-                    tracing::error!("Failed to load schedule: {}", e);
-                }
-            }
+            app.request_refresh_appointments(date);
         }
 
         // Check if practitioners need to be loaded for appointment form picker
@@ -269,12 +271,7 @@ async fn run_tui(
                 Ok(()) => {
                     tracing::info!("Created new appointment in database");
                     let date = app.appointment_state_mut().selected_date.unwrap_or(appointment_date);
-                    match appointment_service.get_schedule(date).await {
-                        Ok(schedule) => {
-                            app.appointment_state_mut().schedule_data = Some(schedule);
-                        }
-                        Err(e) => tracing::error!("Failed to reload schedule: {}", e),
-                    }
+                    app.request_refresh_appointments(date);
                 }
                 Err(e) => tracing::error!("Failed to create appointment: {}", e),
             }
@@ -296,12 +293,7 @@ async fn run_tui(
                 Ok(()) => {
                     tracing::info!("Updated appointment status: {:?}", transition);
                     if let Some(date) = app.appointment_state_mut().selected_date {
-                        match appointment_service.get_schedule(date).await {
-                            Ok(schedule) => {
-                                app.appointment_state_mut().schedule_data = Some(schedule);
-                            }
-                            Err(e) => tracing::error!("Failed to reload schedule: {}", e),
-                        }
+                        app.request_refresh_appointments(date);
                     }
                 }
                 Err(e) => tracing::error!("Failed to update appointment status: {}", e),
@@ -433,16 +425,7 @@ async fn run_tui(
                     ).await {
                         Ok(consultation) => {
                             tracing::info!("Created consultation {} for patient {}", consultation.id, patient_id);
-                            match clinical_service.list_consultations(patient_id).await {
-                                Ok(consultations) => {
-                                    app.clinical_state_mut().consultation_list.consultations = consultations.clone();
-                                    app.clinical_state_mut().consultations = consultations;
-                                }
-                                Err(e) => {
-                                    tracing::error!("Failed to reload consultations: {}", e);
-                                    app.set_status_error(format!("Failed to reload consultations: {}", e));
-                                }
-                            }
+                            app.request_refresh_consultations(patient_id);
                         }
                         Err(e) => {
                             tracing::error!("Failed to create consultation: {}", e);
@@ -488,13 +471,7 @@ async fn run_tui(
         if let Some(patient_id) = app.take_pending_clinical_patient_id() {
             app.clinical_state_mut().set_loading(true);
 
-            match clinical_service.list_consultations(patient_id).await {
-                Ok(consultations) => {
-                    app.clinical_state_mut().consultations = consultations;
-                    tracing::info!("Loaded consultations for clinical view");
-                }
-                Err(e) => tracing::error!("Failed to load consultations: {}", e),
-            }
+            app.request_refresh_consultations(patient_id);
 
             match clinical_service.list_allergies(patient_id, false).await {
                 Ok(allergies) => {
