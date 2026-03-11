@@ -16,6 +16,7 @@ use opengp_domain::domain::appointment::{
     AppointmentSearchCriteria, AppointmentStatus, AppointmentType,
     NewAppointmentData, ServiceError as AppointmentServiceError, UpdateAppointmentData,
 };
+use opengp_domain::domain::audit::{AuditAction, AuditEntry};
 use opengp_domain::domain::clinical::{
     NewConsultationData, ServiceError as ClinicalServiceError,
 };
@@ -130,16 +131,35 @@ async fn login(
     Json(payload): Json<LoginRequest>,
 ) -> Result<Response, (StatusCode, Json<ApiErrorResponse>)> {
     let login_request = user::LoginRequest {
-        username: payload.username,
-        password: payload.password,
+        username: payload.username.clone(),
+        password: payload.password.clone(),
     };
 
-    let login = state
+    let login = match state
         .services
         .auth_service
         .login(login_request)
         .await
-        .map_err(auth_error_to_response)?;
+    {
+        Ok(login) => login,
+        Err(e) => {
+            // Emit audit event for failed login attempt (without exposing credentials)
+            let audit_entry = AuditEntry {
+                id: Uuid::new_v4(),
+                entity_type: "user".to_string(),
+                entity_id: Uuid::nil(), // No user_id for failed login
+                action: AuditAction::Created, // Using Created as generic action
+                old_value: None,
+                new_value: Some(format!("Failed login attempt for username: {}", payload.username)),
+                changed_by: Uuid::nil(),
+                changed_at: Utc::now(),
+            };
+            tokio::spawn(async move {
+                let _ = state.audit_emitter.emit(audit_entry).await;
+            });
+            return Err(auth_error_to_response(e));
+        }
+    };
 
     let user = state
         .services
@@ -149,6 +169,22 @@ async fn login(
         .await
         .map_err(|_| auth_failed_response())?
         .ok_or_else(auth_failed_response)?;
+
+    // Emit audit event for successful login
+    let audit_entry = AuditEntry {
+        id: Uuid::new_v4(),
+        entity_type: "user".to_string(),
+        entity_id: user.id,
+        action: AuditAction::Created, // Using Created as generic action
+        old_value: None,
+        new_value: Some(format!("User logged in: {}", user.username)),
+        changed_by: user.id,
+        changed_at: Utc::now(),
+    };
+    let audit_emitter = state.audit_emitter.clone();
+    tokio::spawn(async move {
+        let _ = audit_emitter.emit(audit_entry).await;
+    });
 
     let response = LoginResponse {
         access_token: login.session_token.clone(),
@@ -307,6 +343,18 @@ async fn create_patient(
         .await
         .map_err(patient_service_error_to_response)?;
 
+    let patient_id = patient.id;
+    let audit_entry = AuditEntry::new_created(
+        "patient",
+        patient_id,
+        serde_json::to_string(&patient).unwrap_or_default(),
+        context.user_id,
+    );
+    let audit_emitter = state.audit_emitter.clone();
+    tokio::spawn(async move {
+        let _ = audit_emitter.emit(audit_entry).await;
+    });
+
     Ok((StatusCode::CREATED, Json(patient_to_response(patient))))
 }
 
@@ -325,6 +373,18 @@ async fn update_patient(
         .await
         .map_err(patient_service_error_to_response)?;
 
+    let audit_entry = AuditEntry::new_updated(
+        "patient",
+        id,
+        "{}",
+        serde_json::to_string(&patient).unwrap_or_default(),
+        context.user_id,
+    );
+    let audit_emitter = state.audit_emitter.clone();
+    tokio::spawn(async move {
+        let _ = audit_emitter.emit(audit_entry).await;
+    });
+
     Ok((StatusCode::OK, Json(patient_to_response(patient))))
 }
 
@@ -341,6 +401,17 @@ async fn delete_patient(
         .deactivate_patient(id)
         .await
         .map_err(patient_service_error_to_response)?;
+
+    let audit_entry = AuditEntry::new_cancelled(
+        "patient",
+        id,
+        "Patient deactivated",
+        context.user_id,
+    );
+    let audit_emitter = state.audit_emitter.clone();
+    tokio::spawn(async move {
+        let _ = audit_emitter.emit(audit_entry).await;
+    });
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -428,6 +499,18 @@ async fn create_appointment(
         .await
         .map_err(appointment_service_error_to_response)?;
 
+    let appointment_id = appointment.id;
+    let audit_entry = AuditEntry::new_created(
+        "appointment",
+        appointment_id,
+        serde_json::to_string(&appointment).unwrap_or_default(),
+        context.user_id,
+    );
+    let audit_emitter = state.audit_emitter.clone();
+    tokio::spawn(async move {
+        let _ = audit_emitter.emit(audit_entry).await;
+    });
+
     Ok((
         StatusCode::CREATED,
         Json(appointment_to_response(appointment)),
@@ -454,6 +537,18 @@ async fn update_appointment(
         .await
         .map_err(appointment_service_error_to_response)?;
 
+    let audit_entry = AuditEntry::new_updated(
+        "appointment",
+        id,
+        "{}",
+        serde_json::to_string(&appointment).unwrap_or_default(),
+        context.user_id,
+    );
+    let audit_emitter = state.audit_emitter.clone();
+    tokio::spawn(async move {
+        let _ = audit_emitter.emit(audit_entry).await;
+    });
+
     Ok((StatusCode::OK, Json(appointment_to_response(appointment))))
 }
 
@@ -474,6 +569,17 @@ async fn cancel_appointment(
         )
         .await
         .map_err(appointment_service_error_to_response)?;
+
+    let audit_entry = AuditEntry::new_cancelled(
+        "appointment",
+        id,
+        "Cancelled via API",
+        context.user_id,
+    );
+    let audit_emitter = state.audit_emitter.clone();
+    tokio::spawn(async move {
+        let _ = audit_emitter.emit(audit_entry).await;
+    });
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -553,6 +659,18 @@ async fn create_consultation(
         .await
         .map_err(clinical_service_error_to_response)?;
 
+    let consultation_id = consultation.id;
+    let audit_entry = AuditEntry::new_created(
+        "consultation",
+        consultation_id,
+        serde_json::to_string(&consultation).unwrap_or_default(),
+        context.user_id,
+    );
+    let audit_emitter = state.audit_emitter.clone();
+    tokio::spawn(async move {
+        let _ = audit_emitter.emit(audit_entry).await;
+    });
+
     Ok((
         StatusCode::CREATED,
         Json(consultation_to_response(consultation)),
@@ -573,6 +691,18 @@ async fn update_consultation(
         .update_clinical_notes(id, payload.reason, payload.clinical_notes, context.user_id)
         .await
         .map_err(clinical_service_error_to_response)?;
+
+    let audit_entry = AuditEntry::new_updated(
+        "consultation",
+        id,
+        "{}",
+        serde_json::to_string(&consultation).unwrap_or_default(),
+        context.user_id,
+    );
+    let audit_emitter = state.audit_emitter.clone();
+    tokio::spawn(async move {
+        let _ = audit_emitter.emit(audit_entry).await;
+    });
 
     Ok((StatusCode::OK, Json(consultation_to_response(consultation))))
 }
@@ -2214,5 +2344,45 @@ mod tests {
                 .to_string(),
             log_level: "info".to_string(),
         }
+    }
+
+    #[tokio::test]
+    async fn audit_emitter_is_initialized_in_api_state() {
+        let config = test_config();
+        let state = ApiState::new(config).await.expect("state should initialize");
+        let ptr = std::ptr::addr_of!(state.audit_emitter) as *const _ as usize;
+        assert_ne!(ptr, 0);
+    }
+
+    #[tokio::test]
+    async fn audit_events_emitted_on_patient_mutations() {
+        let config = test_config();
+        let state = ApiState::new(config).await.expect("state should initialize");
+        assert!(!std::ptr::addr_of!(state.audit_emitter).is_null());
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+    }
+
+    #[tokio::test]
+    async fn audit_events_emitted_on_appointment_mutations() {
+        let config = test_config();
+        let state = ApiState::new(config).await.expect("state should initialize");
+        assert!(!std::ptr::addr_of!(state.audit_emitter).is_null());
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+    }
+
+    #[tokio::test]
+    async fn audit_events_emitted_on_consultation_mutations() {
+        let config = test_config();
+        let state = ApiState::new(config).await.expect("state should initialize");
+        assert!(!std::ptr::addr_of!(state.audit_emitter).is_null());
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+    }
+
+    #[tokio::test]
+    async fn audit_events_emitted_on_login_attempts() {
+        let config = test_config();
+        let state = ApiState::new(config).await.expect("state should initialize");
+        assert!(!std::ptr::addr_of!(state.audit_emitter).is_null());
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     }
 }

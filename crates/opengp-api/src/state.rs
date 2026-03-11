@@ -2,6 +2,7 @@ use std::{str::FromStr, sync::Arc, sync::atomic::AtomicU64, time::{Duration, Ins
 
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::PgPool;
+use opengp_domain::domain::audit::AuditEmitter;
 
 use crate::services::ApiServices;
 use crate::{ApiConfig, ApiError};
@@ -12,6 +13,7 @@ pub struct ApiState {
     pub services: Arc<ApiServices>,
     pub config: ApiConfig,
     pub metrics: Arc<ApiMetrics>,
+    pub audit_emitter: Arc<dyn AuditEmitter>,
 }
 
 pub struct ApiMetrics {
@@ -51,22 +53,26 @@ impl ApiState {
 
         let services = Arc::new(ApiServices::new(&config).await?);
         let metrics = Arc::new(ApiMetrics::new());
+        let audit_emitter = services.audit_service.clone() as Arc<dyn AuditEmitter>;
 
         Ok(Self {
             pool,
             services,
             config,
             metrics,
+            audit_emitter,
         })
     }
 
     #[cfg(test)]
     fn from_parts(pool: PgPool, services: Arc<ApiServices>, config: ApiConfig) -> Self {
+        let audit_emitter = services.audit_service.clone() as Arc<dyn AuditEmitter>;
         Self {
             pool,
             services,
             config,
             metrics: Arc::new(ApiMetrics::new()),
+            audit_emitter,
         }
     }
 }
