@@ -26,46 +26,37 @@ pub enum FormMode {
     Edit(Uuid),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumIter, strum::IntoStaticStr)]
 pub enum VitalSignsFormField {
+    #[strum(to_string = "Systolic BP (mmHg)")]
     SystolicBp,
+    #[strum(to_string = "Diastolic BP (mmHg)")]
     DiastolicBp,
+    #[strum(to_string = "Heart Rate (bpm)")]
     HeartRate,
+    #[strum(to_string = "Respiratory Rate")]
     RespiratoryRate,
+    #[strum(to_string = "Temperature (C)")]
     Temperature,
+    #[strum(to_string = "O2 Saturation (%)")]
     O2Saturation,
+    #[strum(to_string = "Height (cm)")]
     Height,
+    #[strum(to_string = "Weight (kg)")]
     Weight,
+    #[strum(to_string = "Notes")]
     Notes,
 }
 
 impl VitalSignsFormField {
     pub fn all() -> Vec<VitalSignsFormField> {
-        vec![
-            VitalSignsFormField::SystolicBp,
-            VitalSignsFormField::DiastolicBp,
-            VitalSignsFormField::HeartRate,
-            VitalSignsFormField::RespiratoryRate,
-            VitalSignsFormField::Temperature,
-            VitalSignsFormField::O2Saturation,
-            VitalSignsFormField::Height,
-            VitalSignsFormField::Weight,
-            VitalSignsFormField::Notes,
-        ]
+        use strum::IntoEnumIterator;
+        VitalSignsFormField::iter().collect()
     }
 
     pub fn label(&self) -> &'static str {
-        match self {
-            VitalSignsFormField::SystolicBp => "Systolic BP (mmHg)",
-            VitalSignsFormField::DiastolicBp => "Diastolic BP (mmHg)",
-            VitalSignsFormField::HeartRate => "Heart Rate (bpm)",
-            VitalSignsFormField::RespiratoryRate => "Respiratory Rate",
-            VitalSignsFormField::Temperature => "Temperature (C)",
-            VitalSignsFormField::O2Saturation => "O2 Saturation (%)",
-            VitalSignsFormField::Height => "Height (cm)",
-            VitalSignsFormField::Weight => "Weight (kg)",
-            VitalSignsFormField::Notes => "Notes",
-        }
+        use strum::IntoStaticStr;
+        (*self).into()
     }
 
     pub fn is_required(&self) -> bool {

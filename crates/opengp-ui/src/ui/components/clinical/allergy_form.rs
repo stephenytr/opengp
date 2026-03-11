@@ -28,37 +28,31 @@ pub enum FormMode {
     Edit(Uuid),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumIter, strum::IntoStaticStr)]
 pub enum AllergyFormField {
+    #[strum(to_string = "Allergen *")]
     Allergen,
+    #[strum(to_string = "Allergy Type *")]
     AllergyType,
+    #[strum(to_string = "Severity *")]
     Severity,
+    #[strum(to_string = "Reaction")]
     Reaction,
+    #[strum(to_string = "Onset Date (dd/mm/yyyy)")]
     OnsetDate,
+    #[strum(to_string = "Notes")]
     Notes,
 }
 
 impl AllergyFormField {
     pub fn all() -> Vec<AllergyFormField> {
-        vec![
-            AllergyFormField::Allergen,
-            AllergyFormField::AllergyType,
-            AllergyFormField::Severity,
-            AllergyFormField::Reaction,
-            AllergyFormField::OnsetDate,
-            AllergyFormField::Notes,
-        ]
+        use strum::IntoEnumIterator;
+        AllergyFormField::iter().collect()
     }
 
     pub fn label(&self) -> &'static str {
-        match self {
-            AllergyFormField::Allergen => "Allergen *",
-            AllergyFormField::AllergyType => "Allergy Type *",
-            AllergyFormField::Severity => "Severity *",
-            AllergyFormField::Reaction => "Reaction",
-            AllergyFormField::OnsetDate => "Onset Date (dd/mm/yyyy)",
-            AllergyFormField::Notes => "Notes",
-        }
+        use strum::IntoStaticStr;
+        (*self).into()
     }
 
     pub fn is_required(&self) -> bool {

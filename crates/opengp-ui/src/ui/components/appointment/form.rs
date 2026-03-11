@@ -34,51 +34,46 @@ pub enum FormMode {
 }
 
 /// All fields in the appointment creation form, in tab order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumIter, strum::IntoStaticStr)]
 pub enum AppointmentFormField {
     /// Patient search/select (displays name, stores UUID)
+    #[strum(to_string = "Patient *")]
     Patient,
     /// Practitioner dropdown (displays name, stores UUID)
+    #[strum(to_string = "Practitioner *")]
     Practitioner,
     /// Appointment date (YYYY-MM-DD)
+    #[strum(to_string = "Date * (dd/mm/yyyy)")]
     Date,
     /// Start time (HH:MM, 24-hour)
+    #[strum(to_string = "Start Time * (HH:MM)")]
     StartTime,
     /// Duration in minutes
+    #[strum(to_string = "Duration (minutes)")]
     Duration,
     /// Appointment type (Standard, Long, Brief, etc.)
+    #[strum(to_string = "Type *")]
     AppointmentType,
     /// Reason for visit (optional)
+    #[strum(to_string = "Reason")]
     Reason,
     /// Internal notes (optional)
+    #[strum(to_string = "Notes")]
     Notes,
 }
 
 impl AppointmentFormField {
     pub fn all() -> Vec<AppointmentFormField> {
-        vec![
-            AppointmentFormField::Patient,
-            AppointmentFormField::Practitioner,
-            AppointmentFormField::Date,
-            AppointmentFormField::StartTime,
-            // Duration is skipped in Tab navigation but still displayed
-            AppointmentFormField::AppointmentType,
-            AppointmentFormField::Reason,
-            AppointmentFormField::Notes,
-        ]
+        use strum::IntoEnumIterator;
+        // Duration is skipped in Tab navigation but still displayed
+        AppointmentFormField::iter()
+            .filter(|f| !matches!(f, AppointmentFormField::Duration))
+            .collect()
     }
 
     pub fn label(&self) -> &'static str {
-        match self {
-            AppointmentFormField::Patient => "Patient *",
-            AppointmentFormField::Practitioner => "Practitioner *",
-            AppointmentFormField::Date => "Date * (dd/mm/yyyy)",
-            AppointmentFormField::StartTime => "Start Time * (HH:MM)",
-            AppointmentFormField::Duration => "Duration (minutes)",
-            AppointmentFormField::AppointmentType => "Type *",
-            AppointmentFormField::Reason => "Reason",
-            AppointmentFormField::Notes => "Notes",
-        }
+        use strum::IntoStaticStr;
+        (*self).into()
     }
 
     pub fn is_required(&self) -> bool {

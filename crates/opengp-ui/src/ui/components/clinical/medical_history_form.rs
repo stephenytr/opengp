@@ -27,34 +27,29 @@ pub enum FormMode {
     Edit(Uuid),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumIter, strum::IntoStaticStr)]
 pub enum MedicalHistoryFormField {
+    #[strum(to_string = "Condition *")]
     Condition,
+    #[strum(to_string = "Diagnosis Date (dd/mm/yyyy)")]
     DiagnosisDate,
+    #[strum(to_string = "Status *")]
     Status,
+    #[strum(to_string = "Severity")]
     Severity,
+    #[strum(to_string = "Notes")]
     Notes,
 }
 
 impl MedicalHistoryFormField {
     pub fn all() -> Vec<MedicalHistoryFormField> {
-        vec![
-            MedicalHistoryFormField::Condition,
-            MedicalHistoryFormField::DiagnosisDate,
-            MedicalHistoryFormField::Status,
-            MedicalHistoryFormField::Severity,
-            MedicalHistoryFormField::Notes,
-        ]
+        use strum::IntoEnumIterator;
+        MedicalHistoryFormField::iter().collect()
     }
 
     pub fn label(&self) -> &'static str {
-        match self {
-            MedicalHistoryFormField::Condition => "Condition *",
-            MedicalHistoryFormField::DiagnosisDate => "Diagnosis Date (dd/mm/yyyy)",
-            MedicalHistoryFormField::Status => "Status *",
-            MedicalHistoryFormField::Severity => "Severity",
-            MedicalHistoryFormField::Notes => "Notes",
-        }
+        use strum::IntoStaticStr;
+        (*self).into()
     }
 
     pub fn is_required(&self) -> bool {

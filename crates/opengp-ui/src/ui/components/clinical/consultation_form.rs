@@ -18,25 +18,23 @@ use crate::ui::widgets::{
 };
 use opengp_domain::domain::clinical::Consultation;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumIter, strum::IntoStaticStr)]
 pub enum ConsultationFormField {
+    #[strum(to_string = "Reason")]
     Reason,
+    #[strum(to_string = "Clinical Notes")]
     ClinicalNotes,
 }
 
 impl ConsultationFormField {
     pub fn all() -> Vec<ConsultationFormField> {
-        vec![
-            ConsultationFormField::Reason,
-            ConsultationFormField::ClinicalNotes,
-        ]
+        use strum::IntoEnumIterator;
+        ConsultationFormField::iter().collect()
     }
 
     pub fn label(&self) -> &'static str {
-        match self {
-            ConsultationFormField::Reason => "Reason",
-            ConsultationFormField::ClinicalNotes => "Clinical Notes",
-        }
+        use strum::IntoStaticStr;
+        (*self).into()
     }
 
     pub fn is_required(&self) -> bool {

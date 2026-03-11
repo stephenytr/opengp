@@ -25,31 +25,27 @@ pub enum FormMode {
     Edit(Uuid),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumIter, strum::IntoStaticStr)]
 pub enum FamilyHistoryFormField {
+    #[strum(to_string = "Relationship *")]
     Relationship,
+    #[strum(to_string = "Condition *")]
     Condition,
+    #[strum(to_string = "Age at Diagnosis")]
     AgeAtDiagnosis,
+    #[strum(to_string = "Notes")]
     Notes,
 }
 
 impl FamilyHistoryFormField {
     pub fn all() -> Vec<FamilyHistoryFormField> {
-        vec![
-            FamilyHistoryFormField::Relationship,
-            FamilyHistoryFormField::Condition,
-            FamilyHistoryFormField::AgeAtDiagnosis,
-            FamilyHistoryFormField::Notes,
-        ]
+        use strum::IntoEnumIterator;
+        FamilyHistoryFormField::iter().collect()
     }
 
     pub fn label(&self) -> &'static str {
-        match self {
-            FamilyHistoryFormField::Relationship => "Relationship *",
-            FamilyHistoryFormField::Condition => "Condition *",
-            FamilyHistoryFormField::AgeAtDiagnosis => "Age at Diagnosis",
-            FamilyHistoryFormField::Notes => "Notes",
-        }
+        use strum::IntoStaticStr;
+        (*self).into()
     }
 
     pub fn is_required(&self) -> bool {

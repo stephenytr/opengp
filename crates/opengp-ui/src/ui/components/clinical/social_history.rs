@@ -26,49 +26,39 @@ pub struct SocialHistoryData {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter, strum::IntoStaticStr)]
 pub enum SocialHistoryField {
+    #[strum(to_string = "Smoking")]
     SmokingStatus,
+    #[strum(to_string = "Cigarettes/day")]
     CigarettesPerDay,
+    #[strum(to_string = "Quit date (dd/mm/yyyy)")]
     QuitDate,
+    #[strum(to_string = "Alcohol")]
     AlcoholStatus,
+    #[strum(to_string = "Drinks/week")]
     DrinksPerWeek,
+    #[strum(to_string = "Exercise")]
     ExerciseFrequency,
+    #[strum(to_string = "Occupation")]
     Occupation,
+    #[strum(to_string = "Living situation")]
     LivingSituation,
+    #[strum(to_string = "Support network")]
     SupportNetwork,
+    #[strum(to_string = "Notes")]
     Notes,
 }
 
 impl SocialHistoryField {
     fn all() -> Vec<SocialHistoryField> {
-        vec![
-            SocialHistoryField::SmokingStatus,
-            SocialHistoryField::CigarettesPerDay,
-            SocialHistoryField::QuitDate,
-            SocialHistoryField::AlcoholStatus,
-            SocialHistoryField::DrinksPerWeek,
-            SocialHistoryField::ExerciseFrequency,
-            SocialHistoryField::Occupation,
-            SocialHistoryField::LivingSituation,
-            SocialHistoryField::SupportNetwork,
-            SocialHistoryField::Notes,
-        ]
+        use strum::IntoEnumIterator;
+        SocialHistoryField::iter().collect()
     }
 
     fn label(&self) -> &'static str {
-        match self {
-            SocialHistoryField::SmokingStatus => "Smoking",
-            SocialHistoryField::CigarettesPerDay => "Cigarettes/day",
-            SocialHistoryField::QuitDate => "Quit date (dd/mm/yyyy)",
-            SocialHistoryField::AlcoholStatus => "Alcohol",
-            SocialHistoryField::DrinksPerWeek => "Drinks/week",
-            SocialHistoryField::ExerciseFrequency => "Exercise",
-            SocialHistoryField::Occupation => "Occupation",
-            SocialHistoryField::LivingSituation => "Living situation",
-            SocialHistoryField::SupportNetwork => "Support network",
-            SocialHistoryField::Notes => "Notes",
-        }
+        use strum::IntoStaticStr;
+        (*self).into()
     }
 
     fn hint(&self) -> &'static str {

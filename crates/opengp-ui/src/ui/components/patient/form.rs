@@ -29,103 +29,75 @@ pub enum FormMode {
     Edit(Uuid),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumIter, strum::IntoStaticStr)]
 pub enum FormField {
+    #[strum(to_string = "Title")]
     Title,
+    #[strum(to_string = "First Name *")]
     FirstName,
+    #[strum(to_string = "Middle Name")]
     MiddleName,
+    #[strum(to_string = "Last Name *")]
     LastName,
+    #[strum(to_string = "Preferred Name")]
     PreferredName,
+    #[strum(to_string = "Date of Birth * (dd/mm/yyyy)")]
     DateOfBirth,
+    #[strum(to_string = "Gender *")]
     Gender,
+    #[strum(to_string = "Address Line 1")]
     AddressLine1,
+    #[strum(to_string = "Address Line 2")]
     AddressLine2,
+    #[strum(to_string = "Suburb")]
     Suburb,
+    #[strum(to_string = "State")]
     State,
+    #[strum(to_string = "Postcode")]
     Postcode,
+    #[strum(to_string = "Country")]
     Country,
+    #[strum(to_string = "Phone (Home)")]
     PhoneHome,
+    #[strum(to_string = "Phone (Mobile)")]
     PhoneMobile,
+    #[strum(to_string = "Email")]
     Email,
+    #[strum(to_string = "Medicare Number")]
     MedicareNumber,
+    #[strum(to_string = "Medicare IRN")]
     MedicareIrn,
+    #[strum(to_string = "Medicare Expiry (dd/mm/yyyy)")]
     MedicareExpiry,
+    #[strum(to_string = "IHI")]
     Ihi,
+    #[strum(to_string = "Emergency Contact Name")]
     EmergencyName,
+    #[strum(to_string = "Emergency Contact Phone")]
     EmergencyPhone,
+    #[strum(to_string = "Emergency Contact Relationship")]
     EmergencyRelationship,
+    #[strum(to_string = "Concession Type")]
     ConcessionType,
+    #[strum(to_string = "Concession Number")]
     ConcessionNumber,
+    #[strum(to_string = "Preferred Language")]
     PreferredLanguage,
+    #[strum(to_string = "Interpreter Required")]
     InterpreterRequired,
+    #[strum(to_string = "ATSI Status")]
     AtsiStatus,
 }
 
 impl FormField {
     pub fn all() -> Vec<FormField> {
-        vec![
-            FormField::Title,
-            FormField::FirstName,
-            FormField::MiddleName,
-            FormField::LastName,
-            FormField::PreferredName,
-            FormField::DateOfBirth,
-            FormField::Gender,
-            FormField::AddressLine1,
-            FormField::AddressLine2,
-            FormField::Suburb,
-            FormField::State,
-            FormField::Postcode,
-            FormField::Country,
-            FormField::PhoneHome,
-            FormField::PhoneMobile,
-            FormField::Email,
-            FormField::MedicareNumber,
-            FormField::MedicareIrn,
-            FormField::MedicareExpiry,
-            FormField::Ihi,
-            FormField::EmergencyName,
-            FormField::EmergencyPhone,
-            FormField::EmergencyRelationship,
-            FormField::ConcessionType,
-            FormField::ConcessionNumber,
-            FormField::PreferredLanguage,
-            FormField::InterpreterRequired,
-            FormField::AtsiStatus,
-        ]
+        use strum::IntoEnumIterator;
+        FormField::iter().collect()
     }
 
     pub fn label(&self) -> &'static str {
-        match self {
-            FormField::Title => "Title",
-            FormField::FirstName => "First Name *",
-            FormField::MiddleName => "Middle Name",
-            FormField::LastName => "Last Name *",
-            FormField::PreferredName => "Preferred Name",
-            FormField::DateOfBirth => "Date of Birth * (dd/mm/yyyy)",
-            FormField::Gender => "Gender *",
-            FormField::AddressLine1 => "Address Line 1",
-            FormField::AddressLine2 => "Address Line 2",
-            FormField::Suburb => "Suburb",
-            FormField::State => "State",
-            FormField::Postcode => "Postcode",
-            FormField::Country => "Country",
-            FormField::PhoneHome => "Phone (Home)",
-            FormField::PhoneMobile => "Phone (Mobile)",
-            FormField::Email => "Email",
-            FormField::MedicareNumber => "Medicare Number",
-            FormField::MedicareIrn => "Medicare IRN",
-            FormField::MedicareExpiry => "Medicare Expiry (dd/mm/yyyy)",
-            FormField::Ihi => "IHI",
-            FormField::EmergencyName => "Emergency Contact Name",
-            FormField::EmergencyPhone => "Emergency Contact Phone",
-            FormField::EmergencyRelationship => "Emergency Contact Relationship",
-            FormField::ConcessionType => "Concession Type",
-            FormField::ConcessionNumber => "Concession Number",
-            FormField::PreferredLanguage => "Preferred Language",
-            FormField::InterpreterRequired => "Interpreter Required",
-            FormField::AtsiStatus => "ATSI Status",
-        }
+        use strum::IntoStaticStr;
+        (*self).into()
     }
 
     pub fn is_required(&self) -> bool {
