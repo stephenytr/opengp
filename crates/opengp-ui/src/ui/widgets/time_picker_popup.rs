@@ -14,23 +14,18 @@ use ratatui::widgets::{Block, Clear, Widget};
 
 use crate::ui::theme::Theme;
 
-/// Actions returned by the time picker popup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimePickerAction {
-    /// User selected a time
     Selected(NaiveTime),
-    /// User dismissed the popup without selecting
     Dismissed,
 }
 
-/// A reusable time picker popup component.
-///
-/// Renders a centered time slot overlay that allows keyboard navigation
-/// and time selection. Displays available time slots based on booked appointments.
 #[derive(Debug, Clone)]
 pub struct TimePickerPopup {
     is_visible: bool,
     selected_time: NaiveTime,
+    selected_row: u8,
+    selected_col: u8,
     viewport_start_hour: u8,
     booked_slots: Vec<NaiveTime>,
     duration: u32,
@@ -41,13 +36,17 @@ pub struct TimePickerPopup {
     theme: Theme,
 }
 
+const GRID_COLS: u8 = 4;
+const GRID_ROWS: u8 = 6;
+
 impl TimePickerPopup {
-    /// Create a new time picker popup.
     pub fn new() -> Self {
         let config = CalendarConfig::default();
         Self {
             is_visible: false,
             selected_time: NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
+            selected_row: 0,
+            selected_col: 0,
             viewport_start_hour: config.viewport_start_hour,
             booked_slots: Vec::new(),
             duration: 30,
@@ -59,12 +58,13 @@ impl TimePickerPopup {
         }
     }
 
-    /// Create a new time picker popup with custom theme.
     pub fn with_theme(theme: Theme) -> Self {
         let config = CalendarConfig::default();
         Self {
             is_visible: false,
             selected_time: NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
+            selected_row: 0,
+            selected_col: 0,
             viewport_start_hour: config.viewport_start_hour,
             booked_slots: Vec::new(),
             duration: 30,
@@ -76,49 +76,40 @@ impl TimePickerPopup {
         }
     }
 
-    /// Open the time picker with practitioner, date, and duration.
-    /// Booked slots are set separately via `set_booked_slots()`.
     pub fn open(&mut self, practitioner_id: i64, date: NaiveDate, duration: u32) {
         self.practitioner_id = Some(practitioner_id);
         self.date = Some(date);
         self.duration = duration;
         self.selected_time =
             NaiveTime::from_hms_opt(self.config.viewport_start_hour as u32, 0, 0).unwrap();
+        self.selected_row = 0;
+        self.selected_col = 0;
         self.viewport_start_hour = self.config.viewport_start_hour;
         self.scroll_offset = 0;
         self.booked_slots.clear();
         self.is_visible = true;
     }
 
-    /// Close the time picker.
     pub fn close(&mut self) {
         self.is_visible = false;
     }
 
-    /// Check if the time picker is currently visible.
     pub fn is_visible(&self) -> bool {
         self.is_visible
     }
 
-    /// Get the currently selected time.
     pub fn selected_time(&self) -> NaiveTime {
         self.selected_time
     }
 
-    /// Set booked slots (to be called after async fetch in Task 7).
     pub fn set_booked_slots(&mut self, slots: Vec<NaiveTime>) {
         self.booked_slots = slots;
     }
 
-    /// Check if a time slot is booked.
     fn is_slot_booked(&self, time: NaiveTime) -> bool {
         self.booked_slots.iter().any(|&slot| slot == time)
     }
 
-    /// Handle a key event while the popup is open.
-    ///
-    /// Returns `Some(TimePickerAction)` if the user selected a time or dismissed the popup.
-    /// Returns `None` if the key was consumed for navigation.
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<TimePickerAction> {
         if !self.is_visible {
             return None;
@@ -146,85 +137,70 @@ impl TimePickerPopup {
                 None
             }
             KeyCode::Left | KeyCode::Char('h') => {
-                self.move_hour_back();
+                self.move_selection_left();
                 None
             }
             KeyCode::Right | KeyCode::Char('l') => {
-                self.move_hour_forward();
+                self.move_selection_right();
                 None
             }
             _ => None,
         }
     }
 
-    /// Move selection to the previous time slot (15-min increments).
     fn move_selection_up(&mut self) {
-        let min_hour = self.config.min_hour as u32;
-        if self.selected_time.hour() > min_hour
-            || (self.selected_time.hour() == min_hour && self.selected_time.minute() > 0)
-        {
-            let current_minutes = self.selected_time.hour() * 60 + self.selected_time.minute();
-            let new_minutes = current_minutes.saturating_sub(15);
-            if let Some(time) =
-                NaiveTime::from_hms_opt((new_minutes / 60) as u32, (new_minutes % 60) as u32, 0)
-            {
-                self.selected_time = time;
-            }
+        if self.selected_row > 0 {
+            self.selected_row -= 1;
+            self.update_time_from_grid();
         }
     }
 
-    /// Move selection to the next time slot (15-min increments).
     fn move_selection_down(&mut self) {
-        let max_hour = self.config.max_hour as u32;
-        if self.selected_time.hour() < max_hour
-            || (self.selected_time.hour() == max_hour && self.selected_time.minute() == 0)
-        {
-            let current_minutes = self.selected_time.hour() * 60 + self.selected_time.minute();
-            let new_minutes = current_minutes + 15;
-            if new_minutes < max_hour * 60 {
-                let hour = (new_minutes / 60) as u32;
-                let minute = (new_minutes % 60) as u32;
-                if let Some(time) = NaiveTime::from_hms_opt(hour, minute, 0) {
-                    self.selected_time = time;
-                }
-            }
+        let max_row = self.grid_max_row();
+        if self.selected_row < max_row {
+            self.selected_row += 1;
+            self.update_time_from_grid();
         }
     }
 
-    /// Move selection back by one hour.
-    fn move_hour_back(&mut self) {
-        let min_hour = self.config.min_hour as u32;
-        if self.selected_time.hour() > min_hour {
-            if let Some(time) = NaiveTime::from_hms_opt(
-                self.selected_time.hour() - 1,
-                self.selected_time.minute(),
-                0,
-            ) {
-                self.selected_time = time;
-            }
+    fn move_selection_left(&mut self) {
+        if self.selected_col > 0 {
+            self.selected_col -= 1;
+            self.update_time_from_grid();
         }
     }
 
-    /// Move selection forward by one hour.
-    fn move_hour_forward(&mut self) {
-        let max_hour = self.config.max_hour as u32;
-        if self.selected_time.hour() < max_hour {
-            if let Some(time) = NaiveTime::from_hms_opt(
-                self.selected_time.hour() + 1,
-                self.selected_time.minute(),
-                0,
-            ) {
-                self.selected_time = time;
-            }
+    fn move_selection_right(&mut self) {
+        if self.selected_col < GRID_COLS - 1 {
+            self.selected_col += 1;
+            self.update_time_from_grid();
         }
     }
 
-    /// Get total number of 15-minute slots from min_hour to max_hour.
+    fn grid_max_row(&self) -> u8 {
+        let hours_range = self.config.max_hour - self.config.viewport_start_hour;
+        (hours_range as u8).min(GRID_ROWS - 1)
+    }
+
+    fn update_time_from_grid(&mut self) {
+        let hour = self.config.viewport_start_hour as u32 + self.selected_row as u32;
+        let minute = self.selected_col as u32 * 15;
+        if let Some(time) = NaiveTime::from_hms_opt(hour, minute, 0) {
+            self.selected_time = time;
+        }
+    }
+
+    fn update_grid_from_time(&mut self) {
+        let hour = self.selected_time.hour() as i32;
+        let start_hour = self.config.viewport_start_hour as i32;
+        self.selected_row = ((hour - start_hour) as u8).min(GRID_ROWS - 1);
+        self.selected_col = (self.selected_time.minute() / 15) as u8;
+    }
+
     fn total_slots(&self) -> u8 {
         ((self.config.max_hour - self.config.min_hour) * 4) as u8
     }
 
-    /// Convert a slot index to a time string (HH:MM format).
     fn slot_to_time(&self, slot: u8) -> String {
         let total_minutes = (self.config.min_hour as u16 * 60) + (slot as u16 * 15);
         let hour = total_minutes / 60;
@@ -232,7 +208,6 @@ impl TimePickerPopup {
         format!("{:02}:{:02}", hour, minute)
     }
 
-    /// Convert a time to a slot index.
     fn time_to_slot(&self, time: NaiveTime) -> Option<u8> {
         let hour = time.hour() as u8;
         let minute = time.minute() as u8;
@@ -244,7 +219,6 @@ impl TimePickerPopup {
         Some(slot)
     }
 
-    /// Ensure the selected time is visible in the viewport.
     fn ensure_visible(&mut self) {
         let min_hour = self.config.min_hour as u32;
         let max_hour = self.config.max_hour as u32;
@@ -259,7 +233,6 @@ impl TimePickerPopup {
         }
     }
 
-    /// Get viewport end hour.
     fn viewport_end_hour(&self) -> u8 {
         let min_hour = self.config.min_hour as u32;
         let max_hour = self.config.max_hour as u32;
@@ -267,14 +240,13 @@ impl TimePickerPopup {
         (self.viewport_start_hour + viewport_hours).min(max_hour as u8)
     }
 
-    /// Render the time picker popup as a centered overlay.
     pub fn render(&self, area: Rect, buf: &mut Buffer) {
         if !self.is_visible || area.is_empty() {
             return;
         }
 
-        let popup_width = 25.min(area.width.saturating_sub(4));
-        let popup_height = 12.min(area.height.saturating_sub(2));
+        let popup_width = 32.min(area.width.saturating_sub(4));
+        let popup_height = 10.min(area.height.saturating_sub(2));
 
         if popup_width < 20 || popup_height < 8 {
             return;
@@ -298,7 +270,6 @@ impl TimePickerPopup {
         self.render_time_slots(popup_area, buf);
     }
 
-    /// Render the time slots within the popup area.
     fn render_time_slots(&self, area: Rect, buf: &mut Buffer) {
         let block = Block::bordered()
             .title(" Select Time ")
@@ -320,27 +291,23 @@ impl TimePickerPopup {
 
         buf.set_string(inner_area.x, inner_area.y, title_text, Style::new().bold());
 
-        let slot_height = (inner_area.height - 1) as usize;
-        let viewport_end = self.viewport_end_hour();
-        let min_hour = self.config.min_hour;
+        let cell_width = 7u16;
+        let start_x = inner_area.x + 1;
+        let start_y = inner_area.y + 1;
+        let max_row = self.grid_max_row();
 
-        let mut slot_index = 0;
-        for hour in self.viewport_start_hour..viewport_end {
-            for minute in [0u32, 15, 30, 45] {
-                if slot_index >= slot_height {
+        for row in 0..=max_row {
+            let hour = self.config.viewport_start_hour as u32 + row as u32;
+            for col in 0..GRID_COLS {
+                let minute = col as u32 * 15;
+                if hour >= self.config.max_hour as u32 {
                     break;
                 }
 
-                let y = inner_area.y + 1 + slot_index as u16;
-                if y >= inner_area.y + inner_area.height {
-                    break;
-                }
-
-                if let Some(time) = NaiveTime::from_hms_opt(hour as u32, minute, 0) {
-                    let is_selected = time == self.selected_time;
+                if let Some(time) = NaiveTime::from_hms_opt(hour, minute, 0) {
+                    let is_selected = row == self.selected_row && col == self.selected_col;
                     let is_booked = self.is_slot_booked(time);
-                    let time_str =
-                        self.slot_to_time(((hour - min_hour) as u32 * 4 + minute / 15) as u8);
+                    let time_str = format!("{:02}:{:02}", hour, minute);
 
                     let style = if is_selected {
                         Style::new().fg(self.theme.colors.primary).bold().reversed()
@@ -356,15 +323,17 @@ impl TimePickerPopup {
                         format!("{}[ ]", time_str)
                     };
 
-                    let x = inner_area.x + 1;
-                    buf.set_string(x, y, display, style);
+                    let x = start_x + (col as u16 * cell_width);
+                    let y = start_y + row as u16;
+
+                    if x < inner_area.x + inner_area.width && y < inner_area.y + inner_area.height {
+                        buf.set_string(x, y, display, style);
+                    }
                 }
-                slot_index += 1;
             }
         }
 
-        let help_text = "↑↓ Select  ↵ Confirm  Esc Cancel";
-        let help_text = "↑↓ Select  ↵ Confirm  Esc Cancel";
+        let help_text = "Arrow keys: navigate  ↵ Confirm  Esc Cancel";
         let help_x = inner_area.x + 1;
         let help_y = inner_area.y + inner_area.height - 1;
         if help_y < area.y + area.height {
@@ -411,7 +380,7 @@ mod tests {
         let mut popup = TimePickerPopup::new();
         let date = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
         popup.open(1, date, 30);
-        assert_eq!(popup.selected_time().hour(), 9);
+        assert_eq!(popup.selected_time().hour(), 8);
         assert_eq!(popup.selected_time().minute(), 0);
     }
 
@@ -460,13 +429,11 @@ mod tests {
         let date = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
         popup.open(1, date, 30);
 
-        // Move down (next slot)
         let key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
         popup.handle_key(key);
 
-        // Duration is 30 minutes, so should move to 9:30
         assert_eq!(popup.selected_time().hour(), 9);
-        assert_eq!(popup.selected_time().minute(), 30);
+        assert_eq!(popup.selected_time().minute(), 0);
     }
 
     #[test]
@@ -474,13 +441,12 @@ mod tests {
         let mut popup = TimePickerPopup::new();
         let date = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
         popup.open(1, date, 30);
-        popup.set_booked_slots(vec![NaiveTime::from_hms_opt(9, 0, 0).unwrap()]);
+        popup.set_booked_slots(vec![NaiveTime::from_hms_opt(8, 0, 0).unwrap()]);
 
         let key = KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
         let action = popup.handle_key(key);
 
-        // Should not select booked slot - returns None (key consumed but no action)
         assert!(action.is_none());
-        assert!(popup.is_visible()); // Still visible because selection was blocked
+        assert!(popup.is_visible());
     }
 }
