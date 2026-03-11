@@ -14,6 +14,11 @@ impl App {
             return;
         }
 
+        if !self.authenticated {
+            frame.render_widget(self.login_screen.clone(), terminal);
+            return;
+        }
+
         let main_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([

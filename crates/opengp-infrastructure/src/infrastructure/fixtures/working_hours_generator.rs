@@ -14,24 +14,29 @@ use opengp_domain::domain::user::WorkingHours;
 ///
 /// The function is idempotent and will skip practitioners that already have working hours defined.
 pub async fn seed_working_hours(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    let rows = sqlx::query("SELECT id FROM users WHERE (role = 'Doctor' OR role = 'Nurse') AND is_active = TRUE")
-        .fetch_all(pool)
-        .await?;
+    let rows = sqlx::query(
+        "SELECT id FROM users WHERE (role = 'Doctor' OR role = 'Nurse') AND is_active = TRUE",
+    )
+    .fetch_all(pool)
+    .await?;
 
     tracing::info!("Seeding working hours for {} practitioners", rows.len());
 
     for row in rows {
         let practitioner_id_bytes: Vec<u8> = row.get("id");
-        
+
         let existing_count = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM working_hours WHERE practitioner_id = ?"
+            "SELECT COUNT(*) FROM working_hours WHERE practitioner_id = ?",
         )
         .bind(&practitioner_id_bytes)
         .fetch_one(pool)
         .await?;
 
         if existing_count > 0 {
-            tracing::debug!("Practitioner already has {} working hours entries, skipping", existing_count);
+            tracing::debug!(
+                "Practitioner already has {} working hours entries, skipping",
+                existing_count
+            );
             continue;
         }
 
@@ -50,8 +55,9 @@ pub async fn seed_working_hours(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
             let working_hours = WorkingHours {
                 id: Uuid::new_v4(),
-                practitioner_id: bytes_to_uuid(&practitioner_id_bytes)
-                    .map_err(|e| sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))?,
+                practitioner_id: bytes_to_uuid(&practitioner_id_bytes).map_err(|e| {
+                    sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+                })?,
                 day_of_week: day_of_week as u8,
                 start_time,
                 end_time,
@@ -63,8 +69,10 @@ pub async fn seed_working_hours(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             let id_bytes = uuid_to_bytes(&working_hours.id);
             let start_time_str = working_hours.start_time.format("%H:%M:%S").to_string();
             let end_time_str = working_hours.end_time.format("%H:%M:%S").to_string();
-            let created_at_str = format!("{}", working_hours.created_at.format("%Y-%m-%d %H:%M:%S"));
-            let updated_at_str = format!("{}", working_hours.updated_at.format("%Y-%m-%d %H:%M:%S"));
+            let created_at_str =
+                format!("{}", working_hours.created_at.format("%Y-%m-%d %H:%M:%S"));
+            let updated_at_str =
+                format!("{}", working_hours.updated_at.format("%Y-%m-%d %H:%M:%S"));
 
             sqlx::query(
                 r#"
@@ -87,8 +95,12 @@ pub async fn seed_working_hours(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             .execute(pool)
             .await?;
 
-            tracing::debug!("Created working hours for day {} ({}:00 - {}:00)", 
-                day_of_week, start_time.hour(), end_time.hour());
+            tracing::debug!(
+                "Created working hours for day {} ({}:00 - {}:00)",
+                day_of_week,
+                start_time.hour(),
+                end_time.hour()
+            );
         }
     }
 

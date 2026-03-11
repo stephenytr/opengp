@@ -21,6 +21,32 @@ impl App {
             return Action::Unknown;
         }
 
+        if !self.authenticated {
+            if let Some(crate::ui::screens::LoginAction::Submit { username, password }) =
+                self.login_screen.handle_key(key)
+            {
+                self.pending_login_request = Some((username, password));
+                return Action::Submit;
+            }
+
+            if let Some(action) = self
+                .keybinds
+                .lookup(key, KeyContext::Global)
+                .map(|kb| kb.action.clone())
+            {
+                match action {
+                    Action::OpenHelp => self.help_overlay.toggle(),
+                    Action::Quit => {
+                        self.should_quit = true;
+                    }
+                    _ => {}
+                }
+                return action;
+            }
+
+            return Action::Unknown;
+        }
+
         if self.tab_bar.selected() == Tab::Patient
             && self.patient_form.is_none()
             && self.patient_list.is_searching()

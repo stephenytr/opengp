@@ -3,9 +3,9 @@ use chrono::Utc;
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
-use opengp_domain::domain::user::{Practitioner, PractitionerRepository, RepositoryError};
 use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::helpers::{bytes_to_uuid, uuid_to_bytes, DbUuid};
+use opengp_domain::domain::user::{Practitioner, PractitionerRepository, RepositoryError};
 
 #[derive(Debug, FromRow)]
 struct PractitionerQueryRow {
@@ -70,12 +70,14 @@ impl SqlxPractitionerRepository {
 #[async_trait]
 impl PractitionerRepository for SqlxPractitionerRepository {
     async fn list_active(&self) -> Result<Vec<Practitioner>, RepositoryError> {
-        let rows = sqlx::query_as::<_, PractitionerQueryRow>(&db_helpers::sql_with_placeholders(&r#"
+        let rows = sqlx::query_as::<_, PractitionerQueryRow>(&db_helpers::sql_with_placeholders(
+            &r#"
         SELECT id, first_name, last_name, email, role
         FROM users
         WHERE (role = 'Doctor' OR role = 'Nurse') AND is_active = TRUE
         ORDER BY last_name, first_name
-        "#))
+        "#,
+        ))
         .fetch_all(&self.pool)
         .await
         .map_err(|e| RepositoryError::Database(e.to_string()))?;
@@ -91,11 +93,13 @@ impl PractitionerRepository for SqlxPractitionerRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Practitioner>, RepositoryError> {
         let id_bytes = uuid_to_bytes(&id);
 
-        let row = sqlx::query_as::<_, PractitionerQueryRow>(&db_helpers::sql_with_placeholders(&r#"
+        let row = sqlx::query_as::<_, PractitionerQueryRow>(&db_helpers::sql_with_placeholders(
+            &r#"
         SELECT id, first_name, last_name, email, role
         FROM users
         WHERE id = ? AND (role = 'Doctor' OR role = 'Nurse') AND is_active = TRUE
-        "#))
+        "#,
+        ))
         .bind(id_bytes)
         .fetch_optional(&self.pool)
         .await

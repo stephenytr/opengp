@@ -3,10 +3,12 @@ use chrono::{DateTime, Utc};
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
-use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
-use opengp_domain::domain::audit::{AuditAction, AuditEntry, AuditRepository, AuditRepositoryError};
 use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::sqlx_to_audit_error;
+use opengp_domain::domain::audit::{
+    AuditAction, AuditEntry, AuditRepository, AuditRepositoryError,
+};
+use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
 
 fn bytes_to_uuid(bytes: &db_helpers::DbUuid) -> Result<Uuid, AuditRepositoryError> {
     db_helpers::bytes_to_uuid(bytes).map_err(|_| {
@@ -87,13 +89,15 @@ impl AuditRepository for SqlxAuditRepository {
             )))
         })?;
 
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(
+            &r#"
         INSERT INTO audit_logs (
             id, entity_type, entity_id, action,
             old_value, new_value,
             changed_by, changed_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        "#))
+        "#,
+        ))
         .bind(id_bytes)
         .bind(&entry.entity_type)
         .bind(entity_id_bytes)
@@ -110,13 +114,15 @@ impl AuditRepository for SqlxAuditRepository {
             Err(sqlx::Error::Database(db_err)) => {
                 let err_msg = db_err.message();
                 if err_msg.contains("FOREIGN KEY constraint") {
-                    Err(AuditRepositoryError::Base(BaseRepositoryError::ConstraintViolation(
-                        "User does not exist".to_string(),
-                    )))
+                    Err(AuditRepositoryError::Base(
+                        BaseRepositoryError::ConstraintViolation("User does not exist".to_string()),
+                    ))
                 } else if err_msg.contains("NOT NULL constraint") {
-                    Err(AuditRepositoryError::Base(BaseRepositoryError::ConstraintViolation(
-                        "Required field is missing".to_string(),
-                    )))
+                    Err(AuditRepositoryError::Base(
+                        BaseRepositoryError::ConstraintViolation(
+                            "Required field is missing".to_string(),
+                        ),
+                    ))
                 } else {
                     Err(AuditRepositoryError::Base(BaseRepositoryError::Database(
                         db_err.to_string(),
@@ -144,7 +150,7 @@ impl AuditRepository for SqlxAuditRepository {
         .bind(entity_id_bytes)
         .fetch_all(&self.pool)
         .await
-            .map_err(sqlx_to_audit_error)?;
+        .map_err(sqlx_to_audit_error)?;
 
         rows.into_iter().map(|r| r.into_audit_entry()).collect()
     }
@@ -159,7 +165,7 @@ impl AuditRepository for SqlxAuditRepository {
         .bind(user_id_bytes)
         .fetch_all(&self.pool)
         .await
-            .map_err(sqlx_to_audit_error)?;
+        .map_err(sqlx_to_audit_error)?;
 
         rows.into_iter().map(|r| r.into_audit_entry()).collect()
     }
@@ -180,7 +186,7 @@ impl AuditRepository for SqlxAuditRepository {
         .bind(end_time_str)
         .fetch_all(&self.pool)
         .await
-            .map_err(sqlx_to_audit_error)?;
+        .map_err(sqlx_to_audit_error)?;
 
         rows.into_iter().map(|r| r.into_audit_entry()).collect()
     }

@@ -39,7 +39,11 @@ impl ApiClient {
         }
     }
 
-    pub async fn login(&self, username: String, password: String) -> Result<LoginResponse, ApiClientError> {
+    pub async fn login(
+        &self,
+        username: String,
+        password: String,
+    ) -> Result<LoginResponse, ApiClientError> {
         let request = LoginRequest { username, password };
         let response = self
             .http_client
@@ -96,7 +100,10 @@ impl ApiClient {
         Self::parse_json_response(response).await
     }
 
-    pub async fn create_patient(&self, request: &PatientRequest) -> Result<PatientResponse, ApiClientError> {
+    pub async fn create_patient(
+        &self,
+        request: &PatientRequest,
+    ) -> Result<PatientResponse, ApiClientError> {
         let response = self
             .authenticated_request(Method::POST, "/api/v1/patients")
             .await?
@@ -116,7 +123,10 @@ impl ApiClient {
         date_to: Option<DateTime<Utc>>,
         practitioner_id: Option<Uuid>,
     ) -> Result<PaginatedResponse<AppointmentResponse>, ApiClientError> {
-        let mut query_params = vec![("page".to_string(), page.to_string()), ("limit".to_string(), limit.to_string())];
+        let mut query_params = vec![
+            ("page".to_string(), page.to_string()),
+            ("limit".to_string(), limit.to_string()),
+        ];
 
         if let Some(from) = date_from {
             query_params.push(("date_from".to_string(), from.to_rfc3339()));
@@ -214,10 +224,9 @@ impl ApiClient {
         method: Method,
         path: &str,
     ) -> Result<reqwest::RequestBuilder, ApiClientError> {
-        let token = self
-            .current_session_token()
-            .await
-            .ok_or_else(|| ApiClientError::Authentication("Please log in to continue".to_string()))?;
+        let token = self.current_session_token().await.ok_or_else(|| {
+            ApiClientError::Authentication("Please log in to continue".to_string())
+        })?;
 
         Ok(self
             .http_client
@@ -263,7 +272,9 @@ impl ApiClient {
             .unwrap_or(fallback_message);
 
         match status {
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => ApiClientError::Authentication(message),
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                ApiClientError::Authentication(message)
+            }
             StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY => {
                 ApiClientError::Validation(message)
             }
@@ -304,7 +315,10 @@ mod tests {
         let client = ApiClient::new(base_url);
 
         let _ = client
-            .login("dr_smith".to_string(), "correct-horse-battery-staple".to_string())
+            .login(
+                "dr_smith".to_string(),
+                "correct-horse-battery-staple".to_string(),
+            )
             .await
             .expect("login should succeed");
 
@@ -333,7 +347,10 @@ mod tests {
         let client = ApiClient::new(base_url);
 
         client
-            .login("dr_smith".to_string(), "correct-horse-battery-staple".to_string())
+            .login(
+                "dr_smith".to_string(),
+                "correct-horse-battery-staple".to_string(),
+            )
             .await
             .expect("login should succeed");
 
@@ -351,36 +368,47 @@ mod tests {
         let client = ApiClient::new(base_url);
 
         client
-            .login("dr_smith".to_string(), "correct-horse-battery-staple".to_string())
+            .login(
+                "dr_smith".to_string(),
+                "correct-horse-battery-staple".to_string(),
+            )
             .await
             .expect("login should succeed");
 
         let result = client.logout().await;
         assert!(matches!(result, Err(ApiClientError::Server(_))));
-        assert_eq!(client.current_session_token().await.as_deref(), Some("session-token"));
+        assert_eq!(
+            client.current_session_token().await.as_deref(),
+            Some("session-token")
+        );
     }
 
     #[tokio::test]
     async fn maps_validation_and_network_errors() {
-        let app = Router::new().route("/api/v1/auth/login", post(login_handler)).route(
-            "/api/v1/patients",
-            post(|| async {
-                (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiErrorResponse {
-                        status: 400,
-                        message: "Missing required first_name".to_string(),
-                        code: "validation_error".to_string(),
-                    }),
-                )
-            }),
-        );
+        let app = Router::new()
+            .route("/api/v1/auth/login", post(login_handler))
+            .route(
+                "/api/v1/patients",
+                post(|| async {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiErrorResponse {
+                            status: 400,
+                            message: "Missing required first_name".to_string(),
+                            code: "validation_error".to_string(),
+                        }),
+                    )
+                }),
+            );
 
         let (base_url, _server_task) = spawn_server(app).await;
         let client = ApiClient::new(base_url);
 
         client
-            .login("dr_smith".to_string(), "correct-horse-battery-staple".to_string())
+            .login(
+                "dr_smith".to_string(),
+                "correct-horse-battery-staple".to_string(),
+            )
             .await
             .expect("login should succeed");
 
@@ -396,11 +424,17 @@ mod tests {
             })
             .await;
 
-        assert!(matches!(validation_result, Err(ApiClientError::Validation(_))));
+        assert!(matches!(
+            validation_result,
+            Err(ApiClientError::Validation(_))
+        ));
 
         let network_client = ApiClient::new("http://127.0.0.1:9");
         let network_result = network_client
-            .login("dr_smith".to_string(), "correct-horse-battery-staple".to_string())
+            .login(
+                "dr_smith".to_string(),
+                "correct-horse-battery-staple".to_string(),
+            )
             .await;
         assert!(matches!(network_result, Err(ApiClientError::Network)));
     }
@@ -410,7 +444,10 @@ mod tests {
         let state = TestState::default();
         let app = Router::new()
             .route("/api/v1/auth/login", post(login_handler))
-            .route("/api/v1/patients", get(patients_handler).post(create_patient_handler))
+            .route(
+                "/api/v1/patients",
+                get(patients_handler).post(create_patient_handler),
+            )
             .route(
                 "/api/v1/appointments",
                 get(appointments_handler).post(create_appointment_handler),
@@ -425,7 +462,10 @@ mod tests {
         let client = ApiClient::new(base_url);
 
         client
-            .login("dr_smith".to_string(), "correct-horse-battery-staple".to_string())
+            .login(
+                "dr_smith".to_string(),
+                "correct-horse-battery-staple".to_string(),
+            )
             .await
             .expect("login should succeed");
 
@@ -460,7 +500,9 @@ mod tests {
         assert!(!created_consultation.is_signed);
 
         let headers = state.seen_auth_headers.lock().await;
-        assert!(headers.iter().all(|header| header == "Bearer session-token"));
+        assert!(headers
+            .iter()
+            .all(|header| header == "Bearer session-token"));
     }
 
     async fn login_handler(Json(_payload): Json<LoginRequest>) -> Json<LoginResponse> {
@@ -479,9 +521,7 @@ mod tests {
 
     async fn logout_success_handler(headers: HeaderMap) -> (StatusCode, Json<LogoutResponse>) {
         assert_eq!(
-            headers
-                .get("authorization")
-                .and_then(|h| h.to_str().ok()),
+            headers.get("authorization").and_then(|h| h.to_str().ok()),
             Some("Bearer session-token")
         );
 
@@ -607,7 +647,10 @@ mod tests {
                 .expect("test server should run")
         });
 
-        (format!("http://{}", socket_addr_to_host_port(addr)), server_task)
+        (
+            format!("http://{}", socket_addr_to_host_port(addr)),
+            server_task,
+        )
     }
 
     fn socket_addr_to_host_port(addr: SocketAddr) -> String {

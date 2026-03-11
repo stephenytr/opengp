@@ -7,7 +7,8 @@ use super::model::{OrderStatus, PathologyOrder, PathologyResult};
 #[async_trait]
 pub trait PathologyRepository: Send + Sync {
     async fn find_order_by_id(&self, id: Uuid) -> Result<Option<PathologyOrder>, RepositoryError>;
-    async fn find_result_by_id(&self, id: Uuid) -> Result<Option<PathologyResult>, RepositoryError>;
+    async fn find_result_by_id(&self, id: Uuid)
+        -> Result<Option<PathologyResult>, RepositoryError>;
     async fn find_orders_by_patient(
         &self,
         patient_id: Uuid,

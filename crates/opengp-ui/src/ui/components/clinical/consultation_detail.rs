@@ -1,6 +1,6 @@
+use crate::ui::theme::Theme;
 use opengp_domain::domain::clinical::Consultation;
 use opengp_domain::domain::prescription::Prescription;
-use crate::ui::theme::Theme;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};

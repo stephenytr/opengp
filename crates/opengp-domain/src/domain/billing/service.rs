@@ -74,7 +74,11 @@ mod tests {
     #[async_trait]
     impl BillingRepository for MockBillingRepository {
         async fn find_invoice_by_id(&self, id: Uuid) -> Result<Option<Invoice>, RepositoryError> {
-            Ok(self.invoices.iter().find(|invoice| invoice.id == id).cloned())
+            Ok(self
+                .invoices
+                .iter()
+                .find(|invoice| invoice.id == id)
+                .cloned())
         }
 
         async fn find_invoices_by_patient(
@@ -97,11 +101,17 @@ mod tests {
             Ok(invoice)
         }
 
-        async fn find_claim_by_id(&self, id: Uuid) -> Result<Option<MedicareClaim>, RepositoryError> {
+        async fn find_claim_by_id(
+            &self,
+            id: Uuid,
+        ) -> Result<Option<MedicareClaim>, RepositoryError> {
             Ok(self.claims.iter().find(|claim| claim.id == id).cloned())
         }
 
-        async fn create_claim(&self, claim: MedicareClaim) -> Result<MedicareClaim, RepositoryError> {
+        async fn create_claim(
+            &self,
+            claim: MedicareClaim,
+        ) -> Result<MedicareClaim, RepositoryError> {
             Ok(claim)
         }
 
@@ -225,7 +235,9 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(ServiceError::Validation(ValidationError::InvalidPaymentAmount))
+            Err(ServiceError::Validation(
+                ValidationError::InvalidPaymentAmount
+            ))
         ));
     }
 
@@ -233,7 +245,10 @@ mod tests {
     async fn test_find_claims_by_status_filters_correctly() {
         let service = new_service(
             vec![],
-            vec![test_claim(ClaimStatus::Submitted), test_claim(ClaimStatus::Paid)],
+            vec![
+                test_claim(ClaimStatus::Submitted),
+                test_claim(ClaimStatus::Paid),
+            ],
         );
 
         let result = service.find_claims_by_status(ClaimStatus::Paid).await;

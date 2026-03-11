@@ -1046,7 +1046,10 @@ mod tests {
             Ok(self.working_hours.clone())
         }
 
-        async fn save(&self, _working_hours: WorkingHours) -> Result<WorkingHours, RepositoryError> {
+        async fn save(
+            &self,
+            _working_hours: WorkingHours,
+        ) -> Result<WorkingHours, RepositoryError> {
             Err(RepositoryError::Database("not implemented".to_string()))
         }
 
@@ -1128,9 +1131,7 @@ mod tests {
         let service = new_availability_service(vec![], None);
         let date = chrono::NaiveDate::from_ymd_opt(2026, 3, 11).unwrap();
 
-        let result = service
-            .get_available_slots(practitioner_id, date, 15)
-            .await;
+        let result = service.get_available_slots(practitioner_id, date, 15).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), vec![]);
@@ -1144,14 +1145,13 @@ mod tests {
             2,
             NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
             NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let service = new_availability_service(vec![], Some(wh));
         let date = chrono::NaiveDate::from_ymd_opt(2026, 3, 11).unwrap();
 
-        let result = service
-            .get_available_slots(practitioner_id, date, 15)
-            .await;
+        let result = service.get_available_slots(practitioner_id, date, 15).await;
 
         assert!(result.is_ok());
         let slots = result.unwrap();
@@ -1172,7 +1172,8 @@ mod tests {
             2,
             NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
             NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let start_of_slot_1 = Utc.from_utc_datetime(&date.and_hms_opt(9, 15, 0).unwrap());
         let appointment = Appointment::new(
@@ -1186,9 +1187,7 @@ mod tests {
 
         let service = new_availability_service(vec![appointment], Some(wh));
 
-        let result = service
-            .get_available_slots(practitioner_id, date, 15)
-            .await;
+        let result = service.get_available_slots(practitioner_id, date, 15).await;
 
         assert!(result.is_ok());
         let slots = result.unwrap();
@@ -1208,13 +1207,12 @@ mod tests {
             2,
             NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
             NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let service = new_availability_service(vec![], Some(wh));
 
-        let result = service
-            .get_available_slots(practitioner_id, date, 30)
-            .await;
+        let result = service.get_available_slots(practitioner_id, date, 30).await;
 
         assert!(result.is_ok());
         let slots = result.unwrap();
@@ -1234,7 +1232,8 @@ mod tests {
             2,
             NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
             NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let start_of_slot = Utc.from_utc_datetime(&date.and_hms_opt(9, 20, 0).unwrap());
         let appointment = Appointment::new(
@@ -1248,9 +1247,7 @@ mod tests {
 
         let service = new_availability_service(vec![appointment], Some(wh));
 
-        let result = service
-            .get_available_slots(practitioner_id, date, 15)
-            .await;
+        let result = service.get_available_slots(practitioner_id, date, 15).await;
 
         assert!(result.is_ok());
         let slots = result.unwrap();

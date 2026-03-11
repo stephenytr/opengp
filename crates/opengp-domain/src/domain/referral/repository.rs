@@ -10,5 +10,8 @@ pub trait ReferralRepository: Send + Sync {
     async fn find_by_patient(&self, patient_id: Uuid) -> Result<Vec<Referral>, RepositoryError>;
     async fn create(&self, referral: Referral) -> Result<Referral, RepositoryError>;
     async fn update(&self, referral: Referral) -> Result<Referral, RepositoryError>;
-    async fn find_by_status(&self, status: ReferralStatus) -> Result<Vec<Referral>, RepositoryError>;
+    async fn find_by_status(
+        &self,
+        status: ReferralStatus,
+    ) -> Result<Vec<Referral>, RepositoryError>;
 }

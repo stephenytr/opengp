@@ -3,7 +3,9 @@ use opengp_domain::domain::audit::{AuditEmitter, AuditRepository, AuditService};
 use opengp_domain::domain::clinical::{
     ClinicalRepositories, ClinicalService, ConsultationRepository, NewConsultationData,
 };
-use opengp_domain::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
+use opengp_domain::domain::patient::{
+    Address, Gender, NewPatientData, PatientRepository, PatientService,
+};
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::repositories::{
     SqlxAllergyRepository, SqlxAuditRepository, SqlxClinicalRepository,
@@ -99,7 +101,8 @@ fn create_clinical_service(pool: &SqlitePool) -> ClinicalService {
     let consultation_repo: Arc<dyn ConsultationRepository> =
         Arc::new(SqlxClinicalRepository::new(pool.clone(), crypto.clone()));
 
-    let patient_crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
+    let patient_crypto =
+        Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
     let patient_repository: Arc<dyn PatientRepository> =
         Arc::new(SqlxPatientRepository::new(pool.clone(), patient_crypto));
     let patient_service = Arc::new(PatientService::new(patient_repository));
@@ -109,10 +112,19 @@ fn create_clinical_service(pool: &SqlitePool) -> ClinicalService {
     let repos = ClinicalRepositories {
         consultation: consultation_repo,
         allergy: Arc::new(SqlxAllergyRepository::new(pool.clone(), crypto.clone())),
-        medical_history: Arc::new(SqlxMedicalHistoryRepository::new(pool.clone(), crypto.clone())),
+        medical_history: Arc::new(SqlxMedicalHistoryRepository::new(
+            pool.clone(),
+            crypto.clone(),
+        )),
         vital_signs: Arc::new(SqlxVitalSignsRepository::new(pool.clone(), crypto.clone())),
-        social_history: Arc::new(SqlxSocialHistoryRepository::new(pool.clone(), crypto.clone())),
-        family_history: Arc::new(SqlxFamilyHistoryRepository::new(pool.clone(), crypto.clone())),
+        social_history: Arc::new(SqlxSocialHistoryRepository::new(
+            pool.clone(),
+            crypto.clone(),
+        )),
+        family_history: Arc::new(SqlxFamilyHistoryRepository::new(
+            pool.clone(),
+            crypto.clone(),
+        )),
     };
 
     ClinicalService::new(repos, patient_service, audit_service)
@@ -134,10 +146,7 @@ async fn test_create_consultation_with_reason() {
         clinical_notes: None,
     };
     let consultation = service
-        .create_consultation(
-            data,
-            practitioner_id,
-        )
+        .create_consultation(data, practitioner_id)
         .await
         .expect("Failed to create consultation");
 
@@ -300,9 +309,14 @@ async fn test_sign_consultation_twice_fails() {
         .await
         .expect("First sign should succeed");
 
-    let result = service.sign_consultation(consultation.id, practitioner_id).await;
+    let result = service
+        .sign_consultation(consultation.id, practitioner_id)
+        .await;
 
-    assert!(result.is_err(), "Signing an already-signed consultation should fail");
+    assert!(
+        result.is_err(),
+        "Signing an already-signed consultation should fail"
+    );
 }
 
 #[tokio::test]
@@ -368,7 +382,10 @@ async fn test_find_consultations_by_date_range_for_patient() {
         .await
         .expect("Failed to query consultations by date range");
 
-    assert!(!results.is_empty(), "Should find consultations within date range");
+    assert!(
+        !results.is_empty(),
+        "Should find consultations within date range"
+    );
 
     for consultation in &results {
         assert_eq!(
@@ -381,7 +398,10 @@ async fn test_find_consultations_by_date_range_for_patient() {
         .iter()
         .filter(|c| c.patient_id == other_patient_id)
         .count();
-    assert_eq!(other_patient_count, 0, "Results should not include consultations from other patients");
+    assert_eq!(
+        other_patient_count, 0,
+        "Results should not include consultations from other patients"
+    );
 }
 
 #[tokio::test]
@@ -418,5 +438,8 @@ async fn test_find_consultations_by_date_range_future_returns_empty() {
         .await
         .expect("Failed to query consultations by date range");
 
-    assert!(results.is_empty(), "Future date range should return no consultations");
+    assert!(
+        results.is_empty(),
+        "Future date range should return no consultations"
+    );
 }

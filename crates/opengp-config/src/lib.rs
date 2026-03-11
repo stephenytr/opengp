@@ -3,11 +3,8 @@
 //! Handles loading and managing application configuration from environment
 //! variables and configuration files.
 
-
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-
-
 
 /// Database configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -38,7 +38,9 @@ impl PractitionerService {
     /// # Returns
     /// * `Ok(Vec<Practitioner>)` - List of active practitioners
     /// * `Err(PractitionerServiceError)` - Database error
-    pub async fn get_active_practitioners(&self) -> Result<Vec<Practitioner>, PractitionerServiceError> {
+    pub async fn get_active_practitioners(
+        &self,
+    ) -> Result<Vec<Practitioner>, PractitionerServiceError> {
         info!("Fetching active practitioners");
 
         match self.repository.list_active().await {
@@ -181,7 +183,9 @@ impl AuthService {
             return Err(AuthError::SessionExpired);
         }
 
-        self.session_repository.delete_by_token(session_token).await?;
+        self.session_repository
+            .delete_by_token(session_token)
+            .await?;
 
         let refreshed = Session::new(existing.user_id, existing.token, self.session_duration);
         self.session_repository.create(refreshed.clone()).await?;
@@ -478,7 +482,10 @@ mod tests {
             }
         }
 
-        async fn cleanup_expired(&self, now: chrono::DateTime<Utc>) -> Result<u64, RepositoryError> {
+        async fn cleanup_expired(
+            &self,
+            now: chrono::DateTime<Utc>,
+        ) -> Result<u64, RepositoryError> {
             let mut sessions = self.sessions.lock().expect("session lock poisoned");
             let before = sessions.len();
             sessions.retain(|s| !s.is_expired_at(now));

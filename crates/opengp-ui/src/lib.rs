@@ -1,17 +1,18 @@
 // OpenGP UI Layer
 // Terminal User Interface using Ratatui
 
-pub mod ui;
 pub mod api;
+pub mod ui;
 
 // Re-export all UI modules
-pub use ui::app;
 pub use api::*;
+pub use ui::app;
 pub use ui::components;
 pub use ui::error;
 pub use ui::input;
 pub use ui::keybinds;
 pub use ui::layout;
+pub use ui::screens;
 pub use ui::services;
 pub use ui::theme;
 pub use ui::view_models;

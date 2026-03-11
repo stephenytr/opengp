@@ -6,13 +6,14 @@ use std::sync::Arc;
 
 use chrono::{NaiveDate, TimeZone, Utc};
 
-use opengp_domain::domain::appointment::{
-    AppointmentSearchCriteria, AppointmentCalendarQuery, AppointmentRepository,
-    AppointmentService, AvailabilityService, CalendarAppointment, CalendarDayView, NewAppointmentData, PractitionerSchedule,
-};
-use opengp_domain::domain::user::{Practitioner, PractitionerRepository};
-use opengp_domain::domain::error::RepositoryError;
 use chrono::NaiveTime;
+use opengp_domain::domain::appointment::{
+    AppointmentCalendarQuery, AppointmentRepository, AppointmentSearchCriteria, AppointmentService,
+    AvailabilityService, CalendarAppointment, CalendarDayView, NewAppointmentData,
+    PractitionerSchedule,
+};
+use opengp_domain::domain::error::RepositoryError;
+use opengp_domain::domain::user::{Practitioner, PractitionerRepository};
 
 /// Result type for UI operations
 pub type UiResult<T> = Result<T, UiServiceError>;
@@ -76,7 +77,11 @@ impl AppointmentUiService {
         }
     }
 
-    pub async fn create_appointment(&self, data: NewAppointmentData, user_id: uuid::Uuid) -> UiResult<()> {
+    pub async fn create_appointment(
+        &self,
+        data: NewAppointmentData,
+        user_id: uuid::Uuid,
+    ) -> UiResult<()> {
         self.domain_service
             .create_appointment(data, user_id)
             .await
@@ -155,10 +160,17 @@ impl AppointmentUiService {
             })
             .collect();
 
-        Ok(CalendarDayView { date, practitioners: schedules })
+        Ok(CalendarDayView {
+            date,
+            practitioners: schedules,
+        })
     }
 
-    pub async fn mark_arrived(&self, appointment_id: uuid::Uuid, user_id: uuid::Uuid) -> UiResult<()> {
+    pub async fn mark_arrived(
+        &self,
+        appointment_id: uuid::Uuid,
+        user_id: uuid::Uuid,
+    ) -> UiResult<()> {
         self.domain_service
             .mark_arrived(appointment_id, user_id)
             .await
@@ -166,7 +178,11 @@ impl AppointmentUiService {
             .map_err(|e| UiServiceError::Unknown(e.to_string()))
     }
 
-    pub async fn mark_in_progress(&self, appointment_id: uuid::Uuid, user_id: uuid::Uuid) -> UiResult<()> {
+    pub async fn mark_in_progress(
+        &self,
+        appointment_id: uuid::Uuid,
+        user_id: uuid::Uuid,
+    ) -> UiResult<()> {
         self.domain_service
             .mark_in_progress(appointment_id, user_id)
             .await
@@ -174,7 +190,11 @@ impl AppointmentUiService {
             .map_err(|e| UiServiceError::Unknown(e.to_string()))
     }
 
-    pub async fn mark_completed(&self, appointment_id: uuid::Uuid, user_id: uuid::Uuid) -> UiResult<()> {
+    pub async fn mark_completed(
+        &self,
+        appointment_id: uuid::Uuid,
+        user_id: uuid::Uuid,
+    ) -> UiResult<()> {
         self.domain_service
             .mark_completed(appointment_id, user_id)
             .await

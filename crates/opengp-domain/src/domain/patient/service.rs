@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::service;
 
 use super::dto::{NewPatientData, UpdatePatientData};
-use super::error::{ServiceError, RepositoryError as PatientRepositoryError};
+use super::error::{RepositoryError as PatientRepositoryError, ServiceError};
 use super::model::Patient;
 use super::repository::PatientRepository;
 use crate::domain::error::RepositoryError as BaseRepositoryError;
@@ -89,12 +89,16 @@ impl PatientService {
 
         patient.update(data)?;
 
-        let updated = self.repository.update(patient).await.map_err(|err| match err {
-            PatientRepositoryError::Base(BaseRepositoryError::Conflict(message)) => {
-                ServiceError::Conflict(message)
-            }
-            other => ServiceError::Repository(other),
-        })?;
+        let updated = self
+            .repository
+            .update(patient)
+            .await
+            .map_err(|err| match err {
+                PatientRepositoryError::Base(BaseRepositoryError::Conflict(message)) => {
+                    ServiceError::Conflict(message)
+                }
+                other => ServiceError::Repository(other),
+            })?;
         info!("Patient updated successfully: {}", updated.id);
         Ok(updated)
     }
@@ -140,7 +144,10 @@ mod tests {
             Ok(self.existing_patients.iter().find(|p| p.id == id).cloned())
         }
 
-        async fn find_by_medicare(&self, medicare: &str) -> Result<Option<Patient>, RepositoryError> {
+        async fn find_by_medicare(
+            &self,
+            medicare: &str,
+        ) -> Result<Option<Patient>, RepositoryError> {
             Ok(self
                 .existing_patients
                 .iter()

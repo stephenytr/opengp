@@ -9,8 +9,8 @@ use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
-use opengp_domain::domain::appointment::{AppointmentStatus, CalendarAppointment};
 use crate::ui::theme::Theme;
+use opengp_domain::domain::appointment::{AppointmentStatus, CalendarAppointment};
 
 /// Actions returned by the appointment detail modal's key handler.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -439,8 +439,8 @@ impl Widget for AppointmentDetailModal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use opengp_domain::domain::appointment::AppointmentType;
     use chrono::{TimeZone, Utc};
+    use opengp_domain::domain::appointment::AppointmentType;
 
     fn make_appointment() -> CalendarAppointment {
         let start = Utc.with_ymd_and_hms(2026, 3, 15, 9, 0, 0).unwrap();

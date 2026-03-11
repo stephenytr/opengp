@@ -7,7 +7,10 @@ use super::model::{ClaimStatus, Invoice, MedicareClaim, Payment};
 #[async_trait]
 pub trait BillingRepository: Send + Sync {
     async fn find_invoice_by_id(&self, id: Uuid) -> Result<Option<Invoice>, RepositoryError>;
-    async fn find_invoices_by_patient(&self, patient_id: Uuid) -> Result<Vec<Invoice>, RepositoryError>;
+    async fn find_invoices_by_patient(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<Vec<Invoice>, RepositoryError>;
     async fn create_invoice(&self, invoice: Invoice) -> Result<Invoice, RepositoryError>;
     async fn update_invoice(&self, invoice: Invoice) -> Result<Invoice, RepositoryError>;
 

@@ -5,15 +5,17 @@ use chrono::{DateTime, Utc};
 use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentSearchCriteria, AppointmentService, CalendarAppointment,
 };
+use opengp_domain::domain::audit::{
+    AuditEntry, AuditRepository, AuditRepositoryError, AuditService,
+};
 use opengp_domain::domain::clinical::{
-    Allergy, AllergyRepository, ClinicalRepositories, ClinicalService,
-    ConsultationRepository, FamilyHistory, FamilyHistoryRepository, MedicalHistory,
-    MedicalHistoryRepository, RepositoryError as ClinicalRepositoryError, SocialHistory,
-    SocialHistoryRepository, VitalSigns, VitalSignsRepository,
+    Allergy, AllergyRepository, ClinicalRepositories, ClinicalService, ConsultationRepository,
+    FamilyHistory, FamilyHistoryRepository, MedicalHistory, MedicalHistoryRepository,
+    RepositoryError as ClinicalRepositoryError, SocialHistory, SocialHistoryRepository, VitalSigns,
+    VitalSignsRepository,
 };
 use opengp_domain::domain::error::RepositoryError;
-use opengp_domain::domain::audit::{AuditEntry, AuditRepository, AuditRepositoryError, AuditService};
-use opengp_domain::domain::patient::{PatientService, PatientRepository};
+use opengp_domain::domain::patient::{PatientRepository, PatientService};
 use opengp_domain::domain::user::{
     AuthService, PasswordError, PasswordHasher, Permission, Role, SessionRepository, User,
     UserRepository,
@@ -52,7 +54,8 @@ impl ApiServices {
         let user_repository: Arc<dyn UserRepository> = Arc::new(
             InMemoryUserRepository::with_default_users(password_hasher.clone()),
         );
-        let session_repository: Arc<dyn SessionRepository> = Arc::new(InMemorySessionRepository::new());
+        let session_repository: Arc<dyn SessionRepository> =
+            Arc::new(InMemorySessionRepository::new());
         let auth_service = Arc::new(AuthService::new(
             user_repository.clone(),
             password_hasher,
@@ -190,13 +193,7 @@ impl InMemoryUserRepository {
 #[async_trait]
 impl UserRepository for InMemoryUserRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, RepositoryError> {
-        Ok(self
-            .users
-            .read()
-            .await
-            .iter()
-            .find(|u| u.id == id)
-            .cloned())
+        Ok(self.users.read().await.iter().find(|u| u.id == id).cloned())
     }
 
     async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepositoryError> {
@@ -226,7 +223,10 @@ impl UserRepository for InMemoryUserRepository {
 
     async fn create(&self, user: User) -> Result<User, RepositoryError> {
         let mut users = self.users.write().await;
-        if users.iter().any(|existing| existing.username == user.username) {
+        if users
+            .iter()
+            .any(|existing| existing.username == user.username)
+        {
             return Err(RepositoryError::ConstraintViolation(
                 "Username already exists".to_string(),
             ));
@@ -395,10 +395,7 @@ impl VitalSignsRepository for NoopVitalSignsRepository {
         Ok(None)
     }
 
-    async fn create(
-        &self,
-        vitals: VitalSigns,
-    ) -> Result<VitalSigns, ClinicalRepositoryError> {
+    async fn create(&self, vitals: VitalSigns) -> Result<VitalSigns, ClinicalRepositoryError> {
         Ok(vitals)
     }
 }

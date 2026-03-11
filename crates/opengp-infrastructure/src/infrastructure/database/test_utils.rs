@@ -7,9 +7,9 @@ use chrono::{Duration, NaiveDate, Utc};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
+use crate::infrastructure::database::{create_pool, run_migrations, DatabaseConfig};
 use opengp_domain::domain::appointment::{Appointment, AppointmentType};
 use opengp_domain::domain::patient::{Address, Gender, NewPatientData, Patient};
-use crate::infrastructure::database::{create_pool, run_migrations, DatabaseConfig};
 
 /// Create an in-memory SQLite pool for testing
 ///

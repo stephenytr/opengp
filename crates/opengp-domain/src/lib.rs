@@ -15,8 +15,8 @@ pub use domain::macros;
 pub use domain::pathology;
 pub use domain::patient;
 pub use domain::prescription;
-pub use domain::repository;
 pub use domain::referral;
+pub use domain::repository;
 pub use domain::user;
 
 // Re-export commonly used types

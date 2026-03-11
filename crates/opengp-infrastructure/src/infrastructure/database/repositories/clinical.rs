@@ -5,16 +5,16 @@ use chrono::{DateTime, Utc};
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
-use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
-use opengp_domain::domain::clinical::RepositoryError;
-use opengp_domain::domain::clinical::{
-    Allergy, AllergyRepository, AllergyType, ConditionStatus, Consultation, ConsultationRepository,
-    FamilyHistory, FamilyHistoryRepository, MedicalHistory, MedicalHistoryRepository,
-    Severity, SocialHistory, SocialHistoryRepository, VitalSigns, VitalSignsRepository,
-};
 use crate::infrastructure::crypto::EncryptionService;
 use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::sqlx_to_clinical_error;
+use opengp_domain::domain::clinical::RepositoryError;
+use opengp_domain::domain::clinical::{
+    Allergy, AllergyRepository, AllergyType, ConditionStatus, Consultation, ConsultationRepository,
+    FamilyHistory, FamilyHistoryRepository, MedicalHistory, MedicalHistoryRepository, Severity,
+    SocialHistory, SocialHistoryRepository, VitalSigns, VitalSignsRepository,
+};
+use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
 
 fn uuid_to_bytes(id: &Uuid) -> db_helpers::DbUuid {
     db_helpers::uuid_to_bytes(id)
@@ -65,10 +65,7 @@ impl ConsultationRow {
         let clinical_notes = match self.clinical_notes {
             Some(data) => {
                 let decrypted = crypto.decrypt(&data).map_err(|e| {
-                    RepositoryError::Decryption(format!(
-                        "Failed to decrypt clinical notes: {}",
-                        e
-                    ))
+                    RepositoryError::Decryption(format!("Failed to decrypt clinical notes: {}", e))
                 })?;
                 Some(decrypted)
             }
@@ -123,18 +120,20 @@ impl ConsultationRepository for SqlxClinicalRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Consultation>, RepositoryError> {
         let id_bytes = uuid_to_bytes(&id);
 
-        let row = sqlx::query_as::<_, ConsultationRow>(&db_helpers::sql_with_placeholders(&r#"
+        let row = sqlx::query_as::<_, ConsultationRow>(&db_helpers::sql_with_placeholders(
+            &r#"
         SELECT 
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
             created_at, updated_at, version, created_by, updated_by
         FROM consultations
         WHERE id = ?
-        "#))
+        "#,
+        ))
         .bind(id_bytes)
         .fetch_optional(&self.pool)
         .await
-            .map_err(sqlx_to_clinical_error)?;
+        .map_err(sqlx_to_clinical_error)?;
 
         match row {
             Some(r) => Ok(Some(r.into_consultation(&self.crypto)?)),
@@ -148,7 +147,8 @@ impl ConsultationRepository for SqlxClinicalRepository {
     ) -> Result<Vec<Consultation>, RepositoryError> {
         let patient_bytes = uuid_to_bytes(&patient_id);
 
-        let rows = sqlx::query_as::<_, ConsultationRow>(&db_helpers::sql_with_placeholders(&r#"
+        let rows = sqlx::query_as::<_, ConsultationRow>(&db_helpers::sql_with_placeholders(
+            &r#"
         SELECT 
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
@@ -156,11 +156,12 @@ impl ConsultationRepository for SqlxClinicalRepository {
         FROM consultations
         WHERE patient_id = ?
         ORDER BY consultation_date DESC
-        "#))
+        "#,
+        ))
         .bind(patient_bytes)
         .fetch_all(&self.pool)
         .await
-            .map_err(sqlx_to_clinical_error)?;
+        .map_err(sqlx_to_clinical_error)?;
 
         rows.into_iter()
             .map(|r| r.into_consultation(&self.crypto))
@@ -177,7 +178,8 @@ impl ConsultationRepository for SqlxClinicalRepository {
         let start_str = datetime_to_string(&start);
         let end_str = datetime_to_string(&end);
 
-        let rows = sqlx::query_as::<_, ConsultationRow>(&db_helpers::sql_with_placeholders(&r#"
+        let rows = sqlx::query_as::<_, ConsultationRow>(&db_helpers::sql_with_placeholders(
+            &r#"
         SELECT 
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
@@ -185,13 +187,14 @@ impl ConsultationRepository for SqlxClinicalRepository {
         FROM consultations
         WHERE patient_id = ? AND consultation_date BETWEEN ? AND ?
         ORDER BY consultation_date DESC
-        "#))
+        "#,
+        ))
         .bind(&patient_bytes)
         .bind(&start_str)
         .bind(&end_str)
         .fetch_all(&self.pool)
         .await
-            .map_err(sqlx_to_clinical_error)?;
+        .map_err(sqlx_to_clinical_error)?;
 
         rows.into_iter()
             .map(|r| r.into_consultation(&self.crypto))
@@ -217,13 +220,15 @@ impl ConsultationRepository for SqlxClinicalRepository {
                 RepositoryError::Encryption(format!("Failed to encrypt clinical notes: {}", e))
             })?;
 
-        sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        sqlx::query(&db_helpers::sql_with_placeholders(
+            &r#"
         INSERT INTO consultations (
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
             created_at, updated_at, version, created_by, updated_by
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        "#))
+        "#,
+        ))
         .bind(id_bytes)
         .bind(patient_bytes)
         .bind(practitioner_bytes)
@@ -241,7 +246,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
         .bind(consultation.updated_by.as_ref().map(uuid_to_bytes))
         .execute(&self.pool)
         .await
-            .map_err(sqlx_to_clinical_error)?;
+        .map_err(sqlx_to_clinical_error)?;
 
         Ok(consultation)
     }
@@ -281,14 +286,16 @@ impl ConsultationRepository for SqlxClinicalRepository {
                 RepositoryError::Encryption(format!("Failed to encrypt clinical notes: {}", e))
             })?;
 
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(
+            &r#"
         UPDATE consultations
         SET 
             reason = ?, clinical_notes = ?,
             is_signed = ?, signed_at = ?, signed_by = ?,
             updated_at = ?, updated_by = ?, version = ?
         WHERE id = ? AND version = ?
-        "#))
+        "#,
+        ))
         .bind(&consultation.reason)
         .bind(clinical_notes_encrypted)
         .bind(consultation.is_signed)
@@ -301,7 +308,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
         .bind(consultation.version)
         .execute(&self.pool)
         .await
-            .map_err(sqlx_to_clinical_error)?;
+        .map_err(sqlx_to_clinical_error)?;
 
         if result.rows_affected() == 0 {
             return Err(RepositoryError::Base(BaseRepositoryError::Conflict(
@@ -320,18 +327,20 @@ impl ConsultationRepository for SqlxClinicalRepository {
         let user_bytes = uuid_to_bytes(&user_id);
         let signed_at = datetime_to_string(&Utc::now());
 
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(
+            &r#"
         UPDATE consultations
         SET is_signed = TRUE, signed_at = ?, signed_by = ?, updated_at = ?
         WHERE id = ?
-        "#))
+        "#,
+        ))
         .bind(&signed_at)
         .bind(user_bytes)
         .bind(&signed_at)
         .bind(id_bytes)
         .execute(&self.pool)
         .await
-            .map_err(sqlx_to_clinical_error)?;
+        .map_err(sqlx_to_clinical_error)?;
 
         if result.rows_affected() == 0 {
             return Err(RepositoryError::Base(BaseRepositoryError::NotFound));
@@ -428,7 +437,8 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
     ) -> Result<Option<SocialHistory>, RepositoryError> {
         let patient_bytes = uuid_to_bytes(&patient_id);
 
-        let row = sqlx::query_as::<_, SocialHistoryRow>(&db_helpers::sql_with_placeholders(&r#"
+        let row = sqlx::query_as::<_, SocialHistoryRow>(&db_helpers::sql_with_placeholders(
+            &r#"
         SELECT 
             id, patient_id, smoking_status, cigarettes_per_day, 
             smoking_quit_date, alcohol_status, standard_drinks_per_week,
@@ -436,11 +446,12 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
             notes, updated_at, updated_by
         FROM social_history
         WHERE patient_id = ?
-        "#))
+        "#,
+        ))
         .bind(patient_bytes)
         .fetch_optional(&self.pool)
         .await
-            .map_err(sqlx_to_clinical_error)?;
+        .map_err(sqlx_to_clinical_error)?;
 
         match row {
             Some(r) => Ok(Some(r.into_social_history(&self.crypto)?)),
@@ -464,14 +475,16 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
             None => None,
         };
 
-        sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        sqlx::query(&db_helpers::sql_with_placeholders(
+            &r#"
         INSERT INTO social_history (
             id, patient_id, smoking_status, cigarettes_per_day, 
             smoking_quit_date, alcohol_status, standard_drinks_per_week,
             exercise_frequency, occupation, living_situation, support_network,
             notes, updated_at, updated_by
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        "#))
+        "#,
+        ))
         .bind(id_bytes)
         .bind(patient_bytes)
         .bind(history.smoking_status.to_string())
@@ -488,7 +501,7 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
         .bind(updated_by_bytes)
         .execute(&self.pool)
         .await
-            .map_err(sqlx_to_clinical_error)?;
+        .map_err(sqlx_to_clinical_error)?;
 
         Ok(history)
     }
@@ -508,7 +521,8 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
             None => None,
         };
 
-        sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        sqlx::query(&db_helpers::sql_with_placeholders(
+            &r#"
         UPDATE social_history
         SET 
             smoking_status = ?, cigarettes_per_day = ?, 
@@ -516,7 +530,8 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
             exercise_frequency = ?, occupation = ?, living_situation = ?, support_network = ?,
             notes = ?, updated_at = ?, updated_by = ?
         WHERE id = ?
-        "#))
+        "#,
+        ))
         .bind(history.smoking_status.to_string())
         .bind(history.cigarettes_per_day.map(|i| i as i64))
         .bind(history.smoking_quit_date)
@@ -532,7 +547,7 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
         .bind(id_bytes)
         .execute(&self.pool)
         .await
-            .map_err(sqlx_to_clinical_error)?;
+        .map_err(sqlx_to_clinical_error)?;
 
         Ok(history)
     }
@@ -751,12 +766,14 @@ impl AllergyRepository for SqlxAllergyRepository {
         let id_bytes = uuid_to_bytes(&id);
         let updated_at_str = datetime_to_string(&Utc::now());
 
-        sqlx::query(&db_helpers::sql_with_placeholders(&"UPDATE allergies SET is_active = FALSE, updated_at = ? WHERE id = ?"))
-            .bind(&updated_at_str)
-            .bind(id_bytes)
-            .execute(&self.pool)
-            .await
-            .map_err(sqlx_to_clinical_error)?;
+        sqlx::query(&db_helpers::sql_with_placeholders(
+            &"UPDATE allergies SET is_active = FALSE, updated_at = ? WHERE id = ?",
+        ))
+        .bind(&updated_at_str)
+        .bind(id_bytes)
+        .execute(&self.pool)
+        .await
+        .map_err(sqlx_to_clinical_error)?;
 
         Ok(())
     }
@@ -1247,11 +1264,13 @@ impl FamilyHistoryRepository for SqlxFamilyHistoryRepository {
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
         let id_bytes = uuid_to_bytes(&id);
 
-        sqlx::query(&db_helpers::sql_with_placeholders(&"DELETE FROM family_history WHERE id = ?"))
-            .bind(id_bytes)
-            .execute(&self.pool)
-            .await
-            .map_err(sqlx_to_clinical_error)?;
+        sqlx::query(&db_helpers::sql_with_placeholders(
+            &"DELETE FROM family_history WHERE id = ?",
+        ))
+        .bind(id_bytes)
+        .execute(&self.pool)
+        .await
+        .map_err(sqlx_to_clinical_error)?;
 
         Ok(())
     }

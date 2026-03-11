@@ -101,7 +101,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 async fn ensure_working_hours_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     // Check if table already exists
     let table_exists: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='working_hours'"
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='working_hours'",
     )
     .fetch_one(pool)
     .await?;
@@ -128,7 +128,7 @@ async fn ensure_working_hours_table(pool: &SqlitePool) -> Result<(), sqlx::Error
             FOREIGN KEY (practitioner_id) REFERENCES users(id),
             UNIQUE(practitioner_id, day_of_week)
         )
-        "#
+        "#,
     )
     .execute(pool)
     .await?;
@@ -152,11 +152,10 @@ async fn ensure_working_hours_table(pool: &SqlitePool) -> Result<(), sqlx::Error
 }
 
 async fn ensure_sessions_have_token(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    let column_exists: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='token'",
-    )
-    .fetch_one(pool)
-    .await?;
+    let column_exists: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='token'")
+            .fetch_one(pool)
+            .await?;
 
     if column_exists.0 > 0 {
         return Ok(());
@@ -166,9 +165,11 @@ async fn ensure_sessions_have_token(pool: &SqlitePool) -> Result<(), sqlx::Error
         .execute(pool)
         .await?;
 
-    sqlx::query("UPDATE sessions SET token = lower(hex(randomblob(32))) WHERE token IS NULL OR token = ''")
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "UPDATE sessions SET token = lower(hex(randomblob(32))) WHERE token IS NULL OR token = ''",
+    )
+    .execute(pool)
+    .await?;
 
     sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)")
         .execute(pool)
@@ -234,7 +235,9 @@ pub fn sqlx_to_audit_error(err: sqlx::Error) -> opengp_domain::domain::audit::Au
 }
 
 /// Convert sqlx::Error to domain clinical RepositoryError
-pub fn sqlx_to_clinical_error(err: sqlx::Error) -> opengp_domain::domain::clinical::RepositoryError {
+pub fn sqlx_to_clinical_error(
+    err: sqlx::Error,
+) -> opengp_domain::domain::clinical::RepositoryError {
     use opengp_domain::domain::error::RepositoryError as Base;
     opengp_domain::domain::clinical::RepositoryError::Base(Base::Database(err.to_string()))
 }
@@ -251,6 +254,8 @@ pub fn sqlx_to_user_error(err: sqlx::Error) -> opengp_domain::domain::user::Repo
 }
 
 /// Convert sqlx::Error to domain appointment RepositoryError
-pub fn sqlx_to_appointment_error(err: sqlx::Error) -> opengp_domain::domain::appointment::RepositoryError {
+pub fn sqlx_to_appointment_error(
+    err: sqlx::Error,
+) -> opengp_domain::domain::appointment::RepositoryError {
     opengp_domain::domain::appointment::RepositoryError::Database(err.to_string())
 }

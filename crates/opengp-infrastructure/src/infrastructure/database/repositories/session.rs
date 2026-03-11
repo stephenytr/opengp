@@ -33,7 +33,10 @@ impl SessionRepository for InMemorySessionRepository {
     async fn create(&self, session: Session) -> Result<Session, RepositoryError> {
         let mut sessions = self.sessions.write().await;
 
-        if sessions.iter().any(|existing| existing.token == session.token) {
+        if sessions
+            .iter()
+            .any(|existing| existing.token == session.token)
+        {
             return Err(RepositoryError::ConstraintViolation(
                 "Session token already exists".to_string(),
             ));
@@ -80,10 +83,12 @@ struct SessionRow {
 impl SessionRow {
     fn into_session(self) -> Result<Session, RepositoryError> {
         Ok(Session {
-            id: bytes_to_uuid(&self.id)
-                .map_err(|_| RepositoryError::ConstraintViolation("Invalid UUID bytes".to_string()))?,
-            user_id: bytes_to_uuid(&self.user_id)
-                .map_err(|_| RepositoryError::ConstraintViolation("Invalid user_id bytes".to_string()))?,
+            id: bytes_to_uuid(&self.id).map_err(|_| {
+                RepositoryError::ConstraintViolation("Invalid UUID bytes".to_string())
+            })?,
+            user_id: bytes_to_uuid(&self.user_id).map_err(|_| {
+                RepositoryError::ConstraintViolation("Invalid user_id bytes".to_string())
+            })?,
             created_at: string_to_datetime(&self.created_at),
             expires_at: string_to_datetime(&self.expires_at),
             token: self.token,
@@ -109,10 +114,12 @@ impl SqlxSessionRepository {
 #[async_trait]
 impl SessionRepository for SqlxSessionRepository {
     async fn create(&self, session: Session) -> Result<Session, RepositoryError> {
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(
+            &r#"
         INSERT INTO sessions (id, user_id, created_at, expires_at, token)
         VALUES (?, ?, ?, ?, ?)
-        "#))
+        "#,
+        ))
         .bind(uuid_to_bytes(&session.id))
         .bind(uuid_to_bytes(&session.user_id))
         .bind(datetime_to_string(&session.created_at))
@@ -138,11 +145,14 @@ impl SessionRepository for SqlxSessionRepository {
     }
 
     async fn find_by_token(&self, token: &str) -> Result<Option<Session>, RepositoryError> {
-        let row = sqlx::query_as::<_, SessionRow>(&db_helpers::sql_with_placeholders(&format!("{}WHERE token = ?", SESSION_SELECT_QUERY)))
-            .bind(token)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| RepositoryError::Database(e.to_string()))?;
+        let row = sqlx::query_as::<_, SessionRow>(&db_helpers::sql_with_placeholders(&format!(
+            "{}WHERE token = ?",
+            SESSION_SELECT_QUERY
+        )))
+        .bind(token)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
 
         match row {
             Some(r) => Ok(Some(r.into_session()?)),
@@ -151,11 +161,13 @@ impl SessionRepository for SqlxSessionRepository {
     }
 
     async fn delete_by_token(&self, token: &str) -> Result<(), RepositoryError> {
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(&"DELETE FROM sessions WHERE token = ?"))
-            .bind(token)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| RepositoryError::Database(e.to_string()))?;
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(
+            &"DELETE FROM sessions WHERE token = ?",
+        ))
+        .bind(token)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             Err(RepositoryError::NotFound)
@@ -165,11 +177,13 @@ impl SessionRepository for SqlxSessionRepository {
     }
 
     async fn cleanup_expired(&self, now: DateTime<Utc>) -> Result<u64, RepositoryError> {
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(&"DELETE FROM sessions WHERE expires_at <= ?"))
-            .bind(datetime_to_string(&now))
-            .execute(&self.pool)
-            .await
-            .map_err(|e| RepositoryError::Database(e.to_string()))?;
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(
+            &"DELETE FROM sessions WHERE expires_at <= ?",
+        ))
+        .bind(datetime_to_string(&now))
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
@@ -232,12 +246,14 @@ mod tests {
         let user_id = Uuid::new_v4();
         let now = Utc::now();
 
-        sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        sqlx::query(&db_helpers::sql_with_placeholders(
+            &r#"
         INSERT INTO users (
             id, username, password_hash, role, is_active, created_at, updated_at,
             first_name, last_name
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        "#))
+        "#,
+        ))
         .bind(uuid_to_bytes(&user_id))
         .bind("session-test-user")
         .bind("hash")

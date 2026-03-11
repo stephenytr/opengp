@@ -1,8 +1,13 @@
-use std::{str::FromStr, sync::Arc, sync::atomic::AtomicU64, time::{Duration, Instant}};
+use std::{
+    str::FromStr,
+    sync::atomic::AtomicU64,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
+use opengp_domain::domain::audit::AuditEmitter;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::PgPool;
-use opengp_domain::domain::audit::AuditEmitter;
 
 use crate::services::ApiServices;
 use crate::{ApiConfig, ApiError};
@@ -97,7 +102,9 @@ mod tests {
             log_level: "info".to_string(),
         };
 
-        let state = ApiState::new(config.clone()).await.expect("state should initialize");
+        let state = ApiState::new(config.clone())
+            .await
+            .expect("state should initialize");
         assert_eq!(state.config.port, 9090);
         assert_eq!(state.config.bind_address(), "127.0.0.1:9090");
     }
@@ -121,7 +128,11 @@ mod tests {
         let pool = PgPoolOptions::new()
             .connect_lazy(&config.database_url)
             .expect("pool should initialize lazily");
-        let services = Arc::new(ApiServices::new(&config).await.expect("services should initialize"));
+        let services = Arc::new(
+            ApiServices::new(&config)
+                .await
+                .expect("services should initialize"),
+        );
 
         let state = ApiState::from_parts(pool, services, config);
         assert_eq!(state.config.port, 8080);

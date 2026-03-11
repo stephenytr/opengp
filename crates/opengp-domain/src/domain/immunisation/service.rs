@@ -35,7 +35,10 @@ impl ImmunisationService {
         Ok(saved)
     }
 
-    pub async fn find_by_patient(&self, patient_id: Uuid) -> Result<Vec<Immunisation>, ServiceError> {
+    pub async fn find_by_patient(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<Vec<Immunisation>, ServiceError> {
         Ok(self.repository.find_by_patient(patient_id).await?)
     }
 
@@ -51,8 +54,8 @@ impl ImmunisationService {
 mod tests {
     use super::*;
     use crate::domain::immunisation::{
-        AdministrationRoute, AnatomicalSite, ConsentType, RepositoryError, ScheduleStatus,
-        Vaccine, VaccineType,
+        AdministrationRoute, AnatomicalSite, ConsentType, RepositoryError, ScheduleStatus, Vaccine,
+        VaccineType,
     };
     use async_trait::async_trait;
     use chrono::{NaiveDate, Utc};
@@ -80,11 +83,17 @@ mod tests {
                 .collect())
         }
 
-        async fn create(&self, immunisation: Immunisation) -> Result<Immunisation, RepositoryError> {
+        async fn create(
+            &self,
+            immunisation: Immunisation,
+        ) -> Result<Immunisation, RepositoryError> {
             Ok(immunisation)
         }
 
-        async fn update(&self, immunisation: Immunisation) -> Result<Immunisation, RepositoryError> {
+        async fn update(
+            &self,
+            immunisation: Immunisation,
+        ) -> Result<Immunisation, RepositoryError> {
             Ok(immunisation)
         }
 
@@ -101,7 +110,10 @@ mod tests {
         }
     }
 
-    fn new_service(items: Vec<Immunisation>, schedules: Vec<VaccinationSchedule>) -> ImmunisationService {
+    fn new_service(
+        items: Vec<Immunisation>,
+        schedules: Vec<VaccinationSchedule>,
+    ) -> ImmunisationService {
         ImmunisationService::new(Arc::new(MockImmunisationRepository { items, schedules }))
     }
 
@@ -161,7 +173,10 @@ mod tests {
         let other_patient = Uuid::new_v4();
 
         let service = new_service(
-            vec![test_immunisation(target_patient), test_immunisation(other_patient)],
+            vec![
+                test_immunisation(target_patient),
+                test_immunisation(other_patient),
+            ],
             vec![],
         );
 

@@ -30,6 +30,34 @@ impl App {
     }
 
     pub async fn poll_api_tasks(&mut self) {
+        self.start_pending_login_request();
+
+        if self
+            .login_task
+            .as_ref()
+            .is_some_and(tokio::task::JoinHandle::is_finished)
+        {
+            let handle = self.login_task.take().expect("task exists");
+
+            match handle.await {
+                Ok(Ok(login_response)) => {
+                    self.login_screen.set_loading(false);
+                    self.login_screen.clear_error();
+                    self.authenticated = true;
+                    self.current_user_id = login_response.user.id;
+                    self.request_refresh_patients();
+                    self.status_bar.clear_error();
+                }
+                Ok(Err(err)) => {
+                    self.login_screen.set_error(err.to_string());
+                }
+                Err(err) => {
+                    self.login_screen
+                        .set_error(format!("Login task failed: {}", err));
+                }
+            }
+        }
+
         self.start_pending_api_requests();
 
         if self
@@ -95,6 +123,10 @@ impl App {
     }
 
     fn start_pending_api_requests(&mut self) {
+        if !self.authenticated {
+            return;
+        }
+
         let Some(api_client) = self.api_client.clone() else {
             if self.pending_patient_list_refresh
                 || self.pending_appointment_list_refresh.is_some()
@@ -147,6 +179,27 @@ impl App {
                 }));
             }
         }
+    }
+
+    fn start_pending_login_request(&mut self) {
+        let Some((username, password)) = self.pending_login_request.take() else {
+            return;
+        };
+
+        if self.login_task.is_some() {
+            self.pending_login_request = Some((username, password));
+            return;
+        }
+
+        let Some(api_client) = self.api_client.clone() else {
+            self.login_screen.set_error("API client is not configured");
+            return;
+        };
+
+        self.login_screen.set_loading(true);
+        self.login_task = Some(tokio::spawn(async move {
+            api_client.login(username, password).await
+        }));
     }
 
     /// Load patients into the list
@@ -342,7 +395,9 @@ async fn fetch_appointments_for_day(
                 patient_name: patient_names
                     .get(&appointment.patient_id)
                     .cloned()
-                    .unwrap_or_else(|| format!("Patient {}", &appointment.patient_id.to_string()[..8])),
+                    .unwrap_or_else(|| {
+                        format!("Patient {}", &appointment.patient_id.to_string()[..8])
+                    }),
                 practitioner_id: appointment.practitioner_id,
                 start_time,
                 end_time,
@@ -366,7 +421,10 @@ async fn fetch_appointments_for_day(
 
     practitioners.sort_by(|a, b| a.practitioner_name.cmp(&b.practitioner_name));
 
-    Ok(CalendarDayView { date, practitioners })
+    Ok(CalendarDayView {
+        date,
+        practitioners,
+    })
 }
 
 async fn fetch_consultations(
@@ -461,11 +519,14 @@ mod tests {
     use super::*;
     use axum::{
         extract::{Query, State},
-        routing::get,
+        routing::{get, post},
         Json, Router,
     };
     use chrono::Utc;
-    use opengp_domain::domain::api::{AppointmentResponse, ConsultationResponse, PaginatedResponse, PatientResponse};
+    use opengp_domain::domain::api::{
+        ApiErrorResponse, AppointmentResponse, AuthenticatedUserResponse, ConsultationResponse,
+        LoginRequest, LoginResponse, PaginatedResponse, PatientResponse,
+    };
     use std::net::SocketAddr;
     use std::sync::Arc;
     use tokio::sync::Mutex;
@@ -540,7 +601,9 @@ mod tests {
 
         for _ in 0..20 {
             app.poll_api_tasks().await;
-            if app.appointment_state.schedule_data.is_some() && !app.clinical_state.consultations.is_empty() {
+            if app.appointment_state.schedule_data.is_some()
+                && !app.clinical_state.consultations.is_empty()
+            {
                 break;
             }
             sleep(Duration::from_millis(10)).await;
@@ -550,6 +613,69 @@ mod tests {
         assert_eq!(app.clinical_state.consultations.len(), 1);
         assert_eq!(*state.appointment_calls.lock().await, 1);
         assert_eq!(*state.consultation_calls.lock().await, 1);
+    }
+
+    #[tokio::test]
+    async fn app_login_success_sets_authentication_and_token() {
+        let app_router = Router::new()
+            .route("/api/v1/auth/login", post(login_success_handler))
+            .route("/api/v1/patients", get(patients_handler))
+            .with_state(TestState::default());
+
+        let (base_url, _server) = spawn_server(app_router).await;
+        let api_client = Arc::new(crate::api::ApiClient::new(base_url));
+
+        let mut app = App::new(
+            Some(api_client.clone()),
+            None,
+            None,
+            None,
+            opengp_config::CalendarConfig::default(),
+        );
+        app.set_authenticated(false);
+
+        enter_login_credentials(&mut app, "dr_smith", "correct-password");
+
+        for _ in 0..30 {
+            app.poll_api_tasks().await;
+            if app.is_authenticated() {
+                break;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+
+        assert!(app.is_authenticated());
+        assert_eq!(
+            api_client.current_session_token().await.as_deref(),
+            Some("session-token")
+        );
+    }
+
+    #[tokio::test]
+    async fn app_login_failure_keeps_user_unauthenticated() {
+        let app_router = Router::new().route("/api/v1/auth/login", post(login_failure_handler));
+
+        let (base_url, _server) = spawn_server(app_router).await;
+        let api_client = Arc::new(crate::api::ApiClient::new(base_url));
+
+        let mut app = App::new(
+            Some(api_client.clone()),
+            None,
+            None,
+            None,
+            opengp_config::CalendarConfig::default(),
+        );
+        app.set_authenticated(false);
+
+        enter_login_credentials(&mut app, "dr_smith", "wrong-password");
+
+        for _ in 0..20 {
+            app.poll_api_tasks().await;
+            sleep(Duration::from_millis(10)).await;
+        }
+
+        assert!(!app.is_authenticated());
+        assert!(api_client.current_session_token().await.is_none());
     }
 
     async fn patients_handler(
@@ -625,6 +751,47 @@ mod tests {
         })
     }
 
+    async fn login_success_handler(Json(_): Json<LoginRequest>) -> Json<LoginResponse> {
+        Json(LoginResponse {
+            access_token: "session-token".to_string(),
+            token_type: "Bearer".to_string(),
+            expires_in_seconds: 3600,
+            user: AuthenticatedUserResponse {
+                id: uuid::Uuid::new_v4(),
+                username: "dr_smith".to_string(),
+                role: "doctor".to_string(),
+                display_name: "Dr Smith".to_string(),
+            },
+        })
+    }
+
+    async fn login_failure_handler(
+        Json(_): Json<LoginRequest>,
+    ) -> (axum::http::StatusCode, Json<ApiErrorResponse>) {
+        (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(ApiErrorResponse {
+                status: 401,
+                message: "Invalid credentials".to_string(),
+                code: "invalid_credentials".to_string(),
+            }),
+        )
+    }
+
+    fn enter_login_credentials(app: &mut App, username: &str, password: &str) {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        for ch in username.chars() {
+            let _ = app.handle_key_event(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
+        }
+        let _ = app.handle_key_event(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        for ch in password.chars() {
+            let _ = app.handle_key_event(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
+        }
+        let _ = app.handle_key_event(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        let _ = app.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    }
+
     async fn spawn_server(app: Router) -> (String, tokio::task::JoinHandle<()>) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -638,7 +805,10 @@ mod tests {
                 .expect("test server should run")
         });
 
-        (format!("http://{}", socket_addr_to_host_port(addr)), server_task)
+        (
+            format!("http://{}", socket_addr_to_host_port(addr)),
+            server_task,
+        )
     }
 
     fn socket_addr_to_host_port(addr: SocketAddr) -> String {

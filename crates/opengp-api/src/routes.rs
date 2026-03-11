@@ -6,25 +6,23 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
+use chrono::{DateTime, Duration, Utc};
 use http::header::ORIGIN;
 use opengp_domain::domain::api::{
-    ApiErrorResponse, AuthenticatedUserResponse, LoginRequest, LoginResponse, PaginatedResponse,
-    AppointmentRequest, AppointmentResponse, ConsultationRequest, ConsultationResponse,
+    ApiErrorResponse, AppointmentRequest, AppointmentResponse, AuthenticatedUserResponse,
+    ConsultationRequest, ConsultationResponse, LoginRequest, LoginResponse, PaginatedResponse,
     PatientRequest, PatientResponse,
 };
 use opengp_domain::domain::appointment::{
-    AppointmentSearchCriteria, AppointmentStatus, AppointmentType,
-    NewAppointmentData, ServiceError as AppointmentServiceError, UpdateAppointmentData,
+    AppointmentSearchCriteria, AppointmentStatus, AppointmentType, NewAppointmentData,
+    ServiceError as AppointmentServiceError, UpdateAppointmentData,
 };
 use opengp_domain::domain::audit::{AuditAction, AuditEntry};
-use opengp_domain::domain::clinical::{
-    NewConsultationData, ServiceError as ClinicalServiceError,
-};
+use opengp_domain::domain::clinical::{NewConsultationData, ServiceError as ClinicalServiceError};
 use opengp_domain::domain::patient::{
     Address, Gender, NewPatientData, ServiceError as PatientServiceError, UpdatePatientData,
 };
 use opengp_domain::domain::user::{self, AuthError, Role};
-use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tower::ServiceBuilder;
 use tower_http::compression::CompressionLayer;
@@ -49,7 +47,10 @@ pub fn router(state: ApiState) -> Router {
 
     let patient_routes = Router::new()
         .route("/", get(list_patients).post(create_patient))
-        .route("/{id}", get(get_patient).put(update_patient).delete(delete_patient))
+        .route(
+            "/{id}",
+            get(get_patient).put(update_patient).delete(delete_patient),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             session_validation_middleware,
@@ -94,15 +95,17 @@ pub fn router(state: ApiState) -> Router {
 
 async fn health(State(state): State<ApiState>) -> impl IntoResponse {
     // Test database connectivity with timeout
-    let db_connected = tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        state.pool.acquire(),
-    )
-    .await
-    .is_ok();
+    let db_connected =
+        tokio::time::timeout(std::time::Duration::from_secs(5), state.pool.acquire())
+            .await
+            .is_ok();
 
     let response = HealthResponse {
-        status: if db_connected { "ok".to_string() } else { "degraded".to_string() },
+        status: if db_connected {
+            "ok".to_string()
+        } else {
+            "degraded".to_string()
+        },
         database_connected: db_connected,
         uptime_seconds: state.metrics.uptime_seconds(),
     };
@@ -118,9 +121,18 @@ async fn health(State(state): State<ApiState>) -> impl IntoResponse {
 
 async fn metrics(State(state): State<ApiState>) -> impl IntoResponse {
     let response = MetricsResponse {
-        active_sessions: state.metrics.active_sessions.load(std::sync::atomic::Ordering::Relaxed),
-        request_count: state.metrics.request_count.load(std::sync::atomic::Ordering::Relaxed),
-        error_count: state.metrics.error_count.load(std::sync::atomic::Ordering::Relaxed),
+        active_sessions: state
+            .metrics
+            .active_sessions
+            .load(std::sync::atomic::Ordering::Relaxed),
+        request_count: state
+            .metrics
+            .request_count
+            .load(std::sync::atomic::Ordering::Relaxed),
+        error_count: state
+            .metrics
+            .error_count
+            .load(std::sync::atomic::Ordering::Relaxed),
     };
 
     (StatusCode::OK, Json(response))
@@ -135,22 +147,20 @@ async fn login(
         password: payload.password.clone(),
     };
 
-    let login = match state
-        .services
-        .auth_service
-        .login(login_request)
-        .await
-    {
+    let login = match state.services.auth_service.login(login_request).await {
         Ok(login) => login,
         Err(e) => {
             // Emit audit event for failed login attempt (without exposing credentials)
             let audit_entry = AuditEntry {
                 id: Uuid::new_v4(),
                 entity_type: "user".to_string(),
-                entity_id: Uuid::nil(), // No user_id for failed login
+                entity_id: Uuid::nil(),       // No user_id for failed login
                 action: AuditAction::Created, // Using Created as generic action
                 old_value: None,
-                new_value: Some(format!("Failed login attempt for username: {}", payload.username)),
+                new_value: Some(format!(
+                    "Failed login attempt for username: {}",
+                    payload.username
+                )),
                 changed_by: Uuid::nil(),
                 changed_at: Utc::now(),
             };
@@ -273,8 +283,10 @@ async fn list_patients(
     State(state): State<ApiState>,
     Extension(context): Extension<AuthContext>,
     Query(query): Query<PaginationQuery>,
-) -> Result<(StatusCode, Json<PaginatedResponse<PatientResponse>>), (StatusCode, Json<ApiErrorResponse>)>
-{
+) -> Result<
+    (StatusCode, Json<PaginatedResponse<PatientResponse>>),
+    (StatusCode, Json<ApiErrorResponse>),
+> {
     authorize_read(&context)?;
 
     let page = query.page.unwrap_or(1).max(1);
@@ -402,12 +414,8 @@ async fn delete_patient(
         .await
         .map_err(patient_service_error_to_response)?;
 
-    let audit_entry = AuditEntry::new_cancelled(
-        "patient",
-        id,
-        "Patient deactivated",
-        context.user_id,
-    );
+    let audit_entry =
+        AuditEntry::new_cancelled("patient", id, "Patient deactivated", context.user_id);
     let audit_emitter = state.audit_emitter.clone();
     tokio::spawn(async move {
         let _ = audit_emitter.emit(audit_entry).await;
@@ -562,20 +570,12 @@ async fn cancel_appointment(
     state
         .services
         .appointment_service
-        .cancel_appointment(
-            id,
-            "Cancelled via API".to_string(),
-            context.user_id,
-        )
+        .cancel_appointment(id, "Cancelled via API".to_string(), context.user_id)
         .await
         .map_err(appointment_service_error_to_response)?;
 
-    let audit_entry = AuditEntry::new_cancelled(
-        "appointment",
-        id,
-        "Cancelled via API",
-        context.user_id,
-    );
+    let audit_entry =
+        AuditEntry::new_cancelled("appointment", id, "Cancelled via API", context.user_id);
     let audit_emitter = state.audit_emitter.clone();
     tokio::spawn(async move {
         let _ = audit_emitter.emit(audit_entry).await;
@@ -713,7 +713,9 @@ async fn session_validation_middleware(
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiErrorResponse>)> {
     let token = extract_bearer_token(request.headers())
-        .ok_or_else(|| unauthorized_response("unauthorized", "Missing or invalid authorization header"))?
+        .ok_or_else(|| {
+            unauthorized_response("unauthorized", "Missing or invalid authorization header")
+        })?
         .to_string();
 
     let user_id = state
@@ -872,7 +874,10 @@ fn authorize_practitioner_access(
 }
 
 fn is_reader(role: Role) -> bool {
-    matches!(role, Role::Receptionist | Role::Doctor | Role::Nurse | Role::Admin)
+    matches!(
+        role,
+        Role::Receptionist | Role::Doctor | Role::Nurse | Role::Admin
+    )
 }
 
 fn is_writer(role: Role) -> bool {
@@ -887,20 +892,22 @@ fn patient_service_error_to_response(
     error: PatientServiceError,
 ) -> (StatusCode, Json<ApiErrorResponse>) {
     match error {
-        PatientServiceError::DuplicatePatient => {
-            bad_request_response("duplicate_patient", "Patient with provided details already exists")
+        PatientServiceError::DuplicatePatient => bad_request_response(
+            "duplicate_patient",
+            "Patient with provided details already exists",
+        ),
+        PatientServiceError::NotFound(_) => {
+            not_found_response("patient_not_found", "Patient not found")
         }
-        PatientServiceError::NotFound(_) => not_found_response("patient_not_found", "Patient not found"),
         PatientServiceError::Validation(_) => {
             bad_request_response("validation_error", "Invalid patient payload")
         }
         PatientServiceError::Conflict(_) => {
             bad_request_response("conflict", "Patient was modified by another request")
         }
-        PatientServiceError::Repository(_) => internal_server_error_response(
-            "internal_error",
-            "Unable to process patient request",
-        ),
+        PatientServiceError::Repository(_) => {
+            internal_server_error_response("internal_error", "Unable to process patient request")
+        }
     }
 }
 
@@ -914,7 +921,8 @@ fn appointment_service_error_to_response(
         AppointmentServiceError::Conflict(_) => {
             conflict_response("appointment_conflict", "Overlapping appointment")
         }
-        AppointmentServiceError::ValidationError(_) | AppointmentServiceError::InvalidTransition(_) => {
+        AppointmentServiceError::ValidationError(_)
+        | AppointmentServiceError::InvalidTransition(_) => {
             bad_request_response("validation_error", "Invalid appointment payload")
         }
         AppointmentServiceError::Repository(_) | AppointmentServiceError::Audit(_) => {
@@ -939,15 +947,17 @@ fn clinical_service_error_to_response(
         ClinicalServiceError::Validation(_) => {
             bad_request_response("validation_error", "Invalid consultation payload")
         }
-        ClinicalServiceError::Conflict(_) => {
-            conflict_response("consultation_conflict", "Consultation was modified by another request")
-        }
+        ClinicalServiceError::Conflict(_) => conflict_response(
+            "consultation_conflict",
+            "Consultation was modified by another request",
+        ),
         ClinicalServiceError::AlreadySigned => {
             bad_request_response("consultation_signed", "Consultation already signed")
         }
-        ClinicalServiceError::Unauthorized => {
-            forbidden_response("insufficient_permissions", "Role cannot access consultations")
-        }
+        ClinicalServiceError::Unauthorized => forbidden_response(
+            "insufficient_permissions",
+            "Role cannot access consultations",
+        ),
         ClinicalServiceError::Repository(_)
         | ClinicalServiceError::AllergyNotFound(_)
         | ClinicalServiceError::MedicalHistoryNotFound(_)
@@ -1340,11 +1350,14 @@ mod tests {
             database_min_connections: 2,
             connect_timeout_secs: 30,
             idle_timeout_secs: 600,
-            encryption_key: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string(),
             log_level: "info".to_string(),
         };
 
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         let app = router(state);
 
         let response = app
@@ -1371,11 +1384,14 @@ mod tests {
             database_min_connections: 2,
             connect_timeout_secs: 30,
             idle_timeout_secs: 600,
-            encryption_key: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string(),
             log_level: "info".to_string(),
         };
 
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         let app = router(state);
 
         let response = app
@@ -1392,7 +1408,8 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body should be readable");
-        let health: HealthResponse = serde_json::from_slice(&body).expect("body should be valid JSON");
+        let health: HealthResponse =
+            serde_json::from_slice(&body).expect("body should be valid JSON");
         assert_eq!(health.status, "ok".to_string());
         assert!(health.database_connected);
     }
@@ -1408,14 +1425,26 @@ mod tests {
             database_min_connections: 2,
             connect_timeout_secs: 30,
             idle_timeout_secs: 600,
-            encryption_key: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string(),
             log_level: "info".to_string(),
         };
 
-        let state = ApiState::new(config).await.expect("state should initialize");
-        state.metrics.request_count.store(42, std::sync::atomic::Ordering::Relaxed);
-        state.metrics.error_count.store(5, std::sync::atomic::Ordering::Relaxed);
-        state.metrics.active_sessions.store(3, std::sync::atomic::Ordering::Relaxed);
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
+        state
+            .metrics
+            .request_count
+            .store(42, std::sync::atomic::Ordering::Relaxed);
+        state
+            .metrics
+            .error_count
+            .store(5, std::sync::atomic::Ordering::Relaxed);
+        state
+            .metrics
+            .active_sessions
+            .store(3, std::sync::atomic::Ordering::Relaxed);
 
         let app = router(state);
 
@@ -1433,7 +1462,8 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body should be readable");
-        let metrics: MetricsResponse = serde_json::from_slice(&body).expect("body should be valid JSON");
+        let metrics: MetricsResponse =
+            serde_json::from_slice(&body).expect("body should be valid JSON");
         assert_eq!(metrics.request_count, 42);
         assert_eq!(metrics.error_count, 5);
         assert_eq!(metrics.active_sessions, 3);
@@ -1442,7 +1472,9 @@ mod tests {
     #[tokio::test]
     async fn login_endpoint_returns_access_token_and_cookie() {
         let config = test_config();
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         let app = router(state);
 
         let response = app
@@ -1470,7 +1502,8 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body should be readable");
-        let login: LoginResponse = serde_json::from_slice(&body).expect("body should be valid JSON");
+        let login: LoginResponse =
+            serde_json::from_slice(&body).expect("body should be valid JSON");
         assert!(!login.access_token.is_empty());
         assert_eq!(login.token_type, "Bearer");
     }
@@ -1478,7 +1511,9 @@ mod tests {
     #[tokio::test]
     async fn login_endpoint_returns_401_for_invalid_credentials() {
         let config = test_config();
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         let app = router(state);
 
         let response = app
@@ -1501,7 +1536,9 @@ mod tests {
     #[tokio::test]
     async fn locked_account_returns_401() {
         let config = test_config();
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         let app = router(state);
 
         for _ in 0..5 {
@@ -1541,7 +1578,9 @@ mod tests {
     #[tokio::test]
     async fn logout_invalidates_session() {
         let config = test_config();
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         let app = router(state);
 
         let login_response = app
@@ -1562,7 +1601,8 @@ mod tests {
         let body = axum::body::to_bytes(login_response.into_body(), usize::MAX)
             .await
             .expect("body should be readable");
-        let login: LoginResponse = serde_json::from_slice(&body).expect("body should be valid JSON");
+        let login: LoginResponse =
+            serde_json::from_slice(&body).expect("body should be valid JSON");
 
         let logout_response = app
             .clone()
@@ -1570,7 +1610,10 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri("/api/v1/auth/logout")
-                    .header(header::AUTHORIZATION, format!("Bearer {}", login.access_token))
+                    .header(
+                        header::AUTHORIZATION,
+                        format!("Bearer {}", login.access_token),
+                    )
                     .body(Body::empty())
                     .expect("request should be valid"),
             )
@@ -1584,7 +1627,10 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri("/api/v1/auth/refresh")
-                    .header(header::AUTHORIZATION, format!("Bearer {}", login.access_token))
+                    .header(
+                        header::AUTHORIZATION,
+                        format!("Bearer {}", login.access_token),
+                    )
                     .body(Body::empty())
                     .expect("request should be valid"),
             )
@@ -1597,7 +1643,9 @@ mod tests {
     #[tokio::test]
     async fn refresh_keeps_same_token_and_returns_ok() {
         let config = test_config();
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         let app = router(state);
 
         let login_response = app
@@ -1626,7 +1674,10 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri("/api/v1/auth/refresh")
-                    .header(header::AUTHORIZATION, format!("Bearer {}", login.access_token))
+                    .header(
+                        header::AUTHORIZATION,
+                        format!("Bearer {}", login.access_token),
+                    )
                     .body(Body::empty())
                     .expect("request should be valid"),
             )
@@ -1645,7 +1696,9 @@ mod tests {
     #[tokio::test]
     async fn middleware_rejects_missing_authorization_header() {
         let config = test_config();
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         let app = router(state);
 
         let response = app
@@ -1664,7 +1717,9 @@ mod tests {
 
     #[tokio::test]
     async fn patient_endpoints_require_authentication() {
-        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
         let app = router(state);
 
         let response = app
@@ -1683,7 +1738,9 @@ mod tests {
 
     #[tokio::test]
     async fn receptionist_can_read_but_cannot_write_patients() {
-        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
         let app = router(state);
         let token = login_token(&app, "recep_amy", "desk-passphrase").await;
 
@@ -1714,8 +1771,7 @@ mod tests {
                 .header(header::AUTHORIZATION, format!("Bearer {token}"));
 
             if method != "DELETE" {
-                builder = builder
-                    .header(header::CONTENT_TYPE, "application/json")
+                builder = builder.header(header::CONTENT_TYPE, "application/json")
             }
 
             let body = if method == "DELETE" {
@@ -1736,7 +1792,9 @@ mod tests {
 
     #[tokio::test]
     async fn practitioner_can_crud_patients_with_pagination() {
-        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
         let app = router(state);
         let token = login_token(&app, "dr_smith", "correct-horse-battery-staple").await;
 
@@ -1865,7 +1923,9 @@ mod tests {
 
     #[tokio::test]
     async fn appointment_endpoints_require_authentication() {
-        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
         let app = router(state);
 
         let response = app
@@ -1884,7 +1944,9 @@ mod tests {
 
     #[tokio::test]
     async fn receptionist_can_read_but_cannot_modify_appointments() {
-        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
         let app = router(state);
         let token = login_token(&app, "recep_amy", "desk-passphrase").await;
 
@@ -1902,10 +1964,8 @@ mod tests {
             .expect("request should succeed");
         assert_eq!(get_response.status(), StatusCode::OK);
 
-        let payload = sample_appointment_payload(
-            Utc::now() + chrono::Duration::hours(2),
-            Uuid::new_v4(),
-        );
+        let payload =
+            sample_appointment_payload(Utc::now() + chrono::Duration::hours(2), Uuid::new_v4());
 
         for method in ["POST", "PUT", "DELETE"] {
             let uri = if method == "POST" {
@@ -1941,7 +2001,9 @@ mod tests {
 
     #[tokio::test]
     async fn practitioner_can_crud_appointments_and_overlap_returns_conflict() {
-        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
         let app = router(state);
         let token = login_token(&app, "dr_smith", "correct-horse-battery-staple").await;
         let practitioner_id = Uuid::new_v4();
@@ -1955,7 +2017,10 @@ mod tests {
                     .uri("/api/v1/appointments")
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
                     .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(sample_appointment_payload(start_one, practitioner_id)))
+                    .body(Body::from(sample_appointment_payload(
+                        start_one,
+                        practitioner_id,
+                    )))
                     .expect("request should be valid"),
             )
             .await
@@ -1990,7 +2055,10 @@ mod tests {
                     .uri("/api/v1/appointments")
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
                     .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(sample_appointment_payload(start_two, practitioner_id)))
+                    .body(Body::from(sample_appointment_payload(
+                        start_two,
+                        practitioner_id,
+                    )))
                     .expect("request should be valid"),
             )
             .await
@@ -2080,7 +2148,9 @@ mod tests {
 
     #[tokio::test]
     async fn consultation_endpoints_require_authentication() {
-        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
         let app = router(state);
 
         let response = app
@@ -2102,7 +2172,9 @@ mod tests {
 
     #[tokio::test]
     async fn receptionist_cannot_access_consultations() {
-        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
         let app = router(state);
         let token = login_token(&app, "recep_amy", "desk-passphrase").await;
 
@@ -2139,7 +2211,10 @@ mod tests {
                         .uri(uri)
                         .header(header::AUTHORIZATION, format!("Bearer {token}"))
                         .header(header::CONTENT_TYPE, "application/json")
-                        .body(Body::from(sample_consultation_payload(patient_id, Uuid::new_v4())))
+                        .body(Body::from(sample_consultation_payload(
+                            patient_id,
+                            Uuid::new_v4(),
+                        )))
                         .expect("request should be valid"),
                 )
                 .await
@@ -2151,7 +2226,9 @@ mod tests {
 
     #[tokio::test]
     async fn practitioner_can_crud_consultations_with_pagination() {
-        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
         let app = router(state);
         let token = login_token(&app, "dr_smith", "correct-horse-battery-staple").await;
 
@@ -2235,7 +2312,10 @@ mod tests {
         let updated: ConsultationResponse =
             serde_json::from_slice(&update_body).expect("valid consultation response");
         assert_eq!(updated.reason.as_deref(), Some("Updated reason"));
-        assert_eq!(updated.clinical_notes.as_deref(), Some("Updated SOAP notes"));
+        assert_eq!(
+            updated.clinical_notes.as_deref(),
+            Some("Updated SOAP notes")
+        );
 
         for idx in 0..30 {
             let payload = format!(
@@ -2306,7 +2386,8 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body should be readable");
-        let login: LoginResponse = serde_json::from_slice(&body).expect("body should be login JSON");
+        let login: LoginResponse =
+            serde_json::from_slice(&body).expect("body should be login JSON");
         login.access_token
     }
 
@@ -2349,7 +2430,9 @@ mod tests {
     #[tokio::test]
     async fn audit_emitter_is_initialized_in_api_state() {
         let config = test_config();
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         let ptr = std::ptr::addr_of!(state.audit_emitter) as *const _ as usize;
         assert_ne!(ptr, 0);
     }
@@ -2357,7 +2440,9 @@ mod tests {
     #[tokio::test]
     async fn audit_events_emitted_on_patient_mutations() {
         let config = test_config();
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         assert!(!std::ptr::addr_of!(state.audit_emitter).is_null());
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     }
@@ -2365,7 +2450,9 @@ mod tests {
     #[tokio::test]
     async fn audit_events_emitted_on_appointment_mutations() {
         let config = test_config();
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         assert!(!std::ptr::addr_of!(state.audit_emitter).is_null());
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     }
@@ -2373,7 +2460,9 @@ mod tests {
     #[tokio::test]
     async fn audit_events_emitted_on_consultation_mutations() {
         let config = test_config();
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         assert!(!std::ptr::addr_of!(state.audit_emitter).is_null());
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     }
@@ -2381,7 +2470,9 @@ mod tests {
     #[tokio::test]
     async fn audit_events_emitted_on_login_attempts() {
         let config = test_config();
-        let state = ApiState::new(config).await.expect("state should initialize");
+        let state = ApiState::new(config)
+            .await
+            .expect("state should initialize");
         assert!(!std::ptr::addr_of!(state.audit_emitter).is_null());
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     }

@@ -102,7 +102,11 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
-    pub async fn list_allergies(&self, patient_id: Uuid, active_only: bool) -> UiResult<Vec<Allergy>> {
+    pub async fn list_allergies(
+        &self,
+        patient_id: Uuid,
+        active_only: bool,
+    ) -> UiResult<Vec<Allergy>> {
         self.service
             .list_patient_allergies(patient_id, active_only)
             .await
@@ -227,7 +231,11 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
-    pub async fn list_vitals_history(&self, patient_id: Uuid, limit: usize) -> UiResult<Vec<VitalSigns>> {
+    pub async fn list_vitals_history(
+        &self,
+        patient_id: Uuid,
+        limit: usize,
+    ) -> UiResult<Vec<VitalSigns>> {
         self.service
             .list_vital_signs_history(patient_id, limit)
             .await

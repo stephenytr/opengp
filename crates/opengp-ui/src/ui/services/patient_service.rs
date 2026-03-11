@@ -6,8 +6,10 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use opengp_domain::domain::patient::{NewPatientData, UpdatePatientData, Patient, PatientService, RepositoryError};
 use crate::ui::view_models::PatientListItem;
+use opengp_domain::domain::patient::{
+    NewPatientData, Patient, PatientService, RepositoryError, UpdatePatientData,
+};
 
 /// Result type for UI operations
 pub type UiResult<T> = Result<T, UiServiceError>;

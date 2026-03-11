@@ -25,7 +25,10 @@ impl PathologyService {
         Ok(())
     }
 
-    pub async fn create_order(&self, order: PathologyOrder) -> Result<PathologyOrder, ServiceError> {
+    pub async fn create_order(
+        &self,
+        order: PathologyOrder,
+    ) -> Result<PathologyOrder, ServiceError> {
         self.validate_order(&order)?;
         Ok(self.repository.create_order(order).await?)
     }
@@ -62,11 +65,17 @@ mod tests {
 
     #[async_trait]
     impl PathologyRepository for MockPathologyRepository {
-        async fn find_order_by_id(&self, id: Uuid) -> Result<Option<PathologyOrder>, RepositoryError> {
+        async fn find_order_by_id(
+            &self,
+            id: Uuid,
+        ) -> Result<Option<PathologyOrder>, RepositoryError> {
             Ok(self.orders.iter().find(|order| order.id == id).cloned())
         }
 
-        async fn find_result_by_id(&self, _id: Uuid) -> Result<Option<PathologyResult>, RepositoryError> {
+        async fn find_result_by_id(
+            &self,
+            _id: Uuid,
+        ) -> Result<Option<PathologyResult>, RepositoryError> {
             Ok(None)
         }
 
@@ -82,15 +91,24 @@ mod tests {
                 .collect())
         }
 
-        async fn create_order(&self, order: PathologyOrder) -> Result<PathologyOrder, RepositoryError> {
+        async fn create_order(
+            &self,
+            order: PathologyOrder,
+        ) -> Result<PathologyOrder, RepositoryError> {
             Ok(order)
         }
 
-        async fn update_order(&self, order: PathologyOrder) -> Result<PathologyOrder, RepositoryError> {
+        async fn update_order(
+            &self,
+            order: PathologyOrder,
+        ) -> Result<PathologyOrder, RepositoryError> {
             Ok(order)
         }
 
-        async fn create_result(&self, result: PathologyResult) -> Result<PathologyResult, RepositoryError> {
+        async fn create_result(
+            &self,
+            result: PathologyResult,
+        ) -> Result<PathologyResult, RepositoryError> {
             Ok(result)
         }
 

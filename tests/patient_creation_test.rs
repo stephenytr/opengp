@@ -1,5 +1,7 @@
 use chrono::NaiveDate;
-use opengp_domain::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
+use opengp_domain::domain::patient::{
+    Address, Gender, NewPatientData, PatientRepository, PatientService,
+};
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::repositories::SqlxPatientRepository;
 use sqlx::SqlitePool;

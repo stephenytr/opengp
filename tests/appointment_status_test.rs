@@ -4,7 +4,9 @@ use opengp_domain::domain::appointment::{
     AppointmentStatus, AppointmentType,
 };
 use opengp_domain::domain::audit::{AuditEmitter, AuditRepository, AuditService};
-use opengp_domain::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
+use opengp_domain::domain::patient::{
+    Address, Gender, NewPatientData, PatientRepository, PatientService,
+};
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::repositories::{
     SqlxAppointmentRepository, SqlxAuditRepository, SqlxPatientRepository,

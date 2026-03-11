@@ -135,7 +135,10 @@ pub trait WorkingHoursRepository: Send + Sync {
     /// # Returns
     /// * `Ok(Vec<WorkingHours>)` - List of working hours entries (may be empty)
     /// * `Err(RepositoryError)` - Database error
-    async fn find_by_practitioner(&self, practitioner_id: Uuid) -> Result<Vec<WorkingHours>, RepositoryError>;
+    async fn find_by_practitioner(
+        &self,
+        practitioner_id: Uuid,
+    ) -> Result<Vec<WorkingHours>, RepositoryError>;
 
     /// Find working hours for a practitioner on a specific day of the week
     ///

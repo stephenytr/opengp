@@ -49,7 +49,10 @@ impl ReferralService {
         Ok(self.repository.update(referral).await?)
     }
 
-    pub async fn find_by_status(&self, status: ReferralStatus) -> Result<Vec<Referral>, ServiceError> {
+    pub async fn find_by_status(
+        &self,
+        status: ReferralStatus,
+    ) -> Result<Vec<Referral>, ServiceError> {
         Ok(self.repository.find_by_status(status).await?)
     }
 }
@@ -73,7 +76,10 @@ mod tests {
             Ok(self.items.iter().find(|item| item.id == id).cloned())
         }
 
-        async fn find_by_patient(&self, patient_id: Uuid) -> Result<Vec<Referral>, RepositoryError> {
+        async fn find_by_patient(
+            &self,
+            patient_id: Uuid,
+        ) -> Result<Vec<Referral>, RepositoryError> {
             Ok(self
                 .items
                 .iter()
@@ -90,7 +96,10 @@ mod tests {
             Ok(referral)
         }
 
-        async fn find_by_status(&self, status: ReferralStatus) -> Result<Vec<Referral>, RepositoryError> {
+        async fn find_by_status(
+            &self,
+            status: ReferralStatus,
+        ) -> Result<Vec<Referral>, RepositoryError> {
             Ok(self
                 .items
                 .iter()

@@ -555,10 +555,10 @@ impl AuditRepository for MockAuditRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveDate;
     use opengp_domain::domain::audit::AuditAction;
     use opengp_domain::domain::patient::Gender;
     use opengp_domain::domain::patient::NewPatientData;
-    use chrono::NaiveDate;
 
     #[tokio::test]
     async fn test_mock_patient_repository_create_and_find() {

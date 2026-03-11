@@ -5,14 +5,14 @@ use chrono::NaiveDate;
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
-use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
-use opengp_domain::domain::patient::{
-    Address, EmergencyContact, Gender, Patient, PatientRepository, RepositoryError,
-};
 use crate::infrastructure::crypto::EncryptionService;
 use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::helpers::*;
 use crate::infrastructure::database::sqlx_to_patient_error;
+use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
+use opengp_domain::domain::patient::{
+    Address, EmergencyContact, Gender, Patient, PatientRepository, RepositoryError,
+};
 
 #[derive(Debug, FromRow)]
 struct PatientRow {
@@ -378,7 +378,8 @@ impl PatientRepository for SqlxPatientRepository {
 
         let new_version = patient.version + 1;
 
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(
+            &r#"
         UPDATE patients SET
             ihi = ?,
             medicare_number = ?,
@@ -408,7 +409,8 @@ impl PatientRepository for SqlxPatientRepository {
             updated_at = ?,
             version = ?
         WHERE id = ? AND version = ?
-        "#))
+        "#,
+        ))
         .bind(ihi_encrypted)
         .bind(medicare_encrypted)
         .bind(medicare_irn_i64)

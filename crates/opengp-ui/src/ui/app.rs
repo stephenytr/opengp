@@ -31,6 +31,9 @@ type AppointmentListFetchTask =
     tokio::task::JoinHandle<Result<opengp_domain::domain::appointment::CalendarDayView, String>>;
 type ConsultationListFetchTask =
     tokio::task::JoinHandle<Result<Vec<opengp_domain::domain::clinical::Consultation>, String>>;
+type LoginTask = tokio::task::JoinHandle<
+    Result<opengp_domain::domain::api::LoginResponse, crate::api::ApiClientError>,
+>;
 
 pub struct App {
     theme: Theme,
@@ -38,6 +41,8 @@ pub struct App {
     tab_bar: TabBar,
     status_bar: StatusBar,
     help_overlay: HelpOverlay,
+    login_screen: crate::ui::screens::LoginScreen,
+    authenticated: bool,
     current_context: KeyContext,
     should_quit: bool,
     /// The authenticated user performing operations - used for audit logging
@@ -79,6 +84,8 @@ pub struct App {
     patient_list_fetch_task: Option<PatientListFetchTask>,
     appointment_list_fetch_task: Option<AppointmentListFetchTask>,
     consultation_list_fetch_task: Option<ConsultationListFetchTask>,
+    pending_login_request: Option<(String, String)>,
+    login_task: Option<LoginTask>,
     terminal_size: Rect,
 }
 
@@ -142,6 +149,8 @@ impl App {
             tab_bar: TabBar::new(theme.clone()),
             status_bar: StatusBar::patient_list(theme.clone()),
             help_overlay: HelpOverlay::new(theme.clone()),
+            login_screen: crate::ui::screens::LoginScreen::new(theme.clone()),
+            authenticated: true,
             current_context: KeyContext::Global,
             should_quit: false,
             current_user_id: uuid::Uuid::nil(),
@@ -176,6 +185,8 @@ impl App {
             patient_list_fetch_task: None,
             appointment_list_fetch_task: None,
             consultation_list_fetch_task: None,
+            pending_login_request: None,
+            login_task: None,
             terminal_size: Rect::new(0, 0, 80, 24),
         };
 
@@ -199,6 +210,14 @@ impl App {
 
     pub fn should_quit(&self) -> bool {
         self.should_quit
+    }
+
+    pub fn is_authenticated(&self) -> bool {
+        self.authenticated
+    }
+
+    pub fn set_authenticated(&mut self, authenticated: bool) {
+        self.authenticated = authenticated;
     }
 
     pub fn quit(&mut self) {
