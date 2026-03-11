@@ -5,6 +5,7 @@ use crate::ui::components::appointment::{
 use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
 use crate::ui::components::tabs::Tab;
 use crate::ui::keybinds::{Action, KeyContext};
+use crate::ui::widgets::FormNavigation;
 use crossterm::event::{Event, KeyEvent, MouseEvent};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 

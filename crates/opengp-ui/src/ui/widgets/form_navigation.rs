@@ -59,4 +59,8 @@ pub trait FormNavigation {
             self.set_current_field(fields[prev_idx]);
         }
     }
+
+    fn has_errors(&self) -> bool {
+        self.fields().iter().any(|f| self.get_error(*f).is_some())
+    }
 }

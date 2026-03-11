@@ -466,10 +466,6 @@ impl AppointmentForm {
         self.errors.get(&field)
     }
 
-    pub fn has_errors(&self) -> bool {
-        !self.errors.is_empty()
-    }
-
     // ── Build DTO ────────────────────────────────────────────────────────────
 
     /// Validate and build a `NewAppointmentData` DTO ready for the service layer.

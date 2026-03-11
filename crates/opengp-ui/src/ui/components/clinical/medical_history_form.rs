@@ -275,10 +275,6 @@ impl MedicalHistoryForm {
         self.errors.get(&field)
     }
 
-    pub fn has_errors(&self) -> bool {
-        !self.errors.is_empty()
-    }
-
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<MedicalHistoryFormAction> {
         use crossterm::event::KeyEventKind;
 

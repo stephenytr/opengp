@@ -172,10 +172,6 @@ impl ConsultationForm {
         self.errors.get(&field)
     }
 
-    pub fn has_errors(&self) -> bool {
-        !self.errors.is_empty()
-    }
-
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ConsultationFormAction> {
         use crossterm::event::{KeyCode, KeyEventKind};
 

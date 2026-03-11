@@ -834,10 +834,6 @@ impl PatientForm {
         self.errors.get(&field)
     }
 
-    pub fn has_errors(&self) -> bool {
-        !self.errors.is_empty()
-    }
-
     pub fn to_new_patient_data(&mut self) -> Option<NewPatientData> {
         if !self.validate() {
             return None;
@@ -1092,7 +1088,10 @@ impl PatientForm {
                     },
                 }
             }
-            match key.code { KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None, _ => {} }
+            match key.code {
+                KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
+                _ => {}
+            }
             return Some(None);
         }
 
@@ -1215,6 +1214,7 @@ impl Widget for PatientForm {
 
         let mut y: i32 = (inner.y as i32) + 1 - (self.scroll.scroll_offset as i32);
         let max_y = inner.y as i32 + inner.height as i32 - 2;
+        let mut open_dropdown: Option<(DropdownWidget, Rect)> = None;
 
         for field in fields {
             let field_height = self.get_field_height(field) as i32;
@@ -1237,6 +1237,9 @@ impl Widget for PatientForm {
                             inner.width.saturating_sub(label_width + 4),
                             3,
                         );
+                        if dropdown.is_open() {
+                            open_dropdown = Some((dropdown.clone(), dropdown_area));
+                        }
                         dropdown.focused(is_focused).render(dropdown_area, buf);
                     }
                     y += 4;
@@ -1250,6 +1253,9 @@ impl Widget for PatientForm {
                             inner.width.saturating_sub(label_width + 4),
                             3,
                         );
+                        if dropdown.is_open() {
+                            open_dropdown = Some((dropdown.clone(), dropdown_area));
+                        }
                         dropdown.focused(is_focused).render(dropdown_area, buf);
                     }
                     y += 4;
@@ -1263,6 +1269,9 @@ impl Widget for PatientForm {
                             inner.width.saturating_sub(label_width + 4),
                             3,
                         );
+                        if dropdown.is_open() {
+                            open_dropdown = Some((dropdown.clone(), dropdown_area));
+                        }
                         dropdown.focused(is_focused).render(dropdown_area, buf);
                     }
                     y += 4;
@@ -1276,6 +1285,9 @@ impl Widget for PatientForm {
                             inner.width.saturating_sub(label_width + 4),
                             3,
                         );
+                        if dropdown.is_open() {
+                            open_dropdown = Some((dropdown.clone(), dropdown_area));
+                        }
                         dropdown.focused(is_focused).render(dropdown_area, buf);
                     }
                     y += 4;
@@ -1298,6 +1310,10 @@ impl Widget for PatientForm {
                     }
                 }
             }
+        }
+
+        if let Some((dropdown, dropdown_area)) = open_dropdown {
+            dropdown.render(dropdown_area, buf);
         }
 
         // Render scrollbar
