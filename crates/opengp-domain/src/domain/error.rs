@@ -13,6 +13,9 @@ pub enum RepositoryError {
 
     #[error("Constraint violation: {0}")]
     ConstraintViolation(String),
+
+    #[error("Conflict: {0}")]
+    Conflict(String),
 }
 
 impl RepositoryError {

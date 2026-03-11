@@ -52,6 +52,7 @@ struct ConsultationRow {
     signed_by: Option<db_helpers::DbUuid>,
     created_at: String,
     updated_at: String,
+    version: i32,
     created_by: db_helpers::DbUuid,
     updated_by: Option<db_helpers::DbUuid>,
 }
@@ -95,6 +96,7 @@ impl ConsultationRow {
                 .transpose()?,
             created_at: string_to_datetime(&self.created_at),
             updated_at: string_to_datetime(&self.updated_at),
+            version: self.version,
             created_by: bytes_to_uuid(&self.created_by)?,
             updated_by: self
                 .updated_by
@@ -125,7 +127,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
         SELECT 
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
-            created_at, updated_at, created_by, updated_by
+            created_at, updated_at, version, created_by, updated_by
         FROM consultations
         WHERE id = ?
         "#))
@@ -150,7 +152,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
         SELECT 
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
-            created_at, updated_at, created_by, updated_by
+            created_at, updated_at, version, created_by, updated_by
         FROM consultations
         WHERE patient_id = ?
         ORDER BY consultation_date DESC
@@ -179,7 +181,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
         SELECT 
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
-            created_at, updated_at, created_by, updated_by
+            created_at, updated_at, version, created_by, updated_by
         FROM consultations
         WHERE patient_id = ? AND consultation_date BETWEEN ? AND ?
         ORDER BY consultation_date DESC
@@ -219,8 +221,8 @@ impl ConsultationRepository for SqlxClinicalRepository {
         INSERT INTO consultations (
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
-            created_at, updated_at, created_by, updated_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            created_at, updated_at, version, created_by, updated_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#))
         .bind(id_bytes)
         .bind(patient_bytes)
@@ -234,6 +236,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
         .bind(consultation.signed_by.as_ref().map(uuid_to_bytes))
         .bind(&created_at_str)
         .bind(&updated_at_str)
+        .bind(consultation.version)
         .bind(created_by_bytes)
         .bind(consultation.updated_by.as_ref().map(uuid_to_bytes))
         .execute(&self.pool)
@@ -248,6 +251,27 @@ impl ConsultationRepository for SqlxClinicalRepository {
         let updated_at_str = datetime_to_string(&consultation.updated_at);
         let updated_by_bytes = consultation.updated_by.as_ref().map(uuid_to_bytes);
 
+        let current_version = sqlx::query_scalar::<_, i32>(&db_helpers::sql_with_placeholders(
+            "SELECT version FROM consultations WHERE id = ?",
+        ))
+        .bind(id_bytes.clone())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(sqlx_to_clinical_error)?;
+
+        let current_version = match current_version {
+            Some(version) => version,
+            None => return Err(RepositoryError::Base(BaseRepositoryError::NotFound)),
+        };
+
+        if current_version != consultation.version {
+            return Err(RepositoryError::Base(BaseRepositoryError::Conflict(
+                "Consultation was modified by another user".to_string(),
+            )));
+        }
+
+        let new_version = consultation.version + 1;
+
         let clinical_notes_encrypted: Option<Vec<u8>> = consultation
             .clinical_notes
             .as_ref()
@@ -257,13 +281,13 @@ impl ConsultationRepository for SqlxClinicalRepository {
                 RepositoryError::Encryption(format!("Failed to encrypt clinical notes: {}", e))
             })?;
 
-        sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
         UPDATE consultations
         SET 
             reason = ?, clinical_notes = ?,
             is_signed = ?, signed_at = ?, signed_by = ?,
-            updated_at = ?, updated_by = ?
-        WHERE id = ?
+            updated_at = ?, updated_by = ?, version = ?
+        WHERE id = ? AND version = ?
         "#))
         .bind(&consultation.reason)
         .bind(clinical_notes_encrypted)
@@ -272,12 +296,23 @@ impl ConsultationRepository for SqlxClinicalRepository {
         .bind(consultation.signed_by.as_ref().map(uuid_to_bytes))
         .bind(&updated_at_str)
         .bind(updated_by_bytes)
+        .bind(new_version)
         .bind(id_bytes)
+        .bind(consultation.version)
         .execute(&self.pool)
         .await
             .map_err(sqlx_to_clinical_error)?;
 
-        Ok(consultation)
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::Base(BaseRepositoryError::Conflict(
+                "Consultation was modified by another user".to_string(),
+            )));
+        }
+
+        let mut updated_consultation = consultation;
+        updated_consultation.version = new_version;
+
+        Ok(updated_consultation)
     }
 
     async fn sign(&self, id: Uuid, user_id: Uuid) -> Result<(), RepositoryError> {

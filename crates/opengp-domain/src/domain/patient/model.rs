@@ -42,6 +42,7 @@ pub struct Patient {
 
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub version: i32,
 }
 
 impl Patient {
@@ -100,6 +101,7 @@ impl Patient {
             deceased_date: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            version: 1,
         })
     }
 

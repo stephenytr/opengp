@@ -251,6 +251,7 @@ impl ConsultationForm {
             signed_by: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            version: 1,
             created_by,
             updated_by: None,
         }

@@ -44,6 +44,7 @@ struct PatientRow {
     is_deceased: bool,
     created_at: String,
     updated_at: String,
+    version: i32,
 }
 
 impl PatientRow {
@@ -114,6 +115,7 @@ impl PatientRow {
             deceased_date: None,
             created_at: string_to_datetime(&self.created_at),
             updated_at: string_to_datetime(&self.updated_at),
+            version: self.version,
         })
     }
 }
@@ -127,7 +129,8 @@ SELECT
     phone_home, phone_mobile, email,
     emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
     is_active, is_deceased,
-    created_at, updated_at
+    created_at, updated_at,
+    version
 FROM patients
 "#;
 
@@ -276,8 +279,9 @@ impl PatientRepository for SqlxPatientRepository {
             phone_home, phone_mobile, email,
             emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
             is_active, is_deceased,
-            created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            created_at, updated_at,
+            version
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#))
         .bind(id_bytes)
         .bind(ihi_encrypted)
@@ -307,6 +311,7 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(patient.is_deceased)
         .bind(created_at_str)
         .bind(updated_at_str)
+        .bind(patient.version)
         .execute(&self.pool)
         .await;
 
@@ -352,6 +357,27 @@ impl PatientRepository for SqlxPatientRepository {
             .as_ref()
             .map(|ec| ec.relationship.clone());
 
+        let current_version = sqlx::query_scalar::<_, i32>(&db_helpers::sql_with_placeholders(
+            "SELECT version FROM patients WHERE id = ?",
+        ))
+        .bind(id_bytes.clone())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(sqlx_to_patient_error)?;
+
+        let current_version = match current_version {
+            Some(version) => version,
+            None => return Err(RepositoryError::Base(BaseRepositoryError::NotFound)),
+        };
+
+        if current_version != patient.version {
+            return Err(RepositoryError::Base(BaseRepositoryError::Conflict(
+                "Patient was modified by another user".to_string(),
+            )));
+        }
+
+        let new_version = patient.version + 1;
+
         let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
         UPDATE patients SET
             ihi = ?,
@@ -379,8 +405,9 @@ impl PatientRepository for SqlxPatientRepository {
             emergency_contact_relationship = ?,
             is_active = ?,
             is_deceased = ?,
-            updated_at = ?
-        WHERE id = ?
+            updated_at = ?,
+            version = ?
+        WHERE id = ? AND version = ?
         "#))
         .bind(ihi_encrypted)
         .bind(medicare_encrypted)
@@ -408,12 +435,24 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(patient.is_active)
         .bind(patient.is_deceased)
         .bind(updated_at_str)
+        .bind(new_version)
         .bind(id_bytes)
+        .bind(patient.version)
         .execute(&self.pool)
         .await;
 
         match result {
-            Ok(_) => Ok(patient),
+            Ok(query_result) => {
+                if query_result.rows_affected() == 0 {
+                    return Err(RepositoryError::Base(BaseRepositoryError::Conflict(
+                        "Patient was modified by another user".to_string(),
+                    )));
+                }
+
+                let mut updated_patient = patient;
+                updated_patient.version = new_version;
+                Ok(updated_patient)
+            }
             Err(sqlx::Error::Database(db_err)) => Err(map_db_error(db_err)),
             Err(e) => Err(RepositoryError::Base(BaseRepositoryError::Database(
                 e.to_string(),

@@ -13,6 +13,7 @@ use super::model::{Appointment, AppointmentStatus};
 use super::query::AppointmentCalendarQuery;
 use super::repository::AppointmentRepository;
 use crate::domain::audit::{AuditEmitter, AuditEntry};
+use crate::domain::error::RepositoryError as BaseRepositoryError;
 use crate::domain::user::WorkingHoursRepository;
 
 service! {
@@ -31,6 +32,13 @@ service! {
 }
 
 impl AppointmentService {
+    fn map_repository_error(error: BaseRepositoryError) -> ServiceError {
+        match error {
+            BaseRepositoryError::Conflict(message) => ServiceError::Conflict(message),
+            other => ServiceError::Repository(other),
+        }
+    }
+
     /// Check for overlapping appointments for a practitioner
     ///
     /// # Arguments
@@ -249,7 +257,12 @@ impl AppointmentService {
         appointment.updated_by = Some(user_id);
 
         // Save changes
-        match self.repository.update(appointment.clone()).await {
+        match self
+            .repository
+            .update(appointment.clone())
+            .await
+            .map_err(Self::map_repository_error)
+        {
             Ok(updated) => {
                 info!("Appointment updated successfully: {}", updated.id);
                 Ok(updated)
@@ -293,7 +306,12 @@ impl AppointmentService {
         appointment.cancel(reason, user_id);
 
         // Save changes
-        match self.repository.update(appointment.clone()).await {
+        match self
+            .repository
+            .update(appointment.clone())
+            .await
+            .map_err(Self::map_repository_error)
+        {
             Ok(cancelled) => {
                 info!("Appointment cancelled successfully: {}", cancelled.id);
                 Ok(cancelled)
@@ -455,7 +473,11 @@ impl AppointmentService {
 
         appointment.mark_arrived(user_id);
 
-        let updated = self.repository.update(appointment).await?;
+        let updated = self
+            .repository
+            .update(appointment)
+            .await
+            .map_err(Self::map_repository_error)?;
         info!("Appointment {} marked as arrived", appointment_id);
 
         let audit_entry = AuditEntry::new_status_changed(
@@ -503,7 +525,11 @@ impl AppointmentService {
 
         appointment.mark_in_progress(user_id);
 
-        let updated = self.repository.update(appointment).await?;
+        let updated = self
+            .repository
+            .update(appointment)
+            .await
+            .map_err(Self::map_repository_error)?;
         info!("Appointment {} marked as in progress", appointment_id);
 
         let audit_entry = AuditEntry::new_status_changed(
@@ -551,7 +577,11 @@ impl AppointmentService {
 
         appointment.mark_completed(user_id);
 
-        let updated = self.repository.update(appointment).await?;
+        let updated = self
+            .repository
+            .update(appointment)
+            .await
+            .map_err(Self::map_repository_error)?;
         info!("Appointment {} marked as completed", appointment_id);
 
         let audit_entry = AuditEntry::new_status_changed(
@@ -601,7 +631,11 @@ impl AppointmentService {
         appointment.updated_at = Utc::now();
         appointment.updated_by = Some(user_id);
 
-        let updated = self.repository.update(appointment).await?;
+        let updated = self
+            .repository
+            .update(appointment)
+            .await
+            .map_err(Self::map_repository_error)?;
         info!("Appointment {} marked as no show", appointment_id);
 
         let audit_entry = AuditEntry::new_status_changed(
@@ -651,7 +685,11 @@ impl AppointmentService {
         appointment.updated_at = Utc::now();
         appointment.updated_by = Some(user_id);
 
-        let updated = self.repository.update(appointment).await?;
+        let updated = self
+            .repository
+            .update(appointment)
+            .await
+            .map_err(Self::map_repository_error)?;
         info!("Appointment {} rescheduled successfully", appointment_id);
 
         let audit_entry =
@@ -790,6 +828,7 @@ mod tests {
         overlapping: Vec<Appointment>,
         created: Mutex<Vec<Appointment>>,
         updated: Mutex<Vec<Appointment>>,
+        update_error: Mutex<Option<RepositoryError>>,
     }
 
     #[async_trait]
@@ -807,6 +846,14 @@ mod tests {
         }
 
         async fn update(&self, appointment: Appointment) -> Result<Appointment, RepositoryError> {
+            if let Some(err) = self
+                .update_error
+                .lock()
+                .expect("update_error lock poisoned")
+                .take()
+            {
+                return Err(err);
+            }
             self.updated
                 .lock()
                 .expect("updated lock poisoned")
@@ -857,6 +904,7 @@ mod tests {
                 overlapping,
                 created: Mutex::new(vec![]),
                 updated: Mutex::new(vec![]),
+                update_error: Mutex::new(None),
             }),
             Arc::new(NoOpAuditEmitter),
             Arc::new(MockCalendarQuery),
@@ -974,9 +1022,57 @@ mod tests {
                 overlapping: vec![],
                 created: Mutex::new(vec![]),
                 updated: Mutex::new(vec![]),
+                update_error: Mutex::new(None),
             }),
             Arc::new(MockWorkingHoursRepository { working_hours }),
         )
+    }
+
+    #[tokio::test]
+    async fn test_update_appointment_returns_conflict_for_concurrent_modification() {
+        let practitioner_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let appointment = Appointment::new(
+            Uuid::new_v4(),
+            practitioner_id,
+            Utc::now() + Duration::hours(1),
+            Duration::minutes(15),
+            AppointmentType::Standard,
+            Some(user_id),
+        );
+
+        let service = AppointmentService::new(
+            Arc::new(MockAppointmentRepository {
+                appointments: vec![appointment.clone()],
+                overlapping: vec![],
+                created: Mutex::new(vec![]),
+                updated: Mutex::new(vec![]),
+                update_error: Mutex::new(Some(RepositoryError::Conflict(
+                    "Appointment was modified by another user".to_string(),
+                ))),
+            }),
+            Arc::new(NoOpAuditEmitter),
+            Arc::new(MockCalendarQuery),
+        );
+
+        let result = service
+            .update_appointment(
+                appointment.id,
+                UpdateAppointmentData {
+                    status: Some(AppointmentStatus::Confirmed),
+                    appointment_type: None,
+                    reason: None,
+                    notes: None,
+                    is_urgent: None,
+                    reminder_sent: None,
+                    confirmed: None,
+                    cancellation_reason: None,
+                },
+                user_id,
+            )
+            .await;
+
+        assert!(matches!(result, Err(ServiceError::Conflict(_))));
     }
 
     #[tokio::test]

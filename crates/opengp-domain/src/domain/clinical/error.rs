@@ -29,6 +29,9 @@ pub enum ServiceError {
     #[error("Validation error: {0}")]
     Validation(String),
 
+    #[error("Concurrent modification conflict: {0}")]
+    Conflict(String),
+
     #[error("Repository error: {0}")]
     Repository(#[from] RepositoryError),
 

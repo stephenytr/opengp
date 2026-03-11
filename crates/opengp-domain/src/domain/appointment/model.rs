@@ -40,6 +40,7 @@ pub struct Appointment {
     /// Audit fields
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub version: i32,
     pub created_by: Option<Uuid>,
     pub updated_by: Option<Uuid>,
 }
@@ -69,6 +70,7 @@ impl Appointment {
             cancellation_reason: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            version: 1,
             created_by,
             updated_by: None,
         }

@@ -36,6 +36,7 @@ struct AppointmentRow {
     cancellation_reason: Option<String>,
     created_at: String,
     updated_at: String,
+    version: i32,
     created_by: Option<db_helpers::DbUuid>,
     updated_by: Option<db_helpers::DbUuid>,
 }
@@ -64,6 +65,7 @@ impl AppointmentRow {
             cancellation_reason: self.cancellation_reason,
             created_at: string_to_datetime(&self.created_at),
             updated_at: string_to_datetime(&self.updated_at),
+            version: self.version,
             created_by: self.created_by.and_then(|bytes| bytes_to_uuid(&bytes).ok()),
             updated_by: self.updated_by.and_then(|bytes| bytes_to_uuid(&bytes).ok()),
         })
@@ -129,6 +131,7 @@ SELECT
     is_urgent, reminder_sent, confirmed,
     cancellation_reason,
     created_at, updated_at,
+    version,
     created_by, updated_by
 FROM appointments
 "#;
@@ -226,8 +229,9 @@ impl AppointmentRepository for SqlxAppointmentRepository {
             is_urgent, reminder_sent, confirmed,
             cancellation_reason,
             created_at, updated_at,
+            version,
             created_by, updated_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#))
         .bind(id_bytes)
         .bind(patient_id_bytes)
@@ -244,6 +248,7 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         .bind(&appointment.cancellation_reason)
         .bind(created_at_str)
         .bind(updated_at_str)
+        .bind(appointment.version)
         .bind(created_by_bytes)
         .bind(updated_by_bytes)
         .execute(&self.pool)
@@ -305,6 +310,27 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         let updated_at_str = appointment.updated_at.to_rfc3339();
         let updated_by_bytes = appointment.updated_by.map(|id| db_helpers::uuid_to_bytes(&id));
 
+        let current_version = sqlx::query_scalar::<_, i32>(&db_helpers::sql_with_placeholders(
+            "SELECT version FROM appointments WHERE id = ?",
+        ))
+        .bind(id_bytes.clone())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(sqlx_to_appointment_error)?;
+
+        let current_version = match current_version {
+            Some(version) => version,
+            None => return Err(RepositoryError::NotFound),
+        };
+
+        if current_version != appointment.version {
+            return Err(RepositoryError::Conflict(
+                "Appointment was modified by another user".to_string(),
+            ));
+        }
+
+        let new_version = appointment.version + 1;
+
         let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
         UPDATE appointments
         SET start_time = ?,
@@ -318,8 +344,9 @@ impl AppointmentRepository for SqlxAppointmentRepository {
             confirmed = ?,
             cancellation_reason = ?,
             updated_at = ?,
-            updated_by = ?
-        WHERE id = ?
+            updated_by = ?,
+            version = ?
+        WHERE id = ? AND version = ?
         "#))
         .bind(start_time_str)
         .bind(end_time_str)
@@ -333,16 +360,22 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         .bind(&appointment.cancellation_reason)
         .bind(updated_at_str)
         .bind(updated_by_bytes)
+        .bind(new_version)
         .bind(id_bytes)
+        .bind(appointment.version)
         .execute(&self.pool)
         .await;
 
         match result {
             Ok(query_result) => {
                 if query_result.rows_affected() == 0 {
-                    Err(RepositoryError::NotFound)
+                    Err(RepositoryError::Conflict(
+                        "Appointment was modified by another user".to_string(),
+                    ))
                 } else {
-                    Ok(appointment)
+                    let mut updated_appointment = appointment;
+                    updated_appointment.version = new_version;
+                    Ok(updated_appointment)
                 }
             }
             Err(sqlx::Error::Database(db_err)) => {
@@ -396,6 +429,7 @@ impl AppointmentRepository for SqlxAppointmentRepository {
                 is_urgent, reminder_sent, confirmed,
                 cancellation_reason,
                 created_at, updated_at,
+                version,
                 created_by, updated_by
             FROM appointments
             WHERE 1=1
@@ -748,5 +782,100 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
         rows.into_iter()
             .map(|r| r.into_calendar_appointment())
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn setup_test_pool() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite pool");
+
+        sqlx::query(
+            r#"
+            CREATE TABLE appointments (
+                id BLOB PRIMARY KEY,
+                patient_id BLOB NOT NULL,
+                practitioner_id BLOB NOT NULL,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                appointment_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                reason TEXT,
+                notes TEXT,
+                is_urgent BOOLEAN NOT NULL,
+                reminder_sent BOOLEAN NOT NULL,
+                confirmed BOOLEAN NOT NULL,
+                cancellation_reason TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                created_by BLOB,
+                updated_by BLOB
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create appointments table");
+
+        pool
+    }
+
+    #[tokio::test]
+    async fn update_uses_optimistic_locking_and_increments_version() {
+        let pool = setup_test_pool().await;
+        let repo = SqlxAppointmentRepository::new(pool.clone());
+
+        let mut appointment = Appointment::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Utc::now() + Duration::hours(1),
+            Duration::minutes(15),
+            AppointmentType::Standard,
+            Some(Uuid::new_v4()),
+        );
+        appointment.reason = Some("Initial reason".to_string());
+
+        let created = repo
+            .create(appointment.clone())
+            .await
+            .expect("create appointment");
+        assert_eq!(created.version, 1);
+
+        let mut update_a = created.clone();
+        update_a.reason = Some("First update".to_string());
+        update_a.updated_at = Utc::now();
+
+        let updated = repo
+            .update(update_a)
+            .await
+            .expect("first update should succeed");
+        assert_eq!(updated.version, 2);
+
+        let mut stale_update = created.clone();
+        stale_update.reason = Some("Stale update".to_string());
+        stale_update.updated_at = Utc::now();
+
+        let err = repo
+            .update(stale_update)
+            .await
+            .expect_err("stale update should conflict");
+
+        assert!(matches!(err, RepositoryError::Conflict(_)));
+
+        let latest = repo
+            .find_by_id(created.id)
+            .await
+            .expect("find latest")
+            .expect("appointment exists");
+        assert_eq!(latest.version, 2);
     }
 }

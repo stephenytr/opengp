@@ -18,6 +18,7 @@ use super::repository::{
     AllergyRepository, ConsultationRepository, FamilyHistoryRepository, MedicalHistoryRepository,
     SocialHistoryRepository, VitalSignsRepository,
 };
+use crate::domain::error::RepositoryError as BaseRepositoryError;
 
 pub struct ClinicalRepositories {
     pub consultation: Arc<dyn ConsultationRepository>,
@@ -128,7 +129,17 @@ impl ClinicalService {
         consultation.updated_at = chrono::Utc::now();
         consultation.updated_by = Some(user_id);
 
-        let updated = self.repos.consultation.update(consultation).await?;
+        let updated = self
+            .repos
+            .consultation
+            .update(consultation)
+            .await
+            .map_err(|err| match err {
+                super::error::RepositoryError::Base(BaseRepositoryError::Conflict(message)) => {
+                    ServiceError::Conflict(message)
+                }
+                other => ServiceError::Repository(other),
+            })?;
 
         self.audit_logger
                     .emit(AuditEntry::new_updated(
@@ -682,6 +693,7 @@ mod tests {
         consultations: Vec<Consultation>,
         update_calls: Mutex<usize>,
         sign_calls: Mutex<Vec<Uuid>>,
+        update_error: Mutex<Option<RepositoryError>>,
     }
 
     #[async_trait]
@@ -722,6 +734,14 @@ mod tests {
             &self,
             consultation: Consultation,
         ) -> Result<Consultation, RepositoryError> {
+            if let Some(err) = self
+                .update_error
+                .lock()
+                .expect("update_error lock poisoned")
+                .take()
+            {
+                return Err(err);
+            }
             *self.update_calls.lock().expect("update_calls lock poisoned") += 1;
             Ok(consultation)
         }
@@ -949,6 +969,7 @@ mod tests {
                 consultations,
                 update_calls: Mutex::new(0),
                 sign_calls: Mutex::new(vec![]),
+                update_error: Mutex::new(None),
             }),
             allergy: Arc::new(MockAllergyRepository),
             medical_history: Arc::new(MockMedicalHistoryRepository),
@@ -1006,5 +1027,46 @@ mod tests {
             .await;
 
         assert!(matches!(result, Err(ServiceError::AlreadySigned)));
+    }
+
+    #[tokio::test]
+    async fn test_update_clinical_notes_returns_conflict_for_concurrent_modification() {
+        let patient = create_test_patient();
+        let user_id = Uuid::new_v4();
+        let consultation = Consultation::new(patient.id, Uuid::new_v4(), None, user_id);
+
+        let repos = ClinicalRepositories {
+            consultation: Arc::new(MockConsultationRepository {
+                consultations: vec![consultation.clone()],
+                update_calls: Mutex::new(0),
+                sign_calls: Mutex::new(vec![]),
+                update_error: Mutex::new(Some(RepositoryError::Base(
+                    crate::domain::error::RepositoryError::Conflict(
+                        "Consultation was modified by another user".to_string(),
+                    ),
+                ))),
+            }),
+            allergy: Arc::new(MockAllergyRepository),
+            medical_history: Arc::new(MockMedicalHistoryRepository),
+            vital_signs: Arc::new(MockVitalSignsRepository),
+            social_history: Arc::new(MockSocialHistoryRepository),
+            family_history: Arc::new(MockFamilyHistoryRepository),
+        };
+        let patient_service = Arc::new(PatientService::new(Arc::new(MockPatientRepository {
+            patients: vec![patient],
+        })));
+        let audit_logger: Arc<dyn AuditEmitter> = Arc::new(NoOpAuditEmitter);
+        let service = ClinicalService::new(repos, patient_service, audit_logger);
+
+        let result = service
+            .update_clinical_notes(
+                consultation.id,
+                Some("Updated reason".to_string()),
+                Some("Updated notes".to_string()),
+                user_id,
+            )
+            .await;
+
+        assert!(matches!(result, Err(ServiceError::Conflict(_))));
     }
 }
