@@ -2,8 +2,15 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use opengp_domain::domain::error::RepositoryError;
 use opengp_domain::domain::audit::{AuditEntry, AuditRepository, AuditRepositoryError, AuditService};
+use opengp_domain::domain::user::{
+    AuthService, PasswordError, PasswordHasher, Permission, Role, SessionRepository, User,
+    UserRepository,
+};
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
+use opengp_infrastructure::infrastructure::database::repositories::InMemorySessionRepository;
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::{ApiConfig, ApiError};
@@ -12,6 +19,7 @@ use crate::{ApiConfig, ApiError};
 pub struct ApiServices {
     pub audit_service: Arc<AuditService>,
     pub encryption_service: Arc<EncryptionService>,
+    pub auth_service: Arc<AuthService>,
 }
 
 impl ApiServices {
@@ -23,13 +31,149 @@ impl ApiServices {
         let encryption_service = Arc::new(
             EncryptionService::new().map_err(|e| ApiError::EncryptionInit(e.to_string()))?,
         );
+
+        let password_hasher: Arc<dyn PasswordHasher> = Arc::new(DevPasswordHasher);
+        let user_repository: Arc<dyn UserRepository> =
+            Arc::new(InMemoryUserRepository::with_default_user(password_hasher.clone()));
+        let session_repository: Arc<dyn SessionRepository> = Arc::new(InMemorySessionRepository::new());
+        let auth_service = Arc::new(AuthService::new(
+            user_repository,
+            password_hasher,
+            session_repository,
+        ));
+
         let audit_repository: Arc<dyn AuditRepository> = Arc::new(NoopAuditRepository);
         let audit_service = Arc::new(AuditService::new(audit_repository));
 
         Ok(Self {
             audit_service,
             encryption_service,
+            auth_service,
         })
+    }
+}
+
+struct InMemoryUserRepository {
+    users: RwLock<Vec<User>>,
+}
+
+struct DevPasswordHasher;
+
+impl PasswordHasher for DevPasswordHasher {
+    fn hash_password(&self, password: &str) -> Result<String, PasswordError> {
+        if password.is_empty() {
+            return Err(PasswordError::EmptyPassword);
+        }
+
+        Ok(password.to_string())
+    }
+
+    fn verify_password(&self, password_hash: &str, password: &str) -> Result<(), PasswordError> {
+        if password_hash == password {
+            Ok(())
+        } else {
+            Err(PasswordError::VerificationFailed)
+        }
+    }
+}
+
+impl InMemoryUserRepository {
+    fn with_default_user(password_hasher: Arc<dyn PasswordHasher>) -> Self {
+        let now = Utc::now();
+        let password_hash = password_hasher
+            .hash_password("correct-horse-battery-staple")
+            .expect("default auth user password hash should be generated");
+
+        Self {
+            users: RwLock::new(vec![User {
+                id: Uuid::new_v4(),
+                username: "dr_smith".to_string(),
+                password_hash: Some(password_hash),
+                email: Some("dr_smith@example.com".to_string()),
+                first_name: "Sarah".to_string(),
+                last_name: "Smith".to_string(),
+                role: Role::Doctor,
+                additional_permissions: vec![Permission::PatientRead],
+                is_active: true,
+                is_locked: false,
+                failed_login_attempts: 0,
+                last_login: None,
+                password_changed_at: now,
+                created_at: now,
+                updated_at: now,
+            }]),
+        }
+    }
+}
+
+#[async_trait]
+impl UserRepository for InMemoryUserRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, RepositoryError> {
+        Ok(self
+            .users
+            .read()
+            .await
+            .iter()
+            .find(|u| u.id == id)
+            .cloned())
+    }
+
+    async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepositoryError> {
+        Ok(self
+            .users
+            .read()
+            .await
+            .iter()
+            .find(|u| u.username == username)
+            .cloned())
+    }
+
+    async fn find_all(&self) -> Result<Vec<User>, RepositoryError> {
+        Ok(self.users.read().await.clone())
+    }
+
+    async fn find_by_role(&self, role: Role) -> Result<Vec<User>, RepositoryError> {
+        Ok(self
+            .users
+            .read()
+            .await
+            .iter()
+            .filter(|u| u.role == role)
+            .cloned()
+            .collect())
+    }
+
+    async fn create(&self, user: User) -> Result<User, RepositoryError> {
+        let mut users = self.users.write().await;
+        if users.iter().any(|existing| existing.username == user.username) {
+            return Err(RepositoryError::ConstraintViolation(
+                "Username already exists".to_string(),
+            ));
+        }
+
+        users.push(user.clone());
+        Ok(user)
+    }
+
+    async fn update(&self, user: User) -> Result<User, RepositoryError> {
+        let mut users = self.users.write().await;
+        let Some(existing) = users.iter_mut().find(|u| u.id == user.id) else {
+            return Err(RepositoryError::NotFound);
+        };
+
+        *existing = user.clone();
+        Ok(user)
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
+        let mut users = self.users.write().await;
+        let Some(existing) = users.iter_mut().find(|u| u.id == id) else {
+            return Err(RepositoryError::NotFound);
+        };
+
+        existing.is_active = false;
+        existing.updated_at = Utc::now();
+        Ok(())
     }
 }
 

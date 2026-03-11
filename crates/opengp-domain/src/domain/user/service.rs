@@ -164,6 +164,34 @@ impl AuthService {
         }
     }
 
+    pub async fn refresh_session(&self, session_token: &str) -> Result<Session, AuthError> {
+        let now = Utc::now();
+        self.session_repository.cleanup_expired(now).await?;
+
+        let existing = self
+            .session_repository
+            .find_by_token(session_token)
+            .await?
+            .ok_or(AuthError::SessionExpired)?;
+
+        if existing.is_expired_at(now) {
+            self.session_repository
+                .delete_by_token(session_token)
+                .await?;
+            return Err(AuthError::SessionExpired);
+        }
+
+        self.session_repository.delete_by_token(session_token).await?;
+
+        let refreshed = Session::new(existing.user_id, existing.token, self.session_duration);
+        self.session_repository.create(refreshed.clone()).await?;
+        Ok(refreshed)
+    }
+
+    pub fn session_ttl_seconds(&self) -> i64 {
+        self.session_duration.num_seconds()
+    }
+
     pub async fn cleanup_expired_sessions(&self) -> Result<u64, AuthError> {
         match self.session_repository.cleanup_expired(Utc::now()).await {
             Ok(removed) => Ok(removed),
