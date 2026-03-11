@@ -245,8 +245,8 @@ impl TimePickerPopup {
             return;
         }
 
-        let popup_width = 32.min(area.width.saturating_sub(4));
-        let popup_height = 10.min(area.height.saturating_sub(2));
+        let popup_width = 44.min(area.width.saturating_sub(4));
+        let popup_height = 16.min(area.height.saturating_sub(2));
 
         if popup_width < 20 || popup_height < 8 {
             return;
@@ -283,15 +283,7 @@ impl TimePickerPopup {
             return;
         }
 
-        let title_text = if let (Some(pid), Some(date)) = (self.practitioner_id, self.date) {
-            format!(" {} | {}", pid, date.format("%d/%m/%Y"))
-        } else {
-            " Select Time ".to_string()
-        };
-
-        buf.set_string(inner_area.x, inner_area.y, title_text, Style::new().bold());
-
-        let cell_width = 7u16;
+        let cell_width = 10u16;
         let start_x = inner_area.x + 1;
         let start_y = inner_area.y + 1;
         let max_row = self.grid_max_row();
@@ -324,7 +316,7 @@ impl TimePickerPopup {
                     };
 
                     let x = start_x + (col as u16 * cell_width);
-                    let y = start_y + row as u16;
+                    let y = start_y + (row as u16 * 2);
 
                     if x < inner_area.x + inner_area.width && y < inner_area.y + inner_area.height {
                         buf.set_string(x, y, display, style);
