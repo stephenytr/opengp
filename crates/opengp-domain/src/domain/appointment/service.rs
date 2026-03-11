@@ -211,6 +211,49 @@ impl AppointmentService {
             .await?
             .ok_or_else(|| ServiceError::NotFound(id))?;
 
+        let original_practitioner_id = appointment.practitioner_id;
+        let original_start_time = appointment.start_time;
+        let original_end_time = appointment.end_time;
+
+        let mut effective_practitioner_id = original_practitioner_id;
+        let mut effective_start_time = original_start_time;
+        let mut effective_end_time = original_end_time;
+
+        if let Some(patient_id) = data.patient_id {
+            appointment.patient_id = patient_id;
+        }
+
+        if let Some(practitioner_id) = data.practitioner_id {
+            effective_practitioner_id = practitioner_id;
+            appointment.practitioner_id = practitioner_id;
+        }
+
+        if let Some(start_time) = data.start_time {
+            let duration = effective_end_time - effective_start_time;
+            effective_start_time = start_time;
+            effective_end_time = start_time + duration;
+            appointment.start_time = effective_start_time;
+            appointment.end_time = effective_end_time;
+        }
+
+        if let Some(duration) = data.duration {
+            effective_end_time = effective_start_time + duration;
+            appointment.end_time = effective_end_time;
+        }
+
+        if effective_practitioner_id != original_practitioner_id
+            || effective_start_time != original_start_time
+            || effective_end_time != original_end_time
+        {
+            self.check_no_overlap(
+                effective_practitioner_id,
+                effective_start_time,
+                effective_end_time,
+                Some(id),
+            )
+            .await?;
+        }
+
         // Apply updates (only provided fields)
         if let Some(status) = data.status {
             info!("Updating status to: {:?}", status);
@@ -1059,6 +1102,10 @@ mod tests {
             .update_appointment(
                 appointment.id,
                 UpdateAppointmentData {
+                    patient_id: None,
+                    practitioner_id: None,
+                    start_time: None,
+                    duration: None,
                     status: Some(AppointmentStatus::Confirmed),
                     appointment_type: None,
                     reason: None,

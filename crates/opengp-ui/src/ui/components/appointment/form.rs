@@ -556,6 +556,10 @@ impl AppointmentForm {
         };
 
         let data = UpdateAppointmentData {
+            patient_id: None,
+            practitioner_id: None,
+            start_time: None,
+            duration: None,
             status: None,
             appointment_type,
             reason,

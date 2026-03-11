@@ -39,6 +39,14 @@ pub struct NewAppointmentData {
 /// Audit fields (created_at, updated_at, created_by, updated_by) are managed by the system.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateAppointmentData {
+    pub patient_id: Option<Uuid>,
+
+    pub practitioner_id: Option<Uuid>,
+
+    pub start_time: Option<DateTime<Utc>>,
+
+    pub duration: Option<Duration>,
+
     /// Update appointment status
     pub status: Option<AppointmentStatus>,
 

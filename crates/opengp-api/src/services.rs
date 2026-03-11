@@ -2,6 +2,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use opengp_domain::domain::appointment::{
+    AppointmentCalendarQuery, AppointmentSearchCriteria, AppointmentService, CalendarAppointment,
+};
 use opengp_domain::domain::error::RepositoryError;
 use opengp_domain::domain::audit::{AuditEntry, AuditRepository, AuditRepositoryError, AuditService};
 use opengp_domain::domain::patient::{PatientService, PatientRepository};
@@ -10,7 +13,9 @@ use opengp_domain::domain::user::{
     UserRepository,
 };
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
-use opengp_infrastructure::infrastructure::database::mocks::MockPatientRepository;
+use opengp_infrastructure::infrastructure::database::mocks::{
+    MockAppointmentRepository, MockPatientRepository,
+};
 use opengp_infrastructure::infrastructure::database::repositories::InMemorySessionRepository;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -23,6 +28,7 @@ pub struct ApiServices {
     pub encryption_service: Arc<EncryptionService>,
     pub auth_service: Arc<AuthService>,
     pub patient_service: Arc<PatientService>,
+    pub appointment_service: Arc<AppointmentService>,
 }
 
 impl ApiServices {
@@ -52,12 +58,32 @@ impl ApiServices {
         let audit_repository: Arc<dyn AuditRepository> = Arc::new(NoopAuditRepository);
         let audit_service = Arc::new(AuditService::new(audit_repository));
 
+        let appointment_repository = Arc::new(MockAppointmentRepository::new());
+        let appointment_service = Arc::new(AppointmentService::new(
+            appointment_repository,
+            audit_service.clone(),
+            Arc::new(NoopAppointmentCalendarQuery),
+        ));
+
         Ok(Self {
             audit_service,
             encryption_service,
             auth_service,
             patient_service,
+            appointment_service,
         })
+    }
+}
+
+struct NoopAppointmentCalendarQuery;
+
+#[async_trait]
+impl AppointmentCalendarQuery for NoopAppointmentCalendarQuery {
+    async fn find_calendar_appointments(
+        &self,
+        _criteria: &AppointmentSearchCriteria,
+    ) -> Result<Vec<CalendarAppointment>, RepositoryError> {
+        Ok(vec![])
     }
 }
 

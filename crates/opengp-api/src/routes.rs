@@ -9,12 +9,17 @@ use axum::{
 use http::header::ORIGIN;
 use opengp_domain::domain::api::{
     ApiErrorResponse, AuthenticatedUserResponse, LoginRequest, LoginResponse, PaginatedResponse,
-    PatientRequest, PatientResponse,
+    AppointmentRequest, AppointmentResponse, PatientRequest, PatientResponse,
+};
+use opengp_domain::domain::appointment::{
+    AppointmentSearchCriteria, AppointmentStatus, AppointmentType,
+    NewAppointmentData, ServiceError as AppointmentServiceError, UpdateAppointmentData,
 };
 use opengp_domain::domain::patient::{
     Address, Gender, NewPatientData, ServiceError as PatientServiceError, UpdatePatientData,
 };
 use opengp_domain::domain::user::{self, AuthError, Role};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tower::ServiceBuilder;
 use tower_http::compression::CompressionLayer;
@@ -45,11 +50,25 @@ pub fn router(state: ApiState) -> Router {
             session_validation_middleware,
         ));
 
+    let appointment_routes = Router::new()
+        .route("/", get(list_appointments).post(create_appointment))
+        .route(
+            "/{id}",
+            get(get_appointment)
+                .put(update_appointment)
+                .delete(cancel_appointment),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            session_validation_middleware,
+        ));
+
     Router::new()
         .route("/health", get(health))
         .route("/metrics", get(metrics))
         .nest("/api/v1/auth", auth_routes)
         .nest("/api/v1/patients", patient_routes)
+        .nest("/api/v1/appointments", appointment_routes)
         .with_state(state)
         .layer(
             ServiceBuilder::new()
@@ -313,6 +332,139 @@ async fn delete_patient(
     Ok(StatusCode::NO_CONTENT)
 }
 
+async fn list_appointments(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Query(query): Query<AppointmentListQuery>,
+) -> Result<
+    (StatusCode, Json<PaginatedResponse<AppointmentResponse>>),
+    (StatusCode, Json<ApiErrorResponse>),
+> {
+    authorize_read(&context)?;
+
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(25).clamp(1, 100);
+    let criteria = AppointmentSearchCriteria {
+        patient_id: None,
+        practitioner_id: query.practitioner_id,
+        date_from: query.date_from,
+        date_to: query.date_to,
+        status: None,
+        appointment_type: None,
+        is_urgent: None,
+        confirmed: None,
+    };
+
+    let appointments = state
+        .services
+        .appointment_service
+        .search_appointments(&criteria)
+        .await
+        .map_err(appointment_service_error_to_response)?;
+
+    let total = appointments.len() as u64;
+    let offset = ((page - 1) * limit) as usize;
+    let data = appointments
+        .into_iter()
+        .skip(offset)
+        .take(limit as usize)
+        .map(appointment_to_response)
+        .collect();
+
+    Ok((
+        StatusCode::OK,
+        Json(PaginatedResponse {
+            data,
+            total,
+            page,
+            limit,
+        }),
+    ))
+}
+
+async fn get_appointment(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(id): Path<Uuid>,
+) -> Result<(StatusCode, Json<AppointmentResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_read(&context)?;
+
+    let appointment = state
+        .services
+        .appointment_service
+        .find_appointment(id)
+        .await
+        .map_err(appointment_service_error_to_response)?
+        .ok_or_else(|| not_found_response("appointment_not_found", "Appointment not found"))?;
+
+    Ok((StatusCode::OK, Json(appointment_to_response(appointment))))
+}
+
+async fn create_appointment(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Json(payload): Json<AppointmentRequest>,
+) -> Result<(StatusCode, Json<AppointmentResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_write(&context)?;
+    validate_appointment_booking_time(payload.start_time)?;
+
+    let appointment = state
+        .services
+        .appointment_service
+        .create_appointment(appointment_request_to_new_data(payload)?, context.user_id)
+        .await
+        .map_err(appointment_service_error_to_response)?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(appointment_to_response(appointment)),
+    ))
+}
+
+async fn update_appointment(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<AppointmentRequest>,
+) -> Result<(StatusCode, Json<AppointmentResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_write(&context)?;
+    validate_appointment_booking_time(payload.start_time)?;
+
+    let appointment = state
+        .services
+        .appointment_service
+        .update_appointment(
+            id,
+            appointment_request_to_update_data(payload)?,
+            context.user_id,
+        )
+        .await
+        .map_err(appointment_service_error_to_response)?;
+
+    Ok((StatusCode::OK, Json(appointment_to_response(appointment))))
+}
+
+async fn cancel_appointment(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_write(&context)?;
+
+    state
+        .services
+        .appointment_service
+        .cancel_appointment(
+            id,
+            "Cancelled via API".to_string(),
+            context.user_id,
+        )
+        .await
+        .map_err(appointment_service_error_to_response)?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn session_validation_middleware(
     State(state): State<ApiState>,
     mut request: Request,
@@ -451,12 +603,29 @@ fn authorize_write(context: &AuthContext) -> Result<(), (StatusCode, Json<ApiErr
     }
 }
 
+fn authorize_practitioner_write(
+    context: &AuthContext,
+) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
+    if is_practitioner(context.role) {
+        Ok(())
+    } else {
+        Err(forbidden_response(
+            "insufficient_permissions",
+            "Only practitioners can modify appointments",
+        ))
+    }
+}
+
 fn is_reader(role: Role) -> bool {
     matches!(role, Role::Receptionist | Role::Doctor | Role::Nurse | Role::Admin)
 }
 
 fn is_writer(role: Role) -> bool {
     matches!(role, Role::Doctor | Role::Nurse | Role::Admin)
+}
+
+fn is_practitioner(role: Role) -> bool {
+    matches!(role, Role::Doctor | Role::Nurse)
 }
 
 fn patient_service_error_to_response(
@@ -478,6 +647,39 @@ fn patient_service_error_to_response(
             "Unable to process patient request",
         ),
     }
+}
+
+fn appointment_service_error_to_response(
+    error: AppointmentServiceError,
+) -> (StatusCode, Json<ApiErrorResponse>) {
+    match error {
+        AppointmentServiceError::NotFound(_) => {
+            not_found_response("appointment_not_found", "Appointment not found")
+        }
+        AppointmentServiceError::Conflict(_) => {
+            conflict_response("appointment_conflict", "Overlapping appointment")
+        }
+        AppointmentServiceError::ValidationError(_) | AppointmentServiceError::InvalidTransition(_) => {
+            bad_request_response("validation_error", "Invalid appointment payload")
+        }
+        AppointmentServiceError::Repository(_) | AppointmentServiceError::Audit(_) => {
+            internal_server_error_response(
+                "internal_error",
+                "Unable to process appointment request",
+            )
+        }
+    }
+}
+
+fn conflict_response(code: &str, message: &str) -> (StatusCode, Json<ApiErrorResponse>) {
+    (
+        StatusCode::CONFLICT,
+        Json(ApiErrorResponse {
+            status: StatusCode::CONFLICT.as_u16(),
+            message: message.to_string(),
+            code: code.to_string(),
+        }),
+    )
 }
 
 fn patient_request_to_new_data(
@@ -536,6 +738,66 @@ fn patient_request_to_update_data(
     })
 }
 
+fn appointment_request_to_new_data(
+    payload: AppointmentRequest,
+) -> Result<NewAppointmentData, (StatusCode, Json<ApiErrorResponse>)> {
+    if payload.duration_minutes <= 0 {
+        return Err(bad_request_response(
+            "validation_error",
+            "Duration must be greater than zero",
+        ));
+    }
+
+    Ok(NewAppointmentData {
+        patient_id: payload.patient_id,
+        practitioner_id: payload.practitioner_id,
+        start_time: payload.start_time,
+        duration: Duration::minutes(payload.duration_minutes),
+        appointment_type: parse_appointment_type(&payload.appointment_type)?,
+        reason: payload.reason,
+        is_urgent: payload.is_urgent,
+    })
+}
+
+fn appointment_request_to_update_data(
+    payload: AppointmentRequest,
+) -> Result<UpdateAppointmentData, (StatusCode, Json<ApiErrorResponse>)> {
+    if payload.duration_minutes <= 0 {
+        return Err(bad_request_response(
+            "validation_error",
+            "Duration must be greater than zero",
+        ));
+    }
+
+    Ok(UpdateAppointmentData {
+        patient_id: Some(payload.patient_id),
+        practitioner_id: Some(payload.practitioner_id),
+        start_time: Some(payload.start_time),
+        duration: Some(Duration::minutes(payload.duration_minutes)),
+        status: None,
+        appointment_type: Some(parse_appointment_type(&payload.appointment_type)?),
+        reason: payload.reason,
+        notes: None,
+        is_urgent: Some(payload.is_urgent),
+        confirmed: None,
+        reminder_sent: None,
+        cancellation_reason: None,
+    })
+}
+
+fn validate_appointment_booking_time(
+    start_time: DateTime<Utc>,
+) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
+    if start_time <= Utc::now() {
+        return Err(bad_request_response(
+            "validation_error",
+            "Appointment start time must be in the future",
+        ));
+    }
+
+    Ok(())
+}
+
 fn parse_gender(gender: &str) -> Result<Gender, (StatusCode, Json<ApiErrorResponse>)> {
     match gender.trim().to_ascii_lowercase().as_str() {
         "male" => Ok(Gender::Male),
@@ -549,6 +811,63 @@ fn parse_gender(gender: &str) -> Result<Gender, (StatusCode, Json<ApiErrorRespon
     }
 }
 
+fn parse_appointment_type(
+    appointment_type: &str,
+) -> Result<AppointmentType, (StatusCode, Json<ApiErrorResponse>)> {
+    match appointment_type.trim().to_ascii_lowercase().as_str() {
+        "standard" => Ok(AppointmentType::Standard),
+        "long" => Ok(AppointmentType::Long),
+        "brief" => Ok(AppointmentType::Brief),
+        "new_patient" | "new-patient" => Ok(AppointmentType::NewPatient),
+        "health_assessment" | "health-assessment" => Ok(AppointmentType::HealthAssessment),
+        "chronic_disease_review" | "chronic-disease-review" => {
+            Ok(AppointmentType::ChronicDiseaseReview)
+        }
+        "mental_health_plan" | "mental-health-plan" => Ok(AppointmentType::MentalHealthPlan),
+        "immunisation" => Ok(AppointmentType::Immunisation),
+        "procedure" => Ok(AppointmentType::Procedure),
+        "telephone" => Ok(AppointmentType::Telephone),
+        "telehealth" => Ok(AppointmentType::Telehealth),
+        "home_visit" | "home-visit" => Ok(AppointmentType::HomeVisit),
+        "emergency" => Ok(AppointmentType::Emergency),
+        _ => Err(bad_request_response(
+            "validation_error",
+            "Invalid appointment type",
+        )),
+    }
+}
+
+fn appointment_type_to_string(appointment_type: AppointmentType) -> &'static str {
+    match appointment_type {
+        AppointmentType::Standard => "standard",
+        AppointmentType::Long => "long",
+        AppointmentType::Brief => "brief",
+        AppointmentType::NewPatient => "new_patient",
+        AppointmentType::HealthAssessment => "health_assessment",
+        AppointmentType::ChronicDiseaseReview => "chronic_disease_review",
+        AppointmentType::MentalHealthPlan => "mental_health_plan",
+        AppointmentType::Immunisation => "immunisation",
+        AppointmentType::Procedure => "procedure",
+        AppointmentType::Telephone => "telephone",
+        AppointmentType::Telehealth => "telehealth",
+        AppointmentType::HomeVisit => "home_visit",
+        AppointmentType::Emergency => "emergency",
+    }
+}
+
+fn appointment_status_to_string(status: AppointmentStatus) -> &'static str {
+    match status {
+        AppointmentStatus::Scheduled => "scheduled",
+        AppointmentStatus::Confirmed => "confirmed",
+        AppointmentStatus::Arrived => "arrived",
+        AppointmentStatus::InProgress => "in_progress",
+        AppointmentStatus::Completed => "completed",
+        AppointmentStatus::NoShow => "no_show",
+        AppointmentStatus::Cancelled => "cancelled",
+        AppointmentStatus::Rescheduled => "rescheduled",
+    }
+}
+
 fn patient_to_response(patient: opengp_domain::domain::patient::Patient) -> PatientResponse {
     PatientResponse {
         id: patient.id,
@@ -559,6 +878,22 @@ fn patient_to_response(patient: opengp_domain::domain::patient::Patient) -> Pati
         phone_mobile: patient.phone_mobile,
         email: patient.email,
         is_active: patient.is_active,
+    }
+}
+
+fn appointment_to_response(
+    appointment: opengp_domain::domain::appointment::Appointment,
+) -> AppointmentResponse {
+    AppointmentResponse {
+        id: appointment.id,
+        patient_id: appointment.patient_id,
+        practitioner_id: appointment.practitioner_id,
+        start_time: appointment.start_time,
+        end_time: appointment.end_time,
+        status: appointment_status_to_string(appointment.status).to_string(),
+        appointment_type: appointment_type_to_string(appointment.appointment_type).to_string(),
+        is_urgent: appointment.is_urgent,
+        reason: appointment.reason,
     }
 }
 
@@ -637,6 +972,15 @@ struct AuthContext {
 struct PaginationQuery {
     page: Option<u32>,
     limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AppointmentListQuery {
+    page: Option<u32>,
+    limit: Option<u32>,
+    date_from: Option<DateTime<Utc>>,
+    date_to: Option<DateTime<Utc>>,
+    practitioner_id: Option<Uuid>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1198,6 +1542,221 @@ mod tests {
         assert_eq!(get_deleted_response.status(), StatusCode::NOT_FOUND);
     }
 
+    #[tokio::test]
+    async fn appointment_endpoints_require_authentication() {
+        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let app = router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/appointments?page=1&limit=25")
+                    .body(Body::empty())
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn receptionist_can_read_but_cannot_modify_appointments() {
+        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let app = router(state);
+        let token = login_token(&app, "recep_amy", "desk-passphrase").await;
+
+        let get_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/appointments?page=1&limit=25")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(get_response.status(), StatusCode::OK);
+
+        let payload = sample_appointment_payload(
+            Utc::now() + chrono::Duration::hours(2),
+            Uuid::new_v4(),
+        );
+
+        for method in ["POST", "PUT", "DELETE"] {
+            let uri = if method == "POST" {
+                "/api/v1/appointments".to_string()
+            } else {
+                format!("/api/v1/appointments/{}", Uuid::new_v4())
+            };
+
+            let mut builder = Request::builder()
+                .method(method)
+                .uri(uri)
+                .header(header::AUTHORIZATION, format!("Bearer {token}"));
+
+            if method != "DELETE" {
+                builder = builder.header(header::CONTENT_TYPE, "application/json")
+            }
+
+            let body = if method == "DELETE" {
+                Body::empty()
+            } else {
+                Body::from(payload.clone())
+            };
+
+            let response = app
+                .clone()
+                .oneshot(builder.body(body).expect("request should be valid"))
+                .await
+                .expect("request should succeed");
+
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        }
+    }
+
+    #[tokio::test]
+    async fn practitioner_can_crud_appointments_and_overlap_returns_conflict() {
+        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let app = router(state);
+        let token = login_token(&app, "dr_smith", "correct-horse-battery-staple").await;
+        let practitioner_id = Uuid::new_v4();
+
+        let start_one = Utc::now() + chrono::Duration::hours(2);
+        let create_one = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/appointments")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_appointment_payload(start_one, practitioner_id)))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(create_one.status(), StatusCode::CREATED);
+        let create_one_body = axum::body::to_bytes(create_one.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let appointment_one: AppointmentResponse =
+            serde_json::from_slice(&create_one_body).expect("valid appointment response");
+
+        let get_one = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/api/v1/appointments/{}", appointment_one.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(get_one.status(), StatusCode::OK);
+
+        let start_two = Utc::now() + chrono::Duration::hours(4);
+        let create_two = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/appointments")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_appointment_payload(start_two, practitioner_id)))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(create_two.status(), StatusCode::CREATED);
+
+        let overlap_create = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/appointments")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_appointment_payload(
+                        start_one + chrono::Duration::minutes(5),
+                        practitioner_id,
+                    )))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(overlap_create.status(), StatusCode::CONFLICT);
+
+        let overlap_update = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/appointments/{}", appointment_one.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_appointment_payload(
+                        start_two + chrono::Duration::minutes(5),
+                        practitioner_id,
+                    )))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(overlap_update.status(), StatusCode::CONFLICT);
+
+        let list_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!(
+                        "/api/v1/appointments?page=1&limit=10&date_from={}&date_to={}&practitioner_id={}",
+                        (Utc::now() + chrono::Duration::hours(1))
+                            .to_rfc3339()
+                            .replace("+00:00", "Z"),
+                        (Utc::now() + chrono::Duration::hours(5))
+                            .to_rfc3339()
+                            .replace("+00:00", "Z"),
+                        practitioner_id
+                    ))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(list_response.status(), StatusCode::OK);
+        let list_body = axum::body::to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let paginated: PaginatedResponse<AppointmentResponse> =
+            serde_json::from_slice(&list_body).expect("valid paginated appointment response");
+        assert_eq!(paginated.page, 1);
+        assert_eq!(paginated.limit, 10);
+        assert!(!paginated.data.is_empty());
+
+        let cancel_response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/appointments/{}", appointment_one.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(cancel_response.status(), StatusCode::NO_CONTENT);
+    }
+
     async fn login_token(app: &Router, username: &str, password: &str) -> String {
         let response = app
             .clone()
@@ -1224,6 +1783,15 @@ mod tests {
 
     fn sample_patient_payload() -> &'static str {
         r#"{"first_name":"John","last_name":"Citizen","date_of_birth":"1984-05-12","gender":"male","phone_mobile":"0400123456","email":"john.citizen@example.com","medicare_number":"29501012341"}"#
+    }
+
+    fn sample_appointment_payload(start_time: DateTime<Utc>, practitioner_id: Uuid) -> String {
+        format!(
+            "{{\"patient_id\":\"{}\",\"practitioner_id\":\"{}\",\"start_time\":\"{}\",\"duration_minutes\":15,\"appointment_type\":\"standard\",\"reason\":\"Follow-up\",\"is_urgent\":false}}",
+            Uuid::new_v4(),
+            practitioner_id,
+            start_time.to_rfc3339()
+        )
     }
 
     fn test_config() -> ApiConfig {
