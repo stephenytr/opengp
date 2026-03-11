@@ -9,11 +9,15 @@ use axum::{
 use http::header::ORIGIN;
 use opengp_domain::domain::api::{
     ApiErrorResponse, AuthenticatedUserResponse, LoginRequest, LoginResponse, PaginatedResponse,
-    AppointmentRequest, AppointmentResponse, PatientRequest, PatientResponse,
+    AppointmentRequest, AppointmentResponse, ConsultationRequest, ConsultationResponse,
+    PatientRequest, PatientResponse,
 };
 use opengp_domain::domain::appointment::{
     AppointmentSearchCriteria, AppointmentStatus, AppointmentType,
     NewAppointmentData, ServiceError as AppointmentServiceError, UpdateAppointmentData,
+};
+use opengp_domain::domain::clinical::{
+    NewConsultationData, ServiceError as ClinicalServiceError,
 };
 use opengp_domain::domain::patient::{
     Address, Gender, NewPatientData, ServiceError as PatientServiceError, UpdatePatientData,
@@ -63,12 +67,21 @@ pub fn router(state: ApiState) -> Router {
             session_validation_middleware,
         ));
 
+    let consultation_routes = Router::new()
+        .route("/", get(list_consultations).post(create_consultation))
+        .route("/{id}", get(get_consultation).put(update_consultation))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            session_validation_middleware,
+        ));
+
     Router::new()
         .route("/health", get(health))
         .route("/metrics", get(metrics))
         .nest("/api/v1/auth", auth_routes)
         .nest("/api/v1/patients", patient_routes)
         .nest("/api/v1/appointments", appointment_routes)
+        .nest("/api/v1/consultations", consultation_routes)
         .with_state(state)
         .layer(
             ServiceBuilder::new()
@@ -465,6 +478,105 @@ async fn cancel_appointment(
     Ok(StatusCode::NO_CONTENT)
 }
 
+async fn list_consultations(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Query(query): Query<ConsultationListQuery>,
+) -> Result<
+    (StatusCode, Json<PaginatedResponse<ConsultationResponse>>),
+    (StatusCode, Json<ApiErrorResponse>),
+> {
+    authorize_practitioner_access(&context)?;
+
+    let patient_id = query
+        .patient_id
+        .ok_or_else(|| bad_request_response("validation_error", "patient_id is required"))?;
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(25).clamp(1, 100);
+
+    let consultations = state
+        .services
+        .clinical_service
+        .list_patient_consultations(patient_id)
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    let total = consultations.len() as u64;
+    let offset = ((page - 1) * limit) as usize;
+    let data = consultations
+        .into_iter()
+        .skip(offset)
+        .take(limit as usize)
+        .map(consultation_to_response)
+        .collect();
+
+    Ok((
+        StatusCode::OK,
+        Json(PaginatedResponse {
+            data,
+            total,
+            page,
+            limit,
+        }),
+    ))
+}
+
+async fn get_consultation(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(id): Path<Uuid>,
+) -> Result<(StatusCode, Json<ConsultationResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_access(&context)?;
+
+    let consultation = state
+        .services
+        .clinical_service
+        .find_consultation(id)
+        .await
+        .map_err(clinical_service_error_to_response)?
+        .ok_or_else(|| not_found_response("consultation_not_found", "Consultation not found"))?;
+
+    Ok((StatusCode::OK, Json(consultation_to_response(consultation))))
+}
+
+async fn create_consultation(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Json(payload): Json<ConsultationRequest>,
+) -> Result<(StatusCode, Json<ConsultationResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_access(&context)?;
+
+    let consultation = state
+        .services
+        .clinical_service
+        .create_consultation(consultation_request_to_new_data(payload), context.user_id)
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(consultation_to_response(consultation)),
+    ))
+}
+
+async fn update_consultation(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<ConsultationRequest>,
+) -> Result<(StatusCode, Json<ConsultationResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_access(&context)?;
+
+    let consultation = state
+        .services
+        .clinical_service
+        .update_clinical_notes(id, payload.reason, payload.clinical_notes, context.user_id)
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    Ok((StatusCode::OK, Json(consultation_to_response(consultation))))
+}
+
 async fn session_validation_middleware(
     State(state): State<ApiState>,
     mut request: Request,
@@ -616,6 +728,19 @@ fn authorize_practitioner_write(
     }
 }
 
+fn authorize_practitioner_access(
+    context: &AuthContext,
+) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
+    if is_practitioner(context.role) {
+        Ok(())
+    } else {
+        Err(forbidden_response(
+            "insufficient_permissions",
+            "Only practitioners can access clinical notes",
+        ))
+    }
+}
+
 fn is_reader(role: Role) -> bool {
     matches!(role, Role::Receptionist | Role::Doctor | Role::Nurse | Role::Admin)
 }
@@ -668,6 +793,40 @@ fn appointment_service_error_to_response(
                 "Unable to process appointment request",
             )
         }
+    }
+}
+
+fn clinical_service_error_to_response(
+    error: ClinicalServiceError,
+) -> (StatusCode, Json<ApiErrorResponse>) {
+    match error {
+        ClinicalServiceError::ConsultationNotFound(_) => {
+            not_found_response("consultation_not_found", "Consultation not found")
+        }
+        ClinicalServiceError::PatientNotFound(_) => {
+            not_found_response("patient_not_found", "Patient not found")
+        }
+        ClinicalServiceError::Validation(_) => {
+            bad_request_response("validation_error", "Invalid consultation payload")
+        }
+        ClinicalServiceError::Conflict(_) => {
+            conflict_response("consultation_conflict", "Consultation was modified by another request")
+        }
+        ClinicalServiceError::AlreadySigned => {
+            bad_request_response("consultation_signed", "Consultation already signed")
+        }
+        ClinicalServiceError::Unauthorized => {
+            forbidden_response("insufficient_permissions", "Role cannot access consultations")
+        }
+        ClinicalServiceError::Repository(_)
+        | ClinicalServiceError::AllergyNotFound(_)
+        | ClinicalServiceError::MedicalHistoryNotFound(_)
+        | ClinicalServiceError::VitalSignsNotFound(_)
+        | ClinicalServiceError::FamilyHistoryNotFound(_)
+        | ClinicalServiceError::SocialHistoryNotFound(_) => internal_server_error_response(
+            "internal_error",
+            "Unable to process consultation request",
+        ),
     }
 }
 
@@ -785,6 +944,16 @@ fn appointment_request_to_update_data(
     })
 }
 
+fn consultation_request_to_new_data(payload: ConsultationRequest) -> NewConsultationData {
+    NewConsultationData {
+        patient_id: payload.patient_id,
+        practitioner_id: payload.practitioner_id,
+        appointment_id: payload.appointment_id,
+        reason: payload.reason,
+        clinical_notes: payload.clinical_notes,
+    }
+}
+
 fn validate_appointment_booking_time(
     start_time: DateTime<Utc>,
 ) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
@@ -897,6 +1066,21 @@ fn appointment_to_response(
     }
 }
 
+fn consultation_to_response(
+    consultation: opengp_domain::domain::clinical::Consultation,
+) -> ConsultationResponse {
+    ConsultationResponse {
+        id: consultation.id,
+        patient_id: consultation.patient_id,
+        practitioner_id: consultation.practitioner_id,
+        appointment_id: consultation.appointment_id,
+        consultation_date: consultation.consultation_date,
+        reason: consultation.reason,
+        clinical_notes: consultation.clinical_notes,
+        is_signed: consultation.is_signed,
+    }
+}
+
 fn session_cookie(token: &str, ttl_seconds: i64) -> String {
     format!(
         "session_token={}; HttpOnly; Path=/; Max-Age={}; SameSite=Lax",
@@ -981,6 +1165,13 @@ struct AppointmentListQuery {
     date_from: Option<DateTime<Utc>>,
     date_to: Option<DateTime<Utc>>,
     practitioner_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConsultationListQuery {
+    patient_id: Option<Uuid>,
+    page: Option<u32>,
+    limit: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1757,6 +1948,214 @@ mod tests {
         assert_eq!(cancel_response.status(), StatusCode::NO_CONTENT);
     }
 
+    #[tokio::test]
+    async fn consultation_endpoints_require_authentication() {
+        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let app = router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!(
+                        "/api/v1/consultations?patient_id={}&page=1&limit=25",
+                        Uuid::new_v4()
+                    ))
+                    .body(Body::empty())
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn receptionist_cannot_access_consultations() {
+        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let app = router(state);
+        let token = login_token(&app, "recep_amy", "desk-passphrase").await;
+
+        let patient_id = Uuid::new_v4();
+
+        let get_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!(
+                        "/api/v1/consultations?patient_id={patient_id}&page=1&limit=25"
+                    ))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(get_response.status(), StatusCode::FORBIDDEN);
+
+        for method in ["POST", "PUT"] {
+            let uri = if method == "POST" {
+                "/api/v1/consultations".to_string()
+            } else {
+                format!("/api/v1/consultations/{}", Uuid::new_v4())
+            };
+
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(uri)
+                        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(sample_consultation_payload(patient_id, Uuid::new_v4())))
+                        .expect("request should be valid"),
+                )
+                .await
+                .expect("request should succeed");
+
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        }
+    }
+
+    #[tokio::test]
+    async fn practitioner_can_crud_consultations_with_pagination() {
+        let state = ApiState::new(test_config()).await.expect("state should initialize");
+        let app = router(state);
+        let token = login_token(&app, "dr_smith", "correct-horse-battery-staple").await;
+
+        let create_patient = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/patients")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_patient_payload()))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(create_patient.status(), StatusCode::CREATED);
+        let patient_body = axum::body::to_bytes(create_patient.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let patient: PatientResponse =
+            serde_json::from_slice(&patient_body).expect("valid patient response");
+
+        let practitioner_id = Uuid::new_v4();
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/consultations")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_consultation_payload(
+                        patient.id,
+                        practitioner_id,
+                    )))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(create_response.status(), StatusCode::CREATED);
+        let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let created: ConsultationResponse =
+            serde_json::from_slice(&create_body).expect("valid consultation response");
+
+        let get_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/api/v1/consultations/{}", created.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(get_response.status(), StatusCode::OK);
+
+        let update_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/consultations/{}", created.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"patient_id":"00000000-0000-0000-0000-000000000001","practitioner_id":"00000000-0000-0000-0000-000000000002","appointment_id":null,"reason":"Updated reason","clinical_notes":"Updated SOAP notes"}"#,
+                    ))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(update_response.status(), StatusCode::OK);
+        let update_body = axum::body::to_bytes(update_response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let updated: ConsultationResponse =
+            serde_json::from_slice(&update_body).expect("valid consultation response");
+        assert_eq!(updated.reason.as_deref(), Some("Updated reason"));
+        assert_eq!(updated.clinical_notes.as_deref(), Some("Updated SOAP notes"));
+
+        for idx in 0..30 {
+            let payload = format!(
+                "{{\"patient_id\":\"{}\",\"practitioner_id\":\"{}\",\"appointment_id\":null,\"reason\":\"Review {idx}\",\"clinical_notes\":\"SOAP note {idx}\"}}",
+                patient.id, practitioner_id
+            );
+
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/consultations")
+                        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(payload))
+                        .expect("request should be valid"),
+                )
+                .await
+                .expect("request should succeed");
+
+            assert_eq!(response.status(), StatusCode::CREATED);
+        }
+
+        let list_response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!(
+                        "/api/v1/consultations?patient_id={}&page=1&limit=25",
+                        patient.id
+                    ))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(list_response.status(), StatusCode::OK);
+        let list_body = axum::body::to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let paginated: PaginatedResponse<ConsultationResponse> =
+            serde_json::from_slice(&list_body).expect("valid paginated consultation response");
+        assert_eq!(paginated.page, 1);
+        assert_eq!(paginated.limit, 25);
+        assert_eq!(paginated.data.len(), 25);
+        assert!(paginated.total >= 31);
+    }
+
     async fn login_token(app: &Router, username: &str, password: &str) -> String {
         let response = app
             .clone()
@@ -1791,6 +2190,13 @@ mod tests {
             Uuid::new_v4(),
             practitioner_id,
             start_time.to_rfc3339()
+        )
+    }
+
+    fn sample_consultation_payload(patient_id: Uuid, practitioner_id: Uuid) -> String {
+        format!(
+            "{{\"patient_id\":\"{}\",\"practitioner_id\":\"{}\",\"appointment_id\":null,\"reason\":\"Hypertension review\",\"clinical_notes\":\"S: mild headache\\nO: BP 132/82\\nA: improving\\nP: continue current treatment\"}}",
+            patient_id, practitioner_id
         )
     }
 

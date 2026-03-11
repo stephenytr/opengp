@@ -29,6 +29,10 @@ use opengp_domain::domain::appointment::{
 
 use opengp_domain::domain::audit::{AuditEntry, AuditRepository, AuditRepositoryError};
 
+use opengp_domain::domain::clinical::{
+    Consultation, ConsultationRepository, RepositoryError as ClinicalRepositoryError,
+};
+
 use opengp_domain::domain::patient::{
     Patient, PatientRepository, RepositoryError as PatientRepositoryError,
 };
@@ -165,6 +169,103 @@ impl PatientRepository for MockPatientRepository {
 #[derive(Clone)]
 pub struct MockAppointmentRepository {
     storage: Arc<Mutex<Vec<Appointment>>>,
+}
+
+#[derive(Clone)]
+pub struct MockConsultationRepository {
+    storage: Arc<Mutex<Vec<Consultation>>>,
+}
+
+impl MockConsultationRepository {
+    pub fn new() -> Self {
+        Self {
+            storage: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
+impl Default for MockConsultationRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl ConsultationRepository for MockConsultationRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<Consultation>, ClinicalRepositoryError> {
+        let storage = self.storage.lock().await;
+        Ok(storage.iter().find(|c| c.id == id).cloned())
+    }
+
+    async fn find_by_patient(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<Vec<Consultation>, ClinicalRepositoryError> {
+        let storage = self.storage.lock().await;
+        let mut consultations: Vec<Consultation> = storage
+            .iter()
+            .filter(|c| c.patient_id == patient_id)
+            .cloned()
+            .collect();
+        consultations.sort_by(|a, b| b.consultation_date.cmp(&a.consultation_date));
+        Ok(consultations)
+    }
+
+    async fn find_by_date_range(
+        &self,
+        patient_id: Uuid,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<Vec<Consultation>, ClinicalRepositoryError> {
+        let storage = self.storage.lock().await;
+        let mut consultations: Vec<Consultation> = storage
+            .iter()
+            .filter(|c| {
+                c.patient_id == patient_id
+                    && c.consultation_date >= start
+                    && c.consultation_date <= end
+            })
+            .cloned()
+            .collect();
+        consultations.sort_by(|a, b| b.consultation_date.cmp(&a.consultation_date));
+        Ok(consultations)
+    }
+
+    async fn create(
+        &self,
+        consultation: Consultation,
+    ) -> Result<Consultation, ClinicalRepositoryError> {
+        let mut storage = self.storage.lock().await;
+        storage.push(consultation.clone());
+        Ok(consultation)
+    }
+
+    async fn update(
+        &self,
+        consultation: Consultation,
+    ) -> Result<Consultation, ClinicalRepositoryError> {
+        let mut storage = self.storage.lock().await;
+        if let Some(pos) = storage.iter().position(|c| c.id == consultation.id) {
+            storage[pos] = consultation.clone();
+            Ok(consultation)
+        } else {
+            Err(ClinicalRepositoryError::Base(
+                opengp_domain::domain::error::RepositoryError::NotFound,
+            ))
+        }
+    }
+
+    async fn sign(&self, id: Uuid, user_id: Uuid) -> Result<(), ClinicalRepositoryError> {
+        let mut storage = self.storage.lock().await;
+        if let Some(consultation) = storage.iter_mut().find(|c| c.id == id) {
+            consultation.sign(user_id);
+            Ok(())
+        } else {
+            Err(ClinicalRepositoryError::Base(
+                opengp_domain::domain::error::RepositoryError::NotFound,
+            ))
+        }
+    }
 }
 
 impl MockAppointmentRepository {

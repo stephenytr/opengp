@@ -5,6 +5,12 @@ use chrono::{DateTime, Utc};
 use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentSearchCriteria, AppointmentService, CalendarAppointment,
 };
+use opengp_domain::domain::clinical::{
+    Allergy, AllergyRepository, ClinicalRepositories, ClinicalService,
+    ConsultationRepository, FamilyHistory, FamilyHistoryRepository, MedicalHistory,
+    MedicalHistoryRepository, RepositoryError as ClinicalRepositoryError, SocialHistory,
+    SocialHistoryRepository, VitalSigns, VitalSignsRepository,
+};
 use opengp_domain::domain::error::RepositoryError;
 use opengp_domain::domain::audit::{AuditEntry, AuditRepository, AuditRepositoryError, AuditService};
 use opengp_domain::domain::patient::{PatientService, PatientRepository};
@@ -14,7 +20,7 @@ use opengp_domain::domain::user::{
 };
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::mocks::{
-    MockAppointmentRepository, MockPatientRepository,
+    MockAppointmentRepository, MockConsultationRepository, MockPatientRepository,
 };
 use opengp_infrastructure::infrastructure::database::repositories::InMemorySessionRepository;
 use tokio::sync::RwLock;
@@ -29,6 +35,7 @@ pub struct ApiServices {
     pub auth_service: Arc<AuthService>,
     pub patient_service: Arc<PatientService>,
     pub appointment_service: Arc<AppointmentService>,
+    pub clinical_service: Arc<ClinicalService>,
 }
 
 impl ApiServices {
@@ -65,12 +72,29 @@ impl ApiServices {
             Arc::new(NoopAppointmentCalendarQuery),
         ));
 
+        let consultation_repository: Arc<dyn ConsultationRepository> =
+            Arc::new(MockConsultationRepository::new());
+        let clinical_repositories = ClinicalRepositories {
+            consultation: consultation_repository,
+            allergy: Arc::new(NoopAllergyRepository),
+            medical_history: Arc::new(NoopMedicalHistoryRepository),
+            vital_signs: Arc::new(NoopVitalSignsRepository),
+            social_history: Arc::new(NoopSocialHistoryRepository),
+            family_history: Arc::new(NoopFamilyHistoryRepository),
+        };
+        let clinical_service = Arc::new(ClinicalService::new(
+            clinical_repositories,
+            patient_service.clone(),
+            audit_service.clone(),
+        ));
+
         Ok(Self {
             audit_service,
             encryption_service,
             auth_service,
             patient_service,
             appointment_service,
+            clinical_service,
         })
     }
 }
@@ -270,5 +294,174 @@ impl AuditRepository for NoopAuditRepository {
         _end_time: DateTime<Utc>,
     ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
         Ok(vec![])
+    }
+}
+
+struct NoopAllergyRepository;
+
+#[async_trait]
+impl AllergyRepository for NoopAllergyRepository {
+    async fn find_by_id(&self, _id: Uuid) -> Result<Option<Allergy>, ClinicalRepositoryError> {
+        Ok(None)
+    }
+
+    async fn find_by_patient(
+        &self,
+        _patient_id: Uuid,
+    ) -> Result<Vec<Allergy>, ClinicalRepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn find_active_by_patient(
+        &self,
+        _patient_id: Uuid,
+    ) -> Result<Vec<Allergy>, ClinicalRepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn create(&self, allergy: Allergy) -> Result<Allergy, ClinicalRepositoryError> {
+        Ok(allergy)
+    }
+
+    async fn update(&self, allergy: Allergy) -> Result<Allergy, ClinicalRepositoryError> {
+        Ok(allergy)
+    }
+
+    async fn deactivate(&self, _id: Uuid) -> Result<(), ClinicalRepositoryError> {
+        Ok(())
+    }
+}
+
+struct NoopMedicalHistoryRepository;
+
+#[async_trait]
+impl MedicalHistoryRepository for NoopMedicalHistoryRepository {
+    async fn find_by_id(
+        &self,
+        _id: Uuid,
+    ) -> Result<Option<MedicalHistory>, ClinicalRepositoryError> {
+        Ok(None)
+    }
+
+    async fn find_by_patient(
+        &self,
+        _patient_id: Uuid,
+    ) -> Result<Vec<MedicalHistory>, ClinicalRepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn find_active_by_patient(
+        &self,
+        _patient_id: Uuid,
+    ) -> Result<Vec<MedicalHistory>, ClinicalRepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn create(
+        &self,
+        history: MedicalHistory,
+    ) -> Result<MedicalHistory, ClinicalRepositoryError> {
+        Ok(history)
+    }
+
+    async fn update(
+        &self,
+        history: MedicalHistory,
+    ) -> Result<MedicalHistory, ClinicalRepositoryError> {
+        Ok(history)
+    }
+}
+
+struct NoopVitalSignsRepository;
+
+#[async_trait]
+impl VitalSignsRepository for NoopVitalSignsRepository {
+    async fn find_by_id(&self, _id: Uuid) -> Result<Option<VitalSigns>, ClinicalRepositoryError> {
+        Ok(None)
+    }
+
+    async fn find_by_patient(
+        &self,
+        _patient_id: Uuid,
+        _limit: usize,
+    ) -> Result<Vec<VitalSigns>, ClinicalRepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn find_latest_by_patient(
+        &self,
+        _patient_id: Uuid,
+    ) -> Result<Option<VitalSigns>, ClinicalRepositoryError> {
+        Ok(None)
+    }
+
+    async fn create(
+        &self,
+        vitals: VitalSigns,
+    ) -> Result<VitalSigns, ClinicalRepositoryError> {
+        Ok(vitals)
+    }
+}
+
+struct NoopSocialHistoryRepository;
+
+#[async_trait]
+impl SocialHistoryRepository for NoopSocialHistoryRepository {
+    async fn find_by_patient(
+        &self,
+        _patient_id: Uuid,
+    ) -> Result<Option<SocialHistory>, ClinicalRepositoryError> {
+        Ok(None)
+    }
+
+    async fn create(
+        &self,
+        history: SocialHistory,
+    ) -> Result<SocialHistory, ClinicalRepositoryError> {
+        Ok(history)
+    }
+
+    async fn update(
+        &self,
+        history: SocialHistory,
+    ) -> Result<SocialHistory, ClinicalRepositoryError> {
+        Ok(history)
+    }
+}
+
+struct NoopFamilyHistoryRepository;
+
+#[async_trait]
+impl FamilyHistoryRepository for NoopFamilyHistoryRepository {
+    async fn find_by_id(
+        &self,
+        _id: Uuid,
+    ) -> Result<Option<FamilyHistory>, ClinicalRepositoryError> {
+        Ok(None)
+    }
+
+    async fn find_by_patient(
+        &self,
+        _patient_id: Uuid,
+    ) -> Result<Vec<FamilyHistory>, ClinicalRepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn create(
+        &self,
+        history: FamilyHistory,
+    ) -> Result<FamilyHistory, ClinicalRepositoryError> {
+        Ok(history)
+    }
+
+    async fn update(
+        &self,
+        history: FamilyHistory,
+    ) -> Result<FamilyHistory, ClinicalRepositoryError> {
+        Ok(history)
+    }
+
+    async fn delete(&self, _id: Uuid) -> Result<(), ClinicalRepositoryError> {
+        Ok(())
     }
 }
