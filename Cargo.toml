@@ -5,6 +5,7 @@ members = [
     "crates/opengp-infrastructure",
     "crates/opengp-config",
     "crates/opengp-ui",
+    "crates/opengp-api",
 ]
 
 [package]
@@ -21,6 +22,7 @@ opengp-domain = { path = "crates/opengp-domain" }
 opengp-infrastructure = { path = "crates/opengp-infrastructure" }
 opengp-config = { path = "crates/opengp-config" }
 opengp-ui = { path = "crates/opengp-ui" }
+opengp-api = { path = "crates/opengp-api" }
 crossterm.workspace = true
 color-eyre.workspace = true
 tokio.workspace = true

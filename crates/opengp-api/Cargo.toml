@@ -1,0 +1,32 @@
+[package]
+name = "opengp-api"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+axum = "0.8"
+tokio.workspace = true
+sqlx = { workspace = true, features = ["postgres"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+color-eyre.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+async-trait.workspace = true
+dotenvy.workspace = true
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace", "cors", "compression-full"] }
+http = "1"
+
+[dependencies.opengp-domain]
+path = "../opengp-domain"
+
+[dependencies.opengp-infrastructure]
+path = "../opengp-infrastructure"
