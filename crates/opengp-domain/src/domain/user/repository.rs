@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use super::error::RepositoryError;
-use super::model::{Practitioner, Role, User};
+use super::model::{Practitioner, Role, User, WorkingHours};
 
 /// Repository trait for practitioner persistence
 #[async_trait]
@@ -104,6 +104,60 @@ pub trait UserRepository: Send + Sync {
     /// # Returns
     /// * `Ok(())` - User successfully deactivated
     /// * `Err(RepositoryError::NotFound)` - User not found
+    /// * `Err(RepositoryError)` - Database error
+    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError>;
+}
+
+/// Repository trait for working hours persistence
+///
+/// Provides CRUD operations for managing practitioner working hours schedules.
+/// Working hours define when practitioners are available on specific days of the week.
+#[async_trait]
+pub trait WorkingHoursRepository: Send + Sync {
+    /// Find all working hours entries for a practitioner
+    ///
+    /// # Arguments
+    /// * `practitioner_id` - The practitioner UUID
+    ///
+    /// # Returns
+    /// * `Ok(Vec<WorkingHours>)` - List of working hours entries (may be empty)
+    /// * `Err(RepositoryError)` - Database error
+    async fn find_by_practitioner(&self, practitioner_id: Uuid) -> Result<Vec<WorkingHours>, RepositoryError>;
+
+    /// Find working hours for a practitioner on a specific day of the week
+    ///
+    /// # Arguments
+    /// * `practitioner_id` - The practitioner UUID
+    /// * `day_of_week` - Day of week (0 = Monday, 6 = Sunday)
+    ///
+    /// # Returns
+    /// * `Ok(Some(WorkingHours))` - Working hours found for that day
+    /// * `Ok(None)` - No working hours defined for that day
+    /// * `Err(RepositoryError)` - Database error
+    async fn find_for_day(
+        &self,
+        practitioner_id: Uuid,
+        day_of_week: u8,
+    ) -> Result<Option<WorkingHours>, RepositoryError>;
+
+    /// Create a new working hours entry
+    ///
+    /// # Arguments
+    /// * `working_hours` - The working hours to create
+    ///
+    /// # Returns
+    /// * `Ok(WorkingHours)` - Successfully created working hours
+    /// * `Err(RepositoryError)` - Database error or constraint violation
+    async fn save(&self, working_hours: WorkingHours) -> Result<WorkingHours, RepositoryError>;
+
+    /// Delete a working hours entry
+    ///
+    /// # Arguments
+    /// * `id` - The working hours ID to delete
+    ///
+    /// # Returns
+    /// * `Ok(())` - Successfully deleted
+    /// * `Err(RepositoryError::NotFound)` - Working hours not found
     /// * `Err(RepositoryError)` - Database error
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError>;
 }
