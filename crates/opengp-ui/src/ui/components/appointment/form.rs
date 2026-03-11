@@ -20,7 +20,8 @@ use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::{
     format_date, parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption,
     DropdownWidget, FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState,
-    SearchableListAction, SearchableListState, TextareaState, TextareaWidget,
+    SearchableListAction, SearchableListState, TextareaState, TextareaWidget, TimePickerAction,
+    TimePickerPopup,
 };
 use opengp_domain::domain::appointment::{
     Appointment, AppointmentType, NewAppointmentData, UpdateAppointmentData,
@@ -161,6 +162,7 @@ pub struct AppointmentForm {
     patient_picker: SearchableListState<PatientListItem>,
     practitioner_picker: SearchableListState<PractitionerViewItem>,
     date_picker: DatePickerPopup,
+    time_picker: TimePickerPopup,
 }
 
 impl Clone for AppointmentForm {
@@ -181,6 +183,7 @@ impl Clone for AppointmentForm {
             patient_picker: self.patient_picker.clone(),
             practitioner_picker: self.practitioner_picker.clone(),
             date_picker: self.date_picker.clone(),
+            time_picker: self.time_picker.clone(),
         }
     }
 }
@@ -224,6 +227,7 @@ impl AppointmentForm {
             patient_picker: SearchableListState::new(Vec::new()),
             practitioner_picker: SearchableListState::new(Vec::new()),
             date_picker: DatePickerPopup::new(),
+            time_picker: TimePickerPopup::new(),
         }
     }
 
@@ -660,6 +664,39 @@ impl AppointmentForm {
             }
         }
 
+        // Time picker handling
+        if self.time_picker.is_visible() {
+            if let Some(action) = self.time_picker.handle_key(key) {
+                match action {
+                    TimePickerAction::Selected(time) => {
+                        self.start_time = TextareaState::new("Start Time * (HH:MM)")
+                            .with_height_mode(HeightMode::SingleLine)
+                            .with_value(time.format("%H:%M").to_string());
+                        self.validate_field(&AppointmentFormField::StartTime);
+                        return Some(AppointmentFormAction::ValueChanged);
+                    }
+                    TimePickerAction::Dismissed => {
+                        return Some(AppointmentFormAction::FocusChanged);
+                    }
+                }
+            }
+            return Some(AppointmentFormAction::FocusChanged);
+        }
+
+        if self.focused_field == AppointmentFormField::StartTime {
+            if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
+                // Need practitioner_id, date, and duration to open time picker
+                if let (Some(practitioner_id), Some(date), Ok(duration)) = (
+                    self.data.practitioner_id.map(|id| id.as_u128() as i64),
+                    parse_date(&self.date.value()),
+                    self.data.duration.parse::<u32>(),
+                ) {
+                    self.time_picker.open(practitioner_id, date, duration);
+                    return Some(AppointmentFormAction::FocusChanged);
+                }
+            }
+        }
+
         // Ctrl+S submits the form from any field
         if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
             self.validate();
@@ -1090,6 +1127,10 @@ impl Widget for AppointmentForm {
 
         if self.date_picker.is_visible() {
             self.date_picker.render(area, buf);
+        }
+
+        if self.time_picker.is_visible() {
+            self.time_picker.render(area, buf);
         }
     }
 }

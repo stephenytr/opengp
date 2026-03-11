@@ -15,6 +15,7 @@ mod scrollable;
 mod scrollable_form;
 mod searchable_list;
 mod textarea;
+mod time_picker_popup;
 
 pub use calendar::{AppointmentStyler, CalendarAction, CalendarMode, CalendarWidget};
 pub use date_picker_popup::{DatePickerAction, DatePickerPopup};
@@ -28,3 +29,4 @@ pub use scrollable::ScrollableState;
 pub use scrollable_form::ScrollableFormState;
 pub use searchable_list::{Searchable, SearchableList, SearchableListAction, SearchableListState};
 pub use textarea::{HeightMode, TextareaState, TextareaWidget};
+pub use time_picker_popup::{TimePickerAction, TimePickerPopup};
