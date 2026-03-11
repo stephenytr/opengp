@@ -116,6 +116,7 @@ fn create_test_appointment(
         created_by: Some(practitioner_id),
         updated_at: Utc::now(),
         updated_by: None,
+        version: 1,
     }
 }
 
