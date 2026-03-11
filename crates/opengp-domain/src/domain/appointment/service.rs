@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{Datelike, NaiveTime, TimeZone, Utc, Weekday};
 use std::sync::Arc;
 use tracing::{error, info};
 use uuid::Uuid;
@@ -13,12 +13,20 @@ use super::model::{Appointment, AppointmentStatus};
 use super::query::AppointmentCalendarQuery;
 use super::repository::AppointmentRepository;
 use crate::domain::audit::{AuditEmitter, AuditEntry};
+use crate::domain::user::WorkingHoursRepository;
 
 service! {
     AppointmentService {
         repository: Arc<dyn AppointmentRepository>,
         audit_service: Arc<dyn AuditEmitter>,
         calendar_query: Arc<dyn AppointmentCalendarQuery>,
+    }
+}
+
+service! {
+    AvailabilityService {
+        appointment_repository: Arc<dyn AppointmentRepository>,
+        working_hours_repository: Arc<dyn WorkingHoursRepository>,
     }
 }
 
@@ -654,6 +662,111 @@ impl AppointmentService {
     }
 }
 
+impl AvailabilityService {
+    /// Get available appointment slots for a practitioner on a specific date
+    ///
+    /// Combines working hours with existing appointments to determine available time slots.
+    /// Generates 15-minute slots and filters out times where an appointment of the specified
+    /// duration would overlap with existing appointments.
+    ///
+    /// # Arguments
+    /// * `practitioner_id` - ID of the practitioner
+    /// * `date` - Date to check availability for
+    /// * `duration_minutes` - Duration of the appointment in minutes
+    ///
+    /// # Returns
+    /// * `Ok(Vec<NaiveTime>)` - List of available start times (15-minute intervals)
+    /// * `Err(ServiceError)` - Database error or no working hours defined for that day
+    pub async fn get_available_slots(
+        &self,
+        practitioner_id: Uuid,
+        date: chrono::NaiveDate,
+        duration_minutes: i64,
+    ) -> Result<Vec<NaiveTime>, ServiceError> {
+        info!(
+            "Getting available slots for practitioner {} on {} with duration {} minutes",
+            practitioner_id, date, duration_minutes
+        );
+
+        let day_of_week = match date.weekday() {
+            Weekday::Mon => 0,
+            Weekday::Tue => 1,
+            Weekday::Wed => 2,
+            Weekday::Thu => 3,
+            Weekday::Fri => 4,
+            Weekday::Sat => 5,
+            Weekday::Sun => 6,
+        };
+
+        let working_hours = self
+            .working_hours_repository
+            .find_for_day(practitioner_id, day_of_week as u8)
+            .await?;
+
+        let working_hours = match working_hours {
+            Some(wh) => wh,
+            None => {
+                info!(
+                    "No working hours defined for practitioner {} on day {}",
+                    practitioner_id, day_of_week
+                );
+                return Ok(vec![]);
+            }
+        };
+
+        let start_of_day = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
+        let end_of_day = Utc.from_utc_datetime(&date.and_hms_opt(23, 59, 59).unwrap());
+
+        let appointments = self
+            .appointment_repository
+            .find_by_criteria(&AppointmentSearchCriteria {
+                patient_id: None,
+                practitioner_id: Some(practitioner_id),
+                date_from: Some(start_of_day),
+                date_to: Some(end_of_day),
+                status: None,
+                appointment_type: None,
+                is_urgent: None,
+                confirmed: None,
+            })
+            .await?;
+
+        let mut available_slots = Vec::new();
+        let mut current_time = working_hours.start_time;
+        let slot_duration = chrono::Duration::minutes(15);
+        let appointment_duration = chrono::Duration::minutes(duration_minutes);
+
+        while current_time < working_hours.end_time {
+            let appointment_end_time = current_time + appointment_duration;
+            if appointment_end_time > working_hours.end_time {
+                break;
+            }
+
+            let naive_dt = date.and_time(current_time);
+            let slot_start_datetime = Utc.from_utc_datetime(&naive_dt);
+            let slot_end_datetime = slot_start_datetime + appointment_duration;
+
+            let overlapping = appointments.iter().any(|apt| {
+                slot_start_datetime < apt.end_time && slot_end_datetime > apt.start_time
+            });
+
+            if !overlapping {
+                available_slots.push(current_time);
+            }
+
+            current_time = current_time + slot_duration;
+        }
+
+        info!(
+            "Found {} available slots for practitioner {} on {}",
+            available_slots.len(),
+            practitioner_id,
+            date
+        );
+        Ok(available_slots)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -816,5 +929,190 @@ mod tests {
         let updated = result.expect("reschedule should succeed when only self overlaps");
         assert_eq!(updated.start_time, new_start);
         assert_eq!(updated.end_time, new_start + Duration::minutes(30));
+    }
+
+    use crate::domain::user::WorkingHours;
+    use crate::domain::user::WorkingHoursRepository;
+
+    struct MockWorkingHoursRepository {
+        working_hours: Option<WorkingHours>,
+    }
+
+    #[async_trait]
+    impl WorkingHoursRepository for MockWorkingHoursRepository {
+        async fn find_by_practitioner(
+            &self,
+            _practitioner_id: Uuid,
+        ) -> Result<Vec<WorkingHours>, RepositoryError> {
+            Ok(self.working_hours.iter().cloned().collect())
+        }
+
+        async fn find_for_day(
+            &self,
+            _practitioner_id: Uuid,
+            _day_of_week: u8,
+        ) -> Result<Option<WorkingHours>, RepositoryError> {
+            Ok(self.working_hours.clone())
+        }
+
+        async fn save(&self, _working_hours: WorkingHours) -> Result<WorkingHours, RepositoryError> {
+            Err(RepositoryError::Database("not implemented".to_string()))
+        }
+
+        async fn delete(&self, _id: Uuid) -> Result<(), RepositoryError> {
+            Err(RepositoryError::Database("not implemented".to_string()))
+        }
+    }
+
+    fn new_availability_service(
+        appointments: Vec<Appointment>,
+        working_hours: Option<WorkingHours>,
+    ) -> AvailabilityService {
+        AvailabilityService::new(
+            Arc::new(MockAppointmentRepository {
+                appointments,
+                overlapping: vec![],
+                created: Mutex::new(vec![]),
+                updated: Mutex::new(vec![]),
+            }),
+            Arc::new(MockWorkingHoursRepository { working_hours }),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_available_slots_with_no_working_hours() {
+        let practitioner_id = Uuid::new_v4();
+        let service = new_availability_service(vec![], None);
+        let date = chrono::NaiveDate::from_ymd_opt(2026, 3, 11).unwrap();
+
+        let result = service
+            .get_available_slots(practitioner_id, date, 15)
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn test_available_slots_generates_15_minute_intervals() {
+        let practitioner_id = Uuid::new_v4();
+        let wh = WorkingHours::new(
+            practitioner_id,
+            2,
+            NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
+            NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
+        ).unwrap();
+
+        let service = new_availability_service(vec![], Some(wh));
+        let date = chrono::NaiveDate::from_ymd_opt(2026, 3, 11).unwrap();
+
+        let result = service
+            .get_available_slots(practitioner_id, date, 15)
+            .await;
+
+        assert!(result.is_ok());
+        let slots = result.unwrap();
+        assert_eq!(slots.len(), 4);
+        assert_eq!(slots[0], NaiveTime::from_hms_opt(9, 0, 0).unwrap());
+        assert_eq!(slots[1], NaiveTime::from_hms_opt(9, 15, 0).unwrap());
+        assert_eq!(slots[2], NaiveTime::from_hms_opt(9, 30, 0).unwrap());
+        assert_eq!(slots[3], NaiveTime::from_hms_opt(9, 45, 0).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_available_slots_filters_overlapping_appointments() {
+        let practitioner_id = Uuid::new_v4();
+        let date = chrono::NaiveDate::from_ymd_opt(2026, 3, 11).unwrap();
+
+        let wh = WorkingHours::new(
+            practitioner_id,
+            2,
+            NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
+            NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
+        ).unwrap();
+
+        let start_of_slot_1 = Utc.from_utc_datetime(&date.and_hms_opt(9, 15, 0).unwrap());
+        let appointment = Appointment::new(
+            Uuid::new_v4(),
+            practitioner_id,
+            start_of_slot_1,
+            Duration::minutes(15),
+            AppointmentType::Standard,
+            Some(Uuid::new_v4()),
+        );
+
+        let service = new_availability_service(vec![appointment], Some(wh));
+
+        let result = service
+            .get_available_slots(practitioner_id, date, 15)
+            .await;
+
+        assert!(result.is_ok());
+        let slots = result.unwrap();
+        assert_eq!(slots.len(), 3);
+        assert_eq!(slots[0], NaiveTime::from_hms_opt(9, 0, 0).unwrap());
+        assert_eq!(slots[1], NaiveTime::from_hms_opt(9, 30, 0).unwrap());
+        assert_eq!(slots[2], NaiveTime::from_hms_opt(9, 45, 0).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_available_slots_respects_appointment_duration() {
+        let practitioner_id = Uuid::new_v4();
+        let date = chrono::NaiveDate::from_ymd_opt(2026, 3, 11).unwrap();
+
+        let wh = WorkingHours::new(
+            practitioner_id,
+            2,
+            NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
+            NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
+        ).unwrap();
+
+        let service = new_availability_service(vec![], Some(wh));
+
+        let result = service
+            .get_available_slots(practitioner_id, date, 30)
+            .await;
+
+        assert!(result.is_ok());
+        let slots = result.unwrap();
+        assert_eq!(slots.len(), 3);
+        assert_eq!(slots[0], NaiveTime::from_hms_opt(9, 0, 0).unwrap());
+        assert_eq!(slots[1], NaiveTime::from_hms_opt(9, 15, 0).unwrap());
+        assert_eq!(slots[2], NaiveTime::from_hms_opt(9, 30, 0).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_available_slots_no_overlap_with_partial_appointment() {
+        let practitioner_id = Uuid::new_v4();
+        let date = chrono::NaiveDate::from_ymd_opt(2026, 3, 11).unwrap();
+
+        let wh = WorkingHours::new(
+            practitioner_id,
+            2,
+            NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
+            NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
+        ).unwrap();
+
+        let start_of_slot = Utc.from_utc_datetime(&date.and_hms_opt(9, 20, 0).unwrap());
+        let appointment = Appointment::new(
+            Uuid::new_v4(),
+            practitioner_id,
+            start_of_slot,
+            Duration::minutes(20),
+            AppointmentType::Standard,
+            Some(Uuid::new_v4()),
+        );
+
+        let service = new_availability_service(vec![appointment], Some(wh));
+
+        let result = service
+            .get_available_slots(practitioner_id, date, 15)
+            .await;
+
+        assert!(result.is_ok());
+        let slots = result.unwrap();
+        assert_eq!(slots.len(), 2);
+        assert_eq!(slots[0], NaiveTime::from_hms_opt(9, 0, 0).unwrap());
+        assert_eq!(slots[1], NaiveTime::from_hms_opt(9, 45, 0).unwrap());
     }
 }
