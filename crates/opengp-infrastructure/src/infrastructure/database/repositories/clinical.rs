@@ -13,14 +13,15 @@ use opengp_domain::domain::clinical::{
     Severity, SocialHistory, SocialHistoryRepository, VitalSigns, VitalSignsRepository,
 };
 use crate::infrastructure::crypto::EncryptionService;
+use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::sqlx_to_clinical_error;
 
-fn uuid_to_bytes(id: &Uuid) -> Vec<u8> {
-    id.as_bytes().to_vec()
+fn uuid_to_bytes(id: &Uuid) -> db_helpers::DbUuid {
+    db_helpers::uuid_to_bytes(id)
 }
 
-fn bytes_to_uuid(bytes: &[u8]) -> Result<Uuid, RepositoryError> {
-    Uuid::from_slice(bytes)
+fn bytes_to_uuid(bytes: &db_helpers::DbUuid) -> Result<Uuid, RepositoryError> {
+    db_helpers::bytes_to_uuid(bytes)
         .map_err(|e| RepositoryError::Base(BaseRepositoryError::Database(e.to_string())))
 }
 
@@ -39,20 +40,20 @@ fn string_to_datetime(s: &str) -> DateTime<Utc> {
 
 #[derive(Debug, FromRow)]
 struct ConsultationRow {
-    id: Vec<u8>,
-    patient_id: Vec<u8>,
-    practitioner_id: Vec<u8>,
-    appointment_id: Option<Vec<u8>>,
+    id: db_helpers::DbUuid,
+    patient_id: db_helpers::DbUuid,
+    practitioner_id: db_helpers::DbUuid,
+    appointment_id: Option<db_helpers::DbUuid>,
     consultation_date: String,
     reason: Option<String>,
     clinical_notes: Option<Vec<u8>>,
     is_signed: bool,
     signed_at: Option<String>,
-    signed_by: Option<Vec<u8>>,
+    signed_by: Option<db_helpers::DbUuid>,
     created_at: String,
     updated_at: String,
-    created_by: Vec<u8>,
-    updated_by: Option<Vec<u8>>,
+    created_by: db_helpers::DbUuid,
+    updated_by: Option<db_helpers::DbUuid>,
 }
 
 impl ConsultationRow {
@@ -120,16 +121,14 @@ impl ConsultationRepository for SqlxClinicalRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Consultation>, RepositoryError> {
         let id_bytes = uuid_to_bytes(&id);
 
-        let row = sqlx::query_as::<_, ConsultationRow>(
-            r#"
-            SELECT 
-                id, patient_id, practitioner_id, appointment_id,
-                consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
-                created_at, updated_at, created_by, updated_by
-            FROM consultations
-            WHERE id = ?
-            "#,
-        )
+        let row = sqlx::query_as::<_, ConsultationRow>(&db_helpers::sql_with_placeholders(&r#"
+        SELECT 
+            id, patient_id, practitioner_id, appointment_id,
+            consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
+            created_at, updated_at, created_by, updated_by
+        FROM consultations
+        WHERE id = ?
+        "#))
         .bind(id_bytes)
         .fetch_optional(&self.pool)
         .await
@@ -147,17 +146,15 @@ impl ConsultationRepository for SqlxClinicalRepository {
     ) -> Result<Vec<Consultation>, RepositoryError> {
         let patient_bytes = uuid_to_bytes(&patient_id);
 
-        let rows = sqlx::query_as::<_, ConsultationRow>(
-            r#"
-            SELECT 
-                id, patient_id, practitioner_id, appointment_id,
-                consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
-                created_at, updated_at, created_by, updated_by
-            FROM consultations
-            WHERE patient_id = ?
-            ORDER BY consultation_date DESC
-            "#,
-        )
+        let rows = sqlx::query_as::<_, ConsultationRow>(&db_helpers::sql_with_placeholders(&r#"
+        SELECT 
+            id, patient_id, practitioner_id, appointment_id,
+            consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
+            created_at, updated_at, created_by, updated_by
+        FROM consultations
+        WHERE patient_id = ?
+        ORDER BY consultation_date DESC
+        "#))
         .bind(patient_bytes)
         .fetch_all(&self.pool)
         .await
@@ -178,17 +175,15 @@ impl ConsultationRepository for SqlxClinicalRepository {
         let start_str = datetime_to_string(&start);
         let end_str = datetime_to_string(&end);
 
-        let rows = sqlx::query_as::<_, ConsultationRow>(
-            r#"
-            SELECT 
-                id, patient_id, practitioner_id, appointment_id,
-                consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
-                created_at, updated_at, created_by, updated_by
-            FROM consultations
-            WHERE patient_id = ? AND consultation_date BETWEEN ? AND ?
-            ORDER BY consultation_date DESC
-            "#,
-        )
+        let rows = sqlx::query_as::<_, ConsultationRow>(&db_helpers::sql_with_placeholders(&r#"
+        SELECT 
+            id, patient_id, practitioner_id, appointment_id,
+            consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
+            created_at, updated_at, created_by, updated_by
+        FROM consultations
+        WHERE patient_id = ? AND consultation_date BETWEEN ? AND ?
+        ORDER BY consultation_date DESC
+        "#))
         .bind(&patient_bytes)
         .bind(&start_str)
         .bind(&end_str)
@@ -220,15 +215,13 @@ impl ConsultationRepository for SqlxClinicalRepository {
                 RepositoryError::Encryption(format!("Failed to encrypt clinical notes: {}", e))
             })?;
 
-        sqlx::query(
-            r#"
-            INSERT INTO consultations (
-                id, patient_id, practitioner_id, appointment_id,
-                consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
-                created_at, updated_at, created_by, updated_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
+        sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        INSERT INTO consultations (
+            id, patient_id, practitioner_id, appointment_id,
+            consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
+            created_at, updated_at, created_by, updated_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "#))
         .bind(id_bytes)
         .bind(patient_bytes)
         .bind(practitioner_bytes)
@@ -264,16 +257,14 @@ impl ConsultationRepository for SqlxClinicalRepository {
                 RepositoryError::Encryption(format!("Failed to encrypt clinical notes: {}", e))
             })?;
 
-        sqlx::query(
-            r#"
-            UPDATE consultations
-            SET 
-                reason = ?, clinical_notes = ?,
-                is_signed = ?, signed_at = ?, signed_by = ?,
-                updated_at = ?, updated_by = ?
-            WHERE id = ?
-            "#,
-        )
+        sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        UPDATE consultations
+        SET 
+            reason = ?, clinical_notes = ?,
+            is_signed = ?, signed_at = ?, signed_by = ?,
+            updated_at = ?, updated_by = ?
+        WHERE id = ?
+        "#))
         .bind(&consultation.reason)
         .bind(clinical_notes_encrypted)
         .bind(consultation.is_signed)
@@ -294,13 +285,11 @@ impl ConsultationRepository for SqlxClinicalRepository {
         let user_bytes = uuid_to_bytes(&user_id);
         let signed_at = datetime_to_string(&Utc::now());
 
-        let result = sqlx::query(
-            r#"
-            UPDATE consultations
-            SET is_signed = TRUE, signed_at = ?, signed_by = ?, updated_at = ?
-            WHERE id = ?
-            "#,
-        )
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        UPDATE consultations
+        SET is_signed = TRUE, signed_at = ?, signed_by = ?, updated_at = ?
+        WHERE id = ?
+        "#))
         .bind(&signed_at)
         .bind(user_bytes)
         .bind(&signed_at)
@@ -319,8 +308,8 @@ impl ConsultationRepository for SqlxClinicalRepository {
 
 #[derive(Debug, FromRow)]
 struct SocialHistoryRow {
-    id: Vec<u8>,
-    patient_id: Vec<u8>,
+    id: db_helpers::DbUuid,
+    patient_id: db_helpers::DbUuid,
     smoking_status: Option<String>,
     cigarettes_per_day: Option<i64>,
     smoking_quit_date: Option<chrono::NaiveDate>,
@@ -332,7 +321,7 @@ struct SocialHistoryRow {
     support_network: Option<String>,
     notes: Option<Vec<u8>>,
     updated_at: String,
-    updated_by: Vec<u8>,
+    updated_by: db_helpers::DbUuid,
 }
 
 impl SocialHistoryRow {
@@ -404,17 +393,15 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
     ) -> Result<Option<SocialHistory>, RepositoryError> {
         let patient_bytes = uuid_to_bytes(&patient_id);
 
-        let row = sqlx::query_as::<_, SocialHistoryRow>(
-            r#"
-            SELECT 
-                id, patient_id, smoking_status, cigarettes_per_day, 
-                smoking_quit_date, alcohol_status, standard_drinks_per_week,
-                exercise_frequency, occupation, living_situation, support_network,
-                notes, updated_at, updated_by
-            FROM social_history
-            WHERE patient_id = ?
-            "#,
-        )
+        let row = sqlx::query_as::<_, SocialHistoryRow>(&db_helpers::sql_with_placeholders(&r#"
+        SELECT 
+            id, patient_id, smoking_status, cigarettes_per_day, 
+            smoking_quit_date, alcohol_status, standard_drinks_per_week,
+            exercise_frequency, occupation, living_situation, support_network,
+            notes, updated_at, updated_by
+        FROM social_history
+        WHERE patient_id = ?
+        "#))
         .bind(patient_bytes)
         .fetch_optional(&self.pool)
         .await
@@ -442,16 +429,14 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
             None => None,
         };
 
-        sqlx::query(
-            r#"
-            INSERT INTO social_history (
-                id, patient_id, smoking_status, cigarettes_per_day, 
-                smoking_quit_date, alcohol_status, standard_drinks_per_week,
-                exercise_frequency, occupation, living_situation, support_network,
-                notes, updated_at, updated_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
+        sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        INSERT INTO social_history (
+            id, patient_id, smoking_status, cigarettes_per_day, 
+            smoking_quit_date, alcohol_status, standard_drinks_per_week,
+            exercise_frequency, occupation, living_situation, support_network,
+            notes, updated_at, updated_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "#))
         .bind(id_bytes)
         .bind(patient_bytes)
         .bind(history.smoking_status.to_string())
@@ -488,17 +473,15 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
             None => None,
         };
 
-        sqlx::query(
-            r#"
-            UPDATE social_history
-            SET 
-                smoking_status = ?, cigarettes_per_day = ?, 
-                smoking_quit_date = ?, alcohol_status = ?, standard_drinks_per_week = ?,
-                exercise_frequency = ?, occupation = ?, living_situation = ?, support_network = ?,
-                notes = ?, updated_at = ?, updated_by = ?
-            WHERE id = ?
-            "#,
-        )
+        sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        UPDATE social_history
+        SET 
+            smoking_status = ?, cigarettes_per_day = ?, 
+            smoking_quit_date = ?, alcohol_status = ?, standard_drinks_per_week = ?,
+            exercise_frequency = ?, occupation = ?, living_situation = ?, support_network = ?,
+            notes = ?, updated_at = ?, updated_by = ?
+        WHERE id = ?
+        "#))
         .bind(history.smoking_status.to_string())
         .bind(history.cigarettes_per_day.map(|i| i as i64))
         .bind(history.smoking_quit_date)
@@ -526,8 +509,8 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
 
 #[derive(Debug, FromRow)]
 struct AllergyRow {
-    id: Vec<u8>,
-    patient_id: Vec<u8>,
+    id: db_helpers::DbUuid,
+    patient_id: db_helpers::DbUuid,
     allergen: String,
     allergy_type: String,
     severity: String,
@@ -537,8 +520,8 @@ struct AllergyRow {
     is_active: bool,
     created_at: String,
     updated_at: String,
-    created_by: Vec<u8>,
-    updated_by: Option<Vec<u8>>,
+    created_by: db_helpers::DbUuid,
+    updated_by: Option<db_helpers::DbUuid>,
 }
 
 impl AllergyRow {
@@ -602,9 +585,7 @@ impl SqlxAllergyRepository {
 #[async_trait]
 impl AllergyRepository for SqlxAllergyRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Allergy>, RepositoryError> {
-        let row = sqlx::query_as::<_, AllergyRow>(
-            "SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE id = ?"
-        )
+        let row = sqlx::query_as::<_, AllergyRow>(&db_helpers::sql_with_placeholders(&"SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE id = ?"))
         .bind(uuid_to_bytes(&id))
         .fetch_optional(&self.pool)
         .await
@@ -617,9 +598,7 @@ impl AllergyRepository for SqlxAllergyRepository {
     }
 
     async fn find_by_patient(&self, patient_id: Uuid) -> Result<Vec<Allergy>, RepositoryError> {
-        let rows = sqlx::query_as::<_, AllergyRow>(
-            "SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE patient_id = ? ORDER BY created_at DESC"
-        )
+        let rows = sqlx::query_as::<_, AllergyRow>(&db_helpers::sql_with_placeholders(&"SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE patient_id = ? ORDER BY created_at DESC"))
         .bind(uuid_to_bytes(&patient_id))
         .fetch_all(&self.pool)
         .await
@@ -634,9 +613,7 @@ impl AllergyRepository for SqlxAllergyRepository {
         &self,
         patient_id: Uuid,
     ) -> Result<Vec<Allergy>, RepositoryError> {
-        let rows = sqlx::query_as::<_, AllergyRow>(
-            "SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE patient_id = ? AND is_active = TRUE ORDER BY created_at DESC"
-        )
+        let rows = sqlx::query_as::<_, AllergyRow>(&db_helpers::sql_with_placeholders(&"SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE patient_id = ? AND is_active = TRUE ORDER BY created_at DESC"))
         .bind(uuid_to_bytes(&patient_id))
         .fetch_all(&self.pool)
         .await
@@ -673,9 +650,7 @@ impl AllergyRepository for SqlxAllergyRepository {
                 RepositoryError::Encryption(format!("Failed to encrypt allergy notes: {}", e))
             })?;
 
-        sqlx::query(
-            "INSERT INTO allergies (id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        )
+        sqlx::query(&db_helpers::sql_with_placeholders(&"INSERT INTO allergies (id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"))
         .bind(id_bytes)
         .bind(patient_bytes)
         .bind(&allergy.allergen)
@@ -719,9 +694,7 @@ impl AllergyRepository for SqlxAllergyRepository {
                 RepositoryError::Encryption(format!("Failed to encrypt allergy notes: {}", e))
             })?;
 
-        sqlx::query(
-            "UPDATE allergies SET allergen = ?, allergy_type = ?, severity = ?, reaction = ?, onset_date = ?, notes = ?, is_active = ?, updated_at = ?, updated_by = ? WHERE id = ?"
-        )
+        sqlx::query(&db_helpers::sql_with_placeholders(&"UPDATE allergies SET allergen = ?, allergy_type = ?, severity = ?, reaction = ?, onset_date = ?, notes = ?, is_active = ?, updated_at = ?, updated_by = ? WHERE id = ?"))
         .bind(&allergy.allergen)
         .bind(allergy.allergy_type.to_string())
         .bind(allergy.severity.to_string())
@@ -743,7 +716,7 @@ impl AllergyRepository for SqlxAllergyRepository {
         let id_bytes = uuid_to_bytes(&id);
         let updated_at_str = datetime_to_string(&Utc::now());
 
-        sqlx::query("UPDATE allergies SET is_active = FALSE, updated_at = ? WHERE id = ?")
+        sqlx::query(&db_helpers::sql_with_placeholders(&"UPDATE allergies SET is_active = FALSE, updated_at = ? WHERE id = ?"))
             .bind(&updated_at_str)
             .bind(id_bytes)
             .execute(&self.pool)
@@ -760,8 +733,8 @@ impl AllergyRepository for SqlxAllergyRepository {
 
 #[derive(Debug, FromRow)]
 struct MedicalHistoryRow {
-    id: Vec<u8>,
-    patient_id: Vec<u8>,
+    id: db_helpers::DbUuid,
+    patient_id: db_helpers::DbUuid,
     condition: String,
     diagnosis_date: Option<chrono::NaiveDate>,
     status: String,
@@ -770,8 +743,8 @@ struct MedicalHistoryRow {
     is_active: bool,
     created_at: String,
     updated_at: String,
-    created_by: Vec<u8>,
-    updated_by: Option<Vec<u8>>,
+    created_by: db_helpers::DbUuid,
+    updated_by: Option<db_helpers::DbUuid>,
 }
 
 impl MedicalHistoryRow {
@@ -827,9 +800,7 @@ impl SqlxMedicalHistoryRepository {
 #[async_trait]
 impl MedicalHistoryRepository for SqlxMedicalHistoryRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<MedicalHistory>, RepositoryError> {
-        let row = sqlx::query_as::<_, MedicalHistoryRow>(
-            "SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE id = ?"
-        )
+        let row = sqlx::query_as::<_, MedicalHistoryRow>(&db_helpers::sql_with_placeholders(&"SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE id = ?"))
         .bind(uuid_to_bytes(&id))
         .fetch_optional(&self.pool)
         .await
@@ -845,9 +816,7 @@ impl MedicalHistoryRepository for SqlxMedicalHistoryRepository {
         &self,
         patient_id: Uuid,
     ) -> Result<Vec<MedicalHistory>, RepositoryError> {
-        let rows = sqlx::query_as::<_, MedicalHistoryRow>(
-            "SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE patient_id = ? ORDER BY created_at DESC"
-        )
+        let rows = sqlx::query_as::<_, MedicalHistoryRow>(&db_helpers::sql_with_placeholders(&"SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE patient_id = ? ORDER BY created_at DESC"))
         .bind(uuid_to_bytes(&patient_id))
         .fetch_all(&self.pool)
         .await
@@ -862,9 +831,7 @@ impl MedicalHistoryRepository for SqlxMedicalHistoryRepository {
         &self,
         patient_id: Uuid,
     ) -> Result<Vec<MedicalHistory>, RepositoryError> {
-        let rows = sqlx::query_as::<_, MedicalHistoryRow>(
-            "SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE patient_id = ? AND is_active = TRUE ORDER BY created_at DESC"
-        )
+        let rows = sqlx::query_as::<_, MedicalHistoryRow>(&db_helpers::sql_with_placeholders(&"SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE patient_id = ? AND is_active = TRUE ORDER BY created_at DESC"))
         .bind(uuid_to_bytes(&patient_id))
         .fetch_all(&self.pool)
         .await
@@ -895,9 +862,7 @@ impl MedicalHistoryRepository for SqlxMedicalHistoryRepository {
                 ))
             })?;
 
-        sqlx::query(
-            "INSERT INTO medical_history (id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        )
+        sqlx::query(&db_helpers::sql_with_placeholders(&"INSERT INTO medical_history (id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"))
         .bind(id_bytes)
         .bind(patient_bytes)
         .bind(&history.condition)
@@ -934,9 +899,7 @@ impl MedicalHistoryRepository for SqlxMedicalHistoryRepository {
                 ))
             })?;
 
-        sqlx::query(
-            "UPDATE medical_history SET condition = ?, diagnosis_date = ?, status = ?, severity = ?, notes = ?, is_active = ?, updated_at = ?, updated_by = ? WHERE id = ?"
-        )
+        sqlx::query(&db_helpers::sql_with_placeholders(&"UPDATE medical_history SET condition = ?, diagnosis_date = ?, status = ?, severity = ?, notes = ?, is_active = ?, updated_at = ?, updated_by = ? WHERE id = ?"))
         .bind(&history.condition)
         .bind(history.diagnosis_date)
         .bind(history.status.to_string())
@@ -960,9 +923,9 @@ impl MedicalHistoryRepository for SqlxMedicalHistoryRepository {
 
 #[derive(Debug, FromRow)]
 struct VitalSignsRow {
-    id: Vec<u8>,
-    patient_id: Vec<u8>,
-    consultation_id: Option<Vec<u8>>,
+    id: db_helpers::DbUuid,
+    patient_id: db_helpers::DbUuid,
+    consultation_id: Option<db_helpers::DbUuid>,
     measured_at: String,
     systolic_bp: Option<i64>,
     diastolic_bp: Option<i64>,
@@ -975,7 +938,7 @@ struct VitalSignsRow {
     bmi: Option<f32>,
     notes: Option<String>,
     created_at: String,
-    created_by: Vec<u8>,
+    created_by: db_helpers::DbUuid,
 }
 
 impl VitalSignsRow {
@@ -1020,9 +983,7 @@ impl SqlxVitalSignsRepository {
 #[async_trait]
 impl VitalSignsRepository for SqlxVitalSignsRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<VitalSigns>, RepositoryError> {
-        let row = sqlx::query_as::<_, VitalSignsRow>(
-            "SELECT id, patient_id, consultation_id, measured_at, systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, oxygen_saturation, height_cm, weight_kg, bmi, notes, created_at, created_by FROM vital_signs WHERE id = ?"
-        )
+        let row = sqlx::query_as::<_, VitalSignsRow>(&db_helpers::sql_with_placeholders(&"SELECT id, patient_id, consultation_id, measured_at, systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, oxygen_saturation, height_cm, weight_kg, bmi, notes, created_at, created_by FROM vital_signs WHERE id = ?"))
         .bind(uuid_to_bytes(&id))
         .fetch_optional(&self.pool)
         .await
@@ -1039,9 +1000,7 @@ impl VitalSignsRepository for SqlxVitalSignsRepository {
         patient_id: Uuid,
         limit: usize,
     ) -> Result<Vec<VitalSigns>, RepositoryError> {
-        let rows = sqlx::query_as::<_, VitalSignsRow>(
-            "SELECT id, patient_id, consultation_id, measured_at, systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, oxygen_saturation, height_cm, weight_kg, bmi, notes, created_at, created_by FROM vital_signs WHERE patient_id = ? ORDER BY measured_at DESC LIMIT ?"
-        )
+        let rows = sqlx::query_as::<_, VitalSignsRow>(&db_helpers::sql_with_placeholders(&"SELECT id, patient_id, consultation_id, measured_at, systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, oxygen_saturation, height_cm, weight_kg, bmi, notes, created_at, created_by FROM vital_signs WHERE patient_id = ? ORDER BY measured_at DESC LIMIT ?"))
         .bind(uuid_to_bytes(&patient_id))
         .bind(limit as i64)
         .fetch_all(&self.pool)
@@ -1055,9 +1014,7 @@ impl VitalSignsRepository for SqlxVitalSignsRepository {
         &self,
         patient_id: Uuid,
     ) -> Result<Option<VitalSigns>, RepositoryError> {
-        let row = sqlx::query_as::<_, VitalSignsRow>(
-            "SELECT id, patient_id, consultation_id, measured_at, systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, oxygen_saturation, height_cm, weight_kg, bmi, notes, created_at, created_by FROM vital_signs WHERE patient_id = ? ORDER BY measured_at DESC LIMIT 1"
-        )
+        let row = sqlx::query_as::<_, VitalSignsRow>(&db_helpers::sql_with_placeholders(&"SELECT id, patient_id, consultation_id, measured_at, systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, oxygen_saturation, height_cm, weight_kg, bmi, notes, created_at, created_by FROM vital_signs WHERE patient_id = ? ORDER BY measured_at DESC LIMIT 1"))
         .bind(uuid_to_bytes(&patient_id))
         .fetch_optional(&self.pool)
         .await
@@ -1077,9 +1034,7 @@ impl VitalSignsRepository for SqlxVitalSignsRepository {
         let measured_at_str = datetime_to_string(&vitals.measured_at);
         let created_at_str = datetime_to_string(&vitals.created_at);
 
-        sqlx::query(
-            "INSERT INTO vital_signs (id, patient_id, consultation_id, measured_at, systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, oxygen_saturation, height_cm, weight_kg, bmi, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        )
+        sqlx::query(&db_helpers::sql_with_placeholders(&"INSERT INTO vital_signs (id, patient_id, consultation_id, measured_at, systolic_bp, diastolic_bp, heart_rate, respiratory_rate, temperature, oxygen_saturation, height_cm, weight_kg, bmi, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"))
         .bind(id_bytes)
         .bind(patient_bytes)
         .bind(consultation_bytes)
@@ -1110,14 +1065,14 @@ impl VitalSignsRepository for SqlxVitalSignsRepository {
 
 #[derive(Debug, FromRow)]
 struct FamilyHistoryRow {
-    id: Vec<u8>,
-    patient_id: Vec<u8>,
+    id: db_helpers::DbUuid,
+    patient_id: db_helpers::DbUuid,
     relative_relationship: String,
     condition: String,
     age_at_diagnosis: Option<i64>,
     notes: Option<Vec<u8>>,
     created_at: String,
-    created_by: Vec<u8>,
+    created_by: db_helpers::DbUuid,
 }
 
 impl FamilyHistoryRow {
@@ -1165,9 +1120,7 @@ impl SqlxFamilyHistoryRepository {
 #[async_trait]
 impl FamilyHistoryRepository for SqlxFamilyHistoryRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<FamilyHistory>, RepositoryError> {
-        let row = sqlx::query_as::<_, FamilyHistoryRow>(
-            "SELECT id, patient_id, relative_relationship, condition, age_at_diagnosis, notes, created_at, created_by FROM family_history WHERE id = ?"
-        )
+        let row = sqlx::query_as::<_, FamilyHistoryRow>(&db_helpers::sql_with_placeholders(&"SELECT id, patient_id, relative_relationship, condition, age_at_diagnosis, notes, created_at, created_by FROM family_history WHERE id = ?"))
         .bind(uuid_to_bytes(&id))
         .fetch_optional(&self.pool)
         .await
@@ -1183,9 +1136,7 @@ impl FamilyHistoryRepository for SqlxFamilyHistoryRepository {
         &self,
         patient_id: Uuid,
     ) -> Result<Vec<FamilyHistory>, RepositoryError> {
-        let rows = sqlx::query_as::<_, FamilyHistoryRow>(
-            "SELECT id, patient_id, relative_relationship, condition, age_at_diagnosis, notes, created_at, created_by FROM family_history WHERE patient_id = ? ORDER BY created_at DESC"
-        )
+        let rows = sqlx::query_as::<_, FamilyHistoryRow>(&db_helpers::sql_with_placeholders(&"SELECT id, patient_id, relative_relationship, condition, age_at_diagnosis, notes, created_at, created_by FROM family_history WHERE patient_id = ? ORDER BY created_at DESC"))
         .bind(uuid_to_bytes(&patient_id))
         .fetch_all(&self.pool)
         .await
@@ -1214,9 +1165,7 @@ impl FamilyHistoryRepository for SqlxFamilyHistoryRepository {
                 ))
             })?;
 
-        sqlx::query(
-            "INSERT INTO family_history (id, patient_id, relative_relationship, condition, age_at_diagnosis, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        )
+        sqlx::query(&db_helpers::sql_with_placeholders(&"INSERT INTO family_history (id, patient_id, relative_relationship, condition, age_at_diagnosis, notes, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"))
         .bind(id_bytes)
         .bind(patient_bytes)
         .bind(&history.relative_relationship)
@@ -1247,9 +1196,7 @@ impl FamilyHistoryRepository for SqlxFamilyHistoryRepository {
                 ))
             })?;
 
-        sqlx::query(
-            "UPDATE family_history SET relative_relationship = ?, condition = ?, age_at_diagnosis = ?, notes = ? WHERE id = ?"
-        )
+        sqlx::query(&db_helpers::sql_with_placeholders(&"UPDATE family_history SET relative_relationship = ?, condition = ?, age_at_diagnosis = ?, notes = ? WHERE id = ?"))
         .bind(&history.relative_relationship)
         .bind(&history.condition)
         .bind(history.age_at_diagnosis.map(|v| v as i64))
@@ -1265,7 +1212,7 @@ impl FamilyHistoryRepository for SqlxFamilyHistoryRepository {
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
         let id_bytes = uuid_to_bytes(&id);
 
-        sqlx::query("DELETE FROM family_history WHERE id = ?")
+        sqlx::query(&db_helpers::sql_with_placeholders(&"DELETE FROM family_history WHERE id = ?"))
             .bind(id_bytes)
             .execute(&self.pool)
             .await

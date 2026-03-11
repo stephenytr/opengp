@@ -8,7 +8,7 @@ use opengp_domain::domain::audit::{AuditAction, AuditEntry, AuditRepository, Aud
 use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::sqlx_to_audit_error;
 
-fn bytes_to_uuid(bytes: &[u8]) -> Result<Uuid, AuditRepositoryError> {
+fn bytes_to_uuid(bytes: &db_helpers::DbUuid) -> Result<Uuid, AuditRepositoryError> {
     db_helpers::bytes_to_uuid(bytes).map_err(|_| {
         AuditRepositoryError::Base(BaseRepositoryError::ConstraintViolation(
             "Invalid UUID bytes".to_string(),
@@ -30,13 +30,13 @@ const AUDIT_SELECT_QUERY: &str = r#"
 
 #[derive(Debug, FromRow)]
 struct AuditLogRow {
-    id: Vec<u8>,
+    id: db_helpers::DbUuid,
     entity_type: String,
-    entity_id: Vec<u8>,
+    entity_id: db_helpers::DbUuid,
     action: String,
     old_value: Option<String>,
     new_value: Option<String>,
-    changed_by: Vec<u8>,
+    changed_by: db_helpers::DbUuid,
     changed_at: String,
 }
 
@@ -75,9 +75,9 @@ impl SqlxAuditRepository {
 #[async_trait]
 impl AuditRepository for SqlxAuditRepository {
     async fn create(&self, entry: AuditEntry) -> Result<AuditEntry, AuditRepositoryError> {
-        let id_bytes = entry.id.as_bytes().to_vec();
-        let entity_id_bytes = entry.entity_id.as_bytes().to_vec();
-        let changed_by_bytes = entry.changed_by.as_bytes().to_vec();
+        let id_bytes = db_helpers::uuid_to_bytes(&entry.id);
+        let entity_id_bytes = db_helpers::uuid_to_bytes(&entry.entity_id);
+        let changed_by_bytes = db_helpers::uuid_to_bytes(&entry.changed_by);
         let changed_at_str = entry.changed_at.to_rfc3339();
 
         let action_json = serde_json::to_string(&entry.action).map_err(|e| {
@@ -87,15 +87,13 @@ impl AuditRepository for SqlxAuditRepository {
             )))
         })?;
 
-        let result = sqlx::query(
-            r#"
-            INSERT INTO audit_logs (
-                id, entity_type, entity_id, action,
-                old_value, new_value,
-                changed_by, changed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        INSERT INTO audit_logs (
+            id, entity_type, entity_id, action,
+            old_value, new_value,
+            changed_by, changed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        "#))
         .bind(id_bytes)
         .bind(&entry.entity_type)
         .bind(entity_id_bytes)
@@ -136,12 +134,12 @@ impl AuditRepository for SqlxAuditRepository {
         entity_type: &str,
         entity_id: Uuid,
     ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
-        let entity_id_bytes = entity_id.as_bytes().to_vec();
+        let entity_id_bytes = db_helpers::uuid_to_bytes(&entity_id);
 
-        let rows = sqlx::query_as::<_, AuditLogRow>(&format!(
+        let rows = sqlx::query_as::<_, AuditLogRow>(&db_helpers::sql_with_placeholders(&format!(
             "{}WHERE entity_type = ? AND entity_id = ? ORDER BY changed_at ASC",
             AUDIT_SELECT_QUERY
-        ))
+        )))
         .bind(entity_type)
         .bind(entity_id_bytes)
         .fetch_all(&self.pool)
@@ -152,12 +150,12 @@ impl AuditRepository for SqlxAuditRepository {
     }
 
     async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
-        let user_id_bytes = user_id.as_bytes().to_vec();
+        let user_id_bytes = db_helpers::uuid_to_bytes(&user_id);
 
-        let rows = sqlx::query_as::<_, AuditLogRow>(&format!(
+        let rows = sqlx::query_as::<_, AuditLogRow>(&db_helpers::sql_with_placeholders(&format!(
             "{}WHERE changed_by = ? ORDER BY changed_at DESC",
             AUDIT_SELECT_QUERY
-        ))
+        )))
         .bind(user_id_bytes)
         .fetch_all(&self.pool)
         .await
@@ -174,10 +172,10 @@ impl AuditRepository for SqlxAuditRepository {
         let start_time_str = start_time.to_rfc3339();
         let end_time_str = end_time.to_rfc3339();
 
-        let rows = sqlx::query_as::<_, AuditLogRow>(&format!(
+        let rows = sqlx::query_as::<_, AuditLogRow>(&db_helpers::sql_with_placeholders(&format!(
             "{}WHERE changed_at >= ? AND changed_at <= ? ORDER BY changed_at ASC",
             AUDIT_SELECT_QUERY
-        ))
+        )))
         .bind(start_time_str)
         .bind(end_time_str)
         .fetch_all(&self.pool)
@@ -194,16 +192,14 @@ impl AuditRepository for SqlxAuditRepository {
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
     ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
-        let entity_id_bytes = entity_id.as_bytes().to_vec();
+        let entity_id_bytes = db_helpers::uuid_to_bytes(&entity_id);
         let start_time_str = start_time.to_rfc3339();
         let end_time_str = end_time.to_rfc3339();
 
-        let rows = sqlx::query_as::<_, AuditLogRow>(
-            &format!(
-                "{}WHERE entity_type = ? AND entity_id = ? AND changed_at >= ? AND changed_at <= ? ORDER BY changed_at ASC",
-                AUDIT_SELECT_QUERY
-            ),
-        )
+        let rows = sqlx::query_as::<_, AuditLogRow>(&db_helpers::sql_with_placeholders(&format!(
+            "{}WHERE entity_type = ? AND entity_id = ? AND changed_at >= ? AND changed_at <= ? ORDER BY changed_at ASC",
+            AUDIT_SELECT_QUERY
+        )))
         .bind(entity_type)
         .bind(entity_id_bytes)
         .bind(start_time_str)

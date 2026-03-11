@@ -5,8 +5,9 @@ use tokio::sync::RwLock;
 
 use opengp_domain::domain::user::{RepositoryError, Session, SessionRepository};
 
+use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::helpers::{
-    bytes_to_uuid, datetime_to_string, string_to_datetime, uuid_to_bytes,
+    bytes_to_uuid, datetime_to_string, string_to_datetime, uuid_to_bytes, DbUuid,
 };
 
 pub struct InMemorySessionRepository {
@@ -69,8 +70,8 @@ impl SessionRepository for InMemorySessionRepository {
 
 #[derive(Debug, FromRow)]
 struct SessionRow {
-    id: Vec<u8>,
-    user_id: Vec<u8>,
+    id: DbUuid,
+    user_id: DbUuid,
     created_at: String,
     expires_at: String,
     token: String,
@@ -108,12 +109,10 @@ impl SqlxSessionRepository {
 #[async_trait]
 impl SessionRepository for SqlxSessionRepository {
     async fn create(&self, session: Session) -> Result<Session, RepositoryError> {
-        let result = sqlx::query(
-            r#"
-            INSERT INTO sessions (id, user_id, created_at, expires_at, token)
-            VALUES (?, ?, ?, ?, ?)
-            "#,
-        )
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        INSERT INTO sessions (id, user_id, created_at, expires_at, token)
+        VALUES (?, ?, ?, ?, ?)
+        "#))
         .bind(uuid_to_bytes(&session.id))
         .bind(uuid_to_bytes(&session.user_id))
         .bind(datetime_to_string(&session.created_at))
@@ -139,7 +138,7 @@ impl SessionRepository for SqlxSessionRepository {
     }
 
     async fn find_by_token(&self, token: &str) -> Result<Option<Session>, RepositoryError> {
-        let row = sqlx::query_as::<_, SessionRow>(&format!("{}WHERE token = ?", SESSION_SELECT_QUERY))
+        let row = sqlx::query_as::<_, SessionRow>(&db_helpers::sql_with_placeholders(&format!("{}WHERE token = ?", SESSION_SELECT_QUERY)))
             .bind(token)
             .fetch_optional(&self.pool)
             .await
@@ -152,7 +151,7 @@ impl SessionRepository for SqlxSessionRepository {
     }
 
     async fn delete_by_token(&self, token: &str) -> Result<(), RepositoryError> {
-        let result = sqlx::query("DELETE FROM sessions WHERE token = ?")
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(&"DELETE FROM sessions WHERE token = ?"))
             .bind(token)
             .execute(&self.pool)
             .await
@@ -166,7 +165,7 @@ impl SessionRepository for SqlxSessionRepository {
     }
 
     async fn cleanup_expired(&self, now: DateTime<Utc>) -> Result<u64, RepositoryError> {
-        let result = sqlx::query("DELETE FROM sessions WHERE expires_at <= ?")
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(&"DELETE FROM sessions WHERE expires_at <= ?"))
             .bind(datetime_to_string(&now))
             .execute(&self.pool)
             .await
@@ -233,14 +232,12 @@ mod tests {
         let user_id = Uuid::new_v4();
         let now = Utc::now();
 
-        sqlx::query(
-            r#"
-            INSERT INTO users (
-                id, username, password_hash, role, is_active, created_at, updated_at,
-                first_name, last_name
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
+        sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        INSERT INTO users (
+            id, username, password_hash, role, is_active, created_at, updated_at,
+            first_name, last_name
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "#))
         .bind(uuid_to_bytes(&user_id))
         .bind("session-test-user")
         .bind("hash")

@@ -10,12 +10,13 @@ use opengp_domain::domain::patient::{
     Address, EmergencyContact, Gender, Patient, PatientRepository, RepositoryError,
 };
 use crate::infrastructure::crypto::EncryptionService;
+use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::helpers::*;
 use crate::infrastructure::database::sqlx_to_patient_error;
 
 #[derive(Debug, FromRow)]
 struct PatientRow {
-    id: Vec<u8>,
+    id: DbUuid,
     ihi: Option<Vec<u8>>,
     medicare_number: Option<Vec<u8>>,
     medicare_irn: Option<i64>,
@@ -146,10 +147,10 @@ impl PatientRepository for SqlxPatientRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Patient>, RepositoryError> {
         let id_bytes = uuid_to_bytes(&id);
 
-        let row = sqlx::query_as::<_, PatientRow>(&format!(
+        let row = sqlx::query_as::<_, PatientRow>(&db_helpers::sql_with_placeholders(&format!(
             "{} WHERE id = ? AND is_active = TRUE",
             PATIENT_SELECT_QUERY
-        ))
+        )))
         .bind(id_bytes)
         .fetch_optional(&self.pool)
         .await
@@ -174,10 +175,10 @@ impl PatientRepository for SqlxPatientRepository {
     }
 
     async fn list_active(&self) -> Result<Vec<Patient>, RepositoryError> {
-        let rows = sqlx::query_as::<_, PatientRow>(&format!(
+        let rows = sqlx::query_as::<_, PatientRow>(&db_helpers::sql_with_placeholders(&format!(
             "{} WHERE is_active = TRUE ORDER BY last_name, first_name",
             PATIENT_SELECT_QUERY
-        ))
+        )))
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_to_patient_error)?;
@@ -266,20 +267,18 @@ impl PatientRepository for SqlxPatientRepository {
             .as_ref()
             .map(|ec| ec.relationship.clone());
 
-        let result = sqlx::query(
-            r#"
-            INSERT INTO patients (
-                id, ihi, medicare_number, medicare_irn, medicare_expiry,
-                title, first_name, middle_name, last_name, preferred_name,
-                date_of_birth, gender,
-                address_line1, address_line2, suburb, state, postcode, country,
-                phone_home, phone_mobile, email,
-                emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
-                is_active, is_deceased,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#
-        )
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        INSERT INTO patients (
+            id, ihi, medicare_number, medicare_irn, medicare_expiry,
+            title, first_name, middle_name, last_name, preferred_name,
+            date_of_birth, gender,
+            address_line1, address_line2, suburb, state, postcode, country,
+            phone_home, phone_mobile, email,
+            emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+            is_active, is_deceased,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "#))
         .bind(id_bytes)
         .bind(ihi_encrypted)
         .bind(medicare_encrypted)
@@ -353,38 +352,36 @@ impl PatientRepository for SqlxPatientRepository {
             .as_ref()
             .map(|ec| ec.relationship.clone());
 
-        let result = sqlx::query(
-            r#"
-            UPDATE patients SET
-                ihi = ?,
-                medicare_number = ?,
-                medicare_irn = ?,
-                medicare_expiry = ?,
-                title = ?,
-                first_name = ?,
-                middle_name = ?,
-                last_name = ?,
-                preferred_name = ?,
-                date_of_birth = ?,
-                gender = ?,
-                address_line1 = ?,
-                address_line2 = ?,
-                suburb = ?,
-                state = ?,
-                postcode = ?,
-                country = ?,
-                phone_home = ?,
-                phone_mobile = ?,
-                email = ?,
-                emergency_contact_name = ?,
-                emergency_contact_phone = ?,
-                emergency_contact_relationship = ?,
-                is_active = ?,
-                is_deceased = ?,
-                updated_at = ?
-            WHERE id = ?
-            "#,
-        )
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        UPDATE patients SET
+            ihi = ?,
+            medicare_number = ?,
+            medicare_irn = ?,
+            medicare_expiry = ?,
+            title = ?,
+            first_name = ?,
+            middle_name = ?,
+            last_name = ?,
+            preferred_name = ?,
+            date_of_birth = ?,
+            gender = ?,
+            address_line1 = ?,
+            address_line2 = ?,
+            suburb = ?,
+            state = ?,
+            postcode = ?,
+            country = ?,
+            phone_home = ?,
+            phone_mobile = ?,
+            email = ?,
+            emergency_contact_name = ?,
+            emergency_contact_phone = ?,
+            emergency_contact_relationship = ?,
+            is_active = ?,
+            is_deceased = ?,
+            updated_at = ?
+        WHERE id = ?
+        "#))
         .bind(ihi_encrypted)
         .bind(medicare_encrypted)
         .bind(medicare_irn_i64)

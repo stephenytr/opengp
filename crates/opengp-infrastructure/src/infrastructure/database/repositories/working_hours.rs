@@ -3,12 +3,15 @@ use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
 use opengp_domain::domain::user::{RepositoryError, WorkingHours, WorkingHoursRepository};
-use crate::infrastructure::database::helpers::{bytes_to_uuid, datetime_to_string, string_to_datetime, uuid_to_bytes};
+use crate::infrastructure::database::helpers as db_helpers;
+use crate::infrastructure::database::helpers::{
+    bytes_to_uuid, datetime_to_string, string_to_datetime, uuid_to_bytes, DbUuid,
+};
 
 #[derive(Debug, FromRow)]
 struct WorkingHoursRow {
-    id: Vec<u8>,
-    practitioner_id: Vec<u8>,
+    id: DbUuid,
+    practitioner_id: DbUuid,
     day_of_week: i64,
     start_time: String,
     end_time: String,
@@ -73,10 +76,10 @@ impl WorkingHoursRepository for SqlxWorkingHoursRepository {
     ) -> Result<Vec<WorkingHours>, RepositoryError> {
         let practitioner_id_bytes = uuid_to_bytes(&practitioner_id);
 
-        let rows = sqlx::query_as::<_, WorkingHoursRow>(&format!(
+        let rows = sqlx::query_as::<_, WorkingHoursRow>(&db_helpers::sql_with_placeholders(&format!(
             "{}WHERE practitioner_id = ? ORDER BY day_of_week",
             WORKING_HOURS_SELECT_QUERY
-        ))
+        )))
         .bind(practitioner_id_bytes)
         .fetch_all(&self.pool)
         .await
@@ -93,10 +96,10 @@ impl WorkingHoursRepository for SqlxWorkingHoursRepository {
         let practitioner_id_bytes = uuid_to_bytes(&practitioner_id);
         let day_of_week_i64 = day_of_week as i64;
 
-        let row = sqlx::query_as::<_, WorkingHoursRow>(&format!(
+        let row = sqlx::query_as::<_, WorkingHoursRow>(&db_helpers::sql_with_placeholders(&format!(
             "{}WHERE practitioner_id = ? AND day_of_week = ?",
             WORKING_HOURS_SELECT_QUERY
-        ))
+        )))
         .bind(practitioner_id_bytes)
         .bind(day_of_week_i64)
         .fetch_optional(&self.pool)
@@ -123,16 +126,14 @@ impl WorkingHoursRepository for SqlxWorkingHoursRepository {
             .await?;
 
         if existing.is_some() {
-            let result = sqlx::query(
-                r#"
-                UPDATE working_hours
-                SET start_time = ?,
-                    end_time = ?,
-                    is_active = ?,
-                    updated_at = ?
-                WHERE practitioner_id = ? AND day_of_week = ?
-                "#,
-            )
+            let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+            UPDATE working_hours
+            SET start_time = ?,
+                end_time = ?,
+                is_active = ?,
+                updated_at = ?
+            WHERE practitioner_id = ? AND day_of_week = ?
+            "#))
             .bind(&start_time_str)
             .bind(&end_time_str)
             .bind(working_hours.is_active)
@@ -161,16 +162,14 @@ impl WorkingHoursRepository for SqlxWorkingHoursRepository {
                 Err(e) => Err(RepositoryError::Database(e.to_string())),
             }
         } else {
-            let result = sqlx::query(
-                r#"
-                INSERT INTO working_hours (
-                    id, practitioner_id, day_of_week,
-                    start_time, end_time,
-                    is_active,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                "#,
-            )
+            let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+            INSERT INTO working_hours (
+                id, practitioner_id, day_of_week,
+                start_time, end_time,
+                is_active,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            "#))
             .bind(id_bytes)
             .bind(practitioner_id_bytes)
             .bind(day_of_week_i64)
@@ -215,12 +214,10 @@ impl WorkingHoursRepository for SqlxWorkingHoursRepository {
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
         let id_bytes = uuid_to_bytes(&id);
 
-        let result = sqlx::query(
-            r#"
-            DELETE FROM working_hours
-            WHERE id = ?
-            "#,
-        )
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        DELETE FROM working_hours
+        WHERE id = ?
+        "#))
         .bind(id_bytes)
         .execute(&self.pool)
         .await;
