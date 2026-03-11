@@ -3,7 +3,8 @@ use chrono::TimeZone;
 use std::collections::HashMap;
 
 use crate::ui::app::{
-    App, AppointmentStatusTransition, PendingClinicalSaveData, PendingPatientData,
+    ApiTaskError, App, AppointmentStatusTransition, PendingClinicalSaveData, PendingPatientData,
+    RetryOperation,
 };
 use crate::ui::components::appointment::AppointmentState;
 use crate::ui::components::clinical::ClinicalState;
@@ -38,18 +39,34 @@ impl App {
             .is_some_and(tokio::task::JoinHandle::is_finished)
         {
             let handle = self.login_task.take().expect("task exists");
+            let retry_login = self.active_login_attempt.clone();
+            self.active_login_attempt = None;
 
             match handle.await {
                 Ok(Ok(login_response)) => {
                     self.login_screen.set_loading(false);
                     self.login_screen.clear_error();
+                    self.clear_server_unavailable_error();
                     self.authenticated = true;
                     self.current_user_id = login_response.user.id;
                     self.request_refresh_patients();
                     self.status_bar.clear_error();
                 }
                 Ok(Err(err)) => {
-                    self.login_screen.set_error(err.to_string());
+                    match err {
+                        crate::api::ApiClientError::ServerUnavailable(message) => {
+                            let retry_operation = retry_login.map(|(username, password)| {
+                                RetryOperation::Login { username, password }
+                            });
+                            if let Some(retry_operation) = retry_operation {
+                                self.show_server_unavailable_error(message, retry_operation);
+                            }
+                            self.login_screen.set_error("Cannot connect to server");
+                        }
+                        other => {
+                            self.login_screen.set_error(other.to_string());
+                        }
+                    }
                 }
                 Err(err) => {
                     self.login_screen
@@ -71,10 +88,20 @@ impl App {
             match handle.await {
                 Ok(Ok(items)) => {
                     self.patient_list.set_patients(items);
+                    self.clear_server_unavailable_error();
                     self.status_bar.clear_error();
                 }
-                Ok(Err(message)) => self.set_status_error(message),
-                Err(err) => self.set_status_error(format!("Failed to load patients: {}", err)),
+                Ok(Err(err)) => {
+                    self.handle_api_task_error(err, Some(RetryOperation::RefreshPatients))
+                        .await
+                }
+                Err(err) => {
+                    self.handle_api_task_error(ApiTaskError::message(format!(
+                        "Failed to load patients: {}",
+                        err
+                    )), None)
+                    .await;
+                }
             }
         }
 
@@ -87,15 +114,30 @@ impl App {
                 .appointment_list_fetch_task
                 .take()
                 .expect("task exists");
+            let retry_date = self.active_appointment_refresh_date;
+            self.active_appointment_refresh_date = None;
             self.appointment_state.is_loading = false;
 
             match handle.await {
                 Ok(Ok(schedule)) => {
                     self.appointment_state.schedule_data = Some(schedule);
+                    self.clear_server_unavailable_error();
                     self.status_bar.clear_error();
                 }
-                Ok(Err(message)) => self.set_status_error(message),
-                Err(err) => self.set_status_error(format!("Failed to load appointments: {}", err)),
+                Ok(Err(err)) => {
+                    self.handle_api_task_error(
+                        err,
+                        retry_date.map(|date| RetryOperation::RefreshAppointments { date }),
+                    )
+                    .await
+                }
+                Err(err) => {
+                    self.handle_api_task_error(ApiTaskError::message(format!(
+                        "Failed to load appointments: {}",
+                        err
+                    )), None)
+                    .await;
+                }
             }
         }
 
@@ -108,17 +150,67 @@ impl App {
                 .consultation_list_fetch_task
                 .take()
                 .expect("task exists");
+            let retry_patient_id = self.active_consultation_refresh_patient_id;
+            self.active_consultation_refresh_patient_id = None;
             self.clinical_state.consultation_list.set_loading(false);
 
             match handle.await {
                 Ok(Ok(consultations)) => {
                     self.clinical_state.consultations = consultations.clone();
                     self.clinical_state.consultation_list.consultations = consultations;
+                    self.clear_server_unavailable_error();
                     self.status_bar.clear_error();
                 }
-                Ok(Err(message)) => self.set_status_error(message),
-                Err(err) => self.set_status_error(format!("Failed to load consultations: {}", err)),
+                Ok(Err(err)) => {
+                    self.handle_api_task_error(
+                        err,
+                        retry_patient_id
+                            .map(|patient_id| RetryOperation::RefreshConsultations { patient_id }),
+                    )
+                    .await
+                }
+                Err(err) => {
+                    self.handle_api_task_error(ApiTaskError::message(format!(
+                        "Failed to load consultations: {}",
+                        err
+                    )), None)
+                    .await;
+                }
             }
+        }
+    }
+
+    async fn handle_api_task_error(&mut self, error: ApiTaskError, retry: Option<RetryOperation>) {
+        match error {
+            ApiTaskError::Unauthorized => {
+                if let Some(api_client) = self.api_client.clone() {
+                    api_client.set_session_token(None).await;
+                }
+
+                self.authenticated = false;
+                self.current_user_id = uuid::Uuid::nil();
+                self.pending_patient_list_refresh = false;
+                self.pending_appointment_list_refresh = None;
+                self.pending_consultation_list_refresh = None;
+                self.active_login_attempt = None;
+                self.active_appointment_refresh_date = None;
+                self.active_consultation_refresh_patient_id = None;
+                self.patient_list.set_loading(false);
+                self.appointment_state.is_loading = false;
+                self.clinical_state.consultation_list.set_loading(false);
+                self.login_screen.set_loading(false);
+                self.login_screen
+                    .set_error("Session expired. Please log in again.");
+            }
+            ApiTaskError::ServerUnavailable(message) => {
+                if let Some(retry_operation) = retry {
+                    self.show_server_unavailable_error(message, retry_operation);
+                    self.set_status_error("Cannot connect to server");
+                } else {
+                    self.set_status_error("Cannot connect to server");
+                }
+            }
+            ApiTaskError::Message(message) => self.set_status_error(message),
         }
     }
 
@@ -160,6 +252,7 @@ impl App {
                     .map(|p| (p.id, p.full_name.clone()))
                     .collect::<HashMap<_, _>>();
                 self.appointment_state.is_loading = true;
+                self.active_appointment_refresh_date = Some(date);
 
                 let api_client = self.api_client.clone().expect("api client already checked");
                 self.appointment_list_fetch_task = Some(tokio::spawn(async move {
@@ -172,6 +265,7 @@ impl App {
             if self.consultation_list_fetch_task.is_none() {
                 let page_limit = self.consultation_page_limit;
                 self.clinical_state.consultation_list.set_loading(true);
+                self.active_consultation_refresh_patient_id = Some(patient_id);
 
                 let api_client = self.api_client.clone().expect("api client already checked");
                 self.consultation_list_fetch_task = Some(tokio::spawn(async move {
@@ -197,6 +291,7 @@ impl App {
         };
 
         self.login_screen.set_loading(true);
+        self.active_login_attempt = Some((username.clone(), password.clone()));
         self.login_task = Some(tokio::spawn(async move {
             api_client.login(username, password).await
         }));
@@ -315,7 +410,7 @@ impl App {
 async fn fetch_patients(
     api_client: std::sync::Arc<crate::api::ApiClient>,
     limit: u32,
-) -> Result<Vec<PatientListItem>, String> {
+) -> Result<Vec<PatientListItem>, ApiTaskError> {
     let mut page = 1;
     let mut collected = Vec::new();
 
@@ -323,7 +418,7 @@ async fn fetch_patients(
         let response = api_client
             .get_patients(page, limit)
             .await
-            .map_err(|e| format!("Failed to fetch patients: {}", e))?;
+            .map_err(|e| ApiTaskError::from_client_error(e, "Failed to fetch patients"))?;
         let page_count = response.data.len();
 
         for patient in response.data {
@@ -354,7 +449,7 @@ async fn fetch_appointments_for_day(
     date: NaiveDate,
     limit: u32,
     patient_names: HashMap<uuid::Uuid, String>,
-) -> Result<CalendarDayView, String> {
+) -> Result<CalendarDayView, ApiTaskError> {
     let start = chrono::Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).expect("valid start"));
     let end = chrono::Utc.from_utc_datetime(&date.and_hms_opt(23, 59, 59).expect("valid end"));
 
@@ -365,7 +460,9 @@ async fn fetch_appointments_for_day(
         let response = api_client
             .get_appointments(page, limit, Some(start), Some(end), None)
             .await
-            .map_err(|e| format!("Failed to fetch appointments: {}", e))?;
+            .map_err(|e| {
+                ApiTaskError::from_client_error(e, "Failed to fetch appointments")
+            })?;
         let page_count = response.data.len();
 
         all.extend(response.data);
@@ -431,7 +528,7 @@ async fn fetch_consultations(
     api_client: std::sync::Arc<crate::api::ApiClient>,
     patient_id: uuid::Uuid,
     limit: u32,
-) -> Result<Vec<Consultation>, String> {
+) -> Result<Vec<Consultation>, ApiTaskError> {
     let mut page = 1;
     let mut collected = Vec::new();
 
@@ -439,7 +536,9 @@ async fn fetch_consultations(
         let response = api_client
             .get_consultations(patient_id, page, limit)
             .await
-            .map_err(|e| format!("Failed to fetch consultations: {}", e))?;
+            .map_err(|e| {
+                ApiTaskError::from_client_error(e, "Failed to fetch consultations")
+            })?;
         let page_count = response.data.len();
 
         for item in response.data {
@@ -519,6 +618,7 @@ mod tests {
     use super::*;
     use axum::{
         extract::{Query, State},
+        http::StatusCode,
         routing::{get, post},
         Json, Router,
     };
@@ -678,6 +778,76 @@ mod tests {
         assert!(api_client.current_session_token().await.is_none());
     }
 
+    #[tokio::test]
+    async fn app_handles_unauthorized_api_response_by_logging_out() {
+        let app_router = Router::new().route("/api/v1/patients", get(patients_unauthorized_handler));
+
+        let (base_url, _server) = spawn_server(app_router).await;
+        let api_client = Arc::new(crate::api::ApiClient::new(base_url));
+        api_client
+            .set_session_token(Some("test-token".to_string()))
+            .await;
+
+        let mut app = App::new(
+            Some(api_client.clone()),
+            None,
+            None,
+            None,
+            opengp_config::CalendarConfig::default(),
+        );
+        app.set_authenticated(true);
+        app.request_refresh_patients();
+
+        for _ in 0..20 {
+            app.poll_api_tasks().await;
+            if !app.is_authenticated() {
+                break;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+
+        assert!(!app.is_authenticated());
+        assert!(api_client.current_session_token().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn app_shows_server_unavailable_error_and_retries_patient_refresh() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let api_client = Arc::new(crate::api::ApiClient::new("http://127.0.0.1:9"));
+        api_client
+            .set_session_token(Some("test-token".to_string()))
+            .await;
+
+        let mut app = App::new(
+            Some(api_client),
+            None,
+            None,
+            None,
+            opengp_config::CalendarConfig::default(),
+        );
+
+        app.request_refresh_patients();
+
+        for _ in 0..30 {
+            app.poll_api_tasks().await;
+            if app.server_unavailable_error_message().is_some() {
+                break;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+
+        let error = app.server_unavailable_error_message().unwrap_or_default();
+        assert!(error.contains("Cannot connect to server"));
+
+        let action = app.handle_key_event(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+        assert_eq!(action, crate::ui::keybinds::Action::Refresh);
+        assert!(app.server_unavailable_error_message().is_none());
+
+        app.poll_api_tasks().await;
+        assert!(app.patient_list_fetch_task.is_some());
+    }
+
     async fn patients_handler(
         State(state): State<TestState>,
     ) -> Json<PaginatedResponse<PatientResponse>> {
@@ -774,6 +944,17 @@ mod tests {
                 status: 401,
                 message: "Invalid credentials".to_string(),
                 code: "invalid_credentials".to_string(),
+            }),
+        )
+    }
+
+    async fn patients_unauthorized_handler() -> (StatusCode, Json<ApiErrorResponse>) {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(ApiErrorResponse {
+                status: 401,
+                message: "Session expired".to_string(),
+                code: "unauthorized".to_string(),
             }),
         )
     }

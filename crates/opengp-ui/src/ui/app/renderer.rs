@@ -36,6 +36,8 @@ impl App {
 
         self.render_content(frame, content_area);
 
+        self.render_server_unavailable_banner(frame, content_area);
+
         frame.render_widget(self.status_bar.clone(), status_bar_area);
 
         if self.patient_list.is_searching() {
@@ -58,6 +60,44 @@ impl App {
             frame.render_widget(Clear, overlay_area);
             search_text.render(overlay_area, frame.buffer_mut());
         }
+    }
+
+    fn render_server_unavailable_banner(&self, frame: &mut Frame, area: Rect) {
+        let Some(error_message) = self.server_unavailable_error.as_deref() else {
+            return;
+        };
+
+        use ratatui::style::Style;
+        use ratatui::text::Line;
+        use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+
+        let banner_width = area.width.min(80);
+        let banner_height = 4;
+        let banner_area = Rect::new(
+            area.x + area.width.saturating_sub(banner_width) / 2,
+            area.y,
+            banner_width,
+            banner_height,
+        );
+
+        let instructions = Line::from("[r] Retry    [Esc] Dismiss");
+        let content = vec![
+            Line::from(error_message.to_string()),
+            Line::from(""),
+            instructions,
+        ];
+
+        let widget = Paragraph::new(content)
+            .block(
+                Block::default()
+                    .title(" Cannot connect to server ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(self.theme.colors.error)),
+            )
+            .style(Style::default().fg(self.theme.colors.error));
+
+        frame.render_widget(Clear, banner_area);
+        frame.render_widget(widget, banner_area);
     }
 
     fn render_content(&mut self, frame: &mut Frame, area: Rect) {

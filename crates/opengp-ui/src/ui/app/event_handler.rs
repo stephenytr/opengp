@@ -11,6 +11,20 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 impl App {
     pub fn handle_key_event(&mut self, key: KeyEvent) -> Action {
+        if self.server_unavailable_error.is_some() {
+            match key.code {
+                crossterm::event::KeyCode::Char('r') | crossterm::event::KeyCode::Char('R') => {
+                    self.retry_server_unavailable_operation();
+                    return Action::Refresh;
+                }
+                crossterm::event::KeyCode::Esc => {
+                    self.clear_server_unavailable_error();
+                    return Action::Escape;
+                }
+                _ => {}
+            }
+        }
+
         if self.help_overlay.is_visible() {
             if key.code == crossterm::event::KeyCode::Esc
                 || key.code == crossterm::event::KeyCode::F(1)
@@ -224,6 +238,22 @@ impl App {
                     }
                 }
                 Action::Save => {}
+                Action::Refresh => match self.tab_bar.selected() {
+                    Tab::Patient => self.request_refresh_patients(),
+                    Tab::Appointment => {
+                        let date = self
+                            .appointment_state
+                            .selected_date
+                            .unwrap_or_else(|| chrono::Utc::now().date_naive());
+                        self.request_refresh_appointments(date);
+                    }
+                    Tab::Clinical => {
+                        if let Some(patient_id) = self.clinical_state.selected_patient_id {
+                            self.request_refresh_consultations(patient_id);
+                        }
+                    }
+                    Tab::Billing => {}
+                },
                 Action::NavigateDown => {
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
                         let visible_rows = self.calculate_visible_patient_rows();

@@ -26,14 +26,38 @@ const DEFAULT_APPOINTMENT_PAGE_LIMIT: u32 = 100;
 const DEFAULT_CONSULTATION_PAGE_LIMIT: u32 = 100;
 
 type PatientListFetchTask =
-    tokio::task::JoinHandle<Result<Vec<crate::ui::view_models::PatientListItem>, String>>;
+    tokio::task::JoinHandle<Result<Vec<crate::ui::view_models::PatientListItem>, ApiTaskError>>;
 type AppointmentListFetchTask =
-    tokio::task::JoinHandle<Result<opengp_domain::domain::appointment::CalendarDayView, String>>;
+    tokio::task::JoinHandle<
+        Result<opengp_domain::domain::appointment::CalendarDayView, ApiTaskError>,
+    >;
 type ConsultationListFetchTask =
-    tokio::task::JoinHandle<Result<Vec<opengp_domain::domain::clinical::Consultation>, String>>;
+    tokio::task::JoinHandle<Result<Vec<opengp_domain::domain::clinical::Consultation>, ApiTaskError>>;
 type LoginTask = tokio::task::JoinHandle<
     Result<opengp_domain::domain::api::LoginResponse, crate::api::ApiClientError>,
 >;
+
+pub(super) enum ApiTaskError {
+    Unauthorized,
+    ServerUnavailable(String),
+    Message(String),
+}
+
+impl ApiTaskError {
+    fn from_client_error(error: crate::api::ApiClientError, context: &str) -> Self {
+        match error {
+            crate::api::ApiClientError::Unauthorized => Self::Unauthorized,
+            crate::api::ApiClientError::ServerUnavailable(message) => {
+                Self::ServerUnavailable(format!("{}: {}", context, message))
+            }
+            other => Self::Message(format!("{}: {}", context, other)),
+        }
+    }
+
+    fn message(message: impl Into<String>) -> Self {
+        Self::Message(message.into())
+    }
+}
 
 pub struct App {
     theme: Theme,
@@ -86,6 +110,11 @@ pub struct App {
     consultation_list_fetch_task: Option<ConsultationListFetchTask>,
     pending_login_request: Option<(String, String)>,
     login_task: Option<LoginTask>,
+    server_unavailable_error: Option<String>,
+    server_unavailable_retry: Option<RetryOperation>,
+    active_login_attempt: Option<(String, String)>,
+    active_appointment_refresh_date: Option<NaiveDate>,
+    active_consultation_refresh_patient_id: Option<uuid::Uuid>,
     terminal_size: Rect,
 }
 
@@ -132,6 +161,14 @@ pub enum AppointmentStatusTransition {
     MarkArrived,
     MarkInProgress,
     MarkCompleted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RetryOperation {
+    Login { username: String, password: String },
+    RefreshPatients,
+    RefreshAppointments { date: NaiveDate },
+    RefreshConsultations { patient_id: uuid::Uuid },
 }
 
 impl App {
@@ -187,6 +224,11 @@ impl App {
             consultation_list_fetch_task: None,
             pending_login_request: None,
             login_task: None,
+            server_unavailable_error: None,
+            server_unavailable_retry: None,
+            active_login_attempt: None,
+            active_appointment_refresh_date: None,
+            active_consultation_refresh_patient_id: None,
             terminal_size: Rect::new(0, 0, 80, 24),
         };
 
@@ -276,6 +318,45 @@ impl App {
     fn calculate_visible_patient_rows(&self) -> usize {
         let available_height = self.terminal_size.height.saturating_sub(2 + 2 + 1);
         available_height.saturating_sub(1) as usize
+    }
+
+    pub(crate) fn show_server_unavailable_error(
+        &mut self,
+        message: impl Into<String>,
+        retry_operation: RetryOperation,
+    ) {
+        self.server_unavailable_error = Some(message.into());
+        self.server_unavailable_retry = Some(retry_operation);
+    }
+
+    pub(crate) fn clear_server_unavailable_error(&mut self) {
+        self.server_unavailable_error = None;
+        self.server_unavailable_retry = None;
+    }
+
+    pub(crate) fn retry_server_unavailable_operation(&mut self) {
+        if let Some(operation) = self.server_unavailable_retry.clone() {
+            match operation {
+                RetryOperation::Login { username, password } => {
+                    self.pending_login_request = Some((username, password));
+                }
+                RetryOperation::RefreshPatients => {
+                    self.request_refresh_patients();
+                }
+                RetryOperation::RefreshAppointments { date } => {
+                    self.request_refresh_appointments(date);
+                }
+                RetryOperation::RefreshConsultations { patient_id } => {
+                    self.request_refresh_consultations(patient_id);
+                }
+            }
+            self.clear_server_unavailable_error();
+        }
+    }
+
+    #[cfg(test)]
+    pub fn server_unavailable_error_message(&self) -> Option<&str> {
+        self.server_unavailable_error.as_deref()
     }
 }
 

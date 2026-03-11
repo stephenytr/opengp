@@ -12,8 +12,10 @@ use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiClientError {
-    #[error("Unable to reach the server. Please check your connection and try again.")]
-    Network,
+    #[error("Cannot connect to server: {0}")]
+    ServerUnavailable(String),
+    #[error("Session expired. Please log in again.")]
+    Unauthorized,
     #[error("Authentication error: {0}")]
     Authentication(String),
     #[error("Validation error: {0}")]
@@ -252,9 +254,32 @@ impl ApiClient {
 
     fn map_request_error(error: reqwest::Error) -> ApiClientError {
         if error.is_connect() || error.is_timeout() {
-            ApiClientError::Network
+            return ApiClientError::ServerUnavailable(Self::server_unavailable_message(&error));
         } else {
             ApiClientError::Server("Unable to complete request".to_string())
+        }
+    }
+
+    fn server_unavailable_message(error: &reqwest::Error) -> String {
+        if error.is_timeout() {
+            return "Cannot connect to server (request timed out)".to_string();
+        }
+
+        let lower = error.to_string().to_lowercase();
+        if lower.contains("dns")
+            || lower.contains("resolve")
+            || lower.contains("name or service not known")
+            || lower.contains("no such host")
+        {
+            "Cannot connect to server (DNS resolution failed)".to_string()
+        } else if lower.contains("connection refused") {
+            "Cannot connect to server (connection refused)".to_string()
+        } else if lower.contains("network is unreachable")
+            || lower.contains("host is unreachable")
+        {
+            "Cannot connect to server (network unreachable)".to_string()
+        } else {
+            "Cannot connect to server".to_string()
         }
     }
 
@@ -272,9 +297,8 @@ impl ApiClient {
             .unwrap_or(fallback_message);
 
         match status {
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                ApiClientError::Authentication(message)
-            }
+            StatusCode::UNAUTHORIZED => ApiClientError::Unauthorized,
+            StatusCode::FORBIDDEN => ApiClientError::Authentication(message),
             StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY => {
                 ApiClientError::Validation(message)
             }
@@ -384,7 +408,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn maps_validation_and_network_errors() {
+    async fn maps_validation_and_server_unavailable_errors() {
         let app = Router::new()
             .route("/api/v1/auth/login", post(login_handler))
             .route(
@@ -436,7 +460,43 @@ mod tests {
                 "correct-horse-battery-staple".to_string(),
             )
             .await;
-        assert!(matches!(network_result, Err(ApiClientError::Network)));
+        assert!(matches!(
+            network_result,
+            Err(ApiClientError::ServerUnavailable(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn maps_unauthorized_errors_to_dedicated_variant() {
+        let app = Router::new()
+            .route("/api/v1/auth/login", post(login_handler))
+            .route(
+                "/api/v1/patients",
+                get(|| async {
+                    (
+                        StatusCode::UNAUTHORIZED,
+                        Json(ApiErrorResponse {
+                            status: 401,
+                            message: "Session expired".to_string(),
+                            code: "unauthorized".to_string(),
+                        }),
+                    )
+                }),
+            );
+
+        let (base_url, _server_task) = spawn_server(app).await;
+        let client = ApiClient::new(base_url);
+
+        client
+            .login(
+                "dr_smith".to_string(),
+                "correct-horse-battery-staple".to_string(),
+            )
+            .await
+            .expect("login should succeed");
+
+        let result = client.get_patients(1, 25).await;
+        assert!(matches!(result, Err(ApiClientError::Unauthorized)));
     }
 
     #[tokio::test]
