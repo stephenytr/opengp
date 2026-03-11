@@ -17,7 +17,7 @@ pub async fn run() -> Result<()> {
     let config = ApiConfig::from_env()?;
     init_tracing(&config.log_level);
 
-    let state = ApiState::new(config)?;
+    let state = ApiState::new(config).await?;
     let app = routes::router(state.clone());
     let bind_addr = state.config.bind_address();
 

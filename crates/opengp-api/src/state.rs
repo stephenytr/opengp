@@ -37,7 +37,7 @@ impl ApiMetrics {
 }
 
 impl ApiState {
-    pub fn new(config: ApiConfig) -> Result<Self, ApiError> {
+    pub async fn new(config: ApiConfig) -> Result<Self, ApiError> {
         let connect_options = PgConnectOptions::from_str(&config.database_url)
             .map_err(|e| ApiError::InvalidDatabaseUrl(e.to_string()))?;
 
@@ -49,7 +49,7 @@ impl ApiState {
             .test_before_acquire(false)
             .connect_lazy_with(connect_options);
 
-        let services = Arc::new(ApiServices::new(&config)?);
+        let services = Arc::new(ApiServices::new(&config).await?);
         let metrics = Arc::new(ApiMetrics::new());
 
         Ok(Self {
@@ -81,6 +81,7 @@ mod tests {
             host: "127.0.0.1".to_string(),
             port: 9090,
             database_url: "postgres://postgres:postgres@127.0.0.1:5432/opengp".to_string(),
+            patient_database_url: None,
             database_max_connections: 4,
             database_min_connections: 1,
             connect_timeout_secs: 5,
@@ -90,7 +91,7 @@ mod tests {
             log_level: "info".to_string(),
         };
 
-        let state = ApiState::new(config.clone()).expect("state should initialize");
+        let state = ApiState::new(config.clone()).await.expect("state should initialize");
         assert_eq!(state.config.port, 9090);
         assert_eq!(state.config.bind_address(), "127.0.0.1:9090");
     }
@@ -101,6 +102,7 @@ mod tests {
             host: "0.0.0.0".to_string(),
             port: 8080,
             database_url: "postgres://postgres:postgres@127.0.0.1:5432/opengp".to_string(),
+            patient_database_url: None,
             database_max_connections: 10,
             database_min_connections: 2,
             connect_timeout_secs: 30,
@@ -113,7 +115,7 @@ mod tests {
         let pool = PgPoolOptions::new()
             .connect_lazy(&config.database_url)
             .expect("pool should initialize lazily");
-        let services = Arc::new(ApiServices::new(&config).expect("services should initialize"));
+        let services = Arc::new(ApiServices::new(&config).await.expect("services should initialize"));
 
         let state = ApiState::from_parts(pool, services, config);
         assert_eq!(state.config.port, 8080);

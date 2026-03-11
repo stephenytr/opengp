@@ -10,4 +10,7 @@ pub enum ApiError {
 
     #[error("failed to initialize encryption service: {0}")]
     EncryptionInit(String),
+
+    #[error("failed to initialize patient database: {0}")]
+    PatientDatabaseInit(String),
 }

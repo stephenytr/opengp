@@ -9,7 +9,6 @@ pub mod repositories;
 pub use helpers::*;
 pub use query::*;
 
-#[cfg(test)]
 pub mod mocks;
 
 #[cfg(test)]

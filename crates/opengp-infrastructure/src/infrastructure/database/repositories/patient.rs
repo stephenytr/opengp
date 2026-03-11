@@ -460,7 +460,21 @@ impl PatientRepository for SqlxPatientRepository {
         }
     }
 
-    async fn deactivate(&self, _id: Uuid) -> Result<(), RepositoryError> {
-        todo!("Implement deactivate")
+    async fn deactivate(&self, id: Uuid) -> Result<(), RepositoryError> {
+        let id_bytes = uuid_to_bytes(&id);
+
+        let result = sqlx::query(&db_helpers::sql_with_placeholders(
+            "UPDATE patients SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP, version = version + 1 WHERE id = ? AND is_active = TRUE",
+        ))
+        .bind(id_bytes)
+        .execute(&self.pool)
+        .await
+        .map_err(sqlx_to_patient_error)?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::Base(BaseRepositoryError::NotFound));
+        }
+
+        Ok(())
     }
 }

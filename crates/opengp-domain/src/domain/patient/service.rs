@@ -108,6 +108,16 @@ impl PatientService {
         let patients = self.repository.search(query).await?;
         Ok(patients)
     }
+
+    pub async fn deactivate_patient(&self, id: Uuid) -> Result<(), ServiceError> {
+        let exists = self.repository.find_by_id(id).await?.is_some();
+        if !exists {
+            return Err(ServiceError::NotFound(id));
+        }
+
+        self.repository.deactivate(id).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

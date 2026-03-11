@@ -6,6 +6,7 @@ pub struct ApiConfig {
     pub host: String,
     pub port: u16,
     pub database_url: String,
+    pub patient_database_url: Option<String>,
     pub database_max_connections: u32,
     pub database_min_connections: u32,
     pub connect_timeout_secs: u64,
@@ -29,6 +30,7 @@ impl ApiConfig {
             database_url: std::env::var("API_DATABASE_URL").unwrap_or_else(|_| {
                 "postgres://postgres:postgres@127.0.0.1:5432/opengp".to_string()
             }),
+            patient_database_url: std::env::var("API_PATIENT_DATABASE_URL").ok(),
             database_max_connections: std::env::var("API_DATABASE_MAX_CONNECTIONS")
                 .ok()
                 .and_then(|v| v.parse::<u32>().ok())
