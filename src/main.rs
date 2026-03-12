@@ -254,31 +254,28 @@ async fn run_tui(
 
         // Check if practitioners need to be loaded for appointment form picker
         if app.take_pending_load_practitioners() {
-            let needs_load = app.appointment_state_mut().practitioners.is_empty();
-            if needs_load {
-                match appointment_service.get_practitioners().await {
-                    Ok(practitioners) => {
-                        app.appointment_state_mut().practitioners = practitioners;
-                        tracing::info!("Loaded practitioners for appointment form");
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to load practitioners for form: {}", e);
-                    }
+            match api_client.get_practitioners().await {
+                Ok(practitioners) => {
+                    let practitioner_items: Vec<opengp_ui::ui::view_models::PractitionerViewItem> =
+                        practitioners
+                            .into_iter()
+                            .map(|p| opengp_ui::ui::view_models::PractitionerViewItem {
+                                id: p.id,
+                                display_name: p.name,
+                            })
+                            .collect();
+                    app.appointment_form_set_practitioners(practitioner_items);
+                    tracing::info!("Loaded practitioners for appointment form");
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load practitioners for form: {}", e);
                 }
             }
-            let practitioner_items: Vec<opengp_ui::ui::view_models::PractitionerViewItem> = app
-                .practitioners()
-                .iter()
-                .map(|p: &opengp_domain::domain::user::Practitioner| {
-                    opengp_ui::ui::view_models::PractitionerViewItem::from(p.clone())
-                })
-                .collect();
-            app.appointment_form_set_practitioners(practitioner_items);
         }
 
         if let Some((practitioner_id, date, duration)) = app.take_pending_load_booked_slots() {
-            match appointment_service
-                .get_available_slots(practitioner_id, date, duration)
+            match api_client
+                .get_available_slots(practitioner_id, date, duration as i64)
                 .await
             {
                 Ok(available_slots) => {
