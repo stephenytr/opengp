@@ -9,16 +9,19 @@ use axum::{
 use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
 use http::header::ORIGIN;
 use opengp_domain::domain::api::{
-    ApiErrorResponse, AppointmentRequest, AppointmentResponse, AuthenticatedUserResponse,
-    ConsultationRequest, ConsultationResponse, LoginRequest, LoginResponse, PaginatedResponse,
-    PatientRequest, PatientResponse, PractitionerResponse,
+    AllergyRequest, AllergyResponse, ApiErrorResponse, AppointmentRequest, AppointmentResponse,
+    AuthenticatedUserResponse, ConsultationRequest, ConsultationResponse, LoginRequest,
+    LoginResponse, PaginatedResponse, PatientRequest, PatientResponse, PractitionerResponse,
 };
 use opengp_domain::domain::appointment::{
     AppointmentSearchCriteria, AppointmentStatus, AppointmentType, NewAppointmentData,
     ServiceError as AppointmentServiceError, UpdateAppointmentData,
 };
 use opengp_domain::domain::audit::{AuditAction, AuditEntry};
-use opengp_domain::domain::clinical::{NewConsultationData, ServiceError as ClinicalServiceError};
+use opengp_domain::domain::clinical::{
+    AllergyType, NewAllergyData, NewConsultationData, ServiceError as ClinicalServiceError,
+    Severity,
+};
 use opengp_domain::domain::patient::{
     Address, Gender, NewPatientData, ServiceError as PatientServiceError, UpdatePatientData,
 };
@@ -51,6 +54,8 @@ pub fn router(state: ApiState) -> Router {
             "/{id}",
             get(get_patient).put(update_patient).delete(delete_patient),
         )
+        .route("/{id}/allergies", get(list_allergies).post(create_allergy))
+        .route("/{id}/allergies/{allergy_id}", axum::routing::delete(delete_allergy))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             session_validation_middleware,
@@ -727,6 +732,88 @@ async fn create_consultation(
     ))
 }
 
+async fn list_allergies(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(patient_id): Path<Uuid>,
+) -> Result<(StatusCode, Json<Vec<AllergyResponse>>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_read(&context)?;
+
+    let allergies = state
+        .services
+        .clinical_service
+        .list_patient_allergies(patient_id, false)
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    Ok((
+        StatusCode::OK,
+        Json(allergies.into_iter().map(allergy_to_response).collect()),
+    ))
+}
+
+async fn create_allergy(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(patient_id): Path<Uuid>,
+    Json(payload): Json<AllergyRequest>,
+) -> Result<(StatusCode, Json<AllergyResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_access(&context)?;
+
+    let allergy = state
+        .services
+        .clinical_service
+        .add_allergy(allergy_request_to_new_data(patient_id, payload)?, context.user_id)
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    let audit_entry = AuditEntry::new_created(
+        "allergy",
+        allergy.id,
+        serde_json::to_string(&allergy).unwrap_or_default(),
+        context.user_id,
+    );
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
+
+    Ok((StatusCode::CREATED, Json(allergy_to_response(allergy))))
+}
+
+async fn delete_allergy(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path((patient_id, allergy_id)): Path<(Uuid, Uuid)>,
+) -> Result<StatusCode, (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_access(&context)?;
+
+    let allergies = state
+        .services
+        .clinical_service
+        .list_patient_allergies(patient_id, false)
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    if !allergies.iter().any(|allergy| allergy.id == allergy_id) {
+        return Err(not_found_response("allergy_not_found", "Allergy not found"));
+    }
+
+    state
+        .services
+        .clinical_service
+        .deactivate_allergy(allergy_id, context.user_id)
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    let audit_entry = AuditEntry::new_cancelled(
+        "allergy",
+        allergy_id,
+        "Allergy deactivated via API",
+        context.user_id,
+    );
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn update_consultation(
     State(state): State<ApiState>,
     Extension(context): Extension<AuthContext>,
@@ -1088,6 +1175,21 @@ fn clinical_service_error_to_response(
         ClinicalServiceError::PatientNotFound(_) => {
             not_found_response("patient_not_found", "Patient not found")
         }
+        ClinicalServiceError::AllergyNotFound(_) => {
+            not_found_response("allergy_not_found", "Allergy not found")
+        }
+        ClinicalServiceError::MedicalHistoryNotFound(_) => {
+            not_found_response("medical_history_not_found", "Medical history not found")
+        }
+        ClinicalServiceError::VitalSignsNotFound(_) => {
+            not_found_response("vital_signs_not_found", "Vital signs not found")
+        }
+        ClinicalServiceError::FamilyHistoryNotFound(_) => {
+            not_found_response("family_history_not_found", "Family history not found")
+        }
+        ClinicalServiceError::SocialHistoryNotFound(_) => {
+            not_found_response("social_history_not_found", "Social history not found")
+        }
         ClinicalServiceError::Validation(_) => {
             bad_request_response("validation_error", "Invalid consultation payload")
         }
@@ -1101,15 +1203,9 @@ fn clinical_service_error_to_response(
             "insufficient_permissions",
             "Role cannot access consultations",
         ),
-        ClinicalServiceError::Repository(_)
-        | ClinicalServiceError::AllergyNotFound(_)
-        | ClinicalServiceError::MedicalHistoryNotFound(_)
-        | ClinicalServiceError::VitalSignsNotFound(_)
-        | ClinicalServiceError::FamilyHistoryNotFound(_)
-        | ClinicalServiceError::SocialHistoryNotFound(_) => internal_server_error_response(
-            "internal_error",
-            "Unable to process consultation request",
-        ),
+        ClinicalServiceError::Repository(_) => {
+            internal_server_error_response("internal_error", "Unable to process consultation request")
+        }
     }
 }
 
@@ -1244,6 +1340,21 @@ fn consultation_request_to_new_data(payload: ConsultationRequest) -> NewConsulta
     }
 }
 
+fn allergy_request_to_new_data(
+    patient_id: Uuid,
+    payload: AllergyRequest,
+) -> Result<NewAllergyData, (StatusCode, Json<ApiErrorResponse>)> {
+    Ok(NewAllergyData {
+        patient_id,
+        allergen: payload.allergen,
+        allergy_type: parse_allergy_type(&payload.allergy_type)?,
+        severity: parse_severity(&payload.severity)?,
+        reaction: payload.reaction,
+        onset_date: payload.onset_date,
+        notes: payload.notes,
+    })
+}
+
 fn validate_appointment_booking_time(
     start_time: DateTime<Utc>,
 ) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
@@ -1296,6 +1407,33 @@ fn parse_appointment_type(
     }
 }
 
+fn parse_allergy_type(
+    allergy_type: &str,
+) -> Result<AllergyType, (StatusCode, Json<ApiErrorResponse>)> {
+    match allergy_type.trim().to_ascii_lowercase().as_str() {
+        "drug" => Ok(AllergyType::Drug),
+        "food" => Ok(AllergyType::Food),
+        "environmental" => Ok(AllergyType::Environmental),
+        "other" => Ok(AllergyType::Other),
+        _ => Err(bad_request_response(
+            "validation_error",
+            "Invalid allergy type",
+        )),
+    }
+}
+
+fn parse_severity(severity: &str) -> Result<Severity, (StatusCode, Json<ApiErrorResponse>)> {
+    match severity.trim().to_ascii_lowercase().as_str() {
+        "mild" => Ok(Severity::Mild),
+        "moderate" => Ok(Severity::Moderate),
+        "severe" => Ok(Severity::Severe),
+        _ => Err(bad_request_response(
+            "validation_error",
+            "Invalid allergy severity",
+        )),
+    }
+}
+
 fn appointment_type_to_string(appointment_type: AppointmentType) -> &'static str {
     match appointment_type {
         AppointmentType::Standard => "standard",
@@ -1311,6 +1449,23 @@ fn appointment_type_to_string(appointment_type: AppointmentType) -> &'static str
         AppointmentType::Telehealth => "telehealth",
         AppointmentType::HomeVisit => "home_visit",
         AppointmentType::Emergency => "emergency",
+    }
+}
+
+fn allergy_type_to_string(allergy_type: AllergyType) -> &'static str {
+    match allergy_type {
+        AllergyType::Drug => "drug",
+        AllergyType::Food => "food",
+        AllergyType::Environmental => "environmental",
+        AllergyType::Other => "other",
+    }
+}
+
+fn severity_to_string(severity: Severity) -> &'static str {
+    match severity {
+        Severity::Mild => "mild",
+        Severity::Moderate => "moderate",
+        Severity::Severe => "severe",
     }
 }
 
@@ -1371,6 +1526,20 @@ fn consultation_to_response(
         clinical_notes: consultation.clinical_notes,
         is_signed: consultation.is_signed,
         version: consultation.version,
+    }
+}
+
+fn allergy_to_response(allergy: opengp_domain::domain::clinical::Allergy) -> AllergyResponse {
+    AllergyResponse {
+        id: allergy.id,
+        patient_id: allergy.patient_id,
+        allergen: allergy.allergen,
+        allergy_type: allergy_type_to_string(allergy.allergy_type).to_string(),
+        severity: severity_to_string(allergy.severity).to_string(),
+        reaction: allergy.reaction,
+        onset_date: allergy.onset_date,
+        notes: allergy.notes,
+        is_active: allergy.is_active,
     }
 }
 

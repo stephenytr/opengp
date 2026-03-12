@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use opengp_domain::domain::api::{
-    ApiErrorResponse, AppointmentRequest, AppointmentResponse, ConsultationRequest,
-    ConsultationResponse, LoginRequest, LoginResponse, PaginatedResponse, PatientRequest,
-    PatientResponse, PractitionerResponse,
+    AllergyRequest, AllergyResponse, ApiErrorResponse, AppointmentRequest, AppointmentResponse,
+    ConsultationRequest, ConsultationResponse, LoginRequest, LoginResponse, PaginatedResponse,
+    PatientRequest, PatientResponse, PractitionerResponse,
 };
 use reqwest::{Method, StatusCode};
 use tokio::sync::Mutex;
@@ -268,6 +268,58 @@ impl ApiClient {
             .map_err(Self::map_request_error)?;
 
         Self::parse_json_response(response).await
+    }
+
+    pub async fn get_allergies(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<Vec<AllergyResponse>, ApiClientError> {
+        let response = self
+            .authenticated_request(Method::GET, &format!("/api/v1/patients/{patient_id}/allergies"))
+            .await?
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
+    pub async fn create_allergy(
+        &self,
+        patient_id: Uuid,
+        request: &AllergyRequest,
+    ) -> Result<AllergyResponse, ApiClientError> {
+        let response = self
+            .authenticated_request(Method::POST, &format!("/api/v1/patients/{patient_id}/allergies"))
+            .await?
+            .json(request)
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
+    pub async fn delete_allergy(
+        &self,
+        patient_id: Uuid,
+        allergy_id: Uuid,
+    ) -> Result<(), ApiClientError> {
+        let response = self
+            .authenticated_request(
+                Method::DELETE,
+                &format!("/api/v1/patients/{patient_id}/allergies/{allergy_id}"),
+            )
+            .await?
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        if !response.status().is_success() {
+            return Err(Self::map_error_response(response).await);
+        }
+
+        Ok(())
     }
 
     pub async fn current_session_token(&self) -> Option<String> {
@@ -580,6 +632,14 @@ mod tests {
                 "/api/v1/patients/{id}",
                 get(get_patient_handler).put(update_patient_handler),
             )
+            .route(
+                "/api/v1/patients/{id}/allergies",
+                get(allergies_handler).post(create_allergy_handler),
+            )
+            .route(
+                "/api/v1/patients/{id}/allergies/{allergy_id}",
+                axum::routing::delete(delete_allergy_handler),
+            )
             .route("/api/v1/practitioners", get(practitioners_handler))
             .route(
                 "/api/v1/appointments",
@@ -671,6 +731,24 @@ mod tests {
             .await
             .expect("create_consultation should succeed");
         assert!(!created_consultation.is_signed);
+
+        let allergies = client
+            .get_allergies(sample_patient_id())
+            .await
+            .expect("get_allergies should succeed");
+        assert_eq!(allergies.len(), 1);
+        assert_eq!(allergies[0].allergy_type, "drug");
+
+        let created_allergy = client
+            .create_allergy(sample_patient_id(), &sample_allergy_request())
+            .await
+            .expect("create_allergy should succeed");
+        assert_eq!(created_allergy.severity, "severe");
+
+        client
+            .delete_allergy(sample_patient_id(), sample_allergy_id())
+            .await
+            .expect("delete_allergy should succeed");
 
         let headers = state.seen_auth_headers.lock().await;
         assert!(headers
@@ -848,6 +926,34 @@ mod tests {
         (StatusCode::CREATED, Json(sample_consultation_response()))
     }
 
+    async fn allergies_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+    ) -> (StatusCode, Json<Vec<AllergyResponse>>) {
+        capture_header(state, headers).await;
+        (StatusCode::OK, Json(vec![sample_allergy_response()]))
+    }
+
+    async fn create_allergy_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+        Json(_payload): Json<AllergyRequest>,
+    ) -> (StatusCode, Json<AllergyResponse>) {
+        capture_header(state, headers).await;
+        (StatusCode::CREATED, Json(sample_allergy_response()))
+    }
+
+    async fn delete_allergy_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path((_id, _allergy_id)): Path<(Uuid, Uuid)>,
+    ) -> StatusCode {
+        capture_header(state, headers).await;
+        StatusCode::NO_CONTENT
+    }
+
     async fn capture_header(state: TestState, headers: HeaderMap) {
         if let Some(auth) = headers
             .get("authorization")
@@ -931,6 +1037,10 @@ mod tests {
 
     fn sample_consultation_id() -> Uuid {
         Uuid::parse_str("1b31d6e0-a532-426f-9bf2-9b84f0f8c1bb").expect("valid uuid")
+    }
+
+    fn sample_allergy_id() -> Uuid {
+        Uuid::parse_str("6e8c10be-f9f6-4db4-8d51-4235e31af1fa").expect("valid uuid")
     }
 
     fn sample_patient_request() -> PatientRequest {
@@ -1022,6 +1132,31 @@ mod tests {
             clinical_notes: Some("BP stable. Continue current ACE inhibitor dose.".to_string()),
             is_signed: false,
             version: 1,
+        }
+    }
+
+    fn sample_allergy_request() -> AllergyRequest {
+        AllergyRequest {
+            allergen: "Penicillin".to_string(),
+            allergy_type: "drug".to_string(),
+            severity: "severe".to_string(),
+            reaction: Some("Rash and wheeze".to_string()),
+            onset_date: NaiveDate::from_ymd_opt(2024, 1, 12),
+            notes: Some("Confirmed in ED".to_string()),
+        }
+    }
+
+    fn sample_allergy_response() -> AllergyResponse {
+        AllergyResponse {
+            id: sample_allergy_id(),
+            patient_id: sample_patient_id(),
+            allergen: "Penicillin".to_string(),
+            allergy_type: "drug".to_string(),
+            severity: "severe".to_string(),
+            reaction: Some("Rash and wheeze".to_string()),
+            onset_date: NaiveDate::from_ymd_opt(2024, 1, 12),
+            notes: Some("Confirmed in ED".to_string()),
+            is_active: true,
         }
     }
 }

@@ -224,6 +224,48 @@ pub struct ConsultationResponse {
     pub version: i32,
 }
 
+/// Request payload for `/api/v1/patients/{id}/allergies`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct AllergyRequest {
+    #[schema(example = "Penicillin")]
+    pub allergen: String,
+    #[schema(example = "drug")]
+    pub allergy_type: String,
+    #[schema(example = "severe")]
+    pub severity: String,
+    #[schema(example = "Rash and shortness of breath")]
+    pub reaction: Option<String>,
+    #[schema(example = "2024-01-12")]
+    pub onset_date: Option<NaiveDate>,
+    #[schema(example = "Confirmed during emergency presentation")]
+    pub notes: Option<String>,
+}
+
+/// Response payload for `/api/v1/patients/{id}/allergies`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct AllergyResponse {
+    #[schema(example = "2d3f09b3-7fef-4dc5-b6ce-5d7d8f83f2a4")]
+    pub id: Uuid,
+    #[schema(example = "550e8400-e29b-41d4-a716-446655440000")]
+    pub patient_id: Uuid,
+    #[schema(example = "Penicillin")]
+    pub allergen: String,
+    #[schema(example = "drug")]
+    pub allergy_type: String,
+    #[schema(example = "severe")]
+    pub severity: String,
+    #[schema(example = "Rash and shortness of breath")]
+    pub reaction: Option<String>,
+    #[schema(example = "2024-01-12")]
+    pub onset_date: Option<NaiveDate>,
+    #[schema(example = "Confirmed during emergency presentation")]
+    pub notes: Option<String>,
+    #[schema(example = true)]
+    pub is_active: bool,
+}
+
 fn default_version() -> i32 {
     1
 }
