@@ -103,6 +103,7 @@ impl ApiServices {
         let consultation_repository: Arc<dyn ConsultationRepository> = Arc::new(
             opengp_infrastructure::infrastructure::database::repositories::SqlxClinicalRepository::new(
                 pool.clone(),
+                encryption_service.clone(),
             ),
         );
         let clinical_repositories = ClinicalRepositories {
@@ -110,26 +111,31 @@ impl ApiServices {
             allergy: Arc::new(
                 opengp_infrastructure::infrastructure::database::repositories::SqlxAllergyRepository::new(
                     pool.clone(),
+                    encryption_service.clone(),
                 ),
             ),
             medical_history: Arc::new(
                 opengp_infrastructure::infrastructure::database::repositories::SqlxMedicalHistoryRepository::new(
                     pool.clone(),
+                    encryption_service.clone(),
                 ),
             ),
             vital_signs: Arc::new(
                 opengp_infrastructure::infrastructure::database::repositories::SqlxVitalSignsRepository::new(
                     pool.clone(),
+                    encryption_service.clone(),
                 ),
             ),
             social_history: Arc::new(
                 opengp_infrastructure::infrastructure::database::repositories::SqlxSocialHistoryRepository::new(
                     pool.clone(),
+                    encryption_service.clone(),
                 ),
             ),
             family_history: Arc::new(
                 opengp_infrastructure::infrastructure::database::repositories::SqlxFamilyHistoryRepository::new(
                     pool.clone(),
+                    encryption_service.clone(),
                 ),
             ),
         };

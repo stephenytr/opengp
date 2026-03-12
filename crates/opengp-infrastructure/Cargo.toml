@@ -8,8 +8,7 @@ authors.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["sqlite"]
-sqlite = ["sqlx/sqlite"]
+default = ["postgres"]
 postgres = ["sqlx/postgres"]
 
 [dependencies]

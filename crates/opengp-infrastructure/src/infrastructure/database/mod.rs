@@ -15,8 +15,7 @@ pub mod mocks;
 pub mod test_utils;
 
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::{PgPool, SqlitePool};
+use sqlx::PgPool;
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::info;
@@ -24,94 +23,34 @@ use tracing::info;
 // Re-export DatabaseConfig from config crate
 pub use opengp_config::DatabaseConfig;
 
+/// PostgreSQL-only connection pool
 #[derive(Clone)]
-pub enum DatabasePool {
-    Sqlite(SqlitePool),
-    Postgres(PgPool),
-}
+pub struct DatabasePool(PgPool);
 
 impl DatabasePool {
     pub fn size(&self) -> u32 {
-        match self {
-            Self::Sqlite(pool) => pool.size(),
-            Self::Postgres(pool) => pool.size(),
-        }
+        self.0.size()
     }
 
-    pub fn as_sqlite(&self) -> Option<&SqlitePool> {
-        match self {
-            Self::Sqlite(pool) => Some(pool),
-            Self::Postgres(_) => None,
-        }
-    }
-
-    pub fn as_postgres(&self) -> Option<&PgPool> {
-        match self {
-            Self::Sqlite(_) => None,
-            Self::Postgres(pool) => Some(pool),
-        }
+    pub fn as_postgres(&self) -> &PgPool {
+        &self.0
     }
 
     pub fn kind(&self) -> &'static str {
-        match self {
-            Self::Sqlite(_) => "sqlite",
-            Self::Postgres(_) => "postgres",
-        }
+        "postgres"
     }
 }
 
-fn is_postgres_url(url: &str) -> bool {
-    let url = url.to_ascii_lowercase();
-    url.starts_with("postgres://") || url.starts_with("postgresql://")
-}
-
-/// Create a configured database connection pool
-///
-/// # Arguments
-/// * `config` - Database configuration
-///
-/// # Returns
-/// * `Ok(DatabasePool)` - Successfully created connection pool
-/// * `Err(sqlx::Error)` - Failed to create pool or connect to database
-///
-/// # Example
-/// ```no_run
-/// use opengp_infrastructure::infrastructure::database::{DatabaseConfig, create_pool};
-///
-/// # #[tokio::main]
-/// # async fn main() -> Result<(), sqlx::Error> {
-/// let config = DatabaseConfig::default();
-/// let pool = create_pool(&config).await?;
-/// # Ok(())
-/// # }
-/// ```
+/// Create a PostgreSQL connection pool
 pub async fn create_pool(config: &DatabaseConfig) -> Result<DatabasePool, sqlx::Error> {
-    info!("Creating database connection pool");
+    info!("Creating PostgreSQL connection pool");
     info!("  Database URL: {}", config.url);
     info!("  Max connections: {}", config.max_connections);
     info!("  Min connections: {}", config.min_connections);
 
-    if is_postgres_url(&config.url) {
-        let connect_options = PgConnectOptions::from_str(&config.url)?;
+    let connect_options = PgConnectOptions::from_str(&config.url)?;
 
-        let pool = PgPoolOptions::new()
-            .max_connections(config.max_connections)
-            .min_connections(config.min_connections)
-            .acquire_timeout(Duration::from_secs(config.connect_timeout_secs))
-            .idle_timeout(Duration::from_secs(config.idle_timeout_secs))
-            .test_before_acquire(true)
-            .connect_with(connect_options)
-            .await?;
-
-        info!("PostgreSQL connection pool created successfully");
-        return Ok(DatabasePool::Postgres(pool));
-    }
-
-    let connect_options = SqliteConnectOptions::from_str(&config.url)?
-        .create_if_missing(true)
-        .busy_timeout(Duration::from_secs(30));
-
-    let pool = SqlitePoolOptions::new()
+    let pool = PgPoolOptions::new()
         .max_connections(config.max_connections)
         .min_connections(config.min_connections)
         .acquire_timeout(Duration::from_secs(config.connect_timeout_secs))
@@ -120,174 +59,22 @@ pub async fn create_pool(config: &DatabaseConfig) -> Result<DatabasePool, sqlx::
         .connect_with(connect_options)
         .await?;
 
-    info!("SQLite connection pool created successfully");
-
-    Ok(DatabasePool::Sqlite(pool))
+    info!("PostgreSQL connection pool created successfully");
+    Ok(DatabasePool(pool))
 }
 
 /// Run database migrations
-///
-/// # Arguments
-/// * `pool` - Database connection pool
-///
-/// # Returns
-/// * `Ok(())` - Migrations applied successfully
-/// * `Err(sqlx::Error)` - Migration failed
 pub async fn run_migrations(pool: &DatabasePool) -> Result<(), sqlx::Error> {
     info!("Running database migrations");
-
-    match pool {
-        DatabasePool::Sqlite(sqlite_pool) => {
-            sqlx::migrate!("./migrations").run(sqlite_pool).await?;
-
-            // Workaround: Manually ensure working_hours table exists
-            // The sqlx::migrate! macro sometimes doesn't pick up new migration files at compile time
-            // This fallback ensures the table is created if it doesn't exist
-            ensure_working_hours_table(sqlite_pool).await?;
-            ensure_sessions_have_token(sqlite_pool).await?;
-        }
-        DatabasePool::Postgres(pg_pool) => {
-            sqlx::migrate!("../../migrations_postgres").run(pg_pool).await?;
-        }
-    }
-
+    sqlx::migrate!("../../migrations_postgres").run(&pool.0).await?;
     info!("Database migrations completed successfully");
-
-    Ok(())
-}
-
-/// Ensure working_hours table exists (fallback for sqlx macro issue)
-///
-/// This is a workaround for the sqlx::migrate! macro not picking up new migration files.
-/// It's idempotent and safe to run multiple times.
-async fn ensure_working_hours_table(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    // Check if table already exists
-    let table_exists: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='working_hours'",
-    )
-    .fetch_one(pool)
-    .await?;
-
-    if table_exists.0 > 0 {
-        info!("working_hours table already exists, skipping creation");
-        return Ok(());
-    }
-
-    info!("Creating working_hours table (sqlx macro fallback)");
-
-    // Create the working_hours table
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS working_hours (
-            id BLOB PRIMARY KEY,
-            practitioner_id BLOB NOT NULL,
-            day_of_week INTEGER NOT NULL CHECK(day_of_week BETWEEN 0 AND 6),
-            start_time TEXT NOT NULL,
-            end_time TEXT NOT NULL,
-            is_active BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (practitioner_id) REFERENCES users(id),
-            UNIQUE(practitioner_id, day_of_week)
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    // Create indexes
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_working_hours_practitioner ON working_hours(practitioner_id)")
-        .execute(pool)
-        .await?;
-
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_working_hours_day ON working_hours(practitioner_id, day_of_week)")
-        .execute(pool)
-        .await?;
-
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_working_hours_active ON working_hours(is_active)")
-        .execute(pool)
-        .await?;
-
-    info!("working_hours table created successfully");
-
-    Ok(())
-}
-
-async fn ensure_sessions_have_token(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    let column_exists: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='token'")
-            .fetch_one(pool)
-            .await?;
-
-    if column_exists.0 > 0 {
-        return Ok(());
-    }
-
-    sqlx::query("ALTER TABLE sessions ADD COLUMN token TEXT")
-        .execute(pool)
-        .await?;
-
-    sqlx::query(
-        "UPDATE sessions SET token = lower(hex(randomblob(32))) WHERE token IS NULL OR token = ''",
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)")
-        .execute(pool)
-        .await?;
-
     Ok(())
 }
 
 /// Check database connection health
-///
-/// # Arguments
-/// * `pool` - Database connection pool
-///
-/// # Returns
-/// * `Ok(())` - Database is healthy
-/// * `Err(sqlx::Error)` - Database is unhealthy
 pub async fn health_check(pool: &DatabasePool) -> Result<(), sqlx::Error> {
-    match pool {
-        DatabasePool::Sqlite(sqlite_pool) => {
-            sqlx::query("SELECT 1").execute(sqlite_pool).await?;
-        }
-        DatabasePool::Postgres(pg_pool) => {
-            sqlx::query("SELECT 1").execute(pg_pool).await?;
-        }
-    }
-
+    sqlx::query("SELECT 1").execute(&pool.0).await?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_create_pool_in_memory() {
-        let config = DatabaseConfig {
-            url: "sqlite::memory:".to_string(),
-            ..Default::default()
-        };
-
-        let pool = create_pool(&config).await;
-        assert!(pool.is_ok());
-        assert!(matches!(pool.unwrap(), DatabasePool::Sqlite(_)));
-    }
-
-    #[tokio::test]
-    async fn test_health_check() {
-        let config = DatabaseConfig {
-            url: "sqlite::memory:".to_string(),
-            ..Default::default()
-        };
-
-        let pool = create_pool(&config).await.unwrap();
-        let result = health_check(&pool).await;
-        assert!(result.is_ok());
-    }
 }
 
 // Re-export domain error types for infrastructure use

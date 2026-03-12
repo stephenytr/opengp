@@ -1,18 +1,17 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{postgres::PgPool, FromRow};
 use uuid::Uuid;
 
-use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::helpers::{
-    bytes_to_uuid, datetime_to_string, string_to_datetime, uuid_to_bytes, DbUuid,
+    datetime_to_string, string_to_datetime,
 };
 use crate::infrastructure::database::sqlx_to_user_error;
 use opengp_domain::domain::user::{Permission, RepositoryError, Role, User, UserRepository};
 
 #[derive(Debug, FromRow)]
 struct UserRow {
-    id: DbUuid,
+    id: Uuid,
     username: String,
     password_hash_new: Option<String>,
     email: Option<String>,
@@ -41,9 +40,7 @@ impl UserRow {
         };
 
         Ok(User {
-            id: bytes_to_uuid(&self.id).map_err(|_| {
-                RepositoryError::ConstraintViolation("Invalid UUID bytes".to_string())
-            })?,
+            id: self.id,
             username: self.username,
             password_hash: self.password_hash_new,
             email: self.email,
@@ -76,11 +73,11 @@ FROM users
 "#;
 
 pub struct SqlxUserRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl SqlxUserRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 }
@@ -88,13 +85,11 @@ impl SqlxUserRepository {
 #[async_trait]
 impl UserRepository for SqlxUserRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, RepositoryError> {
-        let id_bytes = uuid_to_bytes(&id);
-
-        let row = sqlx::query_as::<_, UserRow>(&db_helpers::sql_with_placeholders(&format!(
-            "{}WHERE id = ?",
+        let row = sqlx::query_as::<_, UserRow>(&format!(
+            "{}WHERE id = $1",
             USER_SELECT_QUERY
-        )))
-        .bind(id_bytes)
+        ))
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(sqlx_to_user_error)?;
@@ -106,10 +101,10 @@ impl UserRepository for SqlxUserRepository {
     }
 
     async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepositoryError> {
-        let row = sqlx::query_as::<_, UserRow>(&db_helpers::sql_with_placeholders(&format!(
-            "{}WHERE username = ?",
+        let row = sqlx::query_as::<_, UserRow>(&format!(
+            "{}WHERE username = $1",
             USER_SELECT_QUERY
-        )))
+        ))
         .bind(username)
         .fetch_optional(&self.pool)
         .await
@@ -122,10 +117,10 @@ impl UserRepository for SqlxUserRepository {
     }
 
     async fn find_all(&self) -> Result<Vec<User>, RepositoryError> {
-        let rows = sqlx::query_as::<_, UserRow>(&db_helpers::sql_with_placeholders(&format!(
+        let rows = sqlx::query_as::<_, UserRow>(&format!(
             "{}ORDER BY last_name, first_name",
             USER_SELECT_QUERY
-        )))
+        ))
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_to_user_error)?;
@@ -136,10 +131,10 @@ impl UserRepository for SqlxUserRepository {
     async fn find_by_role(&self, role: Role) -> Result<Vec<User>, RepositoryError> {
         let role_str = role.to_string();
 
-        let rows = sqlx::query_as::<_, UserRow>(&db_helpers::sql_with_placeholders(&format!(
-            "{}WHERE role = ? ORDER BY last_name, first_name",
+        let rows = sqlx::query_as::<_, UserRow>(&format!(
+            "{}WHERE role = $1 ORDER BY last_name, first_name",
             USER_SELECT_QUERY
-        )))
+        ))
         .bind(role_str)
         .fetch_all(&self.pool)
         .await
@@ -149,7 +144,6 @@ impl UserRepository for SqlxUserRepository {
     }
 
     async fn create(&self, user: User) -> Result<User, RepositoryError> {
-        let id_bytes = uuid_to_bytes(&user.id);
         let role_str = user.role.to_string();
         let additional_permissions_json = if user.additional_permissions.is_empty() {
             "[]".to_string()
@@ -167,8 +161,8 @@ impl UserRepository for SqlxUserRepository {
         let created_at_str = datetime_to_string(&user.created_at);
         let updated_at_str = datetime_to_string(&user.updated_at);
 
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(
-            &r#"
+        let result = sqlx::query(
+            r#"
         INSERT INTO users (
             id, username, password_hash_new, email,
             first_name, last_name,
@@ -176,10 +170,10 @@ impl UserRepository for SqlxUserRepository {
             is_active, is_locked, failed_login_attempts,
             last_login, password_changed_at,
             created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         "#,
-        ))
-        .bind(id_bytes)
+        )
+        .bind(user.id)
         .bind(&user.username)
         .bind(&user.password_hash)
         .bind(&user.email)
@@ -226,7 +220,6 @@ impl UserRepository for SqlxUserRepository {
     }
 
     async fn update(&self, user: User) -> Result<User, RepositoryError> {
-        let id_bytes = uuid_to_bytes(&user.id);
         let role_str = user.role.to_string();
         let additional_permissions_json = if user.additional_permissions.is_empty() {
             "[]".to_string()
@@ -243,25 +236,25 @@ impl UserRepository for SqlxUserRepository {
         let password_changed_at_str = datetime_to_string(&user.password_changed_at);
         let updated_at_str = datetime_to_string(&user.updated_at);
 
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(
-            &r#"
+        let result = sqlx::query(
+            r#"
         UPDATE users
-        SET username = ?,
-            password_hash_new = ?,
-            email = ?,
-            first_name = ?,
-            last_name = ?,
-            role = ?,
-            additional_permissions = ?,
-            is_active = ?,
-            is_locked = ?,
-            failed_login_attempts = ?,
-            last_login = ?,
-            password_changed_at = ?,
-            updated_at = ?
-        WHERE id = ?
+        SET username = $1,
+            password_hash_new = $2,
+            email = $3,
+            first_name = $4,
+            last_name = $5,
+            role = $6,
+            additional_permissions = $7,
+            is_active = $8,
+            is_locked = $9,
+            failed_login_attempts = $10,
+            last_login = $11,
+            password_changed_at = $12,
+            updated_at = $13
+        WHERE id = $14
         "#,
-        ))
+        )
         .bind(&user.username)
         .bind(&user.password_hash)
         .bind(&user.email)
@@ -275,7 +268,7 @@ impl UserRepository for SqlxUserRepository {
         .bind(last_login_str)
         .bind(password_changed_at_str)
         .bind(updated_at_str)
-        .bind(id_bytes)
+        .bind(user.id)
         .execute(&self.pool)
         .await;
 
@@ -306,19 +299,18 @@ impl UserRepository for SqlxUserRepository {
     }
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
-        let id_bytes = uuid_to_bytes(&id);
         let updated_at_str = datetime_to_string(&Utc::now());
 
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(
-            &r#"
+        let result = sqlx::query(
+            r#"
         UPDATE users
         SET is_active = FALSE,
-            updated_at = ?
-        WHERE id = ?
+            updated_at = $1
+        WHERE id = $2
         "#,
-        ))
+        )
         .bind(updated_at_str)
-        .bind(id_bytes)
+        .bind(id)
         .execute(&self.pool)
         .await;
 

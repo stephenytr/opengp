@@ -1,15 +1,13 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
-use crate::infrastructure::database::helpers as db_helpers;
-use crate::infrastructure::database::helpers::{bytes_to_uuid, uuid_to_bytes, DbUuid};
 use opengp_domain::domain::user::{Practitioner, PractitionerRepository, RepositoryError};
 
 #[derive(Debug, FromRow)]
 struct PractitionerQueryRow {
-    id: DbUuid,
+    id: Uuid,
     first_name: String,
     last_name: String,
     email: Option<String>,
@@ -18,8 +16,7 @@ struct PractitionerQueryRow {
 
 impl PractitionerQueryRow {
     fn into_practitioner(self) -> Result<Practitioner, RepositoryError> {
-        let user_id = bytes_to_uuid(&self.id)
-            .map_err(|_| RepositoryError::ConstraintViolation("Invalid UUID bytes".to_string()))?;
+        let user_id = self.id;
 
         let (title, speciality, qualifications) = match self.role.as_str() {
             "Doctor" => (
@@ -58,11 +55,11 @@ impl PractitionerQueryRow {
 }
 
 pub struct SqlxPractitionerRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl SqlxPractitionerRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 }
@@ -70,14 +67,14 @@ impl SqlxPractitionerRepository {
 #[async_trait]
 impl PractitionerRepository for SqlxPractitionerRepository {
     async fn list_active(&self) -> Result<Vec<Practitioner>, RepositoryError> {
-        let rows = sqlx::query_as::<_, PractitionerQueryRow>(&db_helpers::sql_with_placeholders(
-            &r#"
+        let rows = sqlx::query_as::<_, PractitionerQueryRow>(
+            r#"
         SELECT id, first_name, last_name, email, role
         FROM users
         WHERE (role = 'Doctor' OR role = 'Nurse') AND is_active = TRUE
         ORDER BY last_name, first_name
         "#,
-        ))
+        )
         .fetch_all(&self.pool)
         .await
         .map_err(|e| RepositoryError::Database(e.to_string()))?;
@@ -91,16 +88,14 @@ impl PractitionerRepository for SqlxPractitionerRepository {
     }
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Practitioner>, RepositoryError> {
-        let id_bytes = uuid_to_bytes(&id);
-
-        let row = sqlx::query_as::<_, PractitionerQueryRow>(&db_helpers::sql_with_placeholders(
-            &r#"
+        let row = sqlx::query_as::<_, PractitionerQueryRow>(
+            r#"
         SELECT id, first_name, last_name, email, role
         FROM users
-        WHERE id = ? AND (role = 'Doctor' OR role = 'Nurse') AND is_active = TRUE
+        WHERE id = $1 AND (role = 'Doctor' OR role = 'Nurse') AND is_active = TRUE
         "#,
-        ))
-        .bind(id_bytes)
+        )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| RepositoryError::Database(e.to_string()))?;

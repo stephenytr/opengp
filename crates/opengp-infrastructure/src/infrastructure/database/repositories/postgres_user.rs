@@ -1,12 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::{FromRow, PgPool, Postgres};
+use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
-use crate::infrastructure::database::helpers as db_helpers;
-use crate::infrastructure::database::helpers::{
-    bytes_to_uuid, datetime_to_string, string_to_datetime, uuid_to_bytes, DbUuid,
-};
 use crate::infrastructure::database::sqlx_to_user_error;
 use opengp_domain::domain::user::{Permission, RepositoryError, Role, User, UserRepository};
 
@@ -173,10 +169,6 @@ impl UserRepository for PostgresUserRepository {
             })?
         };
         let failed_login_attempts_i64 = user.failed_login_attempts as i64;
-        let last_login_str = user.last_login.map(|dt| datetime_to_string(&dt));
-        let password_changed_at_str = datetime_to_string(&user.password_changed_at);
-        let created_at_str = datetime_to_string(&user.created_at);
-        let updated_at_str = datetime_to_string(&user.updated_at);
 
         let result = sqlx::query(
             r#"
@@ -201,10 +193,10 @@ impl UserRepository for PostgresUserRepository {
         .bind(user.is_active)
         .bind(user.is_locked)
         .bind(failed_login_attempts_i64)
-        .bind(last_login_str)
-        .bind(password_changed_at_str)
-        .bind(created_at_str)
-        .bind(updated_at_str)
+        .bind(user.last_login)
+        .bind(user.password_changed_at)
+        .bind(user.created_at)
+        .bind(user.updated_at)
         .execute(&self.pool)
         .await;
 
@@ -294,8 +286,6 @@ impl UserRepository for PostgresUserRepository {
     }
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
-        let updated_at_str = datetime_to_string(&Utc::now());
-
         let result = sqlx::query(
             r#"
         UPDATE users
@@ -304,7 +294,7 @@ impl UserRepository for PostgresUserRepository {
         WHERE id = $2
         "#,
         )
-        .bind(updated_at_str)
+        .bind(Utc::now())
         .bind(id)
         .execute(&self.pool)
         .await;

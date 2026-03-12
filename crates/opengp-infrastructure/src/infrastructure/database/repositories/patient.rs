@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::NaiveDate;
-use sqlx::{FromRow, SqlitePool};
+use chrono::{DateTime, NaiveDate, Utc};
+use sqlx::postgres::PgPool;
+use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::infrastructure::crypto::EncryptionService;
-use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::helpers::*;
 use crate::infrastructure::database::sqlx_to_patient_error;
 use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
@@ -16,7 +16,7 @@ use opengp_domain::domain::patient::{
 
 #[derive(Debug, FromRow)]
 struct PatientRow {
-    id: DbUuid,
+    id: Uuid,
     ihi: Option<Vec<u8>>,
     medicare_number: Option<Vec<u8>>,
     medicare_irn: Option<i64>,
@@ -42,8 +42,8 @@ struct PatientRow {
     emergency_contact_relationship: Option<String>,
     is_active: bool,
     is_deceased: bool,
-    created_at: String,
-    updated_at: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
     version: i32,
 }
 
@@ -70,7 +70,7 @@ impl PatientRow {
         };
 
         Ok(Patient {
-            id: bytes_to_uuid(&self.id)?,
+            id: self.id,
             ihi,
             medicare_number,
             medicare_irn: self.medicare_irn.map(|i| i as u8),
@@ -113,8 +113,8 @@ impl PatientRow {
             is_active: self.is_active,
             is_deceased: self.is_deceased,
             deceased_date: None,
-            created_at: string_to_datetime(&self.created_at),
-            updated_at: string_to_datetime(&self.updated_at),
+            created_at: self.created_at,
+            updated_at: self.updated_at,
             version: self.version,
         })
     }
@@ -135,12 +135,12 @@ FROM patients
 "#;
 
 pub struct SqlxPatientRepository {
-    pool: SqlitePool,
+    pool: PgPool,
     crypto: Arc<EncryptionService>,
 }
 
 impl SqlxPatientRepository {
-    pub fn new(pool: SqlitePool, crypto: Arc<EncryptionService>) -> Self {
+    pub fn new(pool: PgPool, crypto: Arc<EncryptionService>) -> Self {
         Self { pool, crypto }
     }
 }
@@ -148,13 +148,11 @@ impl SqlxPatientRepository {
 #[async_trait]
 impl PatientRepository for SqlxPatientRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Patient>, RepositoryError> {
-        let id_bytes = uuid_to_bytes(&id);
-
-        let row = sqlx::query_as::<_, PatientRow>(&db_helpers::sql_with_placeholders(&format!(
-            "{} WHERE id = ? AND is_active = TRUE",
+        let row = sqlx::query_as::<_, PatientRow>(&format!(
+            "{} WHERE id = $1 AND is_active = TRUE",
             PATIENT_SELECT_QUERY
-        )))
-        .bind(id_bytes)
+        ))
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(sqlx_to_patient_error)?;
@@ -178,10 +176,10 @@ impl PatientRepository for SqlxPatientRepository {
     }
 
     async fn list_active(&self) -> Result<Vec<Patient>, RepositoryError> {
-        let rows = sqlx::query_as::<_, PatientRow>(&db_helpers::sql_with_placeholders(&format!(
+        let rows = sqlx::query_as::<_, PatientRow>(&format!(
             "{} WHERE is_active = TRUE ORDER BY last_name, first_name",
             PATIENT_SELECT_QUERY
-        )))
+        ))
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_to_patient_error)?;
@@ -237,12 +235,9 @@ impl PatientRepository for SqlxPatientRepository {
     }
 
     async fn create(&self, patient: Patient) -> Result<Patient, RepositoryError> {
-        let id_bytes = uuid_to_bytes(&patient.id);
         let gender_str = patient.gender.to_string();
         let dob = patient.date_of_birth;
         let medicare_expiry = patient.medicare_expiry;
-        let created_at_str = datetime_to_string(&patient.created_at);
-        let updated_at_str = datetime_to_string(&patient.updated_at);
         let medicare_irn_i64 = patient.medicare_irn.map(|i| i as i64);
 
         // Encrypt sensitive fields
@@ -270,7 +265,8 @@ impl PatientRepository for SqlxPatientRepository {
             .as_ref()
             .map(|ec| ec.relationship.clone());
 
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(&r#"
+        let result = sqlx::query(
+            r#"
         INSERT INTO patients (
             id, ihi, medicare_number, medicare_irn, medicare_expiry,
             title, first_name, middle_name, last_name, preferred_name,
@@ -281,9 +277,10 @@ impl PatientRepository for SqlxPatientRepository {
             is_active, is_deceased,
             created_at, updated_at,
             version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        "#))
-        .bind(id_bytes)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+        "#,
+        )
+        .bind(patient.id)
         .bind(ihi_encrypted)
         .bind(medicare_encrypted)
         .bind(medicare_irn_i64)
@@ -309,8 +306,8 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(emergency_contact_relationship)
         .bind(patient.is_active)
         .bind(patient.is_deceased)
-        .bind(created_at_str)
-        .bind(updated_at_str)
+        .bind(patient.created_at)
+        .bind(patient.updated_at)
         .bind(patient.version)
         .execute(&self.pool)
         .await;
@@ -325,11 +322,9 @@ impl PatientRepository for SqlxPatientRepository {
     }
 
     async fn update(&self, patient: Patient) -> Result<Patient, RepositoryError> {
-        let id_bytes = uuid_to_bytes(&patient.id);
         let gender_str = patient.gender.to_string();
         let dob = patient.date_of_birth;
         let medicare_expiry = patient.medicare_expiry;
-        let updated_at_str = datetime_to_string(&patient.updated_at);
         let medicare_irn_i64 = patient.medicare_irn.map(|i| i as i64);
 
         // Encrypt sensitive fields
@@ -357,10 +352,8 @@ impl PatientRepository for SqlxPatientRepository {
             .as_ref()
             .map(|ec| ec.relationship.clone());
 
-        let current_version = sqlx::query_scalar::<_, i32>(&db_helpers::sql_with_placeholders(
-            "SELECT version FROM patients WHERE id = ?",
-        ))
-        .bind(id_bytes.clone())
+        let current_version = sqlx::query_scalar::<_, i32>("SELECT version FROM patients WHERE id = $1")
+        .bind(patient.id)
         .fetch_optional(&self.pool)
         .await
         .map_err(sqlx_to_patient_error)?;
@@ -378,39 +371,39 @@ impl PatientRepository for SqlxPatientRepository {
 
         let new_version = patient.version + 1;
 
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(
-            &r#"
+        let result = sqlx::query(
+            r#"
         UPDATE patients SET
-            ihi = ?,
-            medicare_number = ?,
-            medicare_irn = ?,
-            medicare_expiry = ?,
-            title = ?,
-            first_name = ?,
-            middle_name = ?,
-            last_name = ?,
-            preferred_name = ?,
-            date_of_birth = ?,
-            gender = ?,
-            address_line1 = ?,
-            address_line2 = ?,
-            suburb = ?,
-            state = ?,
-            postcode = ?,
-            country = ?,
-            phone_home = ?,
-            phone_mobile = ?,
-            email = ?,
-            emergency_contact_name = ?,
-            emergency_contact_phone = ?,
-            emergency_contact_relationship = ?,
-            is_active = ?,
-            is_deceased = ?,
-            updated_at = ?,
-            version = ?
-        WHERE id = ? AND version = ?
+            ihi = $1,
+            medicare_number = $2,
+            medicare_irn = $3,
+            medicare_expiry = $4,
+            title = $5,
+            first_name = $6,
+            middle_name = $7,
+            last_name = $8,
+            preferred_name = $9,
+            date_of_birth = $10,
+            gender = $11,
+            address_line1 = $12,
+            address_line2 = $13,
+            suburb = $14,
+            state = $15,
+            postcode = $16,
+            country = $17,
+            phone_home = $18,
+            phone_mobile = $19,
+            email = $20,
+            emergency_contact_name = $21,
+            emergency_contact_phone = $22,
+            emergency_contact_relationship = $23,
+            is_active = $24,
+            is_deceased = $25,
+            updated_at = $26,
+            version = $27
+        WHERE id = $28 AND version = $29
         "#,
-        ))
+        )
         .bind(ihi_encrypted)
         .bind(medicare_encrypted)
         .bind(medicare_irn_i64)
@@ -436,9 +429,9 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(emergency_contact_relationship)
         .bind(patient.is_active)
         .bind(patient.is_deceased)
-        .bind(updated_at_str)
+        .bind(patient.updated_at)
         .bind(new_version)
-        .bind(id_bytes)
+        .bind(patient.id)
         .bind(patient.version)
         .execute(&self.pool)
         .await;
@@ -463,12 +456,10 @@ impl PatientRepository for SqlxPatientRepository {
     }
 
     async fn deactivate(&self, id: Uuid) -> Result<(), RepositoryError> {
-        let id_bytes = uuid_to_bytes(&id);
-
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(
-            "UPDATE patients SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP, version = version + 1 WHERE id = ? AND is_active = TRUE",
-        ))
-        .bind(id_bytes)
+        let result = sqlx::query(
+            "UPDATE patients SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP, version = version + 1 WHERE id = $1 AND is_active = TRUE",
+        )
+        .bind(id)
         .execute(&self.pool)
         .await
         .map_err(sqlx_to_patient_error)?;

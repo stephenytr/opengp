@@ -1,13 +1,13 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{postgres::PgPool, FromRow};
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use opengp_domain::domain::user::{RepositoryError, Session, SessionRepository};
 
-use crate::infrastructure::database::helpers as db_helpers;
 use crate::infrastructure::database::helpers::{
-    bytes_to_uuid, datetime_to_string, string_to_datetime, uuid_to_bytes, DbUuid,
+    datetime_to_string, string_to_datetime,
 };
 
 pub struct InMemorySessionRepository {
@@ -73,8 +73,8 @@ impl SessionRepository for InMemorySessionRepository {
 
 #[derive(Debug, FromRow)]
 struct SessionRow {
-    id: DbUuid,
-    user_id: DbUuid,
+    id: Uuid,
+    user_id: Uuid,
     created_at: String,
     expires_at: String,
     token: String,
@@ -83,12 +83,8 @@ struct SessionRow {
 impl SessionRow {
     fn into_session(self) -> Result<Session, RepositoryError> {
         Ok(Session {
-            id: bytes_to_uuid(&self.id).map_err(|_| {
-                RepositoryError::ConstraintViolation("Invalid UUID bytes".to_string())
-            })?,
-            user_id: bytes_to_uuid(&self.user_id).map_err(|_| {
-                RepositoryError::ConstraintViolation("Invalid user_id bytes".to_string())
-            })?,
+            id: self.id,
+            user_id: self.user_id,
             created_at: string_to_datetime(&self.created_at),
             expires_at: string_to_datetime(&self.expires_at),
             token: self.token,
@@ -102,11 +98,11 @@ FROM sessions
 "#;
 
 pub struct SqlxSessionRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl SqlxSessionRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 }
@@ -114,14 +110,14 @@ impl SqlxSessionRepository {
 #[async_trait]
 impl SessionRepository for SqlxSessionRepository {
     async fn create(&self, session: Session) -> Result<Session, RepositoryError> {
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(
-            &r#"
+        let result = sqlx::query(
+            r#"
         INSERT INTO sessions (id, user_id, created_at, expires_at, token)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5)
         "#,
-        ))
-        .bind(uuid_to_bytes(&session.id))
-        .bind(uuid_to_bytes(&session.user_id))
+        )
+        .bind(session.id)
+        .bind(session.user_id)
         .bind(datetime_to_string(&session.created_at))
         .bind(datetime_to_string(&session.expires_at))
         .bind(&session.token)
@@ -145,10 +141,10 @@ impl SessionRepository for SqlxSessionRepository {
     }
 
     async fn find_by_token(&self, token: &str) -> Result<Option<Session>, RepositoryError> {
-        let row = sqlx::query_as::<_, SessionRow>(&db_helpers::sql_with_placeholders(&format!(
-            "{}WHERE token = ?",
+        let row = sqlx::query_as::<_, SessionRow>(&format!(
+            "{}WHERE token = $1",
             SESSION_SELECT_QUERY
-        )))
+        ))
         .bind(token)
         .fetch_optional(&self.pool)
         .await
@@ -161,9 +157,7 @@ impl SessionRepository for SqlxSessionRepository {
     }
 
     async fn delete_by_token(&self, token: &str) -> Result<(), RepositoryError> {
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(
-            &"DELETE FROM sessions WHERE token = ?",
-        ))
+        let result = sqlx::query("DELETE FROM sessions WHERE token = $1")
         .bind(token)
         .execute(&self.pool)
         .await
@@ -177,9 +171,7 @@ impl SessionRepository for SqlxSessionRepository {
     }
 
     async fn cleanup_expired(&self, now: DateTime<Utc>) -> Result<u64, RepositoryError> {
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(
-            &"DELETE FROM sessions WHERE expires_at <= ?",
-        ))
+        let result = sqlx::query("DELETE FROM sessions WHERE expires_at <= $1")
         .bind(datetime_to_string(&now))
         .execute(&self.pool)
         .await
@@ -195,7 +187,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
-    use crate::infrastructure::database::helpers::{datetime_to_string, uuid_to_bytes};
+    use crate::infrastructure::database::helpers::datetime_to_string;
     use crate::infrastructure::database::test_utils::create_test_pool;
 
     fn build_session(user_id: Uuid, token: &str, expires_in_minutes: i64) -> Session {
@@ -246,15 +238,15 @@ mod tests {
         let user_id = Uuid::new_v4();
         let now = Utc::now();
 
-        sqlx::query(&db_helpers::sql_with_placeholders(
-            &r#"
+        sqlx::query(
+            r#"
         INSERT INTO users (
             id, username, password_hash, role, is_active, created_at, updated_at,
             first_name, last_name
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         "#,
-        ))
-        .bind(uuid_to_bytes(&user_id))
+        )
+        .bind(user_id)
         .bind("session-test-user")
         .bind("hash")
         .bind("Doctor")

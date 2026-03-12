@@ -1,29 +1,20 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{postgres::PgPool, FromRow};
 use uuid::Uuid;
 
-use crate::infrastructure::database::helpers as db_helpers;
+use crate::infrastructure::database::helpers::string_to_datetime;
 use crate::infrastructure::database::sqlx_to_appointment_error;
 use opengp_domain::domain::appointment::{
     Appointment, AppointmentCalendarQuery, AppointmentRepository, AppointmentSearchCriteria,
     AppointmentStatus, AppointmentType, CalendarAppointment, RepositoryError,
 };
 
-fn bytes_to_uuid(bytes: &db_helpers::DbUuid) -> Result<Uuid, RepositoryError> {
-    db_helpers::bytes_to_uuid(bytes)
-        .map_err(|_| RepositoryError::ConstraintViolation("Invalid UUID bytes".to_string()))
-}
-
-fn string_to_datetime(s: &str) -> DateTime<Utc> {
-    db_helpers::string_to_datetime(s)
-}
-
 #[derive(Debug, FromRow)]
 struct AppointmentRow {
-    id: db_helpers::DbUuid,
-    patient_id: db_helpers::DbUuid,
-    practitioner_id: db_helpers::DbUuid,
+    id: Uuid,
+    patient_id: Uuid,
+    practitioner_id: Uuid,
     start_time: String,
     end_time: String,
     appointment_type: String,
@@ -37,16 +28,16 @@ struct AppointmentRow {
     created_at: String,
     updated_at: String,
     version: i32,
-    created_by: Option<db_helpers::DbUuid>,
-    updated_by: Option<db_helpers::DbUuid>,
+    created_by: Option<Uuid>,
+    updated_by: Option<Uuid>,
 }
 
 impl AppointmentRow {
     fn into_appointment(self) -> Result<Appointment, RepositoryError> {
         Ok(Appointment {
-            id: bytes_to_uuid(&self.id)?,
-            patient_id: bytes_to_uuid(&self.patient_id)?,
-            practitioner_id: bytes_to_uuid(&self.practitioner_id)?,
+            id: self.id,
+            patient_id: self.patient_id,
+            practitioner_id: self.practitioner_id,
             start_time: string_to_datetime(&self.start_time),
             end_time: string_to_datetime(&self.end_time),
             appointment_type: self
@@ -66,17 +57,17 @@ impl AppointmentRow {
             created_at: string_to_datetime(&self.created_at),
             updated_at: string_to_datetime(&self.updated_at),
             version: self.version,
-            created_by: self.created_by.and_then(|bytes| bytes_to_uuid(&bytes).ok()),
-            updated_by: self.updated_by.and_then(|bytes| bytes_to_uuid(&bytes).ok()),
+            created_by: self.created_by,
+            updated_by: self.updated_by,
         })
     }
 }
 
 #[derive(Debug, FromRow)]
 struct CalendarAppointmentRow {
-    id: db_helpers::DbUuid,
-    patient_id: db_helpers::DbUuid,
-    practitioner_id: db_helpers::DbUuid,
+    id: Uuid,
+    patient_id: Uuid,
+    practitioner_id: Uuid,
     patient_name: Option<String>,
     start_time: String,
     end_time: String,
@@ -98,9 +89,9 @@ impl CalendarAppointmentRow {
         let slot_span = ((duration_minutes as f64 / 15.0).ceil() as u8).max(1);
 
         Ok(CalendarAppointment {
-            id: bytes_to_uuid(&self.id)?,
-            patient_id: bytes_to_uuid(&self.patient_id)?,
-            practitioner_id: bytes_to_uuid(&self.practitioner_id)?,
+            id: self.id,
+            patient_id: self.patient_id,
+            practitioner_id: self.practitioner_id,
             patient_name: self
                 .patient_name
                 .unwrap_or_else(|| "Unknown Patient".to_string()),
@@ -155,11 +146,11 @@ LEFT JOIN patients p ON a.patient_id = p.id
 "#;
 
 pub struct SqlxAppointmentRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl SqlxAppointmentRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 }
@@ -167,12 +158,11 @@ impl SqlxAppointmentRepository {
 #[async_trait]
 impl AppointmentRepository for SqlxAppointmentRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Appointment>, RepositoryError> {
-        let id_bytes = db_helpers::uuid_to_bytes(&id);
-
-        let row = sqlx::query_as::<_, AppointmentRow>(&db_helpers::sql_with_placeholders(
-            &format!("{}WHERE id = ?", APPOINTMENT_SELECT_QUERY),
+        let row = sqlx::query_as::<_, AppointmentRow>(&format!(
+            "{}WHERE id = $1",
+            APPOINTMENT_SELECT_QUERY
         ))
-        .bind(id_bytes)
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(sqlx_to_appointment_error)?;
@@ -184,9 +174,6 @@ impl AppointmentRepository for SqlxAppointmentRepository {
     }
 
     async fn create(&self, appointment: Appointment) -> Result<Appointment, RepositoryError> {
-        let id_bytes = db_helpers::uuid_to_bytes(&appointment.id);
-        let patient_id_bytes = db_helpers::uuid_to_bytes(&appointment.patient_id);
-        let practitioner_id_bytes = db_helpers::uuid_to_bytes(&appointment.practitioner_id);
         let start_time_str = appointment.start_time.to_rfc3339();
         let end_time_str = appointment.end_time.to_rfc3339();
         let appointment_type_str = match appointment.appointment_type {
@@ -216,15 +203,9 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         };
         let created_at_str = appointment.created_at.to_rfc3339();
         let updated_at_str = appointment.updated_at.to_rfc3339();
-        let created_by_bytes = appointment
-            .created_by
-            .map(|id| db_helpers::uuid_to_bytes(&id));
-        let updated_by_bytes = appointment
-            .updated_by
-            .map(|id| db_helpers::uuid_to_bytes(&id));
 
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(
-            &r#"
+        let result = sqlx::query(
+            r#"
         INSERT INTO appointments (
             id, patient_id, practitioner_id,
             start_time, end_time,
@@ -235,12 +216,12 @@ impl AppointmentRepository for SqlxAppointmentRepository {
             created_at, updated_at,
             version,
             created_by, updated_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         "#,
-        ))
-        .bind(id_bytes)
-        .bind(patient_id_bytes)
-        .bind(practitioner_id_bytes)
+        )
+        .bind(appointment.id)
+        .bind(appointment.patient_id)
+        .bind(appointment.practitioner_id)
         .bind(start_time_str)
         .bind(end_time_str)
         .bind(appointment_type_str)
@@ -254,8 +235,8 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         .bind(created_at_str)
         .bind(updated_at_str)
         .bind(appointment.version)
-        .bind(created_by_bytes)
-        .bind(updated_by_bytes)
+        .bind(appointment.created_by)
+        .bind(appointment.updated_by)
         .execute(&self.pool)
         .await;
 
@@ -284,7 +265,6 @@ impl AppointmentRepository for SqlxAppointmentRepository {
     }
 
     async fn update(&self, appointment: Appointment) -> Result<Appointment, RepositoryError> {
-        let id_bytes = db_helpers::uuid_to_bytes(&appointment.id);
         let start_time_str = appointment.start_time.to_rfc3339();
         let end_time_str = appointment.end_time.to_rfc3339();
         let appointment_type_str = match appointment.appointment_type {
@@ -313,14 +293,11 @@ impl AppointmentRepository for SqlxAppointmentRepository {
             AppointmentStatus::Rescheduled => "Rescheduled",
         };
         let updated_at_str = appointment.updated_at.to_rfc3339();
-        let updated_by_bytes = appointment
-            .updated_by
-            .map(|id| db_helpers::uuid_to_bytes(&id));
 
-        let current_version = sqlx::query_scalar::<_, i32>(&db_helpers::sql_with_placeholders(
-            "SELECT version FROM appointments WHERE id = ?",
-        ))
-        .bind(id_bytes.clone())
+        let current_version = sqlx::query_scalar::<_, i32>(
+            "SELECT version FROM appointments WHERE id = $1",
+        )
+        .bind(appointment.id)
         .fetch_optional(&self.pool)
         .await
         .map_err(sqlx_to_appointment_error)?;
@@ -338,25 +315,25 @@ impl AppointmentRepository for SqlxAppointmentRepository {
 
         let new_version = appointment.version + 1;
 
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(
-            &r#"
+        let result = sqlx::query(
+            r#"
         UPDATE appointments
-        SET start_time = ?,
-            end_time = ?,
-            appointment_type = ?,
-            status = ?,
-            reason = ?,
-            notes = ?,
-            is_urgent = ?,
-            reminder_sent = ?,
-            confirmed = ?,
-            cancellation_reason = ?,
-            updated_at = ?,
-            updated_by = ?,
-            version = ?
-        WHERE id = ? AND version = ?
+        SET start_time = $1,
+            end_time = $2,
+            appointment_type = $3,
+            status = $4,
+            reason = $5,
+            notes = $6,
+            is_urgent = $7,
+            reminder_sent = $8,
+            confirmed = $9,
+            cancellation_reason = $10,
+            updated_at = $11,
+            updated_by = $12,
+            version = $13
+        WHERE id = $14 AND version = $15
         "#,
-        ))
+        )
         .bind(start_time_str)
         .bind(end_time_str)
         .bind(appointment_type_str)
@@ -368,9 +345,9 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         .bind(appointment.confirmed)
         .bind(&appointment.cancellation_reason)
         .bind(updated_at_str)
-        .bind(updated_by_bytes)
+        .bind(appointment.updated_by)
         .bind(new_version)
-        .bind(id_bytes)
+        .bind(appointment.id)
         .bind(appointment.version)
         .execute(&self.pool)
         .await;
@@ -402,15 +379,13 @@ impl AppointmentRepository for SqlxAppointmentRepository {
     }
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
-        let id_bytes = db_helpers::uuid_to_bytes(&id);
-
-        let result = sqlx::query(&db_helpers::sql_with_placeholders(
-            &r#"
+        let result = sqlx::query(
+            r#"
         DELETE FROM appointments
-        WHERE id = ?
+        WHERE id = $1
         "#,
-        ))
-        .bind(id_bytes)
+        )
+        .bind(id)
         .execute(&self.pool)
         .await;
 
@@ -447,20 +422,26 @@ impl AppointmentRepository for SqlxAppointmentRepository {
             "#,
         );
 
-        if let Some(patient_id) = criteria.patient_id {
-            query.push_str(" AND patient_id = ?");
+        let mut placeholder_idx = 1;
+
+        if criteria.patient_id.is_some() {
+            query.push_str(&format!(" AND patient_id = ${}", placeholder_idx));
+            placeholder_idx += 1;
         }
 
-        if let Some(practitioner_id) = criteria.practitioner_id {
-            query.push_str(" AND practitioner_id = ?");
+        if criteria.practitioner_id.is_some() {
+            query.push_str(&format!(" AND practitioner_id = ${}", placeholder_idx));
+            placeholder_idx += 1;
         }
 
-        if let Some(date_from) = criteria.date_from {
-            query.push_str(" AND start_time >= ?");
+        if criteria.date_from.is_some() {
+            query.push_str(&format!(" AND start_time >= ${}", placeholder_idx));
+            placeholder_idx += 1;
         }
 
-        if let Some(date_to) = criteria.date_to {
-            query.push_str(" AND start_time < ?");
+        if criteria.date_to.is_some() {
+            query.push_str(&format!(" AND start_time < ${}", placeholder_idx));
+            placeholder_idx += 1;
         }
 
         if let Some(appointment_type) = criteria.appointment_type {
@@ -479,11 +460,12 @@ impl AppointmentRepository for SqlxAppointmentRepository {
                 AppointmentType::HomeVisit => "HomeVisit",
                 AppointmentType::Emergency => "Emergency",
             };
-            query.push_str(" AND appointment_type = ?");
+            query.push_str(&format!(" AND appointment_type = ${}", placeholder_idx));
+            placeholder_idx += 1;
         }
 
         if let Some(status) = criteria.status {
-            let status_str = match status {
+            let _status_str = match status {
                 AppointmentStatus::Scheduled => "Scheduled",
                 AppointmentStatus::Confirmed => "Confirmed",
                 AppointmentStatus::Arrived => "Arrived",
@@ -493,20 +475,19 @@ impl AppointmentRepository for SqlxAppointmentRepository {
                 AppointmentStatus::Cancelled => "Cancelled",
                 AppointmentStatus::Rescheduled => "Rescheduled",
             };
-            query.push_str(" AND status = ?");
+            query.push_str(&format!(" AND status = ${}", placeholder_idx));
         }
 
         query.push_str(" ORDER BY start_time");
 
-        let patient_id_bytes = criteria.patient_id.map(|id| db_helpers::uuid_to_bytes(&id));
-        let practitioner_id_bytes = criteria
-            .practitioner_id
-            .map(|id| db_helpers::uuid_to_bytes(&id));
+        let patient_id_filter = criteria.patient_id;
+        let practitioner_id_filter = criteria.practitioner_id;
         let date_from_str = criteria.date_from.map(|dt| dt.to_rfc3339());
         let date_to_str = criteria.date_to.map(|dt| dt.to_rfc3339());
 
-        let all_rows = sqlx::query_as::<_, AppointmentRow>(&db_helpers::sql_with_placeholders(
-            &format!("{}ORDER BY start_time", APPOINTMENT_SELECT_QUERY),
+        let all_rows = sqlx::query_as::<_, AppointmentRow>(&format!(
+            "{}ORDER BY start_time",
+            APPOINTMENT_SELECT_QUERY
         ))
         .fetch_all(&self.pool)
         .await
@@ -515,13 +496,13 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         let rows: Vec<AppointmentRow> = all_rows
             .into_iter()
             .filter(|row| {
-                if let Some(ref pid_bytes) = patient_id_bytes {
-                    if &row.patient_id != pid_bytes {
+                if let Some(pid) = patient_id_filter {
+                    if row.patient_id != pid {
                         return false;
                     }
                 }
-                if let Some(ref prid_bytes) = practitioner_id_bytes {
-                    if &row.practitioner_id != prid_bytes {
+                if let Some(prid) = practitioner_id_filter {
+                    if row.practitioner_id != prid {
                         return false;
                     }
                 }
@@ -583,15 +564,14 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
     ) -> Result<Vec<Appointment>, RepositoryError> {
-        let practitioner_id_bytes = db_helpers::uuid_to_bytes(&practitioner_id);
         let start_time_str = start_time.to_rfc3339();
         let end_time_str = end_time.to_rfc3339();
 
-        let rows = sqlx::query_as::<_, AppointmentRow>(&db_helpers::sql_with_placeholders(&format!(
-            "{}WHERE practitioner_id = ? AND start_time < ? AND end_time > ? AND status NOT IN ('Cancelled', 'NoShow') ORDER BY start_time",
+        let rows = sqlx::query_as::<_, AppointmentRow>(&format!(
+            "{}WHERE practitioner_id = $1 AND start_time < $2 AND end_time > $3 AND status NOT IN ('Cancelled', 'NoShow') ORDER BY start_time",
             APPOINTMENT_SELECT_QUERY
-        )))
-        .bind(practitioner_id_bytes)
+        ))
+        .bind(practitioner_id)
         .bind(end_time_str)
         .bind(start_time_str)
         .fetch_all(&self.pool)
@@ -629,20 +609,26 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
             "#,
         );
 
-        if let Some(patient_id) = criteria.patient_id {
-            query.push_str(" AND a.patient_id = ?");
+        let mut placeholder_idx = 1;
+
+        if criteria.patient_id.is_some() {
+            query.push_str(&format!(" AND a.patient_id = ${}", placeholder_idx));
+            placeholder_idx += 1;
         }
 
-        if let Some(practitioner_id) = criteria.practitioner_id {
-            query.push_str(" AND a.practitioner_id = ?");
+        if criteria.practitioner_id.is_some() {
+            query.push_str(&format!(" AND a.practitioner_id = ${}", placeholder_idx));
+            placeholder_idx += 1;
         }
 
-        if let Some(date_from) = criteria.date_from {
-            query.push_str(" AND a.start_time >= ?");
+        if criteria.date_from.is_some() {
+            query.push_str(&format!(" AND a.start_time >= ${}", placeholder_idx));
+            placeholder_idx += 1;
         }
 
-        if let Some(date_to) = criteria.date_to {
-            query.push_str(" AND a.start_time < ?");
+        if criteria.date_to.is_some() {
+            query.push_str(&format!(" AND a.start_time < ${}", placeholder_idx));
+            placeholder_idx += 1;
         }
 
         if let Some(appointment_type) = criteria.appointment_type {
@@ -661,7 +647,8 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
                 AppointmentType::HomeVisit => "HomeVisit",
                 AppointmentType::Emergency => "Emergency",
             };
-            query.push_str(" AND a.appointment_type = ?");
+            query.push_str(&format!(" AND a.appointment_type = ${}", placeholder_idx));
+            placeholder_idx += 1;
         }
 
         if let Some(_status) = criteria.status {
@@ -675,15 +662,17 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
                 AppointmentStatus::Cancelled => "Cancelled",
                 AppointmentStatus::Rescheduled => "Rescheduled",
             };
-            query.push_str(" AND a.status = ?");
+            query.push_str(&format!(" AND a.status = ${}", placeholder_idx));
+            placeholder_idx += 1;
         }
 
         if let Some(_is_urgent) = criteria.is_urgent {
-            query.push_str(" AND a.is_urgent = ?");
+            query.push_str(&format!(" AND a.is_urgent = ${}", placeholder_idx));
+            placeholder_idx += 1;
         }
 
         if let Some(_confirmed) = criteria.confirmed {
-            query.push_str(" AND a.confirmed = ?");
+            query.push_str(&format!(" AND a.confirmed = ${}", placeholder_idx));
         }
 
         query.push_str(" ORDER BY a.start_time");
@@ -697,17 +686,15 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
             || criteria.is_urgent.is_some()
             || criteria.confirmed.is_some()
         {
-            let patient_id_bytes = criteria.patient_id.map(|id| db_helpers::uuid_to_bytes(&id));
-            let practitioner_id_bytes = criteria
-                .practitioner_id
-                .map(|id| db_helpers::uuid_to_bytes(&id));
+            let patient_id_filter = criteria.patient_id;
+            let practitioner_id_filter = criteria.practitioner_id;
             let date_from_str = criteria.date_from.map(|dt| dt.to_rfc3339());
             let date_to_str = criteria.date_to.map(|dt| dt.to_rfc3339());
 
-            let all_rows =
-                sqlx::query_as::<_, CalendarAppointmentRow>(&db_helpers::sql_with_placeholders(
-                    &format!("{}ORDER BY a.start_time", CALENDAR_APPOINTMENT_SELECT_QUERY),
-                ))
+            let all_rows = sqlx::query_as::<_, CalendarAppointmentRow>(&format!(
+                "{}ORDER BY a.start_time",
+                CALENDAR_APPOINTMENT_SELECT_QUERY
+            ))
                 .fetch_all(&self.pool)
                 .await
                 .map_err(sqlx_to_appointment_error)?;
@@ -715,13 +702,13 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
             all_rows
                 .into_iter()
                 .filter(|row| {
-                    if let Some(ref pid_bytes) = patient_id_bytes {
-                        if &row.patient_id != pid_bytes {
+                    if let Some(pid) = patient_id_filter {
+                        if row.patient_id != pid {
                             return false;
                         }
                     }
-                    if let Some(ref prid_bytes) = practitioner_id_bytes {
-                        if &row.practitioner_id != prid_bytes {
+                    if let Some(prid) = practitioner_id_filter {
+                        if row.practitioner_id != prid {
                             return false;
                         }
                     }
@@ -784,8 +771,9 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
                 })
                 .collect()
         } else {
-            sqlx::query_as::<_, CalendarAppointmentRow>(&db_helpers::sql_with_placeholders(
-                &format!("{}ORDER BY a.start_time", CALENDAR_APPOINTMENT_SELECT_QUERY),
+            sqlx::query_as::<_, CalendarAppointmentRow>(&format!(
+                "{}ORDER BY a.start_time",
+                CALENDAR_APPOINTMENT_SELECT_QUERY
             ))
             .fetch_all(&self.pool)
             .await
@@ -802,49 +790,11 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
 mod tests {
     use super::*;
     use chrono::Duration;
-    use sqlx::sqlite::SqlitePoolOptions;
-
-    async fn setup_test_pool() -> SqlitePool {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .expect("in-memory sqlite pool");
-
-        sqlx::query(
-            r#"
-            CREATE TABLE appointments (
-                id BLOB PRIMARY KEY,
-                patient_id BLOB NOT NULL,
-                practitioner_id BLOB NOT NULL,
-                start_time TEXT NOT NULL,
-                end_time TEXT NOT NULL,
-                appointment_type TEXT NOT NULL,
-                status TEXT NOT NULL,
-                reason TEXT,
-                notes TEXT,
-                is_urgent BOOLEAN NOT NULL,
-                reminder_sent BOOLEAN NOT NULL,
-                confirmed BOOLEAN NOT NULL,
-                cancellation_reason TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                version INTEGER NOT NULL DEFAULT 1,
-                created_by BLOB,
-                updated_by BLOB
-            )
-            "#,
-        )
-        .execute(&pool)
-        .await
-        .expect("create appointments table");
-
-        pool
-    }
+    use crate::infrastructure::database::test_utils::create_test_pool;
 
     #[tokio::test]
     async fn update_uses_optimistic_locking_and_increments_version() {
-        let pool = setup_test_pool().await;
+        let pool = create_test_pool().await.expect("pool should initialize");
         let repo = SqlxAppointmentRepository::new(pool.clone());
 
         let mut appointment = Appointment::new(

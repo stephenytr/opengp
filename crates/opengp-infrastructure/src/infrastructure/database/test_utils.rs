@@ -4,36 +4,19 @@
 //! for use in integration tests.
 
 use chrono::{Duration, NaiveDate, Utc};
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::infrastructure::database::{create_pool, run_migrations, DatabaseConfig, DatabasePool};
+use crate::infrastructure::database::{create_pool, run_migrations, DatabaseConfig};
 use opengp_domain::domain::appointment::{Appointment, AppointmentType};
 use opengp_domain::domain::patient::{Address, Gender, NewPatientData, Patient};
 
-/// Create an in-memory SQLite pool for testing
-///
-/// This function creates a new in-memory SQLite database, runs all migrations,
-/// and returns a connection pool ready for testing.
-///
-/// # Returns
-/// * `Ok(SqlitePool)` - Successfully created and initialized pool
-/// * `Err(sqlx::Error)` - Failed to create pool or run migrations
-///
-/// # Example
-/// ```no_run
-/// use opengp_infrastructure::infrastructure::database::test_utils::create_test_pool;
-///
-/// # #[tokio::main]
-/// # async fn main() -> Result<(), sqlx::Error> {
-/// let pool = create_test_pool().await?;
-/// // Use pool for testing
-/// # Ok(())
-/// # }
-/// ```
-pub async fn create_test_pool() -> Result<SqlitePool, sqlx::Error> {
+pub async fn create_test_pool() -> Result<PgPool, sqlx::Error> {
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://localhost/opengp".to_string());
+
     let config = DatabaseConfig {
-        url: "sqlite::memory:".to_string(),
+        url: database_url,
         max_connections: 5,
         min_connections: 1,
         connect_timeout_secs: 10,
@@ -42,13 +25,7 @@ pub async fn create_test_pool() -> Result<SqlitePool, sqlx::Error> {
 
     let pool = create_pool(&config).await?;
     run_migrations(&pool).await?;
-
-    match pool {
-        DatabasePool::Sqlite(sqlite_pool) => Ok(sqlite_pool),
-        DatabasePool::Postgres(_) => {
-            Err(sqlx::Error::Protocol("Expected SQLite pool for test utility".to_string()))
-        }
-    }
+    Ok(pool.0)
 }
 
 /// Create a test patient fixture with default values
