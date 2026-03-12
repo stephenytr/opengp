@@ -15,6 +15,13 @@ fn main() {
         ihi_percentage: 0.90,
         mobile_percentage: 0.85,
         email_percentage: 0.70,
+        atsi_percentage: 0.05,
+        concession_percentage: 0.15,
+        emergency_contact_percentage: 0.70,
+        interpreter_percentage: 0.10,
+        preferred_name_percentage: 0.30,
+        middle_name_percentage: 0.60,
+        use_australian_names: true,
     };
 
     println!("Configuration:");
