@@ -5,8 +5,10 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use chrono::Utc;
-use opengp_domain::domain::api::{PatientRequest, PatientResponse};
-use opengp_domain::domain::appointment::{AppointmentCalendarQuery, AvailabilityService};
+use opengp_domain::domain::api::{AppointmentRequest, PatientRequest, PatientResponse};
+use opengp_domain::domain::appointment::{
+    AppointmentCalendarQuery, AppointmentType, AvailabilityService,
+};
 use opengp_domain::domain::patient::{Gender, Patient};
 use opengp_domain::domain::user::{PractitionerRepository, UserRepository};
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
@@ -299,12 +301,10 @@ async fn run_tui(
 
         if let Some(data) = app.take_pending_appointment_save() {
             let appointment_date = data.start_time.date_naive();
-            match appointment_service
-                .create_appointment(data, app.current_user_id)
-                .await
-            {
-                Ok(()) => {
-                    tracing::info!("Created new appointment in database");
+            let request = appointment_request_from_new(data);
+            match api_client.create_appointment(&request).await {
+                Ok(_) => {
+                    tracing::info!("Created new appointment via API");
                     let date = app
                         .appointment_state_mut()
                         .selected_date
@@ -319,23 +319,23 @@ async fn run_tui(
         {
             let result = match transition {
                 opengp_ui::ui::app::AppointmentStatusTransition::MarkArrived => {
-                    appointment_service
-                        .mark_arrived(appointment_id, app.current_user_id)
+                    api_client
+                        .update_appointment_status(appointment_id, "arrived")
                         .await
                 }
                 opengp_ui::ui::app::AppointmentStatusTransition::MarkInProgress => {
-                    appointment_service
-                        .mark_in_progress(appointment_id, app.current_user_id)
+                    api_client
+                        .update_appointment_status(appointment_id, "in_progress")
                         .await
                 }
                 opengp_ui::ui::app::AppointmentStatusTransition::MarkCompleted => {
-                    appointment_service
-                        .mark_completed(appointment_id, app.current_user_id)
+                    api_client
+                        .update_appointment_status(appointment_id, "completed")
                         .await
                 }
             };
             match result {
-                Ok(()) => {
+                Ok(_) => {
                     tracing::info!("Updated appointment status: {:?}", transition);
                     if let Some(date) = app.appointment_state_mut().selected_date {
                         app.request_refresh_appointments(date);
@@ -691,6 +691,21 @@ fn patient_request_from_new(data: opengp_domain::domain::patient::NewPatientData
     }
 }
 
+fn appointment_request_from_new(
+    data: opengp_domain::domain::appointment::NewAppointmentData,
+) -> AppointmentRequest {
+    AppointmentRequest {
+        patient_id: data.patient_id,
+        practitioner_id: data.practitioner_id,
+        start_time: data.start_time,
+        duration_minutes: data.duration.num_minutes(),
+        appointment_type: appointment_type_to_api_string(data.appointment_type).to_string(),
+        reason: data.reason,
+        is_urgent: data.is_urgent,
+        version: 1,
+    }
+}
+
 fn patient_request_from_update(
     data: opengp_domain::domain::patient::UpdatePatientData,
     current: &PatientResponse,
@@ -749,6 +764,24 @@ fn gender_to_api_string(gender: Gender) -> String {
         Gender::Female => "female".to_string(),
         Gender::Other => "other".to_string(),
         Gender::PreferNotToSay => "prefer_not_to_say".to_string(),
+    }
+}
+
+fn appointment_type_to_api_string(appointment_type: AppointmentType) -> &'static str {
+    match appointment_type {
+        AppointmentType::Standard => "standard",
+        AppointmentType::Long => "long",
+        AppointmentType::Brief => "brief",
+        AppointmentType::NewPatient => "new_patient",
+        AppointmentType::HealthAssessment => "health_assessment",
+        AppointmentType::ChronicDiseaseReview => "chronic_disease_review",
+        AppointmentType::MentalHealthPlan => "mental_health_plan",
+        AppointmentType::Immunisation => "immunisation",
+        AppointmentType::Procedure => "procedure",
+        AppointmentType::Telephone => "telephone",
+        AppointmentType::Telehealth => "telehealth",
+        AppointmentType::HomeVisit => "home_visit",
+        AppointmentType::Emergency => "emergency",
     }
 }
 
