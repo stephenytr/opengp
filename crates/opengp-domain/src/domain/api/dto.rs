@@ -266,6 +266,42 @@ pub struct AllergyResponse {
     pub is_active: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct MedicalHistoryRequest {
+    #[schema(example = "Type 2 diabetes")]
+    pub condition: String,
+    #[schema(example = "2019-04-03")]
+    pub diagnosis_date: Option<NaiveDate>,
+    #[schema(example = "chronic")]
+    pub status: String,
+    #[schema(example = "moderate")]
+    pub severity: Option<String>,
+    #[schema(example = "Managed with metformin")]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct MedicalHistoryResponse {
+    #[schema(example = "f6588cad-58d8-4f68-b534-9f228de8c2a3")]
+    pub id: Uuid,
+    #[schema(example = "550e8400-e29b-41d4-a716-446655440000")]
+    pub patient_id: Uuid,
+    #[schema(example = "Type 2 diabetes")]
+    pub condition: String,
+    #[schema(example = "2019-04-03")]
+    pub diagnosis_date: Option<NaiveDate>,
+    #[schema(example = "chronic")]
+    pub status: String,
+    #[schema(example = "moderate")]
+    pub severity: Option<String>,
+    #[schema(example = "Managed with metformin")]
+    pub notes: Option<String>,
+    #[schema(example = true)]
+    pub is_active: bool,
+}
+
 fn default_version() -> i32 {
     1
 }

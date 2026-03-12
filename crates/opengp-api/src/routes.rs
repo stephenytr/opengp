@@ -11,7 +11,8 @@ use http::header::ORIGIN;
 use opengp_domain::domain::api::{
     AllergyRequest, AllergyResponse, ApiErrorResponse, AppointmentRequest, AppointmentResponse,
     AuthenticatedUserResponse, ConsultationRequest, ConsultationResponse, LoginRequest,
-    LoginResponse, PaginatedResponse, PatientRequest, PatientResponse, PractitionerResponse,
+    LoginResponse, MedicalHistoryRequest, MedicalHistoryResponse, PaginatedResponse,
+    PatientRequest, PatientResponse, PractitionerResponse,
 };
 use opengp_domain::domain::appointment::{
     AppointmentSearchCriteria, AppointmentStatus, AppointmentType, NewAppointmentData,
@@ -19,8 +20,8 @@ use opengp_domain::domain::appointment::{
 };
 use opengp_domain::domain::audit::{AuditAction, AuditEntry};
 use opengp_domain::domain::clinical::{
-    AllergyType, NewAllergyData, NewConsultationData, ServiceError as ClinicalServiceError,
-    Severity,
+    AllergyType, ConditionStatus, NewAllergyData, NewConsultationData, NewMedicalHistoryData,
+    ServiceError as ClinicalServiceError, Severity,
 };
 use opengp_domain::domain::patient::{
     Address, Gender, NewPatientData, ServiceError as PatientServiceError, UpdatePatientData,
@@ -55,6 +56,10 @@ pub fn router(state: ApiState) -> Router {
             get(get_patient).put(update_patient).delete(delete_patient),
         )
         .route("/{id}/allergies", get(list_allergies).post(create_allergy))
+        .route(
+            "/{id}/medical-history",
+            get(list_medical_history).post(create_medical_history),
+        )
         .route("/{id}/allergies/{allergy_id}", axum::routing::delete(delete_allergy))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -778,6 +783,58 @@ async fn create_allergy(
     Ok((StatusCode::CREATED, Json(allergy_to_response(allergy))))
 }
 
+async fn list_medical_history(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(patient_id): Path<Uuid>,
+) -> Result<(StatusCode, Json<Vec<MedicalHistoryResponse>>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_read(&context)?;
+
+    let history = state
+        .services
+        .clinical_service
+        .list_medical_history(patient_id, false)
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    Ok((
+        StatusCode::OK,
+        Json(history.into_iter().map(medical_history_to_response).collect()),
+    ))
+}
+
+async fn create_medical_history(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(patient_id): Path<Uuid>,
+    Json(payload): Json<MedicalHistoryRequest>,
+) -> Result<(StatusCode, Json<MedicalHistoryResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_access(&context)?;
+
+    let history = state
+        .services
+        .clinical_service
+        .add_medical_history(
+            medical_history_request_to_new_data(patient_id, payload)?,
+            context.user_id,
+        )
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    let audit_entry = AuditEntry::new_created(
+        "medical_history",
+        history.id,
+        serde_json::to_string(&history).unwrap_or_default(),
+        context.user_id,
+    );
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
+
+    Ok((
+        StatusCode::CREATED,
+        Json(medical_history_to_response(history)),
+    ))
+}
+
 async fn delete_allergy(
     State(state): State<ApiState>,
     Extension(context): Extension<AuthContext>,
@@ -1355,6 +1412,24 @@ fn allergy_request_to_new_data(
     })
 }
 
+fn medical_history_request_to_new_data(
+    patient_id: Uuid,
+    payload: MedicalHistoryRequest,
+) -> Result<NewMedicalHistoryData, (StatusCode, Json<ApiErrorResponse>)> {
+    Ok(NewMedicalHistoryData {
+        patient_id,
+        condition: payload.condition,
+        diagnosis_date: payload.diagnosis_date,
+        status: parse_condition_status(&payload.status)?,
+        severity: payload
+            .severity
+            .as_deref()
+            .map(parse_severity)
+            .transpose()?,
+        notes: payload.notes,
+    })
+}
+
 fn validate_appointment_booking_time(
     start_time: DateTime<Utc>,
 ) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
@@ -1434,6 +1509,22 @@ fn parse_severity(severity: &str) -> Result<Severity, (StatusCode, Json<ApiError
     }
 }
 
+fn parse_condition_status(
+    condition_status: &str,
+) -> Result<ConditionStatus, (StatusCode, Json<ApiErrorResponse>)> {
+    match condition_status.trim().to_ascii_lowercase().as_str() {
+        "active" => Ok(ConditionStatus::Active),
+        "resolved" => Ok(ConditionStatus::Resolved),
+        "chronic" => Ok(ConditionStatus::Chronic),
+        "recurring" => Ok(ConditionStatus::Recurring),
+        "in_remission" | "in-remission" => Ok(ConditionStatus::InRemission),
+        _ => Err(bad_request_response(
+            "validation_error",
+            "Invalid condition status",
+        )),
+    }
+}
+
 fn appointment_type_to_string(appointment_type: AppointmentType) -> &'static str {
     match appointment_type {
         AppointmentType::Standard => "standard",
@@ -1466,6 +1557,16 @@ fn severity_to_string(severity: Severity) -> &'static str {
         Severity::Mild => "mild",
         Severity::Moderate => "moderate",
         Severity::Severe => "severe",
+    }
+}
+
+fn condition_status_to_string(condition_status: ConditionStatus) -> &'static str {
+    match condition_status {
+        ConditionStatus::Active => "active",
+        ConditionStatus::Resolved => "resolved",
+        ConditionStatus::Chronic => "chronic",
+        ConditionStatus::Recurring => "recurring",
+        ConditionStatus::InRemission => "in_remission",
     }
 }
 
@@ -1540,6 +1641,23 @@ fn allergy_to_response(allergy: opengp_domain::domain::clinical::Allergy) -> All
         onset_date: allergy.onset_date,
         notes: allergy.notes,
         is_active: allergy.is_active,
+    }
+}
+
+fn medical_history_to_response(
+    history: opengp_domain::domain::clinical::MedicalHistory,
+) -> MedicalHistoryResponse {
+    MedicalHistoryResponse {
+        id: history.id,
+        patient_id: history.patient_id,
+        condition: history.condition,
+        diagnosis_date: history.diagnosis_date,
+        status: condition_status_to_string(history.status).to_string(),
+        severity: history
+            .severity
+            .map(|severity| severity_to_string(severity).to_string()),
+        notes: history.notes,
+        is_active: history.is_active,
     }
 }
 

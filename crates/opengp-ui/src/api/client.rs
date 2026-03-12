@@ -3,8 +3,9 @@ use std::sync::Arc;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use opengp_domain::domain::api::{
     AllergyRequest, AllergyResponse, ApiErrorResponse, AppointmentRequest, AppointmentResponse,
-    ConsultationRequest, ConsultationResponse, LoginRequest, LoginResponse, PaginatedResponse,
-    PatientRequest, PatientResponse, PractitionerResponse,
+    ConsultationRequest, ConsultationResponse, LoginRequest, LoginResponse, MedicalHistoryRequest,
+    MedicalHistoryResponse, PaginatedResponse, PatientRequest, PatientResponse,
+    PractitionerResponse,
 };
 use reqwest::{Method, StatusCode};
 use tokio::sync::Mutex;
@@ -300,6 +301,42 @@ impl ApiClient {
         Self::parse_json_response(response).await
     }
 
+    pub async fn get_medical_history(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<Vec<MedicalHistoryResponse>, ApiClientError> {
+        let response = self
+            .authenticated_request(
+                Method::GET,
+                &format!("/api/v1/patients/{patient_id}/medical-history"),
+            )
+            .await?
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
+    pub async fn create_medical_history(
+        &self,
+        patient_id: Uuid,
+        request: &MedicalHistoryRequest,
+    ) -> Result<MedicalHistoryResponse, ApiClientError> {
+        let response = self
+            .authenticated_request(
+                Method::POST,
+                &format!("/api/v1/patients/{patient_id}/medical-history"),
+            )
+            .await?
+            .json(request)
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
     pub async fn delete_allergy(
         &self,
         patient_id: Uuid,
@@ -432,7 +469,7 @@ mod tests {
     use axum::{
         extract::{Path, Query, State},
         http::{HeaderMap, StatusCode},
-        routing::{get, post, put},
+        routing::{get, post},
         Json, Router,
     };
     use chrono::{NaiveDate, TimeZone};
@@ -637,6 +674,10 @@ mod tests {
                 get(allergies_handler).post(create_allergy_handler),
             )
             .route(
+                "/api/v1/patients/{id}/medical-history",
+                get(medical_history_handler).post(create_medical_history_handler),
+            )
+            .route(
                 "/api/v1/patients/{id}/allergies/{allergy_id}",
                 axum::routing::delete(delete_allergy_handler),
             )
@@ -744,6 +785,19 @@ mod tests {
             .await
             .expect("create_allergy should succeed");
         assert_eq!(created_allergy.severity, "severe");
+
+        let medical_history = client
+            .get_medical_history(sample_patient_id())
+            .await
+            .expect("get_medical_history should succeed");
+        assert_eq!(medical_history.len(), 1);
+        assert_eq!(medical_history[0].status, "chronic");
+
+        let created_medical_history = client
+            .create_medical_history(sample_patient_id(), &sample_medical_history_request())
+            .await
+            .expect("create_medical_history should succeed");
+        assert_eq!(created_medical_history.condition, "Type 2 diabetes");
 
         client
             .delete_allergy(sample_patient_id(), sample_allergy_id())
@@ -943,6 +997,25 @@ mod tests {
     ) -> (StatusCode, Json<AllergyResponse>) {
         capture_header(state, headers).await;
         (StatusCode::CREATED, Json(sample_allergy_response()))
+    }
+
+    async fn medical_history_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+    ) -> (StatusCode, Json<Vec<MedicalHistoryResponse>>) {
+        capture_header(state, headers).await;
+        (StatusCode::OK, Json(vec![sample_medical_history_response()]))
+    }
+
+    async fn create_medical_history_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+        Json(_payload): Json<MedicalHistoryRequest>,
+    ) -> (StatusCode, Json<MedicalHistoryResponse>) {
+        capture_header(state, headers).await;
+        (StatusCode::CREATED, Json(sample_medical_history_response()))
     }
 
     async fn delete_allergy_handler(
@@ -1156,6 +1229,33 @@ mod tests {
             reaction: Some("Rash and wheeze".to_string()),
             onset_date: NaiveDate::from_ymd_opt(2024, 1, 12),
             notes: Some("Confirmed in ED".to_string()),
+            is_active: true,
+        }
+    }
+
+    fn sample_medical_history_id() -> Uuid {
+        Uuid::parse_str("f6588cad-58d8-4f68-b534-9f228de8c2a3").expect("valid uuid")
+    }
+
+    fn sample_medical_history_request() -> MedicalHistoryRequest {
+        MedicalHistoryRequest {
+            condition: "Type 2 diabetes".to_string(),
+            diagnosis_date: NaiveDate::from_ymd_opt(2019, 4, 3),
+            status: "chronic".to_string(),
+            severity: Some("moderate".to_string()),
+            notes: Some("Managed with metformin".to_string()),
+        }
+    }
+
+    fn sample_medical_history_response() -> MedicalHistoryResponse {
+        MedicalHistoryResponse {
+            id: sample_medical_history_id(),
+            patient_id: sample_patient_id(),
+            condition: "Type 2 diabetes".to_string(),
+            diagnosis_date: NaiveDate::from_ymd_opt(2019, 4, 3),
+            status: "chronic".to_string(),
+            severity: Some("moderate".to_string()),
+            notes: Some("Managed with metformin".to_string()),
             is_active: true,
         }
     }
