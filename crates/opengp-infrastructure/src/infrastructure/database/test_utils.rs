@@ -7,7 +7,7 @@ use chrono::{Duration, NaiveDate, Utc};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-use crate::infrastructure::database::{create_pool, run_migrations, DatabaseConfig};
+use crate::infrastructure::database::{create_pool, run_migrations, DatabaseConfig, DatabasePool};
 use opengp_domain::domain::appointment::{Appointment, AppointmentType};
 use opengp_domain::domain::patient::{Address, Gender, NewPatientData, Patient};
 
@@ -43,7 +43,12 @@ pub async fn create_test_pool() -> Result<SqlitePool, sqlx::Error> {
     let pool = create_pool(&config).await?;
     run_migrations(&pool).await?;
 
-    Ok(pool)
+    match pool {
+        DatabasePool::Sqlite(sqlite_pool) => Ok(sqlite_pool),
+        DatabasePool::Postgres(_) => {
+            Err(sqlx::Error::Protocol("Expected SQLite pool for test utility".to_string()))
+        }
+    }
 }
 
 /// Create a test patient fixture with default values

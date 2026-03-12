@@ -13,7 +13,7 @@ use opengp_infrastructure::infrastructure::database::repositories::patient::Sqlx
 use opengp_infrastructure::infrastructure::database::repositories::practitioner::SqlxPractitionerRepository;
 use opengp_infrastructure::infrastructure::database::repositories::user::SqlxUserRepository;
 use opengp_infrastructure::infrastructure::database::repositories::working_hours::SqlxWorkingHoursRepository;
-use opengp_infrastructure::infrastructure::database::{create_pool, run_migrations};
+use opengp_infrastructure::infrastructure::database::{create_pool, run_migrations, DatabasePool};
 use opengp_infrastructure::infrastructure::fixtures::seed_working_hours;
 use opengp_ui::api::ApiClient;
 use opengp_ui::ui::app::App;
@@ -47,16 +47,25 @@ async fn main() -> Result<()> {
         db_pool.size()
     );
 
-    seed_working_hours(&db_pool).await?;
+    let sqlite_pool = match db_pool {
+        DatabasePool::Sqlite(pool) => pool,
+        DatabasePool::Postgres(_) => {
+            return Err(color_eyre::eyre::eyre!(
+                "TUI local repositories currently require SQLite pool"
+            ));
+        }
+    };
+
+    seed_working_hours(&sqlite_pool).await?;
     tracing::info!("Practitioner working hours seeded");
 
     let crypto = Arc::new(EncryptionService::new()?);
-    let patient_repo = Arc::new(SqlxPatientRepository::new(db_pool.clone(), crypto.clone()));
+    let patient_repo = Arc::new(SqlxPatientRepository::new(sqlite_pool.clone(), crypto.clone()));
 
     // Create appointment-related repositories and service
     let practitioner_repo: Arc<dyn PractitionerRepository> =
-        Arc::new(SqlxPractitionerRepository::new(db_pool.clone()));
-    let appointment_repo_impl = Arc::new(SqlxAppointmentRepository::new(db_pool.clone()));
+        Arc::new(SqlxPractitionerRepository::new(sqlite_pool.clone()));
+    let appointment_repo_impl = Arc::new(SqlxAppointmentRepository::new(sqlite_pool.clone()));
     let appointment_repo_for_create: Arc<
         dyn opengp_domain::domain::appointment::AppointmentRepository,
     > = appointment_repo_impl.clone();
@@ -64,7 +73,7 @@ async fn main() -> Result<()> {
 
     // Create domain appointment service for status transitions
     let audit_service: std::sync::Arc<dyn opengp_domain::domain::audit::AuditEmitter> = Arc::new(opengp_domain::domain::audit::AuditService::new(
-        Arc::new(opengp_infrastructure::infrastructure::database::repositories::audit::SqlxAuditRepository::new(db_pool.clone()))
+        Arc::new(opengp_infrastructure::infrastructure::database::repositories::audit::SqlxAuditRepository::new(sqlite_pool.clone()))
     ));
     let domain_appointment_service =
         Arc::new(opengp_domain::domain::appointment::AppointmentService::new(
@@ -74,7 +83,7 @@ async fn main() -> Result<()> {
         ));
 
     // Create working hours repository and availability service
-    let working_hours_repo = Arc::new(SqlxWorkingHoursRepository::new(db_pool.clone()));
+    let working_hours_repo = Arc::new(SqlxWorkingHoursRepository::new(sqlite_pool.clone()));
     let availability_service = Arc::new(AvailabilityService::new(
         appointment_repo_for_create.clone(),
         working_hours_repo,
@@ -94,12 +103,12 @@ async fn main() -> Result<()> {
     )));
 
     // Create clinical service repositories
-    let consultation_repo: Arc<dyn opengp_domain::domain::clinical::ConsultationRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxClinicalRepository::new(db_pool.clone(), crypto.clone()));
-    let allergy_repo: Arc<dyn opengp_domain::domain::clinical::AllergyRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxAllergyRepository::new(db_pool.clone(), crypto.clone()));
-    let medical_history_repo: Arc<dyn opengp_domain::domain::clinical::MedicalHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxMedicalHistoryRepository::new(db_pool.clone(), crypto.clone()));
-    let vital_signs_repo: Arc<dyn opengp_domain::domain::clinical::VitalSignsRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxVitalSignsRepository::new(db_pool.clone(), crypto.clone()));
-    let social_history_repo: Arc<dyn opengp_domain::domain::clinical::SocialHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxSocialHistoryRepository::new(db_pool.clone(), crypto.clone()));
-    let family_history_repo: Arc<dyn opengp_domain::domain::clinical::FamilyHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxFamilyHistoryRepository::new(db_pool.clone(), crypto.clone()));
+    let consultation_repo: Arc<dyn opengp_domain::domain::clinical::ConsultationRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxClinicalRepository::new(sqlite_pool.clone(), crypto.clone()));
+    let allergy_repo: Arc<dyn opengp_domain::domain::clinical::AllergyRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxAllergyRepository::new(sqlite_pool.clone(), crypto.clone()));
+    let medical_history_repo: Arc<dyn opengp_domain::domain::clinical::MedicalHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxMedicalHistoryRepository::new(sqlite_pool.clone(), crypto.clone()));
+    let vital_signs_repo: Arc<dyn opengp_domain::domain::clinical::VitalSignsRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxVitalSignsRepository::new(sqlite_pool.clone(), crypto.clone()));
+    let social_history_repo: Arc<dyn opengp_domain::domain::clinical::SocialHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxSocialHistoryRepository::new(sqlite_pool.clone(), crypto.clone()));
+    let family_history_repo: Arc<dyn opengp_domain::domain::clinical::FamilyHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxFamilyHistoryRepository::new(sqlite_pool.clone(), crypto.clone()));
 
     let clinical_repos = opengp_domain::domain::clinical::ClinicalRepositories {
         consultation: consultation_repo,
@@ -119,7 +128,7 @@ async fn main() -> Result<()> {
         ),
     )));
 
-    let user_repo = SqlxUserRepository::new(db_pool.clone());
+    let user_repo = SqlxUserRepository::new(sqlite_pool.clone());
     let system_user_id = match user_repo.find_all().await {
         Ok(users) => {
             if let Some(first_user) = users.first() {

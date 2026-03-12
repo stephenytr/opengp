@@ -128,6 +128,33 @@ impl ApiClient {
         Self::parse_json_response(response).await
     }
 
+    pub async fn get_patient(&self, id: Uuid) -> Result<PatientResponse, ApiClientError> {
+        let response = self
+            .authenticated_request(Method::GET, &format!("/api/v1/patients/{id}"))
+            .await?
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
+    pub async fn update_patient(
+        &self,
+        id: Uuid,
+        request: PatientRequest,
+    ) -> Result<PatientResponse, ApiClientError> {
+        let response = self
+            .authenticated_request(Method::PUT, &format!("/api/v1/patients/{id}"))
+            .await?
+            .json(&request)
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
     pub async fn get_appointments(
         &self,
         page: u32,
@@ -323,9 +350,9 @@ mod tests {
     use std::net::SocketAddr;
 
     use axum::{
-        extract::{Query, State},
+        extract::{Path, Query, State},
         http::{HeaderMap, StatusCode},
-        routing::{get, post},
+        routing::{get, post, put},
         Json, Router,
     };
     use chrono::{NaiveDate, TimeZone};
@@ -336,6 +363,7 @@ mod tests {
     #[derive(Clone, Default)]
     struct TestState {
         seen_auth_headers: Arc<Mutex<Vec<String>>>,
+        seen_patient_update_versions: Arc<Mutex<Vec<i32>>>,
     }
 
     #[tokio::test]
@@ -520,6 +548,10 @@ mod tests {
                 "/api/v1/patients",
                 get(patients_handler).post(create_patient_handler),
             )
+            .route(
+                "/api/v1/patients/{id}",
+                get(get_patient_handler).put(update_patient_handler),
+            )
             .route("/api/v1/practitioners", get(practitioners_handler))
             .route(
                 "/api/v1/appointments",
@@ -547,6 +579,21 @@ mod tests {
             .await
             .expect("create_patient should succeed");
         assert_eq!(created_patient.first_name, "John");
+
+        let fetched_patient = client
+            .get_patient(sample_patient_id())
+            .await
+            .expect("get_patient should succeed");
+        assert_eq!(fetched_patient.id, sample_patient_id());
+        assert_eq!(fetched_patient.version, 1);
+
+        let mut patient_update = sample_patient_request();
+        patient_update.version = 7;
+        let updated_patient = client
+            .update_patient(sample_patient_id(), patient_update)
+            .await
+            .expect("update_patient should succeed");
+        assert_eq!(updated_patient.version, 8);
 
         let practitioners = client
             .get_practitioners()
@@ -583,6 +630,9 @@ mod tests {
         assert!(headers
             .iter()
             .all(|header| header == "Bearer session-token"));
+
+        let seen_versions = state.seen_patient_update_versions.lock().await;
+        assert_eq!(seen_versions.as_slice(), &[7]);
     }
 
     async fn login_handler(Json(_payload): Json<LoginRequest>) -> Json<LoginResponse> {
@@ -649,6 +699,33 @@ mod tests {
     ) -> (StatusCode, Json<PatientResponse>) {
         capture_header(state, headers).await;
         (StatusCode::CREATED, Json(sample_patient_response()))
+    }
+
+    async fn get_patient_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+    ) -> (StatusCode, Json<PatientResponse>) {
+        capture_header(state, headers).await;
+        (StatusCode::OK, Json(sample_patient_response()))
+    }
+
+    async fn update_patient_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+        Json(payload): Json<PatientRequest>,
+    ) -> (StatusCode, Json<PatientResponse>) {
+        capture_header(state.clone(), headers).await;
+        state
+            .seen_patient_update_versions
+            .lock()
+            .await
+            .push(payload.version);
+
+        let mut response = sample_patient_response();
+        response.version = payload.version + 1;
+        (StatusCode::OK, Json(response))
     }
 
     async fn practitioners_handler(

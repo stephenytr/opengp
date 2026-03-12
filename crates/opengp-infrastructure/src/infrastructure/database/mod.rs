@@ -14,8 +14,9 @@ pub mod mocks;
 #[cfg(test)]
 pub mod test_utils;
 
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::SqlitePool;
+use sqlx::{PgPool, SqlitePool};
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::info;
@@ -23,13 +24,54 @@ use tracing::info;
 // Re-export DatabaseConfig from config crate
 pub use opengp_config::DatabaseConfig;
 
+#[derive(Clone)]
+pub enum DatabasePool {
+    Sqlite(SqlitePool),
+    Postgres(PgPool),
+}
+
+impl DatabasePool {
+    pub fn size(&self) -> u32 {
+        match self {
+            Self::Sqlite(pool) => pool.size(),
+            Self::Postgres(pool) => pool.size(),
+        }
+    }
+
+    pub fn as_sqlite(&self) -> Option<&SqlitePool> {
+        match self {
+            Self::Sqlite(pool) => Some(pool),
+            Self::Postgres(_) => None,
+        }
+    }
+
+    pub fn as_postgres(&self) -> Option<&PgPool> {
+        match self {
+            Self::Sqlite(_) => None,
+            Self::Postgres(pool) => Some(pool),
+        }
+    }
+
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Sqlite(_) => "sqlite",
+            Self::Postgres(_) => "postgres",
+        }
+    }
+}
+
+fn is_postgres_url(url: &str) -> bool {
+    let url = url.to_ascii_lowercase();
+    url.starts_with("postgres://") || url.starts_with("postgresql://")
+}
+
 /// Create a configured database connection pool
 ///
 /// # Arguments
 /// * `config` - Database configuration
 ///
 /// # Returns
-/// * `Ok(SqlitePool)` - Successfully created connection pool
+/// * `Ok(DatabasePool)` - Successfully created connection pool
 /// * `Err(sqlx::Error)` - Failed to create pool or connect to database
 ///
 /// # Example
@@ -43,30 +85,44 @@ pub use opengp_config::DatabaseConfig;
 /// # Ok(())
 /// # }
 /// ```
-pub async fn create_pool(config: &DatabaseConfig) -> Result<SqlitePool, sqlx::Error> {
+pub async fn create_pool(config: &DatabaseConfig) -> Result<DatabasePool, sqlx::Error> {
     info!("Creating database connection pool");
     info!("  Database URL: {}", config.url);
     info!("  Max connections: {}", config.max_connections);
     info!("  Min connections: {}", config.min_connections);
 
-    // Parse connection options
+    if is_postgres_url(&config.url) {
+        let connect_options = PgConnectOptions::from_str(&config.url)?;
+
+        let pool = PgPoolOptions::new()
+            .max_connections(config.max_connections)
+            .min_connections(config.min_connections)
+            .acquire_timeout(Duration::from_secs(config.connect_timeout_secs))
+            .idle_timeout(Duration::from_secs(config.idle_timeout_secs))
+            .test_before_acquire(true)
+            .connect_with(connect_options)
+            .await?;
+
+        info!("PostgreSQL connection pool created successfully");
+        return Ok(DatabasePool::Postgres(pool));
+    }
+
     let connect_options = SqliteConnectOptions::from_str(&config.url)?
         .create_if_missing(true)
         .busy_timeout(Duration::from_secs(30));
 
-    // Create pool with configuration
     let pool = SqlitePoolOptions::new()
         .max_connections(config.max_connections)
         .min_connections(config.min_connections)
         .acquire_timeout(Duration::from_secs(config.connect_timeout_secs))
         .idle_timeout(Duration::from_secs(config.idle_timeout_secs))
-        .test_before_acquire(true) // Verify connections before use
+        .test_before_acquire(true)
         .connect_with(connect_options)
         .await?;
 
-    info!("Database connection pool created successfully");
+    info!("SQLite connection pool created successfully");
 
-    Ok(pool)
+    Ok(DatabasePool::Sqlite(pool))
 }
 
 /// Run database migrations
@@ -77,17 +133,23 @@ pub async fn create_pool(config: &DatabaseConfig) -> Result<SqlitePool, sqlx::Er
 /// # Returns
 /// * `Ok(())` - Migrations applied successfully
 /// * `Err(sqlx::Error)` - Migration failed
-pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+pub async fn run_migrations(pool: &DatabasePool) -> Result<(), sqlx::Error> {
     info!("Running database migrations");
 
-    // Force recompilation by including all migrations
-    sqlx::migrate!("./migrations").run(pool).await?;
+    match pool {
+        DatabasePool::Sqlite(sqlite_pool) => {
+            sqlx::migrate!("./migrations").run(sqlite_pool).await?;
 
-    // Workaround: Manually ensure working_hours table exists
-    // The sqlx::migrate! macro sometimes doesn't pick up new migration files at compile time
-    // This fallback ensures the table is created if it doesn't exist
-    ensure_working_hours_table(pool).await?;
-    ensure_sessions_have_token(pool).await?;
+            // Workaround: Manually ensure working_hours table exists
+            // The sqlx::migrate! macro sometimes doesn't pick up new migration files at compile time
+            // This fallback ensures the table is created if it doesn't exist
+            ensure_working_hours_table(sqlite_pool).await?;
+            ensure_sessions_have_token(sqlite_pool).await?;
+        }
+        DatabasePool::Postgres(pg_pool) => {
+            sqlx::migrate!("../../migrations_postgres").run(pg_pool).await?;
+        }
+    }
 
     info!("Database migrations completed successfully");
 
@@ -186,8 +248,15 @@ async fn ensure_sessions_have_token(pool: &SqlitePool) -> Result<(), sqlx::Error
 /// # Returns
 /// * `Ok(())` - Database is healthy
 /// * `Err(sqlx::Error)` - Database is unhealthy
-pub async fn health_check(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    sqlx::query("SELECT 1").execute(pool).await?;
+pub async fn health_check(pool: &DatabasePool) -> Result<(), sqlx::Error> {
+    match pool {
+        DatabasePool::Sqlite(sqlite_pool) => {
+            sqlx::query("SELECT 1").execute(sqlite_pool).await?;
+        }
+        DatabasePool::Postgres(pg_pool) => {
+            sqlx::query("SELECT 1").execute(pg_pool).await?;
+        }
+    }
 
     Ok(())
 }
@@ -205,6 +274,7 @@ mod tests {
 
         let pool = create_pool(&config).await;
         assert!(pool.is_ok());
+        assert!(matches!(pool.unwrap(), DatabasePool::Sqlite(_)));
     }
 
     #[tokio::test]
