@@ -1,126 +1,102 @@
+use axum::body::{to_bytes, Body};
+use axum::http::{header, Request, StatusCode};
+use chrono::Utc;
+use opengp_api::{router, ApiConfig, ApiState};
 use opengp_domain::domain::api::{ApiErrorResponse, LoginResponse};
-use serde_json::json;
-use std::net::TcpListener;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
-use tokio::time::{sleep, Duration};
+use sqlx::PgPool;
+use tower::util::ServiceExt;
 use uuid::Uuid;
 
-fn reserve_test_port() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("should reserve local test port");
-    listener
-        .local_addr()
-        .expect("reserved listener should have local address")
-        .port()
+fn test_config() -> ApiConfig {
+    let mut config = ApiConfig::from_env().expect("test config should load from environment");
+    config.log_level = "warn".to_string();
+    config
 }
 
-async fn send_json_request(
-    port: u16,
-    method: &str,
-    path: &str,
-    body: Option<String>,
-    bearer_token: Option<&str>,
-) -> (u16, String) {
-    let mut stream = TcpStream::connect(("127.0.0.1", port))
+async fn login(app: &axum::Router, username: &str, password: &str) -> LoginResponse {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    "{{\"username\":\"{username}\",\"password\":\"{password}\"}}"
+                )))
+                .expect("request should be valid"),
+        )
         .await
-        .expect("should connect to API server");
+        .expect("login request should succeed");
 
-    let body = body.unwrap_or_default();
-    let auth_header = bearer_token
-        .map(|token| format!("Authorization: Bearer {token}\r\n"))
-        .unwrap_or_default();
-
-    let request = format!(
-        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nContent-Type: application/json\r\n{auth_header}Content-Length: {}\r\n\r\n{}",
-        body.len(),
-        body
-    );
-
-    stream
-        .write_all(request.as_bytes())
+    assert_eq!(response.status(), StatusCode::OK, "login must succeed before booking");
+    let body = to_bytes(response.into_body(), usize::MAX)
         .await
-        .expect("should write HTTP request");
-
-    let mut raw = Vec::new();
-    stream
-        .read_to_end(&mut raw)
-        .await
-        .expect("should read HTTP response");
-
-    let response = String::from_utf8(raw).expect("response should be UTF-8");
-    let (headers, response_body) = response
-        .split_once("\r\n\r\n")
-        .expect("response should contain headers and body");
-
-    let status = headers
-        .lines()
-        .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .and_then(|code| code.parse::<u16>().ok())
-        .expect("status line should contain valid HTTP status code");
-
-    (status, response_body.to_string())
+        .expect("login body should be readable");
+    serde_json::from_slice(&body).expect("login response should be valid JSON")
 }
 
-async fn wait_for_server(port: u16) {
-    for _ in 0..50 {
-        if TcpStream::connect(("127.0.0.1", port)).await.is_ok() {
-            return;
-        }
-        sleep(Duration::from_millis(50)).await;
-    }
+async fn seed_login_user(pool: &PgPool) -> (String, String) {
+    let user_id = Uuid::new_v4();
+    let username = format!("dr_{}", Uuid::new_v4().simple());
+    let password = format!("pw-{}", Uuid::new_v4().simple());
+    let now = Utc::now();
 
-    panic!("API server did not start in time on port {port}");
+    sqlx::query(
+        r#"
+        INSERT INTO users (
+            id,
+            username,
+            password_hash,
+            first_name,
+            last_name,
+            email,
+            role,
+            is_active,
+            is_locked,
+            failed_login_attempts,
+            last_login,
+            password_changed_at,
+            additional_permissions,
+            created_at,
+            updated_at
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, TRUE, FALSE, 0, NULL, $8, '[]', $9, $10
+        )
+        "#,
+    )
+    .bind(user_id)
+    .bind(&username)
+    .bind(&password)
+    .bind("Concurrent")
+    .bind("Tester")
+    .bind(format!("{username}@example.com"))
+    .bind("Doctor")
+    .bind(now)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await
+    .expect("test user insert should succeed");
+
+    (username, password)
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn concurrent_booking_returns_conflict_for_second_writer() {
-    let port = reserve_test_port();
+    let state = ApiState::new(test_config())
+        .await
+        .expect("state should initialize");
+    let (username, password) = seed_login_user(&state.pool).await;
+    let app = router(state);
 
-    unsafe {
-        std::env::set_var("API_HOST", "127.0.0.1");
-        std::env::set_var("API_PORT", port.to_string());
-        std::env::set_var(
-            "API_DATABASE_URL",
-            "postgres://postgres:postgres@127.0.0.1:5432/opengp",
-        );
-        std::env::set_var(
-            "ENCRYPTION_KEY",
-            "0000000000000000000000000000000000000000000000000000000000000000",
-        );
-        std::env::set_var("LOG_LEVEL", "warn");
-    }
+    let login = login(&app, &username, &password).await;
+    let token = login.access_token;
 
-    let server_handle = tokio::spawn(async { opengp_api::run().await });
-    wait_for_server(port).await;
-
-    let login_body = json!({
-        "username": "dr_smith",
-        "password": "correct-horse-battery-staple"
-    })
-    .to_string();
-
-    let (login_status, login_response_body) = send_json_request(
-        port,
-        "POST",
-        "/api/v1/auth/login",
-        Some(login_body),
-        None,
-    )
-    .await;
-    assert_eq!(login_status, 200, "login must succeed before booking");
-
-    let login: LoginResponse =
-        serde_json::from_str(&login_response_body).expect("login response should be valid JSON");
-
-    let practitioner_id = Uuid::new_v4();
-    let patient_id = Uuid::new_v4();
-    let start_time = (chrono::Utc::now() + chrono::Duration::hours(2)).to_rfc3339();
-
-    let appointment_payload = json!({
-        "patient_id": patient_id,
-        "practitioner_id": practitioner_id,
-        "start_time": start_time,
+    let appointment_payload = serde_json::json!({
+        "patient_id": Uuid::new_v4(),
+        "practitioner_id": login.user.id,
+        "start_time": (Utc::now() + chrono::Duration::hours(2)).to_rfc3339(),
         "duration_minutes": 15,
         "appointment_type": "standard",
         "reason": "Concurrent booking test",
@@ -128,41 +104,71 @@ async fn concurrent_booking_returns_conflict_for_second_writer() {
     })
     .to_string();
 
-    let first_token = login.access_token.clone();
-    let first_payload = appointment_payload.clone();
+    let app_one = app.clone();
+    let token_one = token.clone();
+    let body_one = appointment_payload.clone();
     let first = tokio::spawn(async move {
-        send_json_request(
-            port,
-            "POST",
-            "/api/v1/appointments",
-            Some(first_payload),
-            Some(&first_token),
-        )
-        .await
+        app_one
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/appointments")
+                    .header(header::AUTHORIZATION, format!("Bearer {token_one}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(body_one))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("first request should succeed")
     });
 
-    let second_token = login.access_token.clone();
-    let second_payload = appointment_payload;
+    let app_two = app.clone();
+    let token_two = token;
+    let body_two = appointment_payload;
     let second = tokio::spawn(async move {
-        sleep(Duration::from_millis(20)).await;
-        send_json_request(
-            port,
-            "POST",
-            "/api/v1/appointments",
-            Some(second_payload),
-            Some(&second_token),
-        )
-        .await
+        tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+        app_two
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/appointments")
+                    .header(header::AUTHORIZATION, format!("Bearer {token_two}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(body_two))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("second request should succeed")
     });
 
-    let (first_status, _first_body) = first.await.expect("first task should complete");
-    let (second_status, second_body) = second.await.expect("second task should complete");
+    let first_response = first.await.expect("first task should complete");
+    let second_response = second.await.expect("second task should complete");
+    let statuses = [first_response.status(), second_response.status()];
 
-    assert_eq!(first_status, 201, "first booking should succeed");
-    assert_eq!(second_status, 409, "second booking should return conflict");
+    let created_count = statuses
+        .iter()
+        .filter(|status| **status == StatusCode::CREATED)
+        .count();
+    let conflict_count = statuses
+        .iter()
+        .filter(|status| **status == StatusCode::CONFLICT)
+        .count();
 
+    assert_eq!(created_count, 1, "exactly one booking should succeed");
+    assert_eq!(conflict_count, 1, "exactly one booking should return conflict");
+
+    let conflict_response = if first_response.status() == StatusCode::CONFLICT {
+        first_response
+    } else {
+        second_response
+    };
+
+    let conflict_body = to_bytes(conflict_response.into_body(), usize::MAX)
+        .await
+        .expect("conflict response body should be readable");
     let conflict: ApiErrorResponse =
-        serde_json::from_str(&second_body).expect("conflict response should be valid JSON");
+        serde_json::from_slice(&conflict_body).expect("conflict response should be valid JSON");
+
     assert_eq!(conflict.status, 409);
     assert_eq!(conflict.code, "appointment_conflict");
     assert!(
@@ -170,6 +176,4 @@ async fn concurrent_booking_returns_conflict_for_second_writer() {
         "conflict message should clearly describe overlap, got: {}",
         conflict.message
     );
-
-    server_handle.abort();
 }

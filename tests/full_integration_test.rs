@@ -5,24 +5,14 @@ use opengp_api::{router, ApiConfig, ApiState};
 use opengp_domain::domain::api::{
     ApiErrorResponse, AppointmentResponse, LoginResponse, PaginatedResponse, PatientResponse,
 };
+use sqlx::PgPool;
 use tower::util::ServiceExt;
 use uuid::Uuid;
 
 fn test_config() -> ApiConfig {
-    ApiConfig {
-        host: "127.0.0.1".to_string(),
-        port: 8080,
-        database_url: "postgres://postgres:postgres@127.0.0.1:5432/opengp".to_string(),
-        patient_database_url: None,
-        database_max_connections: 10,
-        database_min_connections: 2,
-        connect_timeout_secs: 30,
-        idle_timeout_secs: 600,
-        encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
-            .to_string(),
-        session_timeout_minutes: 480,
-        log_level: "info".to_string(),
-    }
+    let mut config = ApiConfig::from_env().expect("test config should load from environment");
+    config.log_level = "warn".to_string();
+    config
 }
 
 async fn login(app: &axum::Router, username: &str, password: &str) -> LoginResponse {
@@ -48,14 +38,61 @@ async fn login(app: &axum::Router, username: &str, password: &str) -> LoginRespo
     serde_json::from_slice(&body).expect("body should be valid login response")
 }
 
+async fn seed_login_user(pool: &PgPool, role: &str) -> (String, String) {
+    let user_id = Uuid::new_v4();
+    let username = format!("{}_{}", role.to_lowercase(), Uuid::new_v4().simple());
+    let password = format!("pw-{}", Uuid::new_v4().simple());
+    let now = Utc::now();
+
+    sqlx::query(
+        r#"
+        INSERT INTO users (
+            id,
+            username,
+            password_hash,
+            first_name,
+            last_name,
+            email,
+            role,
+            is_active,
+            is_locked,
+            failed_login_attempts,
+            last_login,
+            password_changed_at,
+            additional_permissions,
+            created_at,
+            updated_at
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, TRUE, FALSE, 0, NULL, $8, '[]', $9, $10
+        )
+        "#,
+    )
+    .bind(user_id)
+    .bind(&username)
+    .bind(&password)
+    .bind("Integration")
+    .bind("Tester")
+    .bind(format!("{username}@example.com"))
+    .bind(role)
+    .bind(now)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await
+    .expect("test user insert should succeed");
+
+    (username, password)
+}
+
 #[tokio::test]
 async fn full_workflow_login_view_patients_create_appointment_logout_then_unauthorized() {
     let state = ApiState::new(test_config())
         .await
         .expect("state should initialize");
+    let (username, password) = seed_login_user(&state.pool, "Doctor").await;
     let app = router(state);
 
-    let login = login(&app, "dr_smith", "correct-horse-battery-staple").await;
+    let login = login(&app, &username, &password).await;
     let token = login.access_token;
 
     let list_response = app
@@ -162,9 +199,10 @@ async fn receptionist_can_view_patients_but_is_denied_clinical_endpoints() {
     let state = ApiState::new(test_config())
         .await
         .expect("state should initialize");
+    let (username, password) = seed_login_user(&state.pool, "Receptionist").await;
     let app = router(state);
 
-    let login = login(&app, "recep_amy", "desk-passphrase").await;
+    let login = login(&app, &username, &password).await;
     let token = login.access_token;
 
     let list_response = app
@@ -238,9 +276,10 @@ async fn concurrent_appointment_creates_return_one_created_and_one_conflict() {
     let state = ApiState::new(test_config())
         .await
         .expect("state should initialize");
+    let (username, password) = seed_login_user(&state.pool, "Doctor").await;
     let app = router(state);
 
-    let login = login(&app, "dr_smith", "correct-horse-battery-staple").await;
+    let login = login(&app, &username, &password).await;
     let token = login.access_token;
     let practitioner_id = login.user.id;
     let patient_id = Uuid::new_v4();
