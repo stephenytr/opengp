@@ -15,12 +15,11 @@ use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentType, AvailabilityService,
 };
 use opengp_domain::domain::patient::{Gender, Patient};
-use opengp_domain::domain::user::{PractitionerRepository, UserRepository};
+use opengp_domain::domain::user::PractitionerRepository;
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::repositories::appointment::SqlxAppointmentRepository;
 use opengp_infrastructure::infrastructure::database::repositories::patient::SqlxPatientRepository;
 use opengp_infrastructure::infrastructure::database::repositories::practitioner::SqlxPractitionerRepository;
-use opengp_infrastructure::infrastructure::database::repositories::user::SqlxUserRepository;
 use opengp_infrastructure::infrastructure::database::repositories::working_hours::SqlxWorkingHoursRepository;
 use opengp_infrastructure::infrastructure::database::{create_pool, run_migrations, DatabasePool};
 use opengp_infrastructure::infrastructure::fixtures::seed_working_hours;
@@ -137,30 +136,6 @@ async fn main() -> Result<()> {
         ),
     )));
 
-    let user_repo = SqlxUserRepository::new(sqlite_pool.clone());
-    let system_user_id = match user_repo.find_all().await {
-        Ok(users) => {
-            if let Some(first_user) = users.first() {
-                tracing::info!(
-                    "Using system_user_id from user: {} ({})",
-                    first_user.username,
-                    first_user.id
-                );
-                first_user.id
-            } else {
-                tracing::warn!("No users found in database, using nil UUID for system_user_id");
-                uuid::Uuid::nil()
-            }
-        }
-        Err(e) => {
-            tracing::warn!(
-                "Failed to load users, using nil UUID for system_user_id: {}",
-                e
-            );
-            uuid::Uuid::nil()
-        }
-    };
-
     let api_base_url = std::env::var("API_BASE_URL")
         .or_else(|_| std::env::var("OPENGP_API_BASE_URL"))
         .unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
@@ -174,7 +149,6 @@ async fn main() -> Result<()> {
         appointment_service,
         patient_service,
         clinical_service,
-        system_user_id,
         config.calendar,
     )
     .await?;
@@ -189,7 +163,6 @@ async fn run_tui(
     appointment_service: Arc<AppointmentUiService>,
     patient_service: Arc<opengp_ui::ui::services::PatientUiService>,
     clinical_service: Arc<opengp_ui::ui::services::ClinicalUiService>,
-    system_user_id: uuid::Uuid,
     calendar_config: CalendarConfig,
 ) -> Result<()> {
     enable_raw_mode()?;
@@ -207,7 +180,6 @@ async fn run_tui(
         Some(clinical_service.clone()),
         calendar_config.clone(),
     );
-    app.current_user_id = system_user_id;
     app.set_authenticated(has_session_token);
     if has_session_token {
         app.request_refresh_patients();
