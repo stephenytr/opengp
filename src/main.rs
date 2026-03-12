@@ -11,21 +11,10 @@ use opengp_domain::domain::api::{
     PatientResponse, SocialHistoryRequest, SocialHistoryResponse, VitalSignsRequest,
     VitalSignsResponse,
 };
-use opengp_domain::domain::appointment::{
-    AppointmentCalendarQuery, AppointmentType, AvailabilityService,
-};
+use opengp_domain::domain::appointment::AppointmentType;
 use opengp_domain::domain::patient::{Gender, Patient};
-use opengp_domain::domain::user::PractitionerRepository;
-use opengp_infrastructure::infrastructure::crypto::EncryptionService;
-use opengp_infrastructure::infrastructure::database::repositories::appointment::SqlxAppointmentRepository;
-use opengp_infrastructure::infrastructure::database::repositories::patient::SqlxPatientRepository;
-use opengp_infrastructure::infrastructure::database::repositories::practitioner::SqlxPractitionerRepository;
-use opengp_infrastructure::infrastructure::database::repositories::working_hours::SqlxWorkingHoursRepository;
-use opengp_infrastructure::infrastructure::database::{create_pool, run_migrations, DatabasePool};
-use opengp_infrastructure::infrastructure::fixtures::seed_working_hours;
 use opengp_ui::api::ApiClient;
 use opengp_ui::ui::app::App;
-use opengp_ui::ui::services::AppointmentUiService;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io;
@@ -44,97 +33,6 @@ async fn main() -> Result<()> {
     init_logging(&config.log_level);
 
     tracing::info!("Starting OpenGP");
-    tracing::info!("Database URL: {}", config.database.url);
-
-    let db_pool = create_pool(&config.database).await?;
-
-    run_migrations(&db_pool).await?;
-
-    tracing::info!(
-        "Database pool created with {} connection(s)",
-        db_pool.size()
-    );
-
-    let sqlite_pool = match db_pool {
-        DatabasePool::Sqlite(pool) => pool,
-        DatabasePool::Postgres(_) => {
-            return Err(color_eyre::eyre::eyre!(
-                "TUI local repositories currently require SQLite pool"
-            ));
-        }
-    };
-
-    seed_working_hours(&sqlite_pool).await?;
-    tracing::info!("Practitioner working hours seeded");
-
-    let crypto = Arc::new(EncryptionService::new()?);
-    let patient_repo = Arc::new(SqlxPatientRepository::new(sqlite_pool.clone(), crypto.clone()));
-
-    // Create appointment-related repositories and service
-    let practitioner_repo: Arc<dyn PractitionerRepository> =
-        Arc::new(SqlxPractitionerRepository::new(sqlite_pool.clone()));
-    let appointment_repo_impl = Arc::new(SqlxAppointmentRepository::new(sqlite_pool.clone()));
-    let appointment_repo_for_create: Arc<
-        dyn opengp_domain::domain::appointment::AppointmentRepository,
-    > = appointment_repo_impl.clone();
-    let appointment_repo: Arc<dyn AppointmentCalendarQuery> = appointment_repo_impl.clone();
-
-    // Create domain appointment service for status transitions
-    let audit_service: std::sync::Arc<dyn opengp_domain::domain::audit::AuditEmitter> = Arc::new(opengp_domain::domain::audit::AuditService::new(
-        Arc::new(opengp_infrastructure::infrastructure::database::repositories::audit::SqlxAuditRepository::new(sqlite_pool.clone()))
-    ));
-    let domain_appointment_service =
-        Arc::new(opengp_domain::domain::appointment::AppointmentService::new(
-            appointment_repo_for_create.clone(),
-            audit_service.clone(),
-            appointment_repo.clone(),
-        ));
-
-    // Create working hours repository and availability service
-    let working_hours_repo = Arc::new(SqlxWorkingHoursRepository::new(sqlite_pool.clone()));
-    let availability_service = Arc::new(AvailabilityService::new(
-        appointment_repo_for_create.clone(),
-        working_hours_repo,
-    ));
-
-    let appointment_service = Arc::new(AppointmentUiService::new(
-        practitioner_repo,
-        appointment_repo,
-        appointment_repo_for_create,
-        domain_appointment_service,
-        availability_service,
-    ));
-
-    // Create patient service
-    let patient_service = Arc::new(opengp_ui::ui::services::PatientUiService::new(Arc::new(
-        opengp_domain::domain::patient::PatientService::new(patient_repo.clone()),
-    )));
-
-    // Create clinical service repositories
-    let consultation_repo: Arc<dyn opengp_domain::domain::clinical::ConsultationRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxClinicalRepository::new(sqlite_pool.clone(), crypto.clone()));
-    let allergy_repo: Arc<dyn opengp_domain::domain::clinical::AllergyRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxAllergyRepository::new(sqlite_pool.clone(), crypto.clone()));
-    let medical_history_repo: Arc<dyn opengp_domain::domain::clinical::MedicalHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxMedicalHistoryRepository::new(sqlite_pool.clone(), crypto.clone()));
-    let vital_signs_repo: Arc<dyn opengp_domain::domain::clinical::VitalSignsRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxVitalSignsRepository::new(sqlite_pool.clone(), crypto.clone()));
-    let social_history_repo: Arc<dyn opengp_domain::domain::clinical::SocialHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxSocialHistoryRepository::new(sqlite_pool.clone(), crypto.clone()));
-    let family_history_repo: Arc<dyn opengp_domain::domain::clinical::FamilyHistoryRepository> = Arc::new(opengp_infrastructure::infrastructure::database::repositories::clinical::SqlxFamilyHistoryRepository::new(sqlite_pool.clone(), crypto.clone()));
-
-    let clinical_repos = opengp_domain::domain::clinical::ClinicalRepositories {
-        consultation: consultation_repo,
-        allergy: allergy_repo,
-        medical_history: medical_history_repo,
-        vital_signs: vital_signs_repo,
-        social_history: social_history_repo,
-        family_history: family_history_repo,
-    };
-    let clinical_service = Arc::new(opengp_ui::ui::services::ClinicalUiService::new(Arc::new(
-        opengp_domain::domain::clinical::ClinicalService::new(
-            clinical_repos,
-            Arc::new(opengp_domain::domain::patient::PatientService::new(
-                patient_repo.clone(),
-            )),
-            audit_service,
-        ),
-    )));
 
     let api_base_url = std::env::var("API_BASE_URL")
         .or_else(|_| std::env::var("OPENGP_API_BASE_URL"))
@@ -146,9 +44,6 @@ async fn main() -> Result<()> {
 
     run_tui(
         api_client,
-        appointment_service,
-        patient_service,
-        clinical_service,
         config.calendar,
     )
     .await?;
@@ -160,9 +55,6 @@ async fn main() -> Result<()> {
 
 async fn run_tui(
     api_client: Arc<ApiClient>,
-    appointment_service: Arc<AppointmentUiService>,
-    patient_service: Arc<opengp_ui::ui::services::PatientUiService>,
-    clinical_service: Arc<opengp_ui::ui::services::ClinicalUiService>,
     calendar_config: CalendarConfig,
 ) -> Result<()> {
     enable_raw_mode()?;
@@ -175,9 +67,9 @@ async fn run_tui(
 
     let mut app = App::new(
         Some(api_client.clone()),
-        Some(appointment_service.clone()),
-        Some(patient_service.clone()),
-        Some(clinical_service.clone()),
+        None,
+        None,
+        None,
         calendar_config.clone(),
     );
     app.set_authenticated(has_session_token);
