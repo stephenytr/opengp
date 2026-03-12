@@ -306,6 +306,9 @@ impl App {
 
     /// Take pending patient data (for saving to database)
     pub fn take_pending_patient_data(&mut self) -> Option<PendingPatientData> {
+        if !self.authenticated {
+            return None;
+        }
         self.pending_patient_data.take()
     }
 
@@ -338,6 +341,9 @@ impl App {
     pub fn take_pending_appointment_save(
         &mut self,
     ) -> Option<opengp_domain::domain::appointment::NewAppointmentData> {
+        if !self.authenticated {
+            return None;
+        }
         self.pending_appointment_save.take()
     }
 
@@ -352,6 +358,9 @@ impl App {
     }
 
     pub fn take_pending_clinical_save_data(&mut self) -> Option<PendingClinicalSaveData> {
+        if !self.authenticated {
+            return None;
+        }
         self.pending_clinical_save_data.take()
     }
 
@@ -808,6 +817,74 @@ mod tests {
 
         assert!(!app.is_authenticated());
         assert!(api_client.current_session_token().await.is_none());
+    }
+
+    #[test]
+    fn pending_form_data_is_preserved_while_logged_out_and_available_after_relogin() {
+        let mut app = App::new(None, None, None, None, opengp_config::CalendarConfig::default());
+
+        let patient_id = uuid::Uuid::new_v4();
+        let practitioner_id = uuid::Uuid::new_v4();
+
+        app.pending_patient_data = Some(PendingPatientData::New(
+            opengp_domain::domain::patient::NewPatientData {
+                ihi: None,
+                medicare_number: None,
+                medicare_irn: None,
+                medicare_expiry: None,
+                title: None,
+                first_name: "Jane".to_string(),
+                middle_name: None,
+                last_name: "Citizen".to_string(),
+                preferred_name: None,
+                date_of_birth: chrono::NaiveDate::from_ymd_opt(1990, 1, 1).expect("valid date"),
+                gender: Gender::Female,
+                address: opengp_domain::domain::patient::Address::default(),
+                phone_home: None,
+                phone_mobile: Some("0400000000".to_string()),
+                email: None,
+                emergency_contact: None,
+                concession_type: None,
+                concession_number: None,
+                preferred_language: None,
+                interpreter_required: None,
+                aboriginal_torres_strait_islander: None,
+            },
+        ));
+
+        app.pending_appointment_save = Some(opengp_domain::domain::appointment::NewAppointmentData {
+            patient_id,
+            practitioner_id,
+            start_time: Utc::now(),
+            duration: chrono::Duration::minutes(15),
+            appointment_type: AppointmentType::Standard,
+            reason: Some("Follow-up".to_string()),
+            is_urgent: false,
+        });
+
+        app.pending_clinical_save_data = Some(PendingClinicalSaveData::Consultation {
+            patient_id,
+            practitioner_id,
+            appointment_id: None,
+            reason: Some("Review".to_string()),
+            clinical_notes: Some("Doing well".to_string()),
+        });
+
+        app.set_authenticated(false);
+
+        assert!(app.take_pending_patient_data().is_none());
+        assert!(app.take_pending_appointment_save().is_none());
+        assert!(app.take_pending_clinical_save_data().is_none());
+
+        assert!(app.pending_patient_data.is_some());
+        assert!(app.pending_appointment_save.is_some());
+        assert!(app.pending_clinical_save_data.is_some());
+
+        app.set_authenticated(true);
+
+        assert!(app.take_pending_patient_data().is_some());
+        assert!(app.take_pending_appointment_save().is_some());
+        assert!(app.take_pending_clinical_save_data().is_some());
     }
 
     #[tokio::test]
