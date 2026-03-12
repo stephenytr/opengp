@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use opengp_domain::domain::api::{
     ApiErrorResponse, AppointmentRequest, AppointmentResponse, ConsultationRequest,
     ConsultationResponse, LoginRequest, LoginResponse, PaginatedResponse, PatientRequest,
-    PatientResponse,
+    PatientResponse, PractitionerResponse,
 };
 use reqwest::{Method, StatusCode};
 use tokio::sync::Mutex;
@@ -95,6 +95,17 @@ impl ApiClient {
             .authenticated_request(Method::GET, "/api/v1/patients")
             .await?
             .query(&[("page", page), ("limit", limit)])
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
+    pub async fn get_practitioners(&self) -> Result<Vec<PractitionerResponse>, ApiClientError> {
+        let response = self
+            .authenticated_request(Method::GET, "/api/v1/practitioners")
+            .await?
             .send()
             .await
             .map_err(Self::map_request_error)?;
@@ -509,6 +520,7 @@ mod tests {
                 "/api/v1/patients",
                 get(patients_handler).post(create_patient_handler),
             )
+            .route("/api/v1/practitioners", get(practitioners_handler))
             .route(
                 "/api/v1/appointments",
                 get(appointments_handler).post(create_appointment_handler),
@@ -535,6 +547,13 @@ mod tests {
             .await
             .expect("create_patient should succeed");
         assert_eq!(created_patient.first_name, "John");
+
+        let practitioners = client
+            .get_practitioners()
+            .await
+            .expect("get_practitioners should succeed");
+        assert_eq!(practitioners.len(), 1);
+        assert_eq!(practitioners[0].specialty, "General Practice");
 
         let appointments = client
             .get_appointments(1, 10, None, None, None)
@@ -630,6 +649,14 @@ mod tests {
     ) -> (StatusCode, Json<PatientResponse>) {
         capture_header(state, headers).await;
         (StatusCode::CREATED, Json(sample_patient_response()))
+    }
+
+    async fn practitioners_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+    ) -> (StatusCode, Json<Vec<PractitionerResponse>>) {
+        capture_header(state, headers).await;
+        (StatusCode::OK, Json(vec![sample_practitioner_response()]))
     }
 
     async fn appointments_handler(
@@ -750,6 +777,14 @@ mod tests {
 
     fn sample_appointment_id() -> Uuid {
         Uuid::parse_str("27a88f3f-7f5a-4d9a-9f6a-5a2a4a9e1f80").expect("valid uuid")
+    }
+
+    fn sample_practitioner_response() -> PractitionerResponse {
+        PractitionerResponse {
+            id: sample_practitioner_id(),
+            name: "Sarah Smith".to_string(),
+            specialty: "General Practice".to_string(),
+        }
     }
 
     fn sample_consultation_id() -> Uuid {

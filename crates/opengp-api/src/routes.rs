@@ -11,7 +11,7 @@ use http::header::ORIGIN;
 use opengp_domain::domain::api::{
     ApiErrorResponse, AppointmentRequest, AppointmentResponse, AuthenticatedUserResponse,
     ConsultationRequest, ConsultationResponse, LoginRequest, LoginResponse, PaginatedResponse,
-    PatientRequest, PatientResponse,
+    PatientRequest, PatientResponse, PractitionerResponse,
 };
 use opengp_domain::domain::appointment::{
     AppointmentSearchCriteria, AppointmentStatus, AppointmentType, NewAppointmentData,
@@ -77,6 +77,13 @@ pub fn router(state: ApiState) -> Router {
             session_validation_middleware,
         ));
 
+    let practitioner_routes = Router::new()
+        .route("/", get(list_practitioners))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            session_validation_middleware,
+        ));
+
     Router::new()
         .route("/health", get(health))
         .route("/metrics", get(metrics))
@@ -84,6 +91,7 @@ pub fn router(state: ApiState) -> Router {
         .nest("/api/v1/patients", patient_routes)
         .nest("/api/v1/appointments", appointment_routes)
         .nest("/api/v1/consultations", consultation_routes)
+        .nest("/api/v1/practitioners", practitioner_routes)
         .with_state(state)
         .layer(
             ServiceBuilder::new()
@@ -301,6 +309,35 @@ async fn list_patients(
             limit,
         }),
     ))
+}
+
+async fn list_practitioners(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+) -> Result<(StatusCode, Json<Vec<PractitionerResponse>>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_read(&context)?;
+
+    let users = state
+        .services
+        .auth_service
+        .user_repository
+        .find_all()
+        .await
+        .map_err(|_| {
+            internal_server_error_response("internal_error", "Unable to load practitioners")
+        })?;
+
+    let practitioners = users
+        .into_iter()
+        .filter(|user| user.is_active && is_practitioner(user.role))
+        .map(|user| PractitionerResponse {
+            id: user.id,
+            name: user.full_name(),
+            specialty: practitioner_specialty(user.role).to_string(),
+        })
+        .collect();
+
+    Ok((StatusCode::OK, Json(practitioners)))
 }
 
 async fn get_patient(
@@ -954,6 +991,14 @@ fn is_reader(role: Role) -> bool {
 
 fn is_practitioner(role: Role) -> bool {
     matches!(role, Role::Doctor | Role::Nurse)
+}
+
+fn practitioner_specialty(role: Role) -> &'static str {
+    match role {
+        Role::Doctor => "General Practice",
+        Role::Nurse => "Nursing",
+        _ => "General Practice",
+    }
 }
 
 fn patient_service_error_to_response(

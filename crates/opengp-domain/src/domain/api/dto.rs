@@ -113,6 +113,17 @@ pub struct PatientResponse {
     pub version: i32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct PractitionerResponse {
+    #[schema(example = "0f8fad5b-d9cb-469f-a165-70867728950e")]
+    pub id: Uuid,
+    #[schema(example = "Sarah Smith")]
+    pub name: String,
+    #[schema(example = "General Practice")]
+    pub specialty: String,
+}
+
 /// Request payload for `/api/v1/appointments`.
 ///
 /// Validation hints:
