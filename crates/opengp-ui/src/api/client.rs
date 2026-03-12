@@ -208,6 +208,22 @@ impl ApiClient {
         Self::parse_json_response(response).await
     }
 
+    pub async fn update_appointment_status(
+        &self,
+        id: Uuid,
+        status: &str,
+    ) -> Result<AppointmentResponse, ApiClientError> {
+        let response = self
+            .authenticated_request(Method::POST, &format!("/api/v1/appointments/{id}/status"))
+            .await?
+            .json(&serde_json::json!({ "action": status }))
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
     pub async fn get_available_slots(
         &self,
         practitioner_id: Uuid,
@@ -799,6 +815,10 @@ mod tests {
                 get(appointments_handler).post(create_appointment_handler),
             )
             .route(
+                "/api/v1/appointments/{id}/status",
+                post(update_appointment_status_handler),
+            )
+            .route(
                 "/api/v1/appointments/available-slots",
                 get(available_slots_handler),
             )
@@ -858,6 +878,12 @@ mod tests {
             .await
             .expect("create_appointment should succeed");
         assert_eq!(created_appointment.status, "scheduled");
+
+        let status_updated_appointment = client
+            .update_appointment_status(sample_appointment_id(), "arrived")
+            .await
+            .expect("update_appointment_status should succeed");
+        assert_eq!(status_updated_appointment.status, "arrived");
 
         let available_slots = client
             .get_available_slots(
@@ -1091,6 +1117,19 @@ mod tests {
         (StatusCode::CREATED, Json(sample_appointment_response()))
     }
 
+    async fn update_appointment_status_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+        Json(payload): Json<AppointmentStatusActionPayload>,
+    ) -> (StatusCode, Json<AppointmentResponse>) {
+        capture_header(state, headers).await;
+
+        let mut response = sample_appointment_response();
+        response.status = payload.action;
+        (StatusCode::OK, Json(response))
+    }
+
     async fn available_slots_handler(
         State(state): State<TestState>,
         headers: HeaderMap,
@@ -1280,6 +1319,11 @@ mod tests {
         _practitioner_id: Option<String>,
         _date: Option<String>,
         _duration: Option<String>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct AppointmentStatusActionPayload {
+        action: String,
     }
 
     #[derive(Debug, Deserialize)]

@@ -81,6 +81,7 @@ pub fn router(state: ApiState) -> Router {
     let appointment_routes = Router::new()
         .route("/", get(list_appointments).post(create_appointment))
         .route("/available-slots", get(get_available_slots))
+        .route("/{id}/status", post(update_appointment_status))
         .route(
             "/{id}",
             get(get_appointment)
@@ -657,6 +658,43 @@ async fn cancel_appointment(
     emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn update_appointment_status(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<AppointmentStatusActionRequest>,
+) -> Result<(StatusCode, Json<AppointmentResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_access(&context)?;
+
+    let action = payload.action.trim().to_ascii_lowercase();
+    let appointment = match action.as_str() {
+        "arrived" => state
+            .services
+            .appointment_service
+            .mark_arrived(id, context.user_id)
+            .await,
+        "in_progress" => state
+            .services
+            .appointment_service
+            .mark_in_progress(id, context.user_id)
+            .await,
+        "completed" => state
+            .services
+            .appointment_service
+            .mark_completed(id, context.user_id)
+            .await,
+        _ => {
+            return Err(bad_request_response(
+                "validation_error",
+                "Invalid appointment status action",
+            ));
+        }
+    }
+    .map_err(appointment_service_error_to_response)?;
+
+    Ok((StatusCode::OK, Json(appointment_to_response(appointment))))
 }
 
 async fn list_consultations(
@@ -2099,6 +2137,11 @@ struct AppointmentAvailabilityQuery {
     practitioner_id: Uuid,
     date: NaiveDate,
     duration: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct AppointmentStatusActionRequest {
+    action: String,
 }
 
 #[derive(Debug, Deserialize)]
