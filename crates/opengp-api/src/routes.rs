@@ -6,7 +6,7 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
 use http::header::ORIGIN;
 use opengp_domain::domain::api::{
     ApiErrorResponse, AppointmentRequest, AppointmentResponse, AuthenticatedUserResponse,
@@ -150,23 +150,11 @@ async fn login(
     let login = match state.services.auth_service.login(login_request).await {
         Ok(login) => login,
         Err(e) => {
-            // Emit audit event for failed login attempt (without exposing credentials)
-            let audit_entry = AuditEntry {
-                id: Uuid::new_v4(),
-                entity_type: "user".to_string(),
-                entity_id: Uuid::nil(),       // No user_id for failed login
-                action: AuditAction::Created, // Using Created as generic action
-                old_value: None,
-                new_value: Some(format!(
-                    "Failed login attempt for username: {}",
-                    payload.username
-                )),
-                changed_by: Uuid::nil(),
-                changed_at: Utc::now(),
-            };
-            tokio::spawn(async move {
-                let _ = state.audit_emitter.emit(audit_entry).await;
-            });
+            emit_auth_failure_audit(
+                &state,
+                Some(payload.username.as_str()),
+                "invalid_credentials",
+            );
             return Err(auth_error_to_response(e));
         }
     };
@@ -180,21 +168,17 @@ async fn login(
         .map_err(|_| auth_failed_response())?
         .ok_or_else(auth_failed_response)?;
 
-    // Emit audit event for successful login
     let audit_entry = AuditEntry {
         id: Uuid::new_v4(),
         entity_type: "user".to_string(),
         entity_id: user.id,
-        action: AuditAction::Created, // Using Created as generic action
+        action: AuditAction::Created,
         old_value: None,
         new_value: Some(format!("User logged in: {}", user.username)),
         changed_by: user.id,
         changed_at: Utc::now(),
     };
-    let audit_emitter = state.audit_emitter.clone();
-    tokio::spawn(async move {
-        let _ = audit_emitter.emit(audit_entry).await;
-    });
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 
     let response = LoginResponse {
         access_token: login.session_token.clone(),
@@ -362,10 +346,7 @@ async fn create_patient(
         serde_json::to_string(&patient).unwrap_or_default(),
         context.user_id,
     );
-    let audit_emitter = state.audit_emitter.clone();
-    tokio::spawn(async move {
-        let _ = audit_emitter.emit(audit_entry).await;
-    });
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 
     Ok((StatusCode::CREATED, Json(patient_to_response(patient))))
 }
@@ -393,10 +374,7 @@ async fn update_patient(
         serde_json::to_string(&patient).unwrap_or_default(),
         context.user_id,
     );
-    let audit_emitter = state.audit_emitter.clone();
-    tokio::spawn(async move {
-        let _ = audit_emitter.emit(audit_entry).await;
-    });
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 
     Ok((StatusCode::OK, Json(patient_to_response(patient))))
 }
@@ -417,10 +395,7 @@ async fn delete_patient(
 
     let audit_entry =
         AuditEntry::new_cancelled("patient", id, "Patient deactivated", context.user_id);
-    let audit_emitter = state.audit_emitter.clone();
-    tokio::spawn(async move {
-        let _ = audit_emitter.emit(audit_entry).await;
-    });
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -437,11 +412,28 @@ async fn list_appointments(
 
     let page = query.page.unwrap_or(1).max(1);
     let limit = query.limit.unwrap_or(25).clamp(1, 100);
+    let (date_from, date_to) = if let Some(date) = query.date {
+        (
+            Some(Utc.from_utc_datetime(
+                &date
+                    .and_hms_opt(0, 0, 0)
+                    .expect("00:00:00 should be valid"),
+            )),
+            Some(Utc.from_utc_datetime(
+                &date
+                    .and_hms_opt(23, 59, 59)
+                    .expect("23:59:59 should be valid"),
+            )),
+        )
+    } else {
+        (query.date_from, query.date_to)
+    };
+
     let criteria = AppointmentSearchCriteria {
         patient_id: None,
         practitioner_id: query.practitioner_id,
-        date_from: query.date_from,
-        date_to: query.date_to,
+        date_from,
+        date_to,
         status: None,
         appointment_type: None,
         is_urgent: None,
@@ -515,10 +507,7 @@ async fn create_appointment(
         serde_json::to_string(&appointment).unwrap_or_default(),
         context.user_id,
     );
-    let audit_emitter = state.audit_emitter.clone();
-    tokio::spawn(async move {
-        let _ = audit_emitter.emit(audit_entry).await;
-    });
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 
     Ok((
         StatusCode::CREATED,
@@ -555,10 +544,7 @@ async fn update_appointment(
         serde_json::to_string(&appointment).unwrap_or_default(),
         context.user_id,
     );
-    let audit_emitter = state.audit_emitter.clone();
-    tokio::spawn(async move {
-        let _ = audit_emitter.emit(audit_entry).await;
-    });
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 
     Ok((StatusCode::OK, Json(appointment_to_response(appointment))))
 }
@@ -579,10 +565,7 @@ async fn cancel_appointment(
 
     let audit_entry =
         AuditEntry::new_cancelled("appointment", id, "Cancelled via API", context.user_id);
-    let audit_emitter = state.audit_emitter.clone();
-    tokio::spawn(async move {
-        let _ = audit_emitter.emit(audit_entry).await;
-    });
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -669,10 +652,7 @@ async fn create_consultation(
         serde_json::to_string(&consultation).unwrap_or_default(),
         context.user_id,
     );
-    let audit_emitter = state.audit_emitter.clone();
-    tokio::spawn(async move {
-        let _ = audit_emitter.emit(audit_entry).await;
-    });
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 
     Ok((
         StatusCode::CREATED,
@@ -709,10 +689,7 @@ async fn update_consultation(
         serde_json::to_string(&consultation).unwrap_or_default(),
         context.user_id,
     );
-    let audit_emitter = state.audit_emitter.clone();
-    tokio::spawn(async move {
-        let _ = audit_emitter.emit(audit_entry).await;
-    });
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 
     Ok((StatusCode::OK, Json(consultation_to_response(consultation))))
 }
@@ -722,9 +699,16 @@ async fn session_validation_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiErrorResponse>)> {
-    let token = extract_session_token(request.headers()).ok_or_else(|| {
-        unauthorized_response("unauthorized", "Missing or invalid authentication token")
-    })?;
+    let token = match extract_session_token(request.headers()) {
+        Some(token) => token,
+        None => {
+            emit_auth_failure_audit(&state, None, "missing_or_invalid_token");
+            return Err(unauthorized_response(
+                "unauthorized",
+                "Missing or invalid authentication token",
+            ));
+        }
+    };
 
     let now = Utc::now();
     let session = state
@@ -745,6 +729,7 @@ async fn session_validation_middleware(
                 .await
                 .map_err(|err| auth_error_to_response(AuthError::Repository(err)))?;
 
+            emit_auth_failure_audit(&state, None, "session_expired");
             return Err(unauthorized_response("unauthorized", "Session expired"));
         }
     }
@@ -754,7 +739,10 @@ async fn session_validation_middleware(
         .auth_service
         .validate_session(&token)
         .await
-        .map_err(auth_error_to_response)?;
+        .map_err(|error| {
+            emit_auth_failure_audit(&state, None, "session_validation_failed");
+            auth_error_to_response(error)
+        })?;
 
     let user = state
         .services
@@ -762,8 +750,14 @@ async fn session_validation_middleware(
         .user_repository
         .find_by_id(user_id)
         .await
-        .map_err(|_| unauthorized_response("unauthorized", "Authentication unavailable"))?
-        .ok_or_else(|| unauthorized_response("unauthorized", "Session expired"))?;
+        .map_err(|_| {
+            emit_auth_failure_audit(&state, None, "user_lookup_failed");
+            unauthorized_response("unauthorized", "Authentication unavailable")
+        })?
+        .ok_or_else(|| {
+            emit_auth_failure_audit(&state, None, "session_expired");
+            unauthorized_response("unauthorized", "Session expired")
+        })?;
 
     request.extensions_mut().insert(AuthContext {
         user_id,
@@ -812,6 +806,37 @@ fn auth_error_to_response(error: AuthError) -> (StatusCode, Json<ApiErrorRespons
 
 fn auth_failed_response() -> (StatusCode, Json<ApiErrorResponse>) {
     unauthorized_response("invalid_credentials", "Invalid username or password")
+}
+
+fn emit_audit_event_non_blocking(
+    audit_emitter: std::sync::Arc<dyn opengp_domain::domain::audit::AuditEmitter>,
+    audit_entry: AuditEntry,
+) {
+    tokio::spawn(async move {
+        if let Err(err) = audit_emitter.emit(audit_entry).await {
+            tracing::warn!(error = %err, "audit emission failed");
+        }
+    });
+}
+
+fn emit_auth_failure_audit(state: &ApiState, username: Option<&str>, reason: &str) {
+    let details = match username {
+        Some(name) => format!("Failed auth attempt for username: {name}; reason: {reason}"),
+        None => format!("Failed auth attempt; reason: {reason}"),
+    };
+
+    let audit_entry = AuditEntry {
+        id: Uuid::new_v4(),
+        entity_type: "auth".to_string(),
+        entity_id: Uuid::nil(),
+        action: AuditAction::Created,
+        old_value: None,
+        new_value: Some(details),
+        changed_by: Uuid::nil(),
+        changed_at: Utc::now(),
+    };
+
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 }
 
 fn unauthorized_response(code: &str, message: &str) -> (StatusCode, Json<ApiErrorResponse>) {
@@ -884,12 +909,12 @@ fn authorize_read(context: &AuthContext) -> Result<(), (StatusCode, Json<ApiErro
 }
 
 fn authorize_write(context: &AuthContext) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
-    if is_writer(context.role) {
+    if is_practitioner(context.role) {
         Ok(())
     } else {
         Err(forbidden_response(
             "insufficient_permissions",
-            "Role cannot modify patients",
+            "Only practitioners can modify patients",
         ))
     }
 }
@@ -927,10 +952,6 @@ fn is_reader(role: Role) -> bool {
     )
 }
 
-fn is_writer(role: Role) -> bool {
-    matches!(role, Role::Doctor | Role::Nurse | Role::Admin)
-}
-
 fn is_practitioner(role: Role) -> bool {
     matches!(role, Role::Doctor | Role::Nurse)
 }
@@ -939,7 +960,7 @@ fn patient_service_error_to_response(
     error: PatientServiceError,
 ) -> (StatusCode, Json<ApiErrorResponse>) {
     match error {
-        PatientServiceError::DuplicatePatient => bad_request_response(
+        PatientServiceError::DuplicatePatient => conflict_response(
             "duplicate_patient",
             "Patient with provided details already exists",
         ),
@@ -1359,8 +1380,10 @@ struct PaginationQuery {
 struct AppointmentListQuery {
     page: Option<u32>,
     limit: Option<u32>,
+    date: Option<NaiveDate>,
     date_from: Option<DateTime<Utc>>,
     date_to: Option<DateTime<Utc>>,
+    #[serde(alias = "practitioner")]
     practitioner_id: Option<Uuid>,
 }
 
@@ -1386,11 +1409,16 @@ struct GenericSuccessResponse {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
     use axum::body::Body;
     use axum::http::header;
     use http::{Request, StatusCode};
     use opengp_domain::domain::api::LoginResponse;
+    use opengp_domain::domain::audit::{AuditAction, AuditEmitter, AuditEmitterError, AuditEntry};
     use opengp_domain::domain::user::Session;
+    use tokio::sync::RwLock;
     use tower::util::ServiceExt;
 
     use crate::ApiConfig;
@@ -2061,6 +2089,71 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn patient_post_and_put_with_invalid_payload_return_400() {
+        let state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
+        let app = router(state);
+        let token = login_token(&app, "dr_smith", "correct-horse-battery-staple").await;
+
+        let invalid_gender_payload = r#"{"first_name":"John","last_name":"Citizen","date_of_birth":"1984-05-12","gender":"unknown","phone_mobile":"0400123456","email":"john.citizen@example.com","medicare_number":"29501012341"}"#;
+
+        let invalid_create = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/patients")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(invalid_gender_payload))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(invalid_create.status(), StatusCode::BAD_REQUEST);
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/patients")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_patient_payload()))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(create_response.status(), StatusCode::CREATED);
+        let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let created: PatientResponse =
+            serde_json::from_slice(&create_body).expect("body should be valid patient JSON");
+
+        let invalid_update_payload = format!(
+            "{{\"first_name\":\"Jane\",\"last_name\":\"Citizen\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"invalid\",\"phone_mobile\":\"0400999888\",\"email\":\"jane.citizen@example.com\",\"medicare_number\":\"29501012341\",\"version\":{}}}",
+            created.version
+        );
+
+        let invalid_update = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/patients/{}", created.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(invalid_update_payload))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(invalid_update.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
     async fn patient_update_with_stale_version_returns_409_and_clear_message() {
         let state = ApiState::new(test_config())
             .await
@@ -2320,19 +2413,32 @@ mod tests {
             .expect("request should succeed");
         assert_eq!(overlap_update.status(), StatusCode::CONFLICT);
 
+        let past_create = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/appointments")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_appointment_payload(
+                        Utc::now() - chrono::Duration::hours(1),
+                        practitioner_id,
+                    )))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(past_create.status(), StatusCode::BAD_REQUEST);
+
         let list_response = app
             .clone()
             .oneshot(
                 Request::builder()
                     .method("GET")
                     .uri(format!(
-                        "/api/v1/appointments?page=1&limit=10&date_from={}&date_to={}&practitioner_id={}",
-                        (Utc::now() + chrono::Duration::hours(1))
-                            .to_rfc3339()
-                            .replace("+00:00", "Z"),
-                        (Utc::now() + chrono::Duration::hours(5))
-                            .to_rfc3339()
-                            .replace("+00:00", "Z"),
+                        "/api/v1/appointments?page=1&limit=10&date={}&practitioner={}",
+                        (Utc::now() + chrono::Duration::hours(1)).date_naive(),
                         practitioner_id
                     ))
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
@@ -2659,41 +2765,395 @@ mod tests {
 
     #[tokio::test]
     async fn audit_events_emitted_on_patient_mutations() {
-        let config = test_config();
-        let state = ApiState::new(config)
+        let recorder = Arc::new(RecordingAuditEmitter::default());
+        let state = state_with_audit_emitter(recorder.clone()).await;
+        let app = router(state.clone());
+        let token = login_token(&app, "dr_smith", "correct-horse-battery-staple").await;
+        let user_id = state
+            .services
+            .auth_service
+            .validate_session(&token)
             .await
-            .expect("state should initialize");
-        assert!(!std::ptr::addr_of!(state.audit_emitter).is_null());
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            .expect("session should resolve user");
+        recorder.clear().await;
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/patients")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_patient_payload()))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("create request should succeed");
+        assert_eq!(create_response.status(), StatusCode::CREATED);
+        let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let created: PatientResponse = serde_json::from_slice(&create_body).expect("valid patient");
+
+        let update_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/patients/{}", created.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(format!(
+                        "{{\"first_name\":\"Jane\",\"last_name\":\"Citizen\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"female\",\"phone_mobile\":\"0400999888\",\"email\":\"jane.citizen@example.com\",\"medicare_number\":\"29501012341\",\"version\":{}}}",
+                        created.version
+                    )))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("update request should succeed");
+        assert_eq!(update_response.status(), StatusCode::OK);
+
+        let delete_response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/patients/{}", created.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("delete request should succeed");
+        assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+
+        wait_for_audit_entries(&recorder, 3).await;
+        let entries = recorder.entries().await;
+        let patient_entries: Vec<_> = entries
+            .into_iter()
+            .filter(|entry| entry.entity_type == "patient" && entry.entity_id == created.id)
+            .collect();
+
+        assert_eq!(patient_entries.len(), 3);
+        assert!(patient_entries.iter().any(|entry| entry.action == AuditAction::Created));
+        assert!(patient_entries.iter().any(|entry| entry.action == AuditAction::Updated));
+        assert!(
+            patient_entries
+                .iter()
+                .any(|entry| matches!(entry.action, AuditAction::Cancelled { .. }))
+        );
+        assert!(patient_entries.iter().all(|entry| entry.changed_by == user_id));
+        assert!(patient_entries.iter().all(|entry| entry.changed_at <= Utc::now()));
     }
 
     #[tokio::test]
     async fn audit_events_emitted_on_appointment_mutations() {
-        let config = test_config();
-        let state = ApiState::new(config)
+        let recorder = Arc::new(RecordingAuditEmitter::default());
+        let state = state_with_audit_emitter(recorder.clone()).await;
+        let app = router(state.clone());
+        let token = login_token(&app, "dr_smith", "correct-horse-battery-staple").await;
+        let user_id = state
+            .services
+            .auth_service
+            .validate_session(&token)
             .await
-            .expect("state should initialize");
-        assert!(!std::ptr::addr_of!(state.audit_emitter).is_null());
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            .expect("session should resolve user");
+        recorder.clear().await;
+
+        let practitioner_id = Uuid::new_v4();
+        let start_time = Utc::now() + chrono::Duration::hours(2);
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/appointments")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_appointment_payload(start_time, practitioner_id)))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("create request should succeed");
+        assert_eq!(create_response.status(), StatusCode::CREATED);
+        let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let created: AppointmentResponse =
+            serde_json::from_slice(&create_body).expect("valid appointment response");
+
+        let update_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/appointments/{}", created.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(format!(
+                        "{{\"patient_id\":\"{}\",\"practitioner_id\":\"{}\",\"start_time\":\"{}\",\"duration_minutes\":15,\"appointment_type\":\"standard\",\"reason\":\"Follow-up\",\"is_urgent\":false,\"version\":{}}}",
+                        created.patient_id,
+                        created.practitioner_id,
+                        (Utc::now() + chrono::Duration::hours(3)).to_rfc3339(),
+                        created.version
+                    )))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("update request should succeed");
+        assert_eq!(update_response.status(), StatusCode::OK);
+
+        let delete_response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/appointments/{}", created.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("delete request should succeed");
+        assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+
+        wait_for_audit_entries(&recorder, 3).await;
+        let entries = recorder.entries().await;
+        let appointment_entries: Vec<_> = entries
+            .into_iter()
+            .filter(|entry| entry.entity_type == "appointment" && entry.entity_id == created.id)
+            .collect();
+
+        assert_eq!(appointment_entries.len(), 3);
+        assert!(
+            appointment_entries
+                .iter()
+                .any(|entry| entry.action == AuditAction::Created)
+        );
+        assert!(
+            appointment_entries
+                .iter()
+                .any(|entry| entry.action == AuditAction::Updated)
+        );
+        assert!(
+            appointment_entries
+                .iter()
+                .any(|entry| matches!(entry.action, AuditAction::Cancelled { .. }))
+        );
+        assert!(appointment_entries.iter().all(|entry| entry.changed_by == user_id));
+        assert!(appointment_entries.iter().all(|entry| entry.changed_at <= Utc::now()));
     }
 
     #[tokio::test]
     async fn audit_events_emitted_on_consultation_mutations() {
-        let config = test_config();
-        let state = ApiState::new(config)
+        let recorder = Arc::new(RecordingAuditEmitter::default());
+        let state = state_with_audit_emitter(recorder.clone()).await;
+        let app = router(state.clone());
+        let token = login_token(&app, "dr_smith", "correct-horse-battery-staple").await;
+        let user_id = state
+            .services
+            .auth_service
+            .validate_session(&token)
             .await
-            .expect("state should initialize");
-        assert!(!std::ptr::addr_of!(state.audit_emitter).is_null());
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            .expect("session should resolve user");
+        recorder.clear().await;
+
+        let create_patient = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/patients")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_patient_payload()))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(create_patient.status(), StatusCode::CREATED);
+        let patient_body = axum::body::to_bytes(create_patient.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let patient: PatientResponse = serde_json::from_slice(&patient_body).expect("valid patient");
+
+        let practitioner_id = Uuid::new_v4();
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/consultations")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_consultation_payload(
+                        patient.id,
+                        practitioner_id,
+                    )))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(create_response.status(), StatusCode::CREATED);
+        let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let created: ConsultationResponse =
+            serde_json::from_slice(&create_body).expect("valid consultation response");
+
+        let update_response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/consultations/{}", created.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(format!(
+                        "{{\"patient_id\":\"{}\",\"practitioner_id\":\"{}\",\"appointment_id\":null,\"reason\":\"Updated reason\",\"clinical_notes\":\"Updated SOAP notes\",\"version\":{}}}",
+                        patient.id,
+                        practitioner_id,
+                        created.version
+                    )))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(update_response.status(), StatusCode::OK);
+
+        wait_for_audit_entries(&recorder, 2).await;
+        let entries = recorder.entries().await;
+        let consultation_entries: Vec<_> = entries
+            .into_iter()
+            .filter(|entry| entry.entity_type == "consultation" && entry.entity_id == created.id)
+            .collect();
+
+        assert_eq!(consultation_entries.len(), 2);
+        assert!(
+            consultation_entries
+                .iter()
+                .any(|entry| entry.action == AuditAction::Created)
+        );
+        assert!(
+            consultation_entries
+                .iter()
+                .any(|entry| entry.action == AuditAction::Updated)
+        );
+        assert!(consultation_entries.iter().all(|entry| entry.changed_by == user_id));
+        assert!(consultation_entries.iter().all(|entry| entry.changed_at <= Utc::now()));
     }
 
     #[tokio::test]
     async fn audit_events_emitted_on_login_attempts() {
-        let config = test_config();
-        let state = ApiState::new(config)
+        let recorder = Arc::new(RecordingAuditEmitter::default());
+        let state = state_with_audit_emitter(recorder.clone()).await;
+        let app = router(state);
+
+        let failed_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/login")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"username":"dr_smith","password":"wrong-password"}"#,
+                    ))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(failed_response.status(), StatusCode::UNAUTHORIZED);
+
+        wait_for_audit_entries(&recorder, 1).await;
+        let entries = recorder.entries().await;
+        let failed_auth = entries
+            .iter()
+            .find(|entry| entry.entity_type == "auth")
+            .expect("failed auth audit event should exist");
+
+        assert_eq!(failed_auth.entity_id, Uuid::nil());
+        assert_eq!(failed_auth.changed_by, Uuid::nil());
+        assert_eq!(failed_auth.action, AuditAction::Created);
+        let details = failed_auth
+            .new_value
+            .clone()
+            .expect("details should be populated");
+        assert!(details.contains("Failed auth attempt"));
+        assert!(!details.contains("wrong-password"));
+    }
+
+    #[tokio::test]
+    async fn mutation_requests_do_not_fail_when_audit_emission_fails() {
+        let mut state = ApiState::new(test_config())
             .await
             .expect("state should initialize");
-        assert!(!std::ptr::addr_of!(state.audit_emitter).is_null());
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        state.audit_emitter = Arc::new(FailingAuditEmitter);
+        let app = router(state);
+        let token = login_token(&app, "dr_smith", "correct-horse-battery-staple").await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/patients")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(sample_patient_payload()))
+                    .expect("request should be valid"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    #[derive(Default)]
+    struct RecordingAuditEmitter {
+        entries: RwLock<Vec<AuditEntry>>,
+    }
+
+    #[async_trait]
+    impl AuditEmitter for RecordingAuditEmitter {
+        async fn emit(&self, entry: AuditEntry) -> Result<(), AuditEmitterError> {
+            self.entries.write().await.push(entry);
+            Ok(())
+        }
+    }
+
+    impl RecordingAuditEmitter {
+        async fn entries(&self) -> Vec<AuditEntry> {
+            self.entries.read().await.clone()
+        }
+
+        async fn clear(&self) {
+            self.entries.write().await.clear();
+        }
+    }
+
+    struct FailingAuditEmitter;
+
+    #[async_trait]
+    impl AuditEmitter for FailingAuditEmitter {
+        async fn emit(&self, _entry: AuditEntry) -> Result<(), AuditEmitterError> {
+            Err(AuditEmitterError::Emit("intentional test failure".to_string()))
+        }
+    }
+
+    async fn state_with_audit_emitter(recorder: Arc<RecordingAuditEmitter>) -> ApiState {
+        let mut state = ApiState::new(test_config())
+            .await
+            .expect("state should initialize");
+        state.audit_emitter = recorder;
+        state
+    }
+
+    async fn wait_for_audit_entries(recorder: &RecordingAuditEmitter, min_count: usize) {
+        for _ in 0..30 {
+            if recorder.entries.read().await.len() >= min_count {
+                return;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+        }
+
+        panic!("Timed out waiting for {min_count} audit entries");
     }
 }
