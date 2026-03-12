@@ -4,8 +4,10 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use chrono::Utc;
+use opengp_domain::domain::api::{PatientRequest, PatientResponse};
 use opengp_domain::domain::appointment::{AppointmentCalendarQuery, AvailabilityService};
-use opengp_domain::domain::patient::PatientRepository;
+use opengp_domain::domain::patient::{Gender, Patient};
 use opengp_domain::domain::user::{PractitionerRepository, UserRepository};
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::repositories::appointment::SqlxAppointmentRepository;
@@ -162,7 +164,6 @@ async fn main() -> Result<()> {
 
     run_tui(
         api_client,
-        patient_repo.clone(),
         appointment_service,
         patient_service,
         clinical_service,
@@ -178,7 +179,6 @@ async fn main() -> Result<()> {
 
 async fn run_tui(
     api_client: Arc<ApiClient>,
-    patient_repo: Arc<SqlxPatientRepository>,
     appointment_service: Arc<AppointmentUiService>,
     patient_service: Arc<opengp_ui::ui::services::PatientUiService>,
     clinical_service: Arc<opengp_ui::ui::services::ClinicalUiService>,
@@ -194,7 +194,7 @@ async fn run_tui(
     let has_session_token = api_client.current_session_token().await.is_some();
 
     let mut app = App::new(
-        Some(api_client),
+        Some(api_client.clone()),
         Some(appointment_service.clone()),
         Some(patient_service.clone()),
         Some(clinical_service.clone()),
@@ -215,21 +215,17 @@ async fn run_tui(
 
         // Check if there's pending patient data to save
         if let Some(pending) = app.take_pending_patient_data() {
-            use opengp_domain::domain::patient::Patient;
             match pending {
                 opengp_ui::ui::app::PendingPatientData::New(data) => {
-                    let patient = Patient::from_dto(data)?;
-                    patient_repo.create(patient).await?;
-                    tracing::info!("Created new patient in database");
+                    let request = patient_request_from_new(data);
+                    api_client.create_patient(&request).await?;
+                    tracing::info!("Created new patient via API");
                 }
                 opengp_ui::ui::app::PendingPatientData::Update { id, data } => {
-                    let mut patient = patient_repo
-                        .find_by_id(id)
-                        .await?
-                        .ok_or_else(|| color_eyre::eyre::eyre!("Patient not found"))?;
-                    patient.update(data)?;
-                    patient_repo.update(patient).await?;
-                    tracing::info!("Updated patient in database");
+                    let existing = api_client.get_patient(id).await?;
+                    let request = patient_request_from_update(data, &existing);
+                    api_client.update_patient(id, request).await?;
+                    tracing::info!("Updated patient via API");
                 }
             }
 
@@ -238,13 +234,10 @@ async fn run_tui(
 
         // Check if there's a pending patient to load for editing
         if let Some(patient_id) = app.take_pending_edit_patient_id() {
-            match patient_repo.find_by_id(patient_id).await {
-                Ok(Some(patient)) => {
-                    app.open_patient_form(patient);
+            match api_client.get_patient(patient_id).await {
+                Ok(patient) => {
+                    app.open_patient_form(domain_patient_from_api_response(patient));
                     tracing::info!("Loaded patient for editing: {}", patient_id);
-                }
-                Ok(None) => {
-                    tracing::error!("Patient not found for editing: {}", patient_id);
                 }
                 Err(e) => {
                     tracing::error!("Failed to load patient for editing: {}", e);
@@ -683,6 +676,90 @@ fn compute_booked_slots(
         .into_iter()
         .filter(|slot| !available_slots.contains(slot))
         .collect()
+}
+
+fn patient_request_from_new(data: opengp_domain::domain::patient::NewPatientData) -> PatientRequest {
+    PatientRequest {
+        first_name: data.first_name,
+        last_name: data.last_name,
+        date_of_birth: data.date_of_birth,
+        gender: gender_to_api_string(data.gender),
+        phone_mobile: data.phone_mobile,
+        email: data.email,
+        medicare_number: data.medicare_number,
+        version: 1,
+    }
+}
+
+fn patient_request_from_update(
+    data: opengp_domain::domain::patient::UpdatePatientData,
+    current: &PatientResponse,
+) -> PatientRequest {
+    PatientRequest {
+        first_name: data.first_name.unwrap_or_else(|| current.first_name.clone()),
+        last_name: data.last_name.unwrap_or_else(|| current.last_name.clone()),
+        date_of_birth: data.date_of_birth.unwrap_or(current.date_of_birth),
+        gender: data
+            .gender
+            .map(gender_to_api_string)
+            .unwrap_or_else(|| current.gender.clone()),
+        phone_mobile: data.phone_mobile.or_else(|| current.phone_mobile.clone()),
+        email: data.email.or_else(|| current.email.clone()),
+        medicare_number: data.medicare_number,
+        version: current.version,
+    }
+}
+
+fn domain_patient_from_api_response(response: PatientResponse) -> Patient {
+    Patient {
+        id: response.id,
+        ihi: None,
+        medicare_number: None,
+        medicare_irn: None,
+        medicare_expiry: None,
+        title: None,
+        first_name: response.first_name,
+        middle_name: None,
+        last_name: response.last_name,
+        preferred_name: None,
+        date_of_birth: response.date_of_birth,
+        gender: parse_api_gender(&response.gender),
+        address: opengp_domain::domain::patient::Address::default(),
+        phone_home: None,
+        phone_mobile: response.phone_mobile,
+        email: response.email,
+        emergency_contact: None,
+        concession_type: None,
+        concession_number: None,
+        preferred_language: "English".to_string(),
+        interpreter_required: false,
+        aboriginal_torres_strait_islander: None,
+        is_active: response.is_active,
+        is_deceased: false,
+        deceased_date: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        version: response.version,
+    }
+}
+
+fn gender_to_api_string(gender: Gender) -> String {
+    match gender {
+        Gender::Male => "male".to_string(),
+        Gender::Female => "female".to_string(),
+        Gender::Other => "other".to_string(),
+        Gender::PreferNotToSay => "prefer_not_to_say".to_string(),
+    }
+}
+
+fn parse_api_gender(gender: &str) -> Gender {
+    match gender.trim().to_ascii_lowercase().as_str() {
+        "male" => Gender::Male,
+        "female" => Gender::Female,
+        "other" => Gender::Other,
+        "prefer_not_to_say" | "prefer-not-to-say" => Gender::PreferNotToSay,
+        _ => Gender::PreferNotToSay,
+    }
 }
 
 fn init_logging(level: &str) {
