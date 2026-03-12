@@ -8,6 +8,8 @@ use std::{
 use opengp_domain::domain::audit::AuditEmitter;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::PgPool;
+use std::path::Path;
+use tracing::info;
 
 use crate::services::ApiServices;
 use crate::{ApiConfig, ApiError};
@@ -56,7 +58,9 @@ impl ApiState {
             .test_before_acquire(false)
             .connect_lazy_with(connect_options);
 
-        let services = Arc::new(ApiServices::new(&config).await?);
+        crate::migrations::run_migrations(&pool).await?;
+
+        let services = Arc::new(ApiServices::new(&config, &pool).await?);
         let metrics = Arc::new(ApiMetrics::new());
         let audit_emitter = services.audit_service.clone() as Arc<dyn AuditEmitter>;
 
@@ -131,7 +135,7 @@ mod tests {
             .connect_lazy(&config.database_url)
             .expect("pool should initialize lazily");
         let services = Arc::new(
-            ApiServices::new(&config)
+            ApiServices::new(&config, &pool)
                 .await
                 .expect("services should initialize"),
         );

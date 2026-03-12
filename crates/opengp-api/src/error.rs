@@ -13,4 +13,7 @@ pub enum ApiError {
 
     #[error("failed to initialize patient database: {0}")]
     PatientDatabaseInit(String),
+
+    #[error("configuration error: {0}")]
+    Configuration(String),
 }

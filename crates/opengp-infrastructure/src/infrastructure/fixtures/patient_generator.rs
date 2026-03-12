@@ -5,7 +5,9 @@ use rand::seq::SliceRandom;
 use rand::Rng;
 use uuid::Uuid;
 
-use opengp_domain::domain::patient::{Address, Gender, Patient};
+use opengp_domain::domain::patient::{
+    Address, AtsiStatus, ConcessionType, EmergencyContact, Gender, Patient,
+};
 
 #[derive(Debug, Clone)]
 pub struct PatientGeneratorConfig {
@@ -18,6 +20,20 @@ pub struct PatientGeneratorConfig {
     pub ihi_percentage: f32,
     pub mobile_percentage: f32,
     pub email_percentage: f32,
+    /// Percentage of patients with emergency contacts (0.0-1.0)
+    pub emergency_contact_percentage: f32,
+    /// Percentage of patients with concession cards (0.0-1.0)
+    pub concession_percentage: f32,
+    /// Percentage of patients with ATSI status specified (0.0-1.0)
+    pub atsi_percentage: f32,
+    /// Percentage of patients who require interpreters (0.0-1.0)
+    pub interpreter_percentage: f32,
+    /// Percentage of patients with preferred names (0.0-1.0)
+    pub preferred_name_percentage: f32,
+    /// Percentage of patients with middle names (0.0-1.0)
+    pub middle_name_percentage: f32,
+    /// Use realistic Australian name distribution (true) or generic names (false)
+    pub use_australian_names: bool,
 }
 
 impl Default for PatientGeneratorConfig {
@@ -32,6 +48,13 @@ impl Default for PatientGeneratorConfig {
             ihi_percentage: 0.90,
             mobile_percentage: 0.85,
             email_percentage: 0.70,
+            emergency_contact_percentage: 0.70,
+            concession_percentage: 0.25,
+            atsi_percentage: 0.05,
+            interpreter_percentage: 0.05,
+            preferred_name_percentage: 0.15,
+            middle_name_percentage: 0.60,
+            use_australian_names: true,
         }
     }
 }
@@ -62,7 +85,9 @@ impl PatientGenerator {
         let date_of_birth = self.random_date_of_birth();
         let title = self.random_title(&gender);
 
-        let has_preferred = self.rng.gen_bool(0.15);
+        let has_preferred = self
+            .rng
+            .gen_bool(self.config.preferred_name_percentage as f64);
         let preferred_name = if has_preferred {
             Some(self.random_preferred_name(&first_name, &gender))
         } else {
@@ -103,12 +128,42 @@ impl PatientGenerator {
             None
         };
 
-        let has_middle = self.rng.gen_bool(0.60);
+        let has_middle = self.rng.gen_bool(self.config.middle_name_percentage as f64);
         let middle_name = if has_middle {
             Some(self.random_middle_name(&gender))
         } else {
             None
         };
+
+        let emergency_contact = if self
+            .rng
+            .gen_bool(self.config.emergency_contact_percentage as f64)
+        {
+            Some(self.generate_emergency_contact(&first_name, &last_name))
+        } else {
+            None
+        };
+
+        let (concession_type, concession_number) =
+            if self.rng.gen_bool(self.config.concession_percentage as f64) {
+                self.generate_concession()
+            } else {
+                (None, None)
+            };
+
+        let interpreter_required = self.rng.gen_bool(self.config.interpreter_percentage as f64);
+        let preferred_language = if interpreter_required {
+            self.random_non_english_language()
+        } else {
+            "English".to_string()
+        };
+
+        let aboriginal_torres_strait_islander =
+            if self.rng.gen_bool(self.config.atsi_percentage as f64) {
+                Some(self.random_atsi_status())
+            } else {
+                None
+            };
 
         Patient {
             id: Uuid::new_v4(),
@@ -127,12 +182,12 @@ impl PatientGenerator {
             phone_home,
             phone_mobile,
             email,
-            emergency_contact: None,
-            concession_type: None,
-            concession_number: None,
-            preferred_language: "English".to_string(),
-            interpreter_required: false,
-            aboriginal_torres_strait_islander: None,
+            emergency_contact,
+            concession_type,
+            concession_number,
+            preferred_language,
+            interpreter_required,
+            aboriginal_torres_strait_islander,
             is_active: true,
             is_deceased: false,
             deceased_date: None,
@@ -364,6 +419,104 @@ impl PatientGenerator {
             country: "Australia".to_string(),
         }
     }
+
+    fn generate_emergency_contact(
+        &mut self,
+        _first_name: &str,
+        last_name: &str,
+    ) -> EmergencyContact {
+        let relationships = [
+            "Spouse", "Partner", "Parent", "Child", "Sibling", "Friend", "Other",
+        ];
+        let relationship = relationships.choose(&mut self.rng).unwrap().to_string();
+        let contact_first_name: String = FirstName().fake_with_rng(&mut self.rng);
+        let phone = if self.rng.gen_bool(0.5) {
+            self.generate_mobile()
+        } else {
+            self.generate_landline()
+        };
+
+        EmergencyContact {
+            name: format!("{} {}", contact_first_name, last_name),
+            phone,
+            relationship,
+        }
+    }
+
+    fn generate_concession(&mut self) -> (Option<ConcessionType>, Option<String>) {
+        let concession_types = [
+            ConcessionType::DVA,
+            ConcessionType::Pensioner,
+            ConcessionType::HealthcareCard,
+            ConcessionType::SafetyNetCard,
+        ];
+        let concession_type = *concession_types.choose(&mut self.rng).unwrap();
+        let concession_number = format!("{}", self.rng.gen_range(100000000..=999999999));
+
+        (Some(concession_type), Some(concession_number))
+    }
+
+    #[allow(dead_code)]
+    fn random_language(&mut self) -> String {
+        let languages = [
+            "English",
+            "Mandarin Chinese",
+            "Cantonese",
+            "Vietnamese",
+            "Arabic",
+            "Spanish",
+            "Italian",
+            "Greek",
+            "Korean",
+            "Japanese",
+            "German",
+            "French",
+            "Hindi",
+            "Tamil",
+            "Portuguese",
+        ];
+
+        languages
+            .choose(&mut self.rng)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "English".to_string())
+    }
+
+    fn random_non_english_language(&mut self) -> String {
+        let languages = [
+            "Mandarin Chinese",
+            "Cantonese",
+            "Vietnamese",
+            "Arabic",
+            "Spanish",
+            "Italian",
+            "Greek",
+            "Korean",
+            "Japanese",
+            "German",
+            "French",
+            "Hindi",
+            "Tamil",
+            "Portuguese",
+        ];
+
+        languages
+            .choose(&mut self.rng)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "Mandarin Chinese".to_string())
+    }
+
+    fn random_atsi_status(&mut self) -> AtsiStatus {
+        let statuses = [
+            AtsiStatus::AboriginalNotTorresStrait,
+            AtsiStatus::TorresStraitNotAboriginal,
+            AtsiStatus::BothAboriginalAndTorresStrait,
+            AtsiStatus::NeitherAboriginalNorTorresStrait,
+            AtsiStatus::NotStated,
+        ];
+
+        *statuses.choose(&mut self.rng).unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -491,5 +644,180 @@ mod tests {
 
         assert!(male_count > 0);
         assert!(female_count > 0);
+    }
+
+    #[test]
+    fn test_emergency_contacts_generation() {
+        let config = PatientGeneratorConfig {
+            count: 100,
+            emergency_contact_percentage: 1.0,
+            ..Default::default()
+        };
+
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        for patient in &patients {
+            assert!(patient.emergency_contact.is_some());
+            let ec = patient.emergency_contact.as_ref().unwrap();
+            assert!(!ec.name.is_empty());
+            assert!(!ec.phone.is_empty());
+            assert!(!ec.relationship.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_concession_generation() {
+        let config = PatientGeneratorConfig {
+            count: 50,
+            concession_percentage: 1.0,
+            ..Default::default()
+        };
+
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        let with_concession = patients
+            .iter()
+            .filter(|p| p.concession_type.is_some() && p.concession_number.is_some())
+            .count();
+
+        assert_eq!(with_concession, 50);
+
+        for patient in &patients {
+            if let Some(ct) = patient.concession_type {
+                assert!(patient.concession_number.is_some());
+                match ct {
+                    ConcessionType::DVA
+                    | ConcessionType::Pensioner
+                    | ConcessionType::HealthcareCard
+                    | ConcessionType::SafetyNetCard => {}
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_interpreter_required() {
+        let config = PatientGeneratorConfig {
+            count: 50,
+            interpreter_percentage: 1.0,
+            ..Default::default()
+        };
+
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        let with_interpreter = patients.iter().filter(|p| p.interpreter_required).count();
+        assert_eq!(with_interpreter, 50);
+
+        for patient in &patients {
+            if patient.interpreter_required {
+                assert_ne!(patient.preferred_language, "English");
+            }
+        }
+    }
+
+    #[test]
+    fn test_atsi_status_distribution() {
+        let config = PatientGeneratorConfig {
+            count: 100,
+            atsi_percentage: 1.0,
+            ..Default::default()
+        };
+
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        let with_atsi = patients
+            .iter()
+            .filter(|p| p.aboriginal_torres_strait_islander.is_some())
+            .count();
+        assert_eq!(with_atsi, 100);
+    }
+
+    #[test]
+    fn test_middle_names_percentage() {
+        let config = PatientGeneratorConfig {
+            count: 100,
+            middle_name_percentage: 1.0,
+            ..Default::default()
+        };
+
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        let with_middle = patients.iter().filter(|p| p.middle_name.is_some()).count();
+        assert_eq!(with_middle, 100);
+    }
+
+    #[test]
+    fn test_preferred_names_percentage() {
+        let config = PatientGeneratorConfig {
+            count: 100,
+            preferred_name_percentage: 1.0,
+            ..Default::default()
+        };
+
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        let with_preferred = patients
+            .iter()
+            .filter(|p| p.preferred_name.is_some())
+            .count();
+        assert_eq!(with_preferred, 100);
+    }
+
+    #[test]
+    fn test_language_distribution() {
+        let config = PatientGeneratorConfig {
+            count: 50,
+            interpreter_percentage: 0.5,
+            ..Default::default()
+        };
+
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        let with_non_english = patients
+            .iter()
+            .filter(|p| p.preferred_language != "English")
+            .count();
+
+        assert!(with_non_english > 0);
+    }
+
+    #[test]
+    fn test_zero_concession_percentage() {
+        let config = PatientGeneratorConfig {
+            count: 20,
+            concession_percentage: 0.0,
+            ..Default::default()
+        };
+
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        for patient in &patients {
+            assert!(patient.concession_type.is_none());
+            assert!(patient.concession_number.is_none());
+        }
+    }
+
+    #[test]
+    fn test_zero_emergency_contact_percentage() {
+        let config = PatientGeneratorConfig {
+            count: 20,
+            emergency_contact_percentage: 0.0,
+            ..Default::default()
+        };
+
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        for patient in &patients {
+            assert!(patient.emergency_contact.is_none());
+        }
     }
 }

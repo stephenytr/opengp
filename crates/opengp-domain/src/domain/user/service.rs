@@ -105,6 +105,7 @@ impl AuthService {
             .await?
             .ok_or(AuthError::InvalidCredentials)?;
 
+
         if user.is_locked || user.failed_login_attempts >= MAX_FAILED_LOGIN_ATTEMPTS {
             if !user.is_locked {
                 user.is_locked = true;

@@ -722,11 +722,9 @@ async fn session_validation_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiErrorResponse>)> {
-    let token = extract_bearer_token(request.headers())
-        .ok_or_else(|| {
-            unauthorized_response("unauthorized", "Missing or invalid authorization header")
-        })?
-        .to_string();
+    let token = extract_session_token(request.headers()).ok_or_else(|| {
+        unauthorized_response("unauthorized", "Missing or invalid authentication token")
+    })?;
 
     let now = Utc::now();
     let session = state
@@ -775,15 +773,31 @@ async fn session_validation_middleware(
     Ok(next.run(request).await)
 }
 
+fn extract_session_token(headers: &HeaderMap) -> Option<String> {
+    extract_bearer_token(headers)
+        .or_else(|| extract_session_cookie(headers))
+        .map(std::string::ToString::to_string)
+}
+
 fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
     let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
-    let token = value.strip_prefix("Bearer ")?;
+    let token = value.strip_prefix("Bearer ")?.trim();
+    (!token.is_empty()).then_some(token)
+}
 
-    if token.trim().is_empty() {
-        None
-    } else {
-        Some(token)
-    }
+fn extract_session_cookie(headers: &HeaderMap) -> Option<&str> {
+    let raw_cookie = headers.get(header::COOKIE)?.to_str().ok()?;
+
+    raw_cookie.split(';').find_map(|part| {
+        let mut pair = part.trim().splitn(2, '=');
+        let name = pair.next()?.trim();
+        let value = pair.next()?.trim();
+        if name == "session_token" && !value.is_empty() {
+            Some(value)
+        } else {
+            None
+        }
+    })
 }
 
 fn auth_error_to_response(error: AuthError) -> (StatusCode, Json<ApiErrorResponse>) {
@@ -1738,6 +1752,22 @@ mod tests {
         let refresh: RefreshResponse =
             serde_json::from_slice(&body).expect("body should be valid refresh JSON");
         assert_eq!(refresh.access_token, login.access_token);
+    }
+
+    #[test]
+    fn session_token_extraction_supports_cookie_as_header_alternative() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::COOKIE, HeaderValue::from_static("theme=dark; session_token=abc123"));
+
+        let token = extract_session_token(&headers);
+        assert_eq!(token.as_deref(), Some("abc123"));
+
+        headers.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer bearer-token"),
+        );
+        let preferred = extract_session_token(&headers);
+        assert_eq!(preferred.as_deref(), Some("bearer-token"));
     }
 
     #[tokio::test]

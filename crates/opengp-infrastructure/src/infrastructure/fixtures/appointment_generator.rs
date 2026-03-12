@@ -41,6 +41,12 @@ pub struct AppointmentGeneratorConfig {
     pub exclude_weekends: bool,
     /// Whether to exclude lunch hour (12pm-1pm, default false)
     pub exclude_lunch_hour: bool,
+    /// Percentage of appointments that are telehealth (0.0-1.0)
+    pub telehealth_percentage: f32,
+    /// Percentage of appointments that are cancelled (0.0-1.0)
+    pub cancellation_percentage: f32,
+    /// Percentage of appointments that are no-shows (0.0-1.0, applies to past appointments)
+    pub noshow_percentage: f32,
 }
 
 impl Default for AppointmentGeneratorConfig {
@@ -61,6 +67,9 @@ impl Default for AppointmentGeneratorConfig {
             practitioner_ids: None,
             exclude_weekends: true,
             exclude_lunch_hour: false,
+            telehealth_percentage: 0.20,
+            cancellation_percentage: 0.05,
+            noshow_percentage: 0.05,
         }
     }
 }
@@ -478,7 +487,7 @@ impl AppointmentGenerator {
             .and_utc()
     }
 
-    /// Generate a random appointment reason
+    /// Generate a random appointment reason based on appointment type
     fn random_reason(&mut self) -> String {
         let reasons = [
             "General check-up",
@@ -491,12 +500,149 @@ impl AppointmentGenerator {
             "Health assessment",
             "Preventive care",
             "Acute illness",
+            "Skin concerns",
+            "Joint pain",
+            "Respiratory symptoms",
+            "Sleep issues",
+            "Weight management",
+            "Blood pressure monitoring",
+            "Diabetes review",
+            "Asthma review",
+            "Anxiety consultation",
+            "Fertility counselling",
+            "Work injury",
+            "Sports injury",
+            "Headache assessment",
+            "Digestive issues",
+            "Allergy testing",
+            "Vaccination",
+            "Travel health",
+            "Pre-employment check",
+            "School physical",
+            "Aged care assessment",
         ];
 
         reasons
             .choose(&mut self.rng)
             .expect("reasons not empty")
             .to_string()
+    }
+
+    /// Generate appointment type-specific reasons
+    #[allow(dead_code)]
+    fn reason_for_type(&mut self, appointment_type: AppointmentType) -> String {
+        match appointment_type {
+            AppointmentType::Standard => self.random_reason(),
+            AppointmentType::Long => {
+                let reasons = [
+                    "Complex chronic disease management",
+                    "Comprehensive health assessment",
+                    "Mental health treatment",
+                    "Detailed injury review",
+                ];
+                reasons.choose(&mut self.rng).unwrap().to_string()
+            }
+            AppointmentType::Brief => {
+                let reasons = [
+                    "Script renewal",
+                    "Sick leave certificate",
+                    "Wound check",
+                    "Quick follow-up",
+                ];
+                reasons.choose(&mut self.rng).unwrap().to_string()
+            }
+            AppointmentType::NewPatient => {
+                let reasons = [
+                    "New patient registration",
+                    "Transfer of care",
+                    "Initial consultation",
+                ];
+                reasons.choose(&mut self.rng).unwrap().to_string()
+            }
+            AppointmentType::HealthAssessment => {
+                let reasons = [
+                    "75+ health check",
+                    "45+ health check",
+                    "Preventive health assessment",
+                    "Work capacity evaluation",
+                ];
+                reasons.choose(&mut self.rng).unwrap().to_string()
+            }
+            AppointmentType::ChronicDiseaseReview => {
+                let reasons = [
+                    "Diabetes management",
+                    "Hypertension review",
+                    "Asthma review",
+                    "COPD management",
+                    "Heart disease follow-up",
+                ];
+                reasons.choose(&mut self.rng).unwrap().to_string()
+            }
+            AppointmentType::MentalHealthPlan => {
+                let reasons = [
+                    "Mental health plan development",
+                    "Depression management",
+                    "Anxiety treatment",
+                    "Psychological support",
+                ];
+                reasons.choose(&mut self.rng).unwrap().to_string()
+            }
+            AppointmentType::Immunisation => {
+                let reasons = [
+                    "COVID-19 vaccination",
+                    "Influenza vaccination",
+                    "Pneumococcal vaccination",
+                    "Shingles vaccination",
+                ];
+                reasons.choose(&mut self.rng).unwrap().to_string()
+            }
+            AppointmentType::Procedure => {
+                let reasons = [
+                    "Wound dressing",
+                    "Blood test",
+                    "ECG",
+                    "Spirometry",
+                    "Ear cleaning",
+                ];
+                reasons.choose(&mut self.rng).unwrap().to_string()
+            }
+            AppointmentType::Telephone => {
+                let reasons = [
+                    "Telephone consultation",
+                    "Prescription refill discussion",
+                    "Follow-up check",
+                    "Test results discussion",
+                ];
+                reasons.choose(&mut self.rng).unwrap().to_string()
+            }
+            AppointmentType::Telehealth => {
+                let reasons = [
+                    "Telehealth consultation",
+                    "Virtual health assessment",
+                    "Remote follow-up",
+                    "Video consultation",
+                ];
+                reasons.choose(&mut self.rng).unwrap().to_string()
+            }
+            AppointmentType::HomeVisit => {
+                let reasons = [
+                    "Home visit assessment",
+                    "Aged care visit",
+                    "Mobility issue visit",
+                    "Post-operative home check",
+                ];
+                reasons.choose(&mut self.rng).unwrap().to_string()
+            }
+            AppointmentType::Emergency => {
+                let reasons = [
+                    "Emergency consultation",
+                    "Urgent same-day visit",
+                    "Acute condition",
+                    "Urgent referral",
+                ];
+                reasons.choose(&mut self.rng).unwrap().to_string()
+            }
+        }
     }
 
     /// Generate random appointment notes

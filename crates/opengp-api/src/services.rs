@@ -17,14 +17,19 @@ use opengp_domain::domain::clinical::{
 use opengp_domain::domain::error::RepositoryError;
 use opengp_domain::domain::patient::{PatientRepository, PatientService};
 use opengp_domain::domain::user::{
-    AuthService, PasswordError, PasswordHasher, Permission, Role, SessionRepository, User,
-    UserRepository,
+    AuthService, PasswordError, PasswordHasher, SessionRepository, UserRepository,
 };
+#[cfg(test)]
+use opengp_domain::domain::user::{Permission, Role, User};
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::mocks::{
     MockAppointmentRepository, MockConsultationRepository, MockPatientRepository,
 };
 use opengp_infrastructure::infrastructure::database::repositories::InMemorySessionRepository;
+#[cfg(not(test))]
+use opengp_infrastructure::infrastructure::database::repositories::PostgresUserRepository;
+use sqlx::PgPool;
+#[cfg(test)]
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -41,7 +46,7 @@ pub struct ApiServices {
 }
 
 impl ApiServices {
-    pub async fn new(config: &ApiConfig) -> Result<Self, ApiError> {
+    pub async fn new(config: &ApiConfig, pool: &PgPool) -> Result<Self, ApiError> {
         unsafe {
             std::env::set_var("ENCRYPTION_KEY", &config.encryption_key);
         }
@@ -51,9 +56,7 @@ impl ApiServices {
         );
 
         let password_hasher: Arc<dyn PasswordHasher> = Arc::new(DevPasswordHasher);
-        let user_repository: Arc<dyn UserRepository> = Arc::new(
-            InMemoryUserRepository::with_default_users(password_hasher.clone()),
-        );
+        let user_repository = build_user_repository(pool, password_hasher.clone());
         let session_repository: Arc<dyn SessionRepository> =
             Arc::new(InMemorySessionRepository::new());
         let auth_service = Arc::new(AuthService::new(
@@ -103,6 +106,22 @@ impl ApiServices {
     }
 }
 
+#[cfg(test)]
+fn build_user_repository(
+    _pool: &PgPool,
+    password_hasher: Arc<dyn PasswordHasher>,
+) -> Arc<dyn UserRepository> {
+    Arc::new(InMemoryUserRepository::with_default_users(password_hasher))
+}
+
+#[cfg(not(test))]
+fn build_user_repository(
+    pool: &PgPool,
+    _password_hasher: Arc<dyn PasswordHasher>,
+) -> Arc<dyn UserRepository> {
+    Arc::new(PostgresUserRepository::new(pool.clone()))
+}
+
 struct NoopAppointmentCalendarQuery;
 
 #[async_trait]
@@ -115,6 +134,7 @@ impl AppointmentCalendarQuery for NoopAppointmentCalendarQuery {
     }
 }
 
+#[cfg(test)]
 struct InMemoryUserRepository {
     users: RwLock<Vec<User>>,
 }
@@ -139,6 +159,7 @@ impl PasswordHasher for DevPasswordHasher {
     }
 }
 
+#[cfg(test)]
 impl InMemoryUserRepository {
     fn with_default_users(password_hasher: Arc<dyn PasswordHasher>) -> Self {
         let now = Utc::now();
@@ -191,6 +212,7 @@ impl InMemoryUserRepository {
     }
 }
 
+#[cfg(test)]
 #[async_trait]
 impl UserRepository for InMemoryUserRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, RepositoryError> {
