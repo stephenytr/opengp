@@ -3,9 +3,10 @@ use std::sync::Arc;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use opengp_domain::domain::api::{
     AllergyRequest, AllergyResponse, ApiErrorResponse, AppointmentRequest, AppointmentResponse,
-    ConsultationRequest, ConsultationResponse, LoginRequest, LoginResponse, MedicalHistoryRequest,
-    MedicalHistoryResponse, PaginatedResponse, PatientRequest, PatientResponse,
-    PractitionerResponse,
+    ConsultationRequest, ConsultationResponse, FamilyHistoryRequest, FamilyHistoryResponse,
+    LoginRequest, LoginResponse, MedicalHistoryRequest, MedicalHistoryResponse,
+    PaginatedResponse, PatientRequest, PatientResponse, PractitionerResponse,
+    SocialHistoryRequest, SocialHistoryResponse, VitalSignsRequest, VitalSignsResponse,
 };
 use reqwest::{Method, StatusCode};
 use tokio::sync::Mutex;
@@ -328,6 +329,105 @@ impl ApiClient {
                 Method::POST,
                 &format!("/api/v1/patients/{patient_id}/medical-history"),
             )
+            .await?
+            .json(request)
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
+    pub async fn get_family_history(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<Vec<FamilyHistoryResponse>, ApiClientError> {
+        let response = self
+            .authenticated_request(
+                Method::GET,
+                &format!("/api/v1/patients/{patient_id}/family-history"),
+            )
+            .await?
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
+    pub async fn create_family_history(
+        &self,
+        patient_id: Uuid,
+        request: &FamilyHistoryRequest,
+    ) -> Result<FamilyHistoryResponse, ApiClientError> {
+        let response = self
+            .authenticated_request(
+                Method::POST,
+                &format!("/api/v1/patients/{patient_id}/family-history"),
+            )
+            .await?
+            .json(request)
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
+    pub async fn get_social_history(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<SocialHistoryResponse, ApiClientError> {
+        let response = self
+            .authenticated_request(
+                Method::GET,
+                &format!("/api/v1/patients/{patient_id}/social-history"),
+            )
+            .await?
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
+    pub async fn update_social_history(
+        &self,
+        patient_id: Uuid,
+        request: &SocialHistoryRequest,
+    ) -> Result<SocialHistoryResponse, ApiClientError> {
+        let response = self
+            .authenticated_request(
+                Method::PUT,
+                &format!("/api/v1/patients/{patient_id}/social-history"),
+            )
+            .await?
+            .json(request)
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
+    pub async fn get_vitals(&self, patient_id: Uuid) -> Result<Vec<VitalSignsResponse>, ApiClientError> {
+        let response = self
+            .authenticated_request(Method::GET, &format!("/api/v1/patients/{patient_id}/vitals"))
+            .await?
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
+    pub async fn create_vitals(
+        &self,
+        patient_id: Uuid,
+        request: &VitalSignsRequest,
+    ) -> Result<VitalSignsResponse, ApiClientError> {
+        let response = self
+            .authenticated_request(Method::POST, &format!("/api/v1/patients/{patient_id}/vitals"))
             .await?
             .json(request)
             .send()
@@ -678,6 +778,18 @@ mod tests {
                 get(medical_history_handler).post(create_medical_history_handler),
             )
             .route(
+                "/api/v1/patients/{id}/family-history",
+                get(family_history_handler).post(create_family_history_handler),
+            )
+            .route(
+                "/api/v1/patients/{id}/vitals",
+                get(vitals_handler).post(create_vitals_handler),
+            )
+            .route(
+                "/api/v1/patients/{id}/social-history",
+                get(social_history_handler).put(update_social_history_handler),
+            )
+            .route(
                 "/api/v1/patients/{id}/allergies/{allergy_id}",
                 axum::routing::delete(delete_allergy_handler),
             )
@@ -798,6 +910,44 @@ mod tests {
             .await
             .expect("create_medical_history should succeed");
         assert_eq!(created_medical_history.condition, "Type 2 diabetes");
+
+        let family_history = client
+            .get_family_history(sample_patient_id())
+            .await
+            .expect("get_family_history should succeed");
+        assert_eq!(family_history.len(), 1);
+        assert_eq!(family_history[0].condition, "Breast cancer");
+
+        let created_family_history = client
+            .create_family_history(sample_patient_id(), &sample_family_history_request())
+            .await
+            .expect("create_family_history should succeed");
+        assert_eq!(created_family_history.relative_relationship, "Mother");
+
+        let social_history = client
+            .get_social_history(sample_patient_id())
+            .await
+            .expect("get_social_history should succeed");
+        assert_eq!(social_history.smoking_status, "never_smoked");
+
+        let updated_social_history = client
+            .update_social_history(sample_patient_id(), &sample_social_history_request())
+            .await
+            .expect("update_social_history should succeed");
+        assert_eq!(updated_social_history.alcohol_status, "occasional");
+
+        let vitals = client
+            .get_vitals(sample_patient_id())
+            .await
+            .expect("get_vitals should succeed");
+        assert_eq!(vitals.len(), 1);
+        assert_eq!(vitals[0].heart_rate, Some(72));
+
+        let created_vitals = client
+            .create_vitals(sample_patient_id(), &sample_vitals_request())
+            .await
+            .expect("create_vitals should succeed");
+        assert_eq!(created_vitals.systolic_bp, Some(124));
 
         client
             .delete_allergy(sample_patient_id(), sample_allergy_id())
@@ -1016,6 +1166,63 @@ mod tests {
     ) -> (StatusCode, Json<MedicalHistoryResponse>) {
         capture_header(state, headers).await;
         (StatusCode::CREATED, Json(sample_medical_history_response()))
+    }
+
+    async fn family_history_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+    ) -> (StatusCode, Json<Vec<FamilyHistoryResponse>>) {
+        capture_header(state, headers).await;
+        (StatusCode::OK, Json(vec![sample_family_history_response()]))
+    }
+
+    async fn create_family_history_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+        Json(_payload): Json<FamilyHistoryRequest>,
+    ) -> (StatusCode, Json<FamilyHistoryResponse>) {
+        capture_header(state, headers).await;
+        (StatusCode::CREATED, Json(sample_family_history_response()))
+    }
+
+    async fn social_history_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+    ) -> (StatusCode, Json<SocialHistoryResponse>) {
+        capture_header(state, headers).await;
+        (StatusCode::OK, Json(sample_social_history_response()))
+    }
+
+    async fn update_social_history_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+        Json(_payload): Json<SocialHistoryRequest>,
+    ) -> (StatusCode, Json<SocialHistoryResponse>) {
+        capture_header(state, headers).await;
+        (StatusCode::OK, Json(sample_social_history_response()))
+    }
+
+    async fn vitals_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+    ) -> (StatusCode, Json<Vec<VitalSignsResponse>>) {
+        capture_header(state, headers).await;
+        (StatusCode::OK, Json(vec![sample_vitals_response()]))
+    }
+
+    async fn create_vitals_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Path(_id): Path<Uuid>,
+        Json(_payload): Json<VitalSignsRequest>,
+    ) -> (StatusCode, Json<VitalSignsResponse>) {
+        capture_header(state, headers).await;
+        (StatusCode::CREATED, Json(sample_vitals_response()))
     }
 
     async fn delete_allergy_handler(
@@ -1257,6 +1464,117 @@ mod tests {
             severity: Some("moderate".to_string()),
             notes: Some("Managed with metformin".to_string()),
             is_active: true,
+        }
+    }
+
+    fn sample_family_history_id() -> Uuid {
+        Uuid::parse_str("9d2164e4-c8f7-4eb2-a927-35fd3e068aba").expect("valid uuid")
+    }
+
+    fn sample_family_history_request() -> FamilyHistoryRequest {
+        FamilyHistoryRequest {
+            relative_relationship: "Mother".to_string(),
+            condition: "Breast cancer".to_string(),
+            age_at_diagnosis: Some(52),
+            notes: Some("Diagnosed post-menopause".to_string()),
+        }
+    }
+
+    fn sample_family_history_response() -> FamilyHistoryResponse {
+        FamilyHistoryResponse {
+            id: sample_family_history_id(),
+            patient_id: sample_patient_id(),
+            relative_relationship: "Mother".to_string(),
+            condition: "Breast cancer".to_string(),
+            age_at_diagnosis: Some(52),
+            notes: Some("Diagnosed post-menopause".to_string()),
+            created_at: Utc
+                .with_ymd_and_hms(2026, 3, 11, 10, 30, 0)
+                .single()
+                .expect("valid datetime"),
+            created_by: sample_practitioner_id(),
+        }
+    }
+
+    fn sample_social_history_id() -> Uuid {
+        Uuid::parse_str("8f670ba9-35da-444f-a44d-970ef6847c56").expect("valid uuid")
+    }
+
+    fn sample_social_history_request() -> SocialHistoryRequest {
+        SocialHistoryRequest {
+            smoking_status: "never_smoked".to_string(),
+            cigarettes_per_day: Some(0),
+            smoking_quit_date: NaiveDate::from_ymd_opt(2021, 2, 28),
+            alcohol_status: "occasional".to_string(),
+            standard_drinks_per_week: Some(3),
+            exercise_frequency: Some("three_to_five_times".to_string()),
+            occupation: Some("Teacher".to_string()),
+            living_situation: Some("Lives with partner and two children".to_string()),
+            support_network: Some("Strong family support".to_string()),
+            notes: Some("Working on smoking cessation plan".to_string()),
+        }
+    }
+
+    fn sample_social_history_response() -> SocialHistoryResponse {
+        SocialHistoryResponse {
+            id: sample_social_history_id(),
+            patient_id: sample_patient_id(),
+            smoking_status: "never_smoked".to_string(),
+            cigarettes_per_day: Some(0),
+            smoking_quit_date: NaiveDate::from_ymd_opt(2021, 2, 28),
+            alcohol_status: "occasional".to_string(),
+            standard_drinks_per_week: Some(3),
+            exercise_frequency: Some("three_to_five_times".to_string()),
+            occupation: Some("Teacher".to_string()),
+            living_situation: Some("Lives with partner and two children".to_string()),
+            support_network: Some("Strong family support".to_string()),
+            notes: Some("Working on smoking cessation plan".to_string()),
+            updated_at: Utc
+                .with_ymd_and_hms(2026, 3, 11, 10, 30, 0)
+                .single()
+                .expect("valid datetime"),
+            updated_by: sample_practitioner_id(),
+        }
+    }
+
+    fn sample_vitals_id() -> Uuid {
+        Uuid::parse_str("2c8ee9f9-04cb-4a97-a05b-c997377a9f40").expect("valid uuid")
+    }
+
+    fn sample_vitals_request() -> VitalSignsRequest {
+        VitalSignsRequest {
+            consultation_id: Some(sample_consultation_id()),
+            systolic_bp: Some(124),
+            diastolic_bp: Some(78),
+            heart_rate: Some(72),
+            respiratory_rate: Some(16),
+            temperature: Some(36.8),
+            oxygen_saturation: Some(98),
+            height_cm: Some(178),
+            weight_kg: Some(82.4),
+            notes: Some("Patient reports mild headache".to_string()),
+        }
+    }
+
+    fn sample_vitals_response() -> VitalSignsResponse {
+        VitalSignsResponse {
+            id: sample_vitals_id(),
+            patient_id: sample_patient_id(),
+            consultation_id: Some(sample_consultation_id()),
+            measured_at: Utc
+                .with_ymd_and_hms(2026, 3, 11, 10, 5, 0)
+                .single()
+                .expect("valid datetime"),
+            systolic_bp: Some(124),
+            diastolic_bp: Some(78),
+            heart_rate: Some(72),
+            respiratory_rate: Some(16),
+            temperature: Some(36.8),
+            oxygen_saturation: Some(98),
+            height_cm: Some(178),
+            weight_kg: Some(82.4),
+            bmi: Some(26.0),
+            notes: Some("Patient reports mild headache".to_string()),
         }
     }
 }

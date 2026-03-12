@@ -302,6 +302,160 @@ pub struct MedicalHistoryResponse {
     pub is_active: bool,
 }
 
+/// Request payload for `/api/v1/patients/{id}/family-history`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct FamilyHistoryRequest {
+    #[schema(example = "Mother")]
+    pub relative_relationship: String,
+    #[schema(example = "Breast cancer")]
+    pub condition: String,
+    #[schema(example = 52)]
+    pub age_at_diagnosis: Option<u8>,
+    #[schema(example = "Diagnosed post-menopause")]
+    pub notes: Option<String>,
+}
+
+/// Response payload for `/api/v1/patients/{id}/family-history`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct FamilyHistoryResponse {
+    #[schema(example = "9d2164e4-c8f7-4eb2-a927-35fd3e068aba")]
+    pub id: Uuid,
+    #[schema(example = "550e8400-e29b-41d4-a716-446655440000")]
+    pub patient_id: Uuid,
+    #[schema(example = "Mother")]
+    pub relative_relationship: String,
+    #[schema(example = "Breast cancer")]
+    pub condition: String,
+    #[schema(example = 52)]
+    pub age_at_diagnosis: Option<u8>,
+    #[schema(example = "Diagnosed post-menopause")]
+    pub notes: Option<String>,
+    #[schema(example = "2026-03-11T10:30:00Z")]
+    pub created_at: DateTime<Utc>,
+    #[schema(example = "0f8fad5b-d9cb-469f-a165-70867728950e")]
+    pub created_by: Uuid,
+}
+
+/// Request payload for `/api/v1/patients/{id}/social-history`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SocialHistoryRequest {
+    #[schema(example = "never_smoked")]
+    pub smoking_status: String,
+    #[schema(example = 0)]
+    pub cigarettes_per_day: Option<u8>,
+    #[schema(example = "2021-02-28")]
+    pub smoking_quit_date: Option<NaiveDate>,
+    #[schema(example = "occasional")]
+    pub alcohol_status: String,
+    #[schema(example = 3)]
+    pub standard_drinks_per_week: Option<u8>,
+    #[schema(example = "three_to_five_times")]
+    pub exercise_frequency: Option<String>,
+    #[schema(example = "Teacher")]
+    pub occupation: Option<String>,
+    #[schema(example = "Lives with partner and two children")]
+    pub living_situation: Option<String>,
+    #[schema(example = "Strong family support")]
+    pub support_network: Option<String>,
+    #[schema(example = "Working on smoking cessation plan")]
+    pub notes: Option<String>,
+}
+
+/// Response payload for `/api/v1/patients/{id}/social-history`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SocialHistoryResponse {
+    #[schema(example = "8f670ba9-35da-444f-a44d-970ef6847c56")]
+    pub id: Uuid,
+    #[schema(example = "550e8400-e29b-41d4-a716-446655440000")]
+    pub patient_id: Uuid,
+    #[schema(example = "never_smoked")]
+    pub smoking_status: String,
+    #[schema(example = 0)]
+    pub cigarettes_per_day: Option<u8>,
+    #[schema(example = "2021-02-28")]
+    pub smoking_quit_date: Option<NaiveDate>,
+    #[schema(example = "occasional")]
+    pub alcohol_status: String,
+    #[schema(example = 3)]
+    pub standard_drinks_per_week: Option<u8>,
+    #[schema(example = "three_to_five_times")]
+    pub exercise_frequency: Option<String>,
+    #[schema(example = "Teacher")]
+    pub occupation: Option<String>,
+    #[schema(example = "Lives with partner and two children")]
+    pub living_situation: Option<String>,
+    #[schema(example = "Strong family support")]
+    pub support_network: Option<String>,
+    #[schema(example = "Working on smoking cessation plan")]
+    pub notes: Option<String>,
+    #[schema(example = "2026-03-11T10:30:00Z")]
+    pub updated_at: DateTime<Utc>,
+    #[schema(example = "0f8fad5b-d9cb-469f-a165-70867728950e")]
+    pub updated_by: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct VitalSignsRequest {
+    #[schema(example = "1b31d6e0-a532-426f-9bf2-9b84f0f8c1bb")]
+    pub consultation_id: Option<Uuid>,
+    #[schema(example = 124)]
+    pub systolic_bp: Option<u16>,
+    #[schema(example = 78)]
+    pub diastolic_bp: Option<u16>,
+    #[schema(example = 72)]
+    pub heart_rate: Option<u16>,
+    #[schema(example = 16)]
+    pub respiratory_rate: Option<u16>,
+    #[schema(example = 36.8)]
+    pub temperature: Option<f32>,
+    #[schema(example = 98)]
+    pub oxygen_saturation: Option<u8>,
+    #[schema(example = 178)]
+    pub height_cm: Option<u16>,
+    #[schema(example = 82.4)]
+    pub weight_kg: Option<f32>,
+    #[schema(example = "Patient reports mild headache")]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct VitalSignsResponse {
+    #[schema(example = "2c8ee9f9-04cb-4a97-a05b-c997377a9f40")]
+    pub id: Uuid,
+    #[schema(example = "550e8400-e29b-41d4-a716-446655440000")]
+    pub patient_id: Uuid,
+    #[schema(example = "1b31d6e0-a532-426f-9bf2-9b84f0f8c1bb")]
+    pub consultation_id: Option<Uuid>,
+    #[schema(example = "2026-03-11T10:05:00Z")]
+    pub measured_at: DateTime<Utc>,
+    #[schema(example = 124)]
+    pub systolic_bp: Option<u16>,
+    #[schema(example = 78)]
+    pub diastolic_bp: Option<u16>,
+    #[schema(example = 72)]
+    pub heart_rate: Option<u16>,
+    #[schema(example = 16)]
+    pub respiratory_rate: Option<u16>,
+    #[schema(example = 36.8)]
+    pub temperature: Option<f32>,
+    #[schema(example = 98)]
+    pub oxygen_saturation: Option<u8>,
+    #[schema(example = 178)]
+    pub height_cm: Option<u16>,
+    #[schema(example = 82.4)]
+    pub weight_kg: Option<f32>,
+    #[schema(example = 26.0)]
+    pub bmi: Option<f32>,
+    #[schema(example = "Patient reports mild headache")]
+    pub notes: Option<String>,
+}
+
 fn default_version() -> i32 {
     1
 }

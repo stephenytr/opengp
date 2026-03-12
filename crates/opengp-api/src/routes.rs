@@ -10,9 +10,11 @@ use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
 use http::header::ORIGIN;
 use opengp_domain::domain::api::{
     AllergyRequest, AllergyResponse, ApiErrorResponse, AppointmentRequest, AppointmentResponse,
-    AuthenticatedUserResponse, ConsultationRequest, ConsultationResponse, LoginRequest,
-    LoginResponse, MedicalHistoryRequest, MedicalHistoryResponse, PaginatedResponse,
-    PatientRequest, PatientResponse, PractitionerResponse,
+    AuthenticatedUserResponse, ConsultationRequest, ConsultationResponse, FamilyHistoryRequest,
+    FamilyHistoryResponse, LoginRequest, LoginResponse, MedicalHistoryRequest,
+    MedicalHistoryResponse, PaginatedResponse, PatientRequest, PatientResponse,
+    PractitionerResponse, SocialHistoryRequest, SocialHistoryResponse, VitalSignsRequest,
+    VitalSignsResponse,
 };
 use opengp_domain::domain::appointment::{
     AppointmentSearchCriteria, AppointmentStatus, AppointmentType, NewAppointmentData,
@@ -20,8 +22,9 @@ use opengp_domain::domain::appointment::{
 };
 use opengp_domain::domain::audit::{AuditAction, AuditEntry};
 use opengp_domain::domain::clinical::{
-    AllergyType, ConditionStatus, NewAllergyData, NewConsultationData, NewMedicalHistoryData,
-    ServiceError as ClinicalServiceError, Severity,
+    AlcoholStatus, AllergyType, ConditionStatus, ExerciseFrequency, NewAllergyData,
+    NewConsultationData, NewFamilyHistoryData, NewMedicalHistoryData, NewVitalSignsData,
+    ServiceError as ClinicalServiceError, Severity, SmokingStatus, UpdateSocialHistoryData,
 };
 use opengp_domain::domain::patient::{
     Address, Gender, NewPatientData, ServiceError as PatientServiceError, UpdatePatientData,
@@ -60,6 +63,15 @@ pub fn router(state: ApiState) -> Router {
             "/{id}/medical-history",
             get(list_medical_history).post(create_medical_history),
         )
+        .route(
+            "/{id}/family-history",
+            get(list_family_history).post(create_family_history),
+        )
+        .route(
+            "/{id}/social-history",
+            get(get_social_history).put(update_social_history),
+        )
+        .route("/{id}/vitals", get(list_vitals).post(create_vitals))
         .route("/{id}/allergies/{allergy_id}", axum::routing::delete(delete_allergy))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -835,6 +847,155 @@ async fn create_medical_history(
     ))
 }
 
+async fn list_family_history(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(patient_id): Path<Uuid>,
+) -> Result<(StatusCode, Json<Vec<FamilyHistoryResponse>>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_read(&context)?;
+
+    let history = state
+        .services
+        .clinical_service
+        .list_family_history(patient_id)
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    Ok((
+        StatusCode::OK,
+        Json(history.into_iter().map(family_history_to_response).collect()),
+    ))
+}
+
+async fn create_family_history(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(patient_id): Path<Uuid>,
+    Json(payload): Json<FamilyHistoryRequest>,
+) -> Result<(StatusCode, Json<FamilyHistoryResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_access(&context)?;
+
+    let history = state
+        .services
+        .clinical_service
+        .add_family_history(
+            family_history_request_to_new_data(patient_id, payload),
+            context.user_id,
+        )
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    let audit_entry = AuditEntry::new_created(
+        "family_history",
+        history.id,
+        serde_json::to_string(&history).unwrap_or_default(),
+        context.user_id,
+    );
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
+
+    Ok((
+        StatusCode::CREATED,
+        Json(family_history_to_response(history)),
+    ))
+}
+
+async fn get_social_history(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(patient_id): Path<Uuid>,
+) -> Result<(StatusCode, Json<SocialHistoryResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_read(&context)?;
+
+    let history = state
+        .services
+        .clinical_service
+        .get_social_history(patient_id)
+        .await
+        .map_err(clinical_service_error_to_response)?
+        .ok_or_else(|| {
+            not_found_response("social_history_not_found", "Social history not found")
+        })?;
+
+    Ok((StatusCode::OK, Json(social_history_to_response(history))))
+}
+
+async fn update_social_history(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(patient_id): Path<Uuid>,
+    Json(payload): Json<SocialHistoryRequest>,
+) -> Result<(StatusCode, Json<SocialHistoryResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_access(&context)?;
+
+    let history = state
+        .services
+        .clinical_service
+        .update_social_history(
+            patient_id,
+            social_history_request_to_update_data(payload)?,
+            context.user_id,
+        )
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    let audit_entry = AuditEntry::new_updated(
+        "social_history",
+        history.id,
+        "{}",
+        serde_json::to_string(&history).unwrap_or_default(),
+        context.user_id,
+    );
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
+
+    Ok((StatusCode::OK, Json(social_history_to_response(history))))
+}
+
+async fn list_vitals(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(patient_id): Path<Uuid>,
+) -> Result<(StatusCode, Json<Vec<VitalSignsResponse>>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_read(&context)?;
+
+    let vitals = state
+        .services
+        .clinical_service
+        .list_vital_signs_history(patient_id, 100)
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    Ok((
+        StatusCode::OK,
+        Json(vitals.into_iter().map(vital_signs_to_response).collect()),
+    ))
+}
+
+async fn create_vitals(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Path(patient_id): Path<Uuid>,
+    Json(payload): Json<VitalSignsRequest>,
+) -> Result<(StatusCode, Json<VitalSignsResponse>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_practitioner_access(&context)?;
+
+    let vitals = state
+        .services
+        .clinical_service
+        .record_vital_signs(vital_signs_request_to_new_data(patient_id, payload), context.user_id)
+        .await
+        .map_err(clinical_service_error_to_response)?;
+
+    let audit_entry = AuditEntry::new_created(
+        "vital_signs",
+        vitals.id,
+        serde_json::to_string(&vitals).unwrap_or_default(),
+        context.user_id,
+    );
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
+
+    Ok((StatusCode::CREATED, Json(vital_signs_to_response(vitals))))
+}
+
 async fn delete_allergy(
     State(state): State<ApiState>,
     Extension(context): Extension<AuthContext>,
@@ -1430,6 +1591,59 @@ fn medical_history_request_to_new_data(
     })
 }
 
+fn family_history_request_to_new_data(
+    patient_id: Uuid,
+    payload: FamilyHistoryRequest,
+) -> NewFamilyHistoryData {
+    NewFamilyHistoryData {
+        patient_id,
+        relative_relationship: payload.relative_relationship,
+        condition: payload.condition,
+        age_at_diagnosis: payload.age_at_diagnosis,
+        notes: payload.notes,
+    }
+}
+
+fn vital_signs_request_to_new_data(
+    patient_id: Uuid,
+    payload: VitalSignsRequest,
+) -> NewVitalSignsData {
+    NewVitalSignsData {
+        patient_id,
+        consultation_id: payload.consultation_id,
+        systolic_bp: payload.systolic_bp,
+        diastolic_bp: payload.diastolic_bp,
+        heart_rate: payload.heart_rate,
+        respiratory_rate: payload.respiratory_rate,
+        temperature: payload.temperature,
+        oxygen_saturation: payload.oxygen_saturation,
+        height_cm: payload.height_cm,
+        weight_kg: payload.weight_kg,
+        notes: payload.notes,
+    }
+}
+
+fn social_history_request_to_update_data(
+    payload: SocialHistoryRequest,
+) -> Result<UpdateSocialHistoryData, (StatusCode, Json<ApiErrorResponse>)> {
+    Ok(UpdateSocialHistoryData {
+        smoking_status: parse_smoking_status(&payload.smoking_status)?,
+        cigarettes_per_day: payload.cigarettes_per_day,
+        smoking_quit_date: payload.smoking_quit_date,
+        alcohol_status: parse_alcohol_status(&payload.alcohol_status)?,
+        standard_drinks_per_week: payload.standard_drinks_per_week,
+        exercise_frequency: payload
+            .exercise_frequency
+            .as_deref()
+            .map(parse_exercise_frequency)
+            .transpose()?,
+        occupation: payload.occupation,
+        living_situation: payload.living_situation,
+        support_network: payload.support_network,
+        notes: payload.notes,
+    })
+}
+
 fn validate_appointment_booking_time(
     start_time: DateTime<Utc>,
 ) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
@@ -1525,6 +1739,53 @@ fn parse_condition_status(
     }
 }
 
+fn parse_smoking_status(
+    smoking_status: &str,
+) -> Result<SmokingStatus, (StatusCode, Json<ApiErrorResponse>)> {
+    match smoking_status.trim().to_ascii_lowercase().as_str() {
+        "never_smoked" | "never-smoked" => Ok(SmokingStatus::NeverSmoked),
+        "current_smoker" | "current-smoker" => Ok(SmokingStatus::CurrentSmoker),
+        "ex_smoker" | "ex-smoker" => Ok(SmokingStatus::ExSmoker),
+        _ => Err(bad_request_response(
+            "validation_error",
+            "Invalid smoking status",
+        )),
+    }
+}
+
+fn parse_alcohol_status(
+    alcohol_status: &str,
+) -> Result<AlcoholStatus, (StatusCode, Json<ApiErrorResponse>)> {
+    match alcohol_status.trim().to_ascii_lowercase().as_str() {
+        "none" => Ok(AlcoholStatus::None),
+        "occasional" => Ok(AlcoholStatus::Occasional),
+        "moderate" => Ok(AlcoholStatus::Moderate),
+        "heavy" => Ok(AlcoholStatus::Heavy),
+        _ => Err(bad_request_response(
+            "validation_error",
+            "Invalid alcohol status",
+        )),
+    }
+}
+
+fn parse_exercise_frequency(
+    exercise_frequency: &str,
+) -> Result<ExerciseFrequency, (StatusCode, Json<ApiErrorResponse>)> {
+    match exercise_frequency.trim().to_ascii_lowercase().as_str() {
+        "none" => Ok(ExerciseFrequency::None),
+        "rarely" => Ok(ExerciseFrequency::Rarely),
+        "once_or_twice_per_week" | "once-or-twice-per-week" => {
+            Ok(ExerciseFrequency::OnceOrTwicePerWeek)
+        }
+        "three_to_five_times" | "three-to-five-times" => Ok(ExerciseFrequency::ThreeToFiveTimes),
+        "daily" => Ok(ExerciseFrequency::Daily),
+        _ => Err(bad_request_response(
+            "validation_error",
+            "Invalid exercise frequency",
+        )),
+    }
+}
+
 fn appointment_type_to_string(appointment_type: AppointmentType) -> &'static str {
     match appointment_type {
         AppointmentType::Standard => "standard",
@@ -1567,6 +1828,33 @@ fn condition_status_to_string(condition_status: ConditionStatus) -> &'static str
         ConditionStatus::Chronic => "chronic",
         ConditionStatus::Recurring => "recurring",
         ConditionStatus::InRemission => "in_remission",
+    }
+}
+
+fn smoking_status_to_string(smoking_status: SmokingStatus) -> &'static str {
+    match smoking_status {
+        SmokingStatus::NeverSmoked => "never_smoked",
+        SmokingStatus::CurrentSmoker => "current_smoker",
+        SmokingStatus::ExSmoker => "ex_smoker",
+    }
+}
+
+fn alcohol_status_to_string(alcohol_status: AlcoholStatus) -> &'static str {
+    match alcohol_status {
+        AlcoholStatus::None => "none",
+        AlcoholStatus::Occasional => "occasional",
+        AlcoholStatus::Moderate => "moderate",
+        AlcoholStatus::Heavy => "heavy",
+    }
+}
+
+fn exercise_frequency_to_string(exercise_frequency: ExerciseFrequency) -> &'static str {
+    match exercise_frequency {
+        ExerciseFrequency::None => "none",
+        ExerciseFrequency::Rarely => "rarely",
+        ExerciseFrequency::OnceOrTwicePerWeek => "once_or_twice_per_week",
+        ExerciseFrequency::ThreeToFiveTimes => "three_to_five_times",
+        ExerciseFrequency::Daily => "daily",
     }
 }
 
@@ -1658,6 +1946,63 @@ fn medical_history_to_response(
             .map(|severity| severity_to_string(severity).to_string()),
         notes: history.notes,
         is_active: history.is_active,
+    }
+}
+
+fn family_history_to_response(
+    history: opengp_domain::domain::clinical::FamilyHistory,
+) -> FamilyHistoryResponse {
+    FamilyHistoryResponse {
+        id: history.id,
+        patient_id: history.patient_id,
+        relative_relationship: history.relative_relationship,
+        condition: history.condition,
+        age_at_diagnosis: history.age_at_diagnosis,
+        notes: history.notes,
+        created_at: history.created_at,
+        created_by: history.created_by,
+    }
+}
+
+fn social_history_to_response(
+    history: opengp_domain::domain::clinical::SocialHistory,
+) -> SocialHistoryResponse {
+    SocialHistoryResponse {
+        id: history.id,
+        patient_id: history.patient_id,
+        smoking_status: smoking_status_to_string(history.smoking_status).to_string(),
+        cigarettes_per_day: history.cigarettes_per_day,
+        smoking_quit_date: history.smoking_quit_date,
+        alcohol_status: alcohol_status_to_string(history.alcohol_status).to_string(),
+        standard_drinks_per_week: history.standard_drinks_per_week,
+        exercise_frequency: history
+            .exercise_frequency
+            .map(|frequency| exercise_frequency_to_string(frequency).to_string()),
+        occupation: history.occupation,
+        living_situation: history.living_situation,
+        support_network: history.support_network,
+        notes: history.notes,
+        updated_at: history.updated_at,
+        updated_by: history.updated_by,
+    }
+}
+
+fn vital_signs_to_response(vitals: opengp_domain::domain::clinical::VitalSigns) -> VitalSignsResponse {
+    VitalSignsResponse {
+        id: vitals.id,
+        patient_id: vitals.patient_id,
+        consultation_id: vitals.consultation_id,
+        measured_at: vitals.measured_at,
+        systolic_bp: vitals.systolic_bp,
+        diastolic_bp: vitals.diastolic_bp,
+        heart_rate: vitals.heart_rate,
+        respiratory_rate: vitals.respiratory_rate,
+        temperature: vitals.temperature,
+        oxygen_saturation: vitals.oxygen_saturation,
+        height_cm: vitals.height_cm,
+        weight_kg: vitals.weight_kg,
+        bmi: vitals.bmi,
+        notes: vitals.notes,
     }
 }
 
