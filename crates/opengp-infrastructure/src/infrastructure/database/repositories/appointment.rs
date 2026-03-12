@@ -464,7 +464,7 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         }
 
         if let Some(appointment_type) = criteria.appointment_type {
-            let type_str = match appointment_type {
+            let _type_str = match appointment_type {
                 AppointmentType::Standard => "Standard",
                 AppointmentType::Long => "Long",
                 AppointmentType::Brief => "Brief",
@@ -646,7 +646,7 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
         }
 
         if let Some(appointment_type) = criteria.appointment_type {
-            let type_str = match appointment_type {
+            let _type_str = match appointment_type {
                 AppointmentType::Standard => "Standard",
                 AppointmentType::Long => "Long",
                 AppointmentType::Brief => "Brief",
@@ -664,8 +664,8 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
             query.push_str(" AND a.appointment_type = ?");
         }
 
-        if let Some(status) = criteria.status {
-            let status_str = match status {
+        if let Some(_status) = criteria.status {
+            let _status_str = match _status {
                 AppointmentStatus::Scheduled => "Scheduled",
                 AppointmentStatus::Confirmed => "Confirmed",
                 AppointmentStatus::Arrived => "Arrived",
@@ -678,11 +678,11 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
             query.push_str(" AND a.status = ?");
         }
 
-        if let Some(is_urgent) = criteria.is_urgent {
+        if let Some(_is_urgent) = criteria.is_urgent {
             query.push_str(" AND a.is_urgent = ?");
         }
 
-        if let Some(confirmed) = criteria.confirmed {
+        if let Some(_confirmed) = criteria.confirmed {
             query.push_str(" AND a.confirmed = ?");
         }
 

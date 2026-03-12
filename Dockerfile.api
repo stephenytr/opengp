@@ -16,9 +16,10 @@ WORKDIR /app
 # Copy all workspace files (required for cargo to resolve dependencies)
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+COPY migrations_postgres ./migrations_postgres
 
 # Build the API binary
-RUN cargo build --release -p opengp-api
+RUN RUSTFLAGS="-A unused" cargo build --release -p opengp-api
 
 # Stage 2: Production runtime
 FROM debian:bookworm-slim

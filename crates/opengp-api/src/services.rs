@@ -69,34 +69,69 @@ impl ApiServices {
             config.session_timeout_minutes,
         ));
 
-        let patient_repository: Arc<dyn PatientRepository> = Arc::new(MockPatientRepository::new());
+        let patient_repository: Arc<dyn PatientRepository> = Arc::new(
+            opengp_infrastructure::infrastructure::database::repositories::SqlxPatientRepository::new(
+                pool.clone(),
+                encryption_service.clone(),
+            ),
+        );
         let patient_service = Arc::new(PatientService::new(patient_repository));
 
         let audit_repository: Arc<dyn AuditRepository> = Arc::new(NoopAuditRepository);
         let audit_service = Arc::new(AuditService::new(audit_repository));
 
-        let appointment_repository = Arc::new(MockAppointmentRepository::new());
+        let appointment_repository: Arc<dyn opengp_domain::domain::appointment::AppointmentRepository> = Arc::new(
+            opengp_infrastructure::infrastructure::database::repositories::SqlxAppointmentRepository::new(
+                pool.clone(),
+            ),
+        );
         let appointment_service = Arc::new(AppointmentService::new(
             appointment_repository.clone(),
             audit_service.clone(),
-            Arc::new(NoopAppointmentCalendarQuery),
+            appointment_repository.clone(),
         ));
-        let working_hours_repository: Arc<dyn WorkingHoursRepository> =
-            Arc::new(NoopWorkingHoursRepository);
+        let working_hours_repository: Arc<dyn WorkingHoursRepository> = Arc::new(
+            opengp_infrastructure::infrastructure::database::repositories::SqlxWorkingHoursRepository::new(
+                pool.clone(),
+            ),
+        );
         let availability_service = Arc::new(AvailabilityService::new(
             appointment_repository,
             working_hours_repository,
         ));
 
-        let consultation_repository: Arc<dyn ConsultationRepository> =
-            Arc::new(MockConsultationRepository::new());
+        let consultation_repository: Arc<dyn ConsultationRepository> = Arc::new(
+            opengp_infrastructure::infrastructure::database::repositories::SqlxClinicalRepository::new(
+                pool.clone(),
+            ),
+        );
         let clinical_repositories = ClinicalRepositories {
             consultation: consultation_repository,
-            allergy: Arc::new(NoopAllergyRepository),
-            medical_history: Arc::new(NoopMedicalHistoryRepository),
-            vital_signs: Arc::new(NoopVitalSignsRepository),
-            social_history: Arc::new(NoopSocialHistoryRepository),
-            family_history: Arc::new(NoopFamilyHistoryRepository),
+            allergy: Arc::new(
+                opengp_infrastructure::infrastructure::database::repositories::SqlxAllergyRepository::new(
+                    pool.clone(),
+                ),
+            ),
+            medical_history: Arc::new(
+                opengp_infrastructure::infrastructure::database::repositories::SqlxMedicalHistoryRepository::new(
+                    pool.clone(),
+                ),
+            ),
+            vital_signs: Arc::new(
+                opengp_infrastructure::infrastructure::database::repositories::SqlxVitalSignsRepository::new(
+                    pool.clone(),
+                ),
+            ),
+            social_history: Arc::new(
+                opengp_infrastructure::infrastructure::database::repositories::SqlxSocialHistoryRepository::new(
+                    pool.clone(),
+                ),
+            ),
+            family_history: Arc::new(
+                opengp_infrastructure::infrastructure::database::repositories::SqlxFamilyHistoryRepository::new(
+                    pool.clone(),
+                ),
+            ),
         };
         let clinical_service = Arc::new(ClinicalService::new(
             clinical_repositories,
