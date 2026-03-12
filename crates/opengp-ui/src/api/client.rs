@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use opengp_domain::domain::api::{
     ApiErrorResponse, AppointmentRequest, AppointmentResponse, ConsultationRequest,
     ConsultationResponse, LoginRequest, LoginResponse, PaginatedResponse, PatientRequest,
@@ -204,6 +204,34 @@ impl ApiClient {
             .map_err(Self::map_request_error)?;
 
         Self::parse_json_response(response).await
+    }
+
+    pub async fn get_available_slots(
+        &self,
+        practitioner_id: Uuid,
+        date: NaiveDate,
+        duration: i64,
+    ) -> Result<Vec<NaiveTime>, ApiClientError> {
+        let response = self
+            .authenticated_request(Method::GET, "/api/v1/appointments/available-slots")
+            .await?
+            .query(&[
+                ("practitioner_id", practitioner_id.to_string()),
+                ("date", date.to_string()),
+                ("duration", duration.to_string()),
+            ])
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        let slot_strings = Self::parse_json_response::<Vec<String>>(response).await?;
+        slot_strings
+            .into_iter()
+            .map(|slot| {
+                NaiveTime::parse_from_str(&slot, "%H:%M:%S")
+                    .map_err(|_| ApiClientError::Unexpected)
+            })
+            .collect()
     }
 
     pub async fn get_consultations(
@@ -558,6 +586,10 @@ mod tests {
                 get(appointments_handler).post(create_appointment_handler),
             )
             .route(
+                "/api/v1/appointments/available-slots",
+                get(available_slots_handler),
+            )
+            .route(
                 "/api/v1/consultations",
                 get(consultations_handler).post(create_consultation_handler),
             )
@@ -613,6 +645,20 @@ mod tests {
             .await
             .expect("create_appointment should succeed");
         assert_eq!(created_appointment.status, "scheduled");
+
+        let available_slots = client
+            .get_available_slots(
+                sample_practitioner_id(),
+                NaiveDate::from_ymd_opt(2026, 3, 11).expect("valid date"),
+                15,
+            )
+            .await
+            .expect("get_available_slots should succeed");
+        assert_eq!(available_slots.len(), 2);
+        assert_eq!(
+            available_slots[0],
+            NaiveTime::from_hms_opt(9, 0, 0).expect("valid time")
+        );
 
         let consultations = client
             .get_consultations(sample_patient_id(), 1, 25)
@@ -763,6 +809,18 @@ mod tests {
         (StatusCode::CREATED, Json(sample_appointment_response()))
     }
 
+    async fn available_slots_handler(
+        State(state): State<TestState>,
+        headers: HeaderMap,
+        Query(_query): Query<AvailableSlotsQuery>,
+    ) -> (StatusCode, Json<Vec<String>>) {
+        capture_header(state, headers).await;
+        (
+            StatusCode::OK,
+            Json(vec!["09:00:00".to_string(), "09:15:00".to_string()]),
+        )
+    }
+
     async fn consultations_handler(
         State(state): State<TestState>,
         headers: HeaderMap,
@@ -829,6 +887,13 @@ mod tests {
         _date_from: Option<String>,
         _date_to: Option<String>,
         _practitioner_id: Option<String>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct AvailableSlotsQuery {
+        _practitioner_id: Option<String>,
+        _date: Option<String>,
+        _duration: Option<String>,
     }
 
     #[derive(Debug, Deserialize)]

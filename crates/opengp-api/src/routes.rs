@@ -58,6 +58,7 @@ pub fn router(state: ApiState) -> Router {
 
     let appointment_routes = Router::new()
         .route("/", get(list_appointments).post(create_appointment))
+        .route("/available-slots", get(get_available_slots))
         .route(
             "/{id}",
             get(get_appointment)
@@ -520,6 +521,35 @@ async fn get_appointment(
         .ok_or_else(|| not_found_response("appointment_not_found", "Appointment not found"))?;
 
     Ok((StatusCode::OK, Json(appointment_to_response(appointment))))
+}
+
+async fn get_available_slots(
+    State(state): State<ApiState>,
+    Extension(context): Extension<AuthContext>,
+    Query(query): Query<AppointmentAvailabilityQuery>,
+) -> Result<(StatusCode, Json<Vec<String>>), (StatusCode, Json<ApiErrorResponse>)> {
+    authorize_read(&context)?;
+
+    if query.duration <= 0 {
+        return Err(bad_request_response(
+            "validation_error",
+            "duration must be greater than zero",
+        ));
+    }
+
+    let slots = state
+        .services
+        .availability_service
+        .get_available_slots(query.practitioner_id, query.date, query.duration)
+        .await
+        .map_err(appointment_service_error_to_response)?;
+
+    let response_slots = slots
+        .into_iter()
+        .map(|time| time.format("%H:%M:%S").to_string())
+        .collect();
+
+    Ok((StatusCode::OK, Json(response_slots)))
 }
 
 async fn create_appointment(
@@ -1430,6 +1460,13 @@ struct AppointmentListQuery {
     date_to: Option<DateTime<Utc>>,
     #[serde(alias = "practitioner")]
     practitioner_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AppointmentAvailabilityQuery {
+    practitioner_id: Uuid,
+    date: NaiveDate,
+    duration: i64,
 }
 
 #[derive(Debug, Deserialize)]

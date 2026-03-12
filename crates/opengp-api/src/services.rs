@@ -3,7 +3,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use opengp_domain::domain::appointment::{
-    AppointmentCalendarQuery, AppointmentSearchCriteria, AppointmentService, CalendarAppointment,
+    AppointmentCalendarQuery, AppointmentSearchCriteria, AppointmentService, AvailabilityService,
+    CalendarAppointment,
 };
 use opengp_domain::domain::audit::{
     AuditEntry, AuditRepository, AuditRepositoryError, AuditService,
@@ -18,6 +19,7 @@ use opengp_domain::domain::error::RepositoryError;
 use opengp_domain::domain::patient::{PatientRepository, PatientService};
 use opengp_domain::domain::user::{
     AuthService, PasswordError, PasswordHasher, SessionRepository, UserRepository,
+    WorkingHours, WorkingHoursRepository,
 };
 #[cfg(test)]
 use opengp_domain::domain::user::{Permission, Role, User};
@@ -42,6 +44,7 @@ pub struct ApiServices {
     pub auth_service: Arc<AuthService>,
     pub patient_service: Arc<PatientService>,
     pub appointment_service: Arc<AppointmentService>,
+    pub availability_service: Arc<AvailabilityService>,
     pub clinical_service: Arc<ClinicalService>,
 }
 
@@ -74,9 +77,15 @@ impl ApiServices {
 
         let appointment_repository = Arc::new(MockAppointmentRepository::new());
         let appointment_service = Arc::new(AppointmentService::new(
-            appointment_repository,
+            appointment_repository.clone(),
             audit_service.clone(),
             Arc::new(NoopAppointmentCalendarQuery),
+        ));
+        let working_hours_repository: Arc<dyn WorkingHoursRepository> =
+            Arc::new(NoopWorkingHoursRepository);
+        let availability_service = Arc::new(AvailabilityService::new(
+            appointment_repository,
+            working_hours_repository,
         ));
 
         let consultation_repository: Arc<dyn ConsultationRepository> =
@@ -101,6 +110,7 @@ impl ApiServices {
             auth_service,
             patient_service,
             appointment_service,
+            availability_service,
             clinical_service,
         })
     }
@@ -131,6 +141,34 @@ impl AppointmentCalendarQuery for NoopAppointmentCalendarQuery {
         _criteria: &AppointmentSearchCriteria,
     ) -> Result<Vec<CalendarAppointment>, RepositoryError> {
         Ok(vec![])
+    }
+}
+
+struct NoopWorkingHoursRepository;
+
+#[async_trait]
+impl WorkingHoursRepository for NoopWorkingHoursRepository {
+    async fn find_by_practitioner(
+        &self,
+        _practitioner_id: Uuid,
+    ) -> Result<Vec<WorkingHours>, RepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn find_for_day(
+        &self,
+        _practitioner_id: Uuid,
+        _day_of_week: u8,
+    ) -> Result<Option<WorkingHours>, RepositoryError> {
+        Ok(None)
+    }
+
+    async fn save(&self, working_hours: WorkingHours) -> Result<WorkingHours, RepositoryError> {
+        Ok(working_hours)
+    }
+
+    async fn delete(&self, _id: Uuid) -> Result<(), RepositoryError> {
+        Ok(())
     }
 }
 
