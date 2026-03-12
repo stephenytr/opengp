@@ -5,7 +5,12 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use chrono::Utc;
-use opengp_domain::domain::api::{AppointmentRequest, PatientRequest, PatientResponse};
+use opengp_domain::domain::api::{
+    AllergyRequest, AllergyResponse, AppointmentRequest, ConsultationRequest, FamilyHistoryRequest,
+    FamilyHistoryResponse, MedicalHistoryRequest, MedicalHistoryResponse, PatientRequest,
+    PatientResponse, SocialHistoryRequest, SocialHistoryResponse, VitalSignsRequest,
+    VitalSignsResponse,
+};
 use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentType, AvailabilityService,
 };
@@ -348,22 +353,24 @@ async fn run_tui(
                     patient_id,
                     allergy,
                 } => {
-                    match clinical_service
-                        .add_allergy(
-                            patient_id,
-                            allergy.allergen,
-                            allergy.allergy_type,
-                            allergy.severity,
-                            allergy.reaction,
-                            allergy.notes,
-                            app.current_user_id,
-                        )
-                        .await
-                    {
+                    let request = AllergyRequest {
+                        allergen: allergy.allergen,
+                        allergy_type: allergy_type_to_api_string(allergy.allergy_type).to_string(),
+                        severity: severity_to_api_string(allergy.severity).to_string(),
+                        reaction: allergy.reaction,
+                        onset_date: allergy.onset_date,
+                        notes: allergy.notes,
+                    };
+                    match api_client.create_allergy(patient_id, &request).await {
                         Ok(_) => {
                             tracing::info!("Saved allergy for patient {}", patient_id);
-                            match clinical_service.list_allergies(patient_id, false).await {
-                                Ok(allergies) => app.clinical_state_mut().allergies = allergies,
+                            match api_client.get_allergies(patient_id).await {
+                                Ok(allergies) => {
+                                    app.clinical_state_mut().allergies = allergies
+                                        .into_iter()
+                                        .map(domain_allergy_from_api_response)
+                                        .collect()
+                                }
                                 Err(e) => {
                                     tracing::error!("Failed to reload allergies: {}", e);
                                     app.set_status_error(format!(
@@ -383,25 +390,24 @@ async fn run_tui(
                     patient_id,
                     history,
                 } => {
-                    match clinical_service
-                        .add_medical_history(
-                            patient_id,
-                            history.condition,
-                            history.status,
-                            history.severity,
-                            history.notes,
-                            app.current_user_id,
-                        )
-                        .await
-                    {
+                    let request = MedicalHistoryRequest {
+                        condition: history.condition,
+                        diagnosis_date: history.diagnosis_date,
+                        status: condition_status_to_api_string(history.status).to_string(),
+                        severity: history
+                            .severity
+                            .map(|severity| severity_to_api_string(severity).to_string()),
+                        notes: history.notes,
+                    };
+                    match api_client.create_medical_history(patient_id, &request).await {
                         Ok(_) => {
                             tracing::info!("Saved medical history for patient {}", patient_id);
-                            match clinical_service
-                                .list_medical_history(patient_id, false)
-                                .await
-                            {
+                            match api_client.get_medical_history(patient_id).await {
                                 Ok(conditions) => {
                                     app.clinical_state_mut().medical_history = conditions
+                                        .into_iter()
+                                        .map(domain_medical_history_from_api_response)
+                                        .collect()
                                 }
                                 Err(e) => {
                                     tracing::error!("Failed to reload medical history: {}", e);
@@ -419,26 +425,28 @@ async fn run_tui(
                     }
                 }
                 opengp_ui::ui::app::PendingClinicalSaveData::VitalSigns { patient_id, vitals } => {
-                    match clinical_service
-                        .record_vitals(
-                            patient_id,
-                            vitals.systolic_bp,
-                            vitals.diastolic_bp,
-                            vitals.heart_rate,
-                            vitals.respiratory_rate,
-                            vitals.temperature,
-                            vitals.oxygen_saturation,
-                            vitals.height_cm,
-                            vitals.weight_kg,
-                            vitals.notes,
-                            app.current_user_id,
-                        )
-                        .await
-                    {
+                    let request = VitalSignsRequest {
+                        consultation_id: vitals.consultation_id,
+                        systolic_bp: vitals.systolic_bp,
+                        diastolic_bp: vitals.diastolic_bp,
+                        heart_rate: vitals.heart_rate,
+                        respiratory_rate: vitals.respiratory_rate,
+                        temperature: vitals.temperature,
+                        oxygen_saturation: vitals.oxygen_saturation,
+                        height_cm: vitals.height_cm,
+                        weight_kg: vitals.weight_kg,
+                        notes: vitals.notes,
+                    };
+                    match api_client.create_vitals(patient_id, &request).await {
                         Ok(_) => {
                             tracing::info!("Saved vital signs for patient {}", patient_id);
-                            match clinical_service.list_vitals_history(patient_id, 50).await {
-                                Ok(v) => app.clinical_state_mut().vital_signs = v,
+                            match api_client.get_vitals(patient_id).await {
+                                Ok(v) => {
+                                    app.clinical_state_mut().vital_signs = v
+                                        .into_iter()
+                                        .map(domain_vital_signs_from_api_response)
+                                        .collect()
+                                }
                                 Err(e) => {
                                     tracing::error!("Failed to reload vital signs: {}", e);
                                     app.set_status_error(format!(
@@ -458,21 +466,22 @@ async fn run_tui(
                     patient_id,
                     entry,
                 } => {
-                    match clinical_service
-                        .add_family_history(
-                            patient_id,
-                            entry.relative_relationship,
-                            entry.condition,
-                            entry.age_at_diagnosis,
-                            entry.notes,
-                            app.current_user_id,
-                        )
-                        .await
-                    {
+                    let request = FamilyHistoryRequest {
+                        relative_relationship: entry.relative_relationship,
+                        condition: entry.condition,
+                        age_at_diagnosis: entry.age_at_diagnosis,
+                        notes: entry.notes,
+                    };
+                    match api_client.create_family_history(patient_id, &request).await {
                         Ok(_) => {
                             tracing::info!("Saved family history for patient {}", patient_id);
-                            match clinical_service.list_family_history(patient_id).await {
-                                Ok(entries) => app.clinical_state_mut().family_history = entries,
+                            match api_client.get_family_history(patient_id).await {
+                                Ok(entries) => {
+                                    app.clinical_state_mut().family_history = entries
+                                        .into_iter()
+                                        .map(domain_family_history_from_api_response)
+                                        .collect()
+                                }
                                 Err(e) => {
                                     tracing::error!("Failed to reload family history: {}", e);
                                     app.set_status_error(format!(
@@ -491,7 +500,7 @@ async fn run_tui(
                 opengp_ui::ui::app::PendingClinicalSaveData::Consultation {
                     patient_id,
                     practitioner_id,
-                    appointment_id: _,
+                    appointment_id,
                     reason,
                     clinical_notes,
                 } => {
@@ -500,16 +509,15 @@ async fn run_tui(
                     } else {
                         practitioner_id
                     };
-                    match clinical_service
-                        .create_consultation(
-                            patient_id,
-                            effective_practitioner_id,
-                            app.current_user_id,
-                            reason,
-                            clinical_notes,
-                        )
-                        .await
-                    {
+                    let request = ConsultationRequest {
+                        patient_id,
+                        practitioner_id: effective_practitioner_id,
+                        appointment_id,
+                        reason,
+                        clinical_notes,
+                        version: 1,
+                    };
+                    match api_client.create_consultation(&request).await {
                         Ok(consultation) => {
                             tracing::info!(
                                 "Created consultation {} for patient {}",
@@ -528,28 +536,30 @@ async fn run_tui(
                     patient_id,
                     history,
                 } => {
-                    match clinical_service
-                        .update_social_history(
-                            patient_id,
-                            history.smoking_status,
-                            history.cigarettes_per_day,
-                            history.smoking_quit_date,
-                            history.alcohol_status,
-                            history.standard_drinks_per_week,
-                            history.exercise_frequency,
-                            history.occupation,
-                            history.living_situation,
-                            history.support_network,
-                            history.notes,
-                            app.current_user_id,
-                        )
-                        .await
-                    {
+                    let request = SocialHistoryRequest {
+                        smoking_status: smoking_status_to_api_string(history.smoking_status)
+                            .to_string(),
+                        cigarettes_per_day: history.cigarettes_per_day,
+                        smoking_quit_date: history.smoking_quit_date,
+                        alcohol_status: alcohol_status_to_api_string(history.alcohol_status)
+                            .to_string(),
+                        standard_drinks_per_week: history.standard_drinks_per_week,
+                        exercise_frequency: history
+                            .exercise_frequency
+                            .map(|frequency| exercise_frequency_to_api_string(frequency).to_string()),
+                        occupation: history.occupation,
+                        living_situation: history.living_situation,
+                        support_network: history.support_network,
+                        notes: history.notes,
+                    };
+                    match api_client.update_social_history(patient_id, &request).await {
                         Ok(_) => {
                             tracing::info!("Saved social history for patient {}", patient_id);
-                            match clinical_service.get_social_history(patient_id).await {
-                                Ok(Some(sh)) => app.clinical_state_mut().social_history = Some(sh),
-                                Ok(None) => app.clinical_state_mut().social_history = None,
+                            match api_client.get_social_history(patient_id).await {
+                                Ok(sh) => {
+                                    app.clinical_state_mut().social_history =
+                                        Some(domain_social_history_from_api_response(sh))
+                                }
                                 Err(e) => {
                                     tracing::error!("Failed to reload social history: {}", e);
                                     app.set_status_error(format!(
@@ -573,44 +583,54 @@ async fn run_tui(
 
             app.request_refresh_consultations(patient_id);
 
-            match clinical_service.list_allergies(patient_id, false).await {
+            match api_client.get_allergies(patient_id).await {
                 Ok(allergies) => {
-                    app.clinical_state_mut().allergies = allergies;
+                    app.clinical_state_mut().allergies = allergies
+                        .into_iter()
+                        .map(domain_allergy_from_api_response)
+                        .collect();
                     tracing::info!("Loaded allergies for clinical view");
                 }
                 Err(e) => tracing::error!("Failed to load allergies: {}", e),
             }
 
-            match clinical_service
-                .list_medical_history(patient_id, false)
-                .await
-            {
+            match api_client.get_medical_history(patient_id).await {
                 Ok(conditions) => {
-                    app.clinical_state_mut().medical_history = conditions;
+                    app.clinical_state_mut().medical_history = conditions
+                        .into_iter()
+                        .map(domain_medical_history_from_api_response)
+                        .collect();
                     tracing::info!("Loaded medical history for clinical view");
                 }
                 Err(e) => tracing::error!("Failed to load medical history: {}", e),
             }
 
-            match clinical_service.list_vitals_history(patient_id, 50).await {
+            match api_client.get_vitals(patient_id).await {
                 Ok(vitals) => {
-                    app.clinical_state_mut().vital_signs = vitals;
+                    app.clinical_state_mut().vital_signs = vitals
+                        .into_iter()
+                        .map(domain_vital_signs_from_api_response)
+                        .collect();
                     tracing::info!("Loaded vital signs for clinical view");
                 }
                 Err(e) => tracing::error!("Failed to load vital signs: {}", e),
             }
 
-            match clinical_service.get_social_history(patient_id).await {
+            match api_client.get_social_history(patient_id).await {
                 Ok(history) => {
-                    app.clinical_state_mut().social_history = history;
+                    app.clinical_state_mut().social_history =
+                        Some(domain_social_history_from_api_response(history));
                     tracing::info!("Loaded social history for clinical view");
                 }
                 Err(e) => tracing::error!("Failed to load social history: {}", e),
             }
 
-            match clinical_service.list_family_history(patient_id).await {
+            match api_client.get_family_history(patient_id).await {
                 Ok(entries) => {
-                    app.clinical_state_mut().family_history = entries;
+                    app.clinical_state_mut().family_history = entries
+                        .into_iter()
+                        .map(domain_family_history_from_api_response)
+                        .collect();
                     tracing::info!("Loaded family history for clinical view");
                 }
                 Err(e) => tracing::error!("Failed to load family history: {}", e),
@@ -755,6 +775,106 @@ fn domain_patient_from_api_response(response: PatientResponse) -> Patient {
     }
 }
 
+fn domain_allergy_from_api_response(response: AllergyResponse) -> opengp_domain::domain::clinical::Allergy {
+    opengp_domain::domain::clinical::Allergy {
+        id: response.id,
+        patient_id: response.patient_id,
+        allergen: response.allergen,
+        allergy_type: parse_api_allergy_type(&response.allergy_type),
+        severity: parse_api_severity(&response.severity),
+        reaction: response.reaction,
+        onset_date: response.onset_date,
+        notes: response.notes,
+        is_active: response.is_active,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        created_by: uuid::Uuid::nil(),
+        updated_by: None,
+    }
+}
+
+fn domain_medical_history_from_api_response(
+    response: MedicalHistoryResponse,
+) -> opengp_domain::domain::clinical::MedicalHistory {
+    opengp_domain::domain::clinical::MedicalHistory {
+        id: response.id,
+        patient_id: response.patient_id,
+        condition: response.condition,
+        diagnosis_date: response.diagnosis_date,
+        status: parse_api_condition_status(&response.status),
+        severity: response
+            .severity
+            .map(|severity| parse_api_severity(&severity)),
+        notes: response.notes,
+        is_active: response.is_active,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        created_by: uuid::Uuid::nil(),
+        updated_by: None,
+    }
+}
+
+fn domain_vital_signs_from_api_response(
+    response: VitalSignsResponse,
+) -> opengp_domain::domain::clinical::VitalSigns {
+    opengp_domain::domain::clinical::VitalSigns {
+        id: response.id,
+        patient_id: response.patient_id,
+        consultation_id: response.consultation_id,
+        measured_at: response.measured_at,
+        systolic_bp: response.systolic_bp,
+        diastolic_bp: response.diastolic_bp,
+        heart_rate: response.heart_rate,
+        respiratory_rate: response.respiratory_rate,
+        temperature: response.temperature,
+        oxygen_saturation: response.oxygen_saturation,
+        height_cm: response.height_cm,
+        weight_kg: response.weight_kg,
+        bmi: response.bmi,
+        notes: response.notes,
+        created_at: response.measured_at,
+        created_by: uuid::Uuid::nil(),
+    }
+}
+
+fn domain_social_history_from_api_response(
+    response: SocialHistoryResponse,
+) -> opengp_domain::domain::clinical::SocialHistory {
+    opengp_domain::domain::clinical::SocialHistory {
+        id: response.id,
+        patient_id: response.patient_id,
+        smoking_status: parse_api_smoking_status(&response.smoking_status),
+        cigarettes_per_day: response.cigarettes_per_day,
+        smoking_quit_date: response.smoking_quit_date,
+        alcohol_status: parse_api_alcohol_status(&response.alcohol_status),
+        standard_drinks_per_week: response.standard_drinks_per_week,
+        exercise_frequency: response
+            .exercise_frequency
+            .map(|frequency| parse_api_exercise_frequency(&frequency)),
+        occupation: response.occupation,
+        living_situation: response.living_situation,
+        support_network: response.support_network,
+        notes: response.notes,
+        updated_at: response.updated_at,
+        updated_by: response.updated_by,
+    }
+}
+
+fn domain_family_history_from_api_response(
+    response: FamilyHistoryResponse,
+) -> opengp_domain::domain::clinical::FamilyHistory {
+    opengp_domain::domain::clinical::FamilyHistory {
+        id: response.id,
+        patient_id: response.patient_id,
+        relative_relationship: response.relative_relationship,
+        condition: response.condition,
+        age_at_diagnosis: response.age_at_diagnosis,
+        notes: response.notes,
+        created_at: response.created_at,
+        created_by: response.created_by,
+    }
+}
+
 fn gender_to_api_string(gender: Gender) -> String {
     match gender {
         Gender::Male => "male".to_string(),
@@ -782,6 +902,72 @@ fn appointment_type_to_api_string(appointment_type: AppointmentType) -> &'static
     }
 }
 
+fn allergy_type_to_api_string(allergy_type: opengp_domain::domain::clinical::AllergyType) -> &'static str {
+    match allergy_type {
+        opengp_domain::domain::clinical::AllergyType::Drug => "drug",
+        opengp_domain::domain::clinical::AllergyType::Food => "food",
+        opengp_domain::domain::clinical::AllergyType::Environmental => "environmental",
+        opengp_domain::domain::clinical::AllergyType::Other => "other",
+    }
+}
+
+fn severity_to_api_string(severity: opengp_domain::domain::clinical::Severity) -> &'static str {
+    match severity {
+        opengp_domain::domain::clinical::Severity::Mild => "mild",
+        opengp_domain::domain::clinical::Severity::Moderate => "moderate",
+        opengp_domain::domain::clinical::Severity::Severe => "severe",
+    }
+}
+
+fn condition_status_to_api_string(
+    condition_status: opengp_domain::domain::clinical::ConditionStatus,
+) -> &'static str {
+    match condition_status {
+        opengp_domain::domain::clinical::ConditionStatus::Active => "active",
+        opengp_domain::domain::clinical::ConditionStatus::Resolved => "resolved",
+        opengp_domain::domain::clinical::ConditionStatus::Chronic => "chronic",
+        opengp_domain::domain::clinical::ConditionStatus::Recurring => "recurring",
+        opengp_domain::domain::clinical::ConditionStatus::InRemission => "in_remission",
+    }
+}
+
+fn smoking_status_to_api_string(
+    smoking_status: opengp_domain::domain::clinical::SmokingStatus,
+) -> &'static str {
+    match smoking_status {
+        opengp_domain::domain::clinical::SmokingStatus::NeverSmoked => "never_smoked",
+        opengp_domain::domain::clinical::SmokingStatus::CurrentSmoker => "current_smoker",
+        opengp_domain::domain::clinical::SmokingStatus::ExSmoker => "ex_smoker",
+    }
+}
+
+fn alcohol_status_to_api_string(
+    alcohol_status: opengp_domain::domain::clinical::AlcoholStatus,
+) -> &'static str {
+    match alcohol_status {
+        opengp_domain::domain::clinical::AlcoholStatus::None => "none",
+        opengp_domain::domain::clinical::AlcoholStatus::Occasional => "occasional",
+        opengp_domain::domain::clinical::AlcoholStatus::Moderate => "moderate",
+        opengp_domain::domain::clinical::AlcoholStatus::Heavy => "heavy",
+    }
+}
+
+fn exercise_frequency_to_api_string(
+    exercise_frequency: opengp_domain::domain::clinical::ExerciseFrequency,
+) -> &'static str {
+    match exercise_frequency {
+        opengp_domain::domain::clinical::ExerciseFrequency::None => "none",
+        opengp_domain::domain::clinical::ExerciseFrequency::Rarely => "rarely",
+        opengp_domain::domain::clinical::ExerciseFrequency::OnceOrTwicePerWeek => {
+            "once_or_twice_per_week"
+        }
+        opengp_domain::domain::clinical::ExerciseFrequency::ThreeToFiveTimes => {
+            "three_to_five_times"
+        }
+        opengp_domain::domain::clinical::ExerciseFrequency::Daily => "daily",
+    }
+}
+
 fn parse_api_gender(gender: &str) -> Gender {
     match gender.trim().to_ascii_lowercase().as_str() {
         "male" => Gender::Male,
@@ -789,6 +975,80 @@ fn parse_api_gender(gender: &str) -> Gender {
         "other" => Gender::Other,
         "prefer_not_to_say" | "prefer-not-to-say" => Gender::PreferNotToSay,
         _ => Gender::PreferNotToSay,
+    }
+}
+
+fn parse_api_allergy_type(allergy_type: &str) -> opengp_domain::domain::clinical::AllergyType {
+    match allergy_type.trim().to_ascii_lowercase().as_str() {
+        "drug" => opengp_domain::domain::clinical::AllergyType::Drug,
+        "food" => opengp_domain::domain::clinical::AllergyType::Food,
+        "environmental" => opengp_domain::domain::clinical::AllergyType::Environmental,
+        _ => opengp_domain::domain::clinical::AllergyType::Other,
+    }
+}
+
+fn parse_api_severity(severity: &str) -> opengp_domain::domain::clinical::Severity {
+    match severity.trim().to_ascii_lowercase().as_str() {
+        "mild" => opengp_domain::domain::clinical::Severity::Mild,
+        "moderate" => opengp_domain::domain::clinical::Severity::Moderate,
+        _ => opengp_domain::domain::clinical::Severity::Severe,
+    }
+}
+
+fn parse_api_condition_status(
+    condition_status: &str,
+) -> opengp_domain::domain::clinical::ConditionStatus {
+    match condition_status.trim().to_ascii_lowercase().as_str() {
+        "active" => opengp_domain::domain::clinical::ConditionStatus::Active,
+        "resolved" => opengp_domain::domain::clinical::ConditionStatus::Resolved,
+        "chronic" => opengp_domain::domain::clinical::ConditionStatus::Chronic,
+        "recurring" => opengp_domain::domain::clinical::ConditionStatus::Recurring,
+        "in_remission" | "in-remission" => {
+            opengp_domain::domain::clinical::ConditionStatus::InRemission
+        }
+        _ => opengp_domain::domain::clinical::ConditionStatus::Active,
+    }
+}
+
+fn parse_api_smoking_status(
+    smoking_status: &str,
+) -> opengp_domain::domain::clinical::SmokingStatus {
+    match smoking_status.trim().to_ascii_lowercase().as_str() {
+        "never_smoked" | "never-smoked" => opengp_domain::domain::clinical::SmokingStatus::NeverSmoked,
+        "current_smoker" | "current-smoker" => {
+            opengp_domain::domain::clinical::SmokingStatus::CurrentSmoker
+        }
+        "ex_smoker" | "ex-smoker" => opengp_domain::domain::clinical::SmokingStatus::ExSmoker,
+        _ => opengp_domain::domain::clinical::SmokingStatus::NeverSmoked,
+    }
+}
+
+fn parse_api_alcohol_status(
+    alcohol_status: &str,
+) -> opengp_domain::domain::clinical::AlcoholStatus {
+    match alcohol_status.trim().to_ascii_lowercase().as_str() {
+        "none" => opengp_domain::domain::clinical::AlcoholStatus::None,
+        "occasional" => opengp_domain::domain::clinical::AlcoholStatus::Occasional,
+        "moderate" => opengp_domain::domain::clinical::AlcoholStatus::Moderate,
+        "heavy" => opengp_domain::domain::clinical::AlcoholStatus::Heavy,
+        _ => opengp_domain::domain::clinical::AlcoholStatus::None,
+    }
+}
+
+fn parse_api_exercise_frequency(
+    exercise_frequency: &str,
+) -> opengp_domain::domain::clinical::ExerciseFrequency {
+    match exercise_frequency.trim().to_ascii_lowercase().as_str() {
+        "none" => opengp_domain::domain::clinical::ExerciseFrequency::None,
+        "rarely" => opengp_domain::domain::clinical::ExerciseFrequency::Rarely,
+        "once_or_twice_per_week" | "once-or-twice-per-week" => {
+            opengp_domain::domain::clinical::ExerciseFrequency::OnceOrTwicePerWeek
+        }
+        "three_to_five_times" | "three-to-five-times" => {
+            opengp_domain::domain::clinical::ExerciseFrequency::ThreeToFiveTimes
+        }
+        "daily" => opengp_domain::domain::clinical::ExerciseFrequency::Daily,
+        _ => opengp_domain::domain::clinical::ExerciseFrequency::None,
     }
 }
 
