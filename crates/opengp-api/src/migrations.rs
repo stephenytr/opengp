@@ -18,6 +18,11 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), crate::ApiError> {
     
     entries.sort_by_key(|e| e.file_name());
 
+    let mut conn = pool
+        .acquire()
+        .await
+        .map_err(|e| crate::ApiError::Configuration(format!("Failed to acquire migration connection: {e}")))?;
+
     for entry in entries {
         let path = entry.path();
         let sql = std::fs::read_to_string(&path)
@@ -26,7 +31,7 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), crate::ApiError> {
         if !sql.trim().is_empty() {
             // Execute the entire SQL file as a single statement to preserve DO $$ ... $$; blocks
             // which contain internal semicolons that would break statement splitting
-            let result = sqlx::raw_sql(&sql).execute(pool).await;
+            let result = sqlx::raw_sql(&sql).execute(&mut *conn).await;
             if let Err(e) = result {
                 if !e.to_string().contains("duplicate key") {
                     return Err(crate::ApiError::Configuration(format!(
