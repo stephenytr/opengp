@@ -134,6 +134,7 @@ impl App {
             match action {
                 Action::SwitchToPatient => {
                     self.tab_bar.select(Tab::Patient);
+                    self.previous_tab = Tab::Patient;
                     self.refresh_status_bar();
                     self.refresh_context();
                 }
@@ -142,11 +143,17 @@ impl App {
                     let today = chrono::Utc::now().date_naive();
                     self.appointment_state.selected_date = Some(today);
                     self.pending_appointment_date = Some(today);
+                    // Auto-refresh appointments when switching to Appointment tab
+                    if self.previous_tab != Tab::Appointment {
+                        self.request_refresh_appointments(today);
+                    }
+                    self.previous_tab = Tab::Appointment;
                     self.refresh_status_bar();
                     self.refresh_context();
                 }
                 Action::SwitchToClinical => {
                     self.tab_bar.select(Tab::Clinical);
+                    self.previous_tab = Tab::Clinical;
                     if let Some(patient_id) = self.patient_list.selected_patient_id() {
                         self.clinical_state.set_patient(patient_id);
                     }
@@ -156,6 +163,7 @@ impl App {
                 }
                 Action::SwitchToBilling => {
                     self.tab_bar.select(Tab::Billing);
+                    self.previous_tab = Tab::Billing;
                     self.refresh_status_bar();
                     self.refresh_context();
                 }

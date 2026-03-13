@@ -33,6 +33,8 @@ type AppointmentListFetchTask =
     >;
 type ConsultationListFetchTask =
     tokio::task::JoinHandle<Result<Vec<opengp_domain::domain::clinical::Consultation>, ApiTaskError>>;
+type PractitionerListFetchTask =
+    tokio::task::JoinHandle<Result<Vec<opengp_domain::domain::user::Practitioner>, ApiTaskError>>;
 type LoginTask = tokio::task::JoinHandle<
     Result<opengp_domain::domain::api::LoginResponse, crate::api::ApiClientError>,
 >;
@@ -63,6 +65,7 @@ pub struct App {
     theme: Theme,
     keybinds: &'static KeybindRegistry,
     tab_bar: TabBar,
+    previous_tab: Tab,
     status_bar: StatusBar,
     help_overlay: HelpOverlay,
     login_screen: crate::ui::screens::LoginScreen,
@@ -105,9 +108,11 @@ pub struct App {
     pending_patient_list_refresh: bool,
     pending_appointment_list_refresh: Option<NaiveDate>,
     pending_consultation_list_refresh: Option<uuid::Uuid>,
+    pending_practitioners_list_refresh: bool,
     patient_list_fetch_task: Option<PatientListFetchTask>,
     appointment_list_fetch_task: Option<AppointmentListFetchTask>,
     consultation_list_fetch_task: Option<ConsultationListFetchTask>,
+    practitioners_list_fetch_task: Option<PractitionerListFetchTask>,
     pending_login_request: Option<(String, String)>,
     login_task: Option<LoginTask>,
     server_unavailable_error: Option<String>,
@@ -184,6 +189,7 @@ impl App {
             theme: theme.clone(),
             keybinds: KeybindRegistry::global(),
             tab_bar: TabBar::new(theme.clone()),
+            previous_tab: Tab::Patient,
             status_bar: StatusBar::patient_list(theme.clone()),
             help_overlay: HelpOverlay::new(theme.clone()),
             login_screen: crate::ui::screens::LoginScreen::new(theme.clone()),
@@ -219,9 +225,11 @@ impl App {
             pending_patient_list_refresh: false,
             pending_appointment_list_refresh: None,
             pending_consultation_list_refresh: None,
+            pending_practitioners_list_refresh: false,
             patient_list_fetch_task: None,
             appointment_list_fetch_task: None,
             consultation_list_fetch_task: None,
+            practitioners_list_fetch_task: None,
             pending_login_request: None,
             login_task: None,
             server_unavailable_error: None,

@@ -24,10 +24,15 @@ impl App {
 
     pub fn request_refresh_appointments(&mut self, date: NaiveDate) {
         self.pending_appointment_list_refresh = Some(date);
+        self.request_refresh_practitioners();
     }
 
     pub fn request_refresh_consultations(&mut self, patient_id: uuid::Uuid) {
         self.pending_consultation_list_refresh = Some(patient_id);
+    }
+
+    pub fn request_refresh_practitioners(&mut self) {
+        self.pending_practitioners_list_refresh = true;
     }
 
     pub async fn poll_api_tasks(&mut self) {
@@ -178,6 +183,35 @@ impl App {
                 }
             }
         }
+
+        if self
+            .practitioners_list_fetch_task
+            .as_ref()
+            .is_some_and(tokio::task::JoinHandle::is_finished)
+        {
+            let handle = self
+                .practitioners_list_fetch_task
+                .take()
+                .expect("task exists");
+
+            match handle.await {
+                Ok(Ok(practitioners)) => {
+                    self.appointment_state.practitioners = practitioners;
+                    self.clear_server_unavailable_error();
+                    self.status_bar.clear_error();
+                }
+                Ok(Err(err)) => {
+                    self.handle_api_task_error(err, None).await
+                }
+                Err(err) => {
+                    self.handle_api_task_error(ApiTaskError::message(format!(
+                        "Failed to load practitioners: {}",
+                        err
+                    )), None)
+                    .await;
+                }
+            }
+        }
     }
 
     async fn handle_api_task_error(&mut self, error: ApiTaskError, retry: Option<RetryOperation>) {
@@ -272,6 +306,15 @@ impl App {
                     fetch_consultations(api_client, patient_id, page_limit).await
                 }));
             }
+        }
+
+        if self.pending_practitioners_list_refresh && self.practitioners_list_fetch_task.is_none() {
+            self.pending_practitioners_list_refresh = false;
+
+            let api_client = self.api_client.clone().expect("api client already checked");
+            self.practitioners_list_fetch_task = Some(tokio::spawn(async move {
+                fetch_practitioners(api_client).await
+            }));
         }
     }
 
@@ -613,6 +656,73 @@ async fn fetch_consultations(
     }
 
     Ok(collected)
+}
+
+async fn fetch_practitioners(
+    api_client: std::sync::Arc<crate::api::ApiClient>,
+) -> Result<Vec<opengp_domain::domain::user::Practitioner>, ApiTaskError> {
+    tracing::debug!("UI fetch_practitioners requesting API");
+    let response = match api_client.get_practitioners().await {
+        Ok(response) => {
+            tracing::debug!(
+                response_count = response.len(),
+                "UI fetch_practitioners received API response"
+            );
+            response
+        }
+        Err(error) => {
+            tracing::error!(
+                error = %error,
+                "UI fetch_practitioners API request failed"
+            );
+            return Err(ApiTaskError::from_client_error(
+                error,
+                "Failed to fetch practitioners",
+            ));
+        }
+    };
+
+    let now = chrono::Utc::now();
+    let practitioners: Vec<opengp_domain::domain::user::Practitioner> = response
+        .into_iter()
+        .map(|p| {
+            let (first_name, last_name) = if let Some(space_idx) = p.name.rfind(' ') {
+                (
+                    p.name[..space_idx].to_string(),
+                    p.name[space_idx + 1..].to_string(),
+                )
+            } else {
+                (p.name.clone(), String::new())
+            };
+
+            opengp_domain::domain::user::Practitioner {
+                id: p.id,
+                user_id: None,
+                first_name,
+                middle_name: None,
+                last_name,
+                title: String::new(),
+                hpi_i: None,
+                ahpra_registration: None,
+                prescriber_number: None,
+                provider_number: String::new(),
+                speciality: Some(p.specialty),
+                qualifications: Vec::new(),
+                phone: None,
+                email: None,
+                is_active: true,
+                created_at: now,
+                updated_at: now,
+            }
+        })
+        .collect();
+
+    tracing::debug!(
+        total_collected = practitioners.len(),
+        "UI fetch_practitioners completed"
+    );
+
+    Ok(practitioners)
 }
 
 fn parse_gender(value: &str) -> Gender {
