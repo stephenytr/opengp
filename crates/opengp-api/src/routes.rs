@@ -308,21 +308,42 @@ async fn list_patients(
     let page = query.page.unwrap_or(1).max(1);
     let limit = query.limit.unwrap_or(25).clamp(1, 100);
 
+    tracing::debug!(user_id = %context.user_id, page, limit, "Handling list_patients request");
+
     let patients = state
         .services
         .patient_service
         .list_active_patients()
         .await
-        .map_err(patient_service_error_to_response)?;
+        .map_err(|err| {
+            tracing::error!(
+                user_id = %context.user_id,
+                page,
+                limit,
+                error = %err,
+                "list_patients failed while retrieving active patients"
+            );
+            patient_service_error_to_response(err)
+        })?;
 
     let total = patients.len() as u64;
+    tracing::debug!(user_id = %context.user_id, page, limit, total, "list_patients retrieved active patient set");
     let offset = ((page - 1) * limit) as usize;
-    let data = patients
+    let data: Vec<PatientResponse> = patients
         .into_iter()
         .skip(offset)
         .take(limit as usize)
         .map(patient_to_response)
         .collect();
+
+    tracing::debug!(
+        user_id = %context.user_id,
+        page,
+        limit,
+        total,
+        returned_count = data.len(),
+        "list_patients returning paginated response"
+    );
 
     Ok((
         StatusCode::OK,

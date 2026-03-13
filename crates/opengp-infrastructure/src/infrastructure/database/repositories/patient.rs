@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::postgres::PgPool;
 use sqlx::FromRow;
+use tracing::{debug, error};
 use uuid::Uuid;
 
 use crate::infrastructure::crypto::EncryptionService;
@@ -49,15 +50,31 @@ struct PatientRow {
 
 impl PatientRow {
     fn into_patient(self, crypto: &EncryptionService) -> Result<Patient, RepositoryError> {
+        let patient_id = self.id;
+
         // Try to decrypt, but fall back to plain text if decryption fails
         // This handles both encrypted and unencrypted seed data
         let ihi = match self.ihi {
             Some(data) => {
+                debug!(patient_id = %patient_id, field = "ihi", "Attempting to decrypt patient field");
                 match crypto.decrypt(&data) {
-                    Ok(decrypted) => Some(decrypted),
-                    Err(_) => {
+                    Ok(decrypted) => {
+                        debug!(patient_id = %patient_id, field = "ihi", "Decryption succeeded");
+                        Some(decrypted)
+                    }
+                    Err(err) => {
+                        error!(patient_id = %patient_id, field = "ihi", error = %err, "Decryption failed, attempting plaintext fallback");
                         // Decryption failed - try to interpret as plain text
-                        String::from_utf8(data).ok()
+                        match String::from_utf8(data) {
+                            Ok(plain) => {
+                                debug!(patient_id = %patient_id, field = "ihi", "Plaintext fallback succeeded");
+                                Some(plain)
+                            }
+                            Err(utf8_err) => {
+                                error!(patient_id = %patient_id, field = "ihi", error = %utf8_err, "Plaintext fallback failed");
+                                None
+                            }
+                        }
                     }
                 }
             }
@@ -66,16 +83,32 @@ impl PatientRow {
 
         let medicare_number = match self.medicare_number {
             Some(data) => {
+                debug!(patient_id = %patient_id, field = "medicare_number", "Attempting to decrypt patient field");
                 match crypto.decrypt(&data) {
-                    Ok(decrypted) => Some(decrypted),
-                    Err(_) => {
+                    Ok(decrypted) => {
+                        debug!(patient_id = %patient_id, field = "medicare_number", "Decryption succeeded");
+                        Some(decrypted)
+                    }
+                    Err(err) => {
+                        error!(patient_id = %patient_id, field = "medicare_number", error = %err, "Decryption failed, attempting plaintext fallback");
                         // Decryption failed - try to interpret as plain text
-                        String::from_utf8(data).ok()
+                        match String::from_utf8(data) {
+                            Ok(plain) => {
+                                debug!(patient_id = %patient_id, field = "medicare_number", "Plaintext fallback succeeded");
+                                Some(plain)
+                            }
+                            Err(utf8_err) => {
+                                error!(patient_id = %patient_id, field = "medicare_number", error = %utf8_err, "Plaintext fallback failed");
+                                None
+                            }
+                        }
                     }
                 }
             }
             None => None,
         };
+
+        debug!(patient_id = %patient_id, "Patient row converted into domain model");
 
         Ok(Patient {
             id: self.id,
@@ -184,17 +217,34 @@ impl PatientRepository for SqlxPatientRepository {
     }
 
     async fn list_active(&self) -> Result<Vec<Patient>, RepositoryError> {
+        debug!("Executing patient list_active query");
         let rows = sqlx::query_as::<_, PatientRow>(&format!(
             "{} WHERE is_active = TRUE ORDER BY last_name, first_name",
             PATIENT_SELECT_QUERY
         ))
         .fetch_all(&self.pool)
         .await
-        .map_err(sqlx_to_patient_error)?;
+        .map_err(|err| {
+            error!(error = %err, "Patient list_active query failed");
+            sqlx_to_patient_error(err)
+        })?;
 
-        rows.into_iter()
-            .map(|r| r.into_patient(&self.crypto))
-            .collect()
+        debug!(row_count = rows.len(), "Patient list_active query returned rows");
+
+        let mut patients = Vec::with_capacity(rows.len());
+        for row in rows {
+            match row.into_patient(&self.crypto) {
+                Ok(patient) => patients.push(patient),
+                Err(err) => {
+                    error!(error = %err, "Failed converting patient row into domain model");
+                    return Err(err);
+                }
+            }
+        }
+
+        debug!(patient_count = patients.len(), "Patient list_active returning converted patients");
+
+        Ok(patients)
     }
 
     async fn search(&self, query: &str) -> Result<Vec<Patient>, RepositoryError> {

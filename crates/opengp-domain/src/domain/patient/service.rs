@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::service;
@@ -111,7 +111,12 @@ impl PatientService {
     }
 
     pub async fn list_active_patients(&self) -> Result<Vec<Patient>, ServiceError> {
-        let patients = self.repository.list_active().await?;
+        debug!("Listing active patients from repository");
+        let patients = self.repository.list_active().await.map_err(|err| {
+            error!(error = %err, "Failed to list active patients from repository");
+            ServiceError::from(err)
+        })?;
+        debug!(patient_count = patients.len(), "Successfully listed active patients");
         Ok(patients)
     }
 

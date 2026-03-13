@@ -424,11 +424,35 @@ async fn fetch_patients(
     let mut collected = Vec::new();
 
     loop {
-        let response = api_client
-            .get_patients(page, limit)
-            .await
-            .map_err(|e| ApiTaskError::from_client_error(e, "Failed to fetch patients"))?;
+        tracing::debug!(page, limit, "UI fetch_patients requesting API page");
+        let response = match api_client.get_patients(page, limit).await {
+            Ok(response) => {
+                tracing::debug!(
+                    page,
+                    limit,
+                    response_page = response.page,
+                    response_limit = response.limit,
+                    response_total = response.total,
+                    response_count = response.data.len(),
+                    "UI fetch_patients received API response"
+                );
+                response
+            }
+            Err(error) => {
+                tracing::error!(
+                    page,
+                    limit,
+                    error = %error,
+                    "UI fetch_patients API request failed"
+                );
+                return Err(ApiTaskError::from_client_error(
+                    error,
+                    "Failed to fetch patients",
+                ));
+            }
+        };
         let page_count = response.data.len();
+        let response_total = response.total;
 
         for patient in response.data {
             collected.push(PatientListItem {
@@ -443,12 +467,23 @@ async fn fetch_patients(
             });
         }
 
-        if collected.len() as u64 >= response.total || page_count == 0 {
+        tracing::debug!(
+            page,
+            limit,
+            collected_count = collected.len(),
+            response_total,
+            page_count,
+            "UI fetch_patients accumulated patient results"
+        );
+
+        if collected.len() as u64 >= response_total || page_count == 0 {
             break;
         }
 
         page += 1;
     }
+
+    tracing::debug!(total_collected = collected.len(), "UI fetch_patients completed");
 
     Ok(collected)
 }
