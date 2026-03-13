@@ -20,6 +20,7 @@ struct PatientRow {
     id: Uuid,
     ihi: Option<Vec<u8>>,
     medicare_number: Option<Vec<u8>>,
+    #[sqlx(default)]
     medicare_irn: Option<i32>,
     medicare_expiry: Option<NaiveDate>,
     title: Option<String>,

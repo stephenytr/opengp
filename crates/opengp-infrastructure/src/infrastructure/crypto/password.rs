@@ -1,48 +1,38 @@
-use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, SaltString},
-    Argon2, PasswordHasher as ArgonPasswordHasher, PasswordVerifier,
-};
+use bcrypt::{hash, verify, DEFAULT_COST};
 use opengp_domain::user::{PasswordError, PasswordHasher};
 
 #[derive(Debug, Clone)]
-pub struct Argon2PasswordHasher {
-    argon2: Argon2<'static>,
-}
+pub struct BcryptPasswordHasher;
 
-impl Default for Argon2PasswordHasher {
+impl Default for BcryptPasswordHasher {
     fn default() -> Self {
-        Self {
-            argon2: Argon2::default(),
-        }
+        Self
     }
 }
 
-impl Argon2PasswordHasher {
+impl BcryptPasswordHasher {
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl PasswordHasher for Argon2PasswordHasher {
+impl PasswordHasher for BcryptPasswordHasher {
     fn hash_password(&self, password: &str) -> Result<String, PasswordError> {
         if password.is_empty() {
             return Err(PasswordError::EmptyPassword);
         }
 
-        let salt = SaltString::generate(&mut OsRng);
-        self.argon2
-            .hash_password(password.as_bytes(), &salt)
-            .map(|hash| hash.to_string())
-            .map_err(|_| PasswordError::HashingFailed)
+        hash(password, DEFAULT_COST).map_err(|_| PasswordError::HashingFailed)
     }
 
     fn verify_password(&self, password_hash: &str, password: &str) -> Result<(), PasswordError> {
-        let parsed_hash =
-            PasswordHash::new(password_hash).map_err(|_| PasswordError::InvalidHash)?;
-
-        self.argon2
-            .verify_password(password.as_bytes(), &parsed_hash)
-            .map_err(|_| PasswordError::VerificationFailed)
+        let result =
+            verify(password, password_hash).map_err(|_| PasswordError::VerificationFailed)?;
+        if result {
+            Ok(())
+        } else {
+            Err(PasswordError::VerificationFailed)
+        }
     }
 }
 
@@ -52,17 +42,18 @@ mod tests {
 
     #[test]
     fn hash_password_uses_unique_salt_for_same_input() {
-        let hasher = Argon2PasswordHasher::new();
+        let hasher = BcryptPasswordHasher::new();
 
         let hash1 = hasher.hash_password("test123").unwrap();
         let hash2 = hasher.hash_password("test123").unwrap();
 
+        // Same password with different salts produces different hashes
         assert_ne!(hash1, hash2);
     }
 
     #[test]
     fn verify_password_succeeds_for_correct_password() {
-        let hasher = Argon2PasswordHasher::new();
+        let hasher = BcryptPasswordHasher::new();
         let hash = hasher.hash_password("test123").unwrap();
 
         assert!(hasher.verify_password(&hash, "test123").is_ok());
@@ -70,7 +61,7 @@ mod tests {
 
     #[test]
     fn verify_password_fails_for_wrong_password() {
-        let hasher = Argon2PasswordHasher::new();
+        let hasher = BcryptPasswordHasher::new();
         let hash = hasher.hash_password("test123").unwrap();
 
         assert!(matches!(
@@ -78,4 +69,20 @@ mod tests {
             Err(PasswordError::VerificationFailed)
         ));
     }
+}
+
+#[test]
+fn print_hash() {
+    let hasher = BcryptPasswordHasher::new();
+    let hash = hasher.hash_password("test123").unwrap();
+    println!("TEST123_HASH: {}", hash);
+    let hash2 = hasher.hash_password("password").unwrap();
+    println!("PASSWORD_HASH: {}", hash2);
+}
+
+#[test]
+fn print_bannana_hash() {
+    let hasher = BcryptPasswordHasher::new();
+    let hash = hasher.hash_password("bannana").unwrap();
+    println!("BANNANA_HASH: {}", hash);
 }

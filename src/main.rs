@@ -503,23 +503,25 @@ async fn run_tui(
             app.clinical_state_mut().set_loading(false);
         }
 
-        if let Ok(event) = crossterm::event::read() {
-            match event {
-                Event::Key(key) => {
-                    let action = app.handle_key_event(key);
+        if crossterm::event::poll(std::time::Duration::from_millis(16))? {
+            if let Ok(event) = crossterm::event::read() {
+                match event {
+                    Event::Key(key) => {
+                        let action = app.handle_key_event(key);
 
-                    if action == opengp_ui::ui::keybinds::Action::Quit || app.should_quit() {
-                        break;
+                        if action == opengp_ui::ui::keybinds::Action::Quit || app.should_quit() {
+                            break;
+                        }
                     }
+                    Event::Mouse(mouse) => {
+                        let terminal_size = terminal.size().unwrap_or_default();
+                        let terminal_rect =
+                            ratatui::layout::Rect::new(0, 0, terminal_size.width, terminal_size.height);
+                        app.handle_mouse_event(mouse, terminal_rect);
+                    }
+                    Event::Resize(_, _) => {}
+                    _ => {}
                 }
-                Event::Mouse(mouse) => {
-                    let terminal_size = terminal.size().unwrap_or_default();
-                    let terminal_rect =
-                        ratatui::layout::Rect::new(0, 0, terminal_size.width, terminal_size.height);
-                    app.handle_mouse_event(mouse, terminal_rect);
-                }
-                Event::Resize(_, _) => {}
-                _ => {}
             }
         }
     }

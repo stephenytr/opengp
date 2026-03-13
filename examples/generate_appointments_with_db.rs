@@ -7,7 +7,7 @@ use opengp::infrastructure::crypto::EncryptionService;
 use opengp::infrastructure::database::repositories::{
     SqlxAppointmentRepository, SqlxPatientRepository, SqlxPractitionerRepository,
 };
-use opengp::infrastructure::database::{create_pool, run_migrations, DatabasePool};
+use opengp::infrastructure::database::{create_pool, run_migrations};
 use opengp::infrastructure::fixtures::{
     AppointmentGenerator, AppointmentGeneratorConfig, GenerationStats,
 };
@@ -21,15 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::from_env()?;
     let pool = create_pool(&config.database).await?;
     run_migrations(&pool).await?;
-    let pool = match pool {
-        DatabasePool::Sqlite(pool) => pool,
-        DatabasePool::Postgres(_) => {
-            return Err(
-                "generate_appointments_with_db example currently supports SQLite repositories only"
-                    .into(),
-            );
-        }
-    };
+    let pool = pool.as_postgres().clone();
 
     println!("Database connected: {}\n", config.database.url);
 

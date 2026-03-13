@@ -23,6 +23,7 @@ use opengp_domain::domain::user::{
 };
 #[cfg(test)]
 use opengp_domain::domain::user::{Permission, Role, User};
+use opengp_infrastructure::infrastructure::crypto::password::BcryptPasswordHasher;
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::mocks::{
     MockAppointmentRepository, MockConsultationRepository, MockPatientRepository,
@@ -58,7 +59,7 @@ impl ApiServices {
             EncryptionService::new().map_err(|e| ApiError::EncryptionInit(e.to_string()))?,
         );
 
-        let password_hasher: Arc<dyn PasswordHasher> = Arc::new(DevPasswordHasher);
+        let password_hasher: Arc<dyn PasswordHasher> = Arc::new(BcryptPasswordHasher::new());
         let user_repository = build_user_repository(pool, password_hasher.clone());
         let session_repository: Arc<dyn SessionRepository> =
             Arc::new(InMemorySessionRepository::new());

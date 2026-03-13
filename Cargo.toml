@@ -63,6 +63,7 @@ time = "0.3"
 uuid = { version = "1", features = ["v4", "serde"] }
 async-trait = "0.1.89"
 aes-gcm = "0.10"
+bcrypt = "0.15"
 rand = "0.8"
 hex = "0.4"
 fake = { version = "2.9", features = ["chrono", "uuid", "derive"] }

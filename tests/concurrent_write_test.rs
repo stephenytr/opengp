@@ -1,8 +1,12 @@
 use axum::body::{to_bytes, Body};
 use axum::http::{header, Request, StatusCode};
 use chrono::Utc;
+use opengp_domain::user::PasswordHasher;
 use opengp_api::{router, ApiConfig, ApiState};
-use opengp_domain::domain::api::{ApiErrorResponse, LoginResponse};
+use opengp_domain::domain::api::{
+    ApiErrorResponse, LoginResponse, PaginatedResponse, PatientResponse,
+};
+use opengp_infrastructure::infrastructure::crypto::password::BcryptPasswordHasher;
 use sqlx::PgPool;
 use tower::util::ServiceExt;
 use uuid::Uuid;
@@ -11,6 +15,21 @@ fn test_config() -> ApiConfig {
     let mut config = ApiConfig::from_env().expect("test config should load from environment");
     config.log_level = "warn".to_string();
     config
+}
+
+async fn align_appointment_schema(pool: &PgPool) {
+    sqlx::query(
+        r#"
+        ALTER TABLE appointments
+            ALTER COLUMN start_time TYPE TEXT USING start_time::text,
+            ALTER COLUMN end_time TYPE TEXT USING end_time::text,
+            ALTER COLUMN created_at TYPE TEXT USING created_at::text,
+            ALTER COLUMN updated_at TYPE TEXT USING updated_at::text
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("appointment schema alignment should succeed");
 }
 
 async fn login(app: &axum::Router, username: &str, password: &str) -> LoginResponse {
@@ -36,10 +55,41 @@ async fn login(app: &axum::Router, username: &str, password: &str) -> LoginRespo
     serde_json::from_slice(&body).expect("login response should be valid JSON")
 }
 
+async fn first_patient_id(app: &axum::Router, token: &str) -> Uuid {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/patients?page=1&limit=1")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .expect("request should be valid"),
+        )
+        .await
+        .expect("patient list request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("patient list body should be readable");
+    let patients: PaginatedResponse<PatientResponse> =
+        serde_json::from_slice(&body).expect("patient list response should be valid");
+
+    patients
+        .data
+        .first()
+        .map(|p| p.id)
+        .expect("at least one patient is required for appointment tests")
+}
+
 async fn seed_login_user(pool: &PgPool) -> (String, String) {
     let user_id = Uuid::new_v4();
     let username = format!("dr_{}", Uuid::new_v4().simple());
     let password = format!("pw-{}", Uuid::new_v4().simple());
+    let password_hash = BcryptPasswordHasher::new()
+        .hash_password(&password)
+        .expect("password hashing should succeed");
     let now = Utc::now();
 
     sqlx::query(
@@ -67,7 +117,7 @@ async fn seed_login_user(pool: &PgPool) -> (String, String) {
     )
     .bind(user_id)
     .bind(&username)
-    .bind(&password)
+    .bind(&password_hash)
     .bind("Concurrent")
     .bind("Tester")
     .bind(format!("{username}@example.com"))
@@ -87,14 +137,16 @@ async fn concurrent_booking_returns_conflict_for_second_writer() {
     let state = ApiState::new(test_config())
         .await
         .expect("state should initialize");
+    align_appointment_schema(&state.pool).await;
     let (username, password) = seed_login_user(&state.pool).await;
     let app = router(state);
 
     let login = login(&app, &username, &password).await;
     let token = login.access_token;
+    let patient_id = first_patient_id(&app, &token).await;
 
     let appointment_payload = serde_json::json!({
-        "patient_id": Uuid::new_v4(),
+        "patient_id": patient_id,
         "practitioner_id": login.user.id,
         "start_time": (Utc::now() + chrono::Duration::hours(2)).to_rfc3339(),
         "duration_minutes": 15,

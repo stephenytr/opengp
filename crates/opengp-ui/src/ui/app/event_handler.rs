@@ -6,6 +6,7 @@ use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
 use crate::ui::components::tabs::Tab;
 use crate::ui::keybinds::{Action, KeyContext};
 use crate::ui::widgets::FormNavigation;
+use chrono::Utc;
 use crossterm::event::{Event, KeyEvent, MouseEvent};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
@@ -115,7 +116,9 @@ impl App {
                             self.patient_form = None;
                             self.current_context = KeyContext::PatientList;
                         }
-                        crate::ui::components::patient::PatientFormAction::SaveComplete => {}
+                        crate::ui::components::patient::PatientFormAction::SaveComplete => {
+                            self.request_refresh_patients();
+                        }
                     }
                     return Action::Enter;
                 }
@@ -367,9 +370,14 @@ impl App {
                             }
                         }
                     }
-                    AppointmentFormAction::Cancel | AppointmentFormAction::SaveComplete => {
+                    AppointmentFormAction::Cancel => {
                         self.appointment_form = None;
                         self.status_bar.clear_error();
+                    }
+                    AppointmentFormAction::SaveComplete => {
+                        self.appointment_form = None;
+                        self.status_bar.clear_error();
+                        self.request_refresh_appointments(Utc::now().date_naive());
                     }
                     AppointmentFormAction::OpenTimePicker {
                         practitioner_id,
@@ -444,7 +452,9 @@ impl App {
                     crate::ui::components::patient::PatientFormAction::ValueChanged => {}
                     crate::ui::components::patient::PatientFormAction::Submit => {}
                     crate::ui::components::patient::PatientFormAction::Cancel => {}
-                    crate::ui::components::patient::PatientFormAction::SaveComplete => {}
+                    crate::ui::components::patient::PatientFormAction::SaveComplete => {
+                        self.request_refresh_patients();
+                    }
                 }
                 return;
             }

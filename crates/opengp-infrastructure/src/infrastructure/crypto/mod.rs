@@ -30,6 +30,9 @@
 //! - Key loaded from ENCRYPTION_KEY environment variable
 //! - Key must be 32 bytes (64 hex characters)
 
+pub mod password;
+pub use password::BcryptPasswordHasher;
+
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,

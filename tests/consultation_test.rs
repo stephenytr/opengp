@@ -12,30 +12,47 @@ use opengp_infrastructure::infrastructure::database::repositories::{
     SqlxFamilyHistoryRepository, SqlxMedicalHistoryRepository, SqlxPatientRepository,
     SqlxSocialHistoryRepository, SqlxVitalSignsRepository,
 };
-use sqlx::SqlitePool;
+use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
 use std::sync::Arc;
+use tokio::sync::OnceCell;
 use uuid::Uuid;
 
-async fn setup_test_database() -> SqlitePool {
-    let pool = SqlitePool::connect(":memory:")
-        .await
-        .expect("Failed to create in-memory database");
+static MIGRATIONS: OnceCell<()> = OnceCell::const_new();
 
-    sqlx::migrate!("./migrations")
-        .run(&pool)
+async fn setup_test_database() -> PgPool {
+    let database_url = std::env::var("API_DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://opengp:opengp_dev_password@127.0.0.1:5432/opengp".to_string()
+    });
+
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url)
         .await
-        .expect("Failed to run migrations");
+        .expect("Failed to connect to PostgreSQL test database");
+
+    MIGRATIONS
+        .get_or_init(|| async {
+            if let Err(err) = sqlx::migrate!("./migrations_postgres").run(&pool).await {
+                let msg = err.to_string();
+                assert!(
+                    msg.contains("users_pkey") && msg.contains("duplicate key value"),
+                    "Failed to run migrations: {err}"
+                );
+            }
+        })
+        .await;
 
     pool
 }
 
-fn create_mock_audit_service(pool: &SqlitePool) -> Arc<dyn AuditEmitter> {
+fn create_mock_audit_service(pool: &PgPool) -> Arc<dyn AuditEmitter> {
     let audit_repository: Arc<dyn AuditRepository> =
         Arc::new(SqlxAuditRepository::new(pool.clone()));
     Arc::new(AuditService::new(audit_repository))
 }
 
-async fn create_test_patient(pool: &SqlitePool) -> Uuid {
+async fn create_test_patient(pool: &PgPool) -> Uuid {
     let crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
     let repository: Arc<dyn PatientRepository> =
         Arc::new(SqlxPatientRepository::new(pool.clone(), crypto));
@@ -72,14 +89,14 @@ async fn create_test_patient(pool: &SqlitePool) -> Uuid {
         .id
 }
 
-async fn create_test_practitioner(pool: &SqlitePool) -> Uuid {
+async fn create_test_practitioner(pool: &PgPool) -> Uuid {
     let id = Uuid::new_v4();
     let username = format!("dr_{}", id);
     let now = Utc::now();
 
     sqlx::query(
         "INSERT INTO users (id, username, password_hash, role, is_active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(id)
     .bind(username)
@@ -95,7 +112,7 @@ async fn create_test_practitioner(pool: &SqlitePool) -> Uuid {
     id
 }
 
-fn create_clinical_service(pool: &SqlitePool) -> ClinicalService {
+fn create_clinical_service(pool: &PgPool) -> ClinicalService {
     let crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
 
     let consultation_repo: Arc<dyn ConsultationRepository> =
