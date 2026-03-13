@@ -24,19 +24,16 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), crate::ApiError> {
             .map_err(|e| crate::ApiError::Configuration(e.to_string()))?;
         
         if !sql.trim().is_empty() {
-            for statement in sql.split(';') {
-                let stmt = statement.trim();
-                if !stmt.is_empty() && !stmt.starts_with("--") {
-                    let result = sqlx::query(stmt).execute(pool).await;
-                    if let Err(e) = result {
-                        if !e.to_string().contains("duplicate key") {
-                            return Err(crate::ApiError::Configuration(format!(
-                                "Migration failed: {} - in {}", 
-                                e, 
-                                path.file_name().unwrap_or_default().to_string_lossy()
-                            )));
-                        }
-                    }
+            // Execute the entire SQL file as a single statement to preserve DO $$ ... $$; blocks
+            // which contain internal semicolons that would break statement splitting
+            let result = sqlx::query(&sql).execute(pool).await;
+            if let Err(e) = result {
+                if !e.to_string().contains("duplicate key") {
+                    return Err(crate::ApiError::Configuration(format!(
+                        "Migration failed: {} - in {}", 
+                        e, 
+                        path.file_name().unwrap_or_default().to_string_lossy()
+                    )));
                 }
             }
             info!("Ran migration: {}", path.file_name().unwrap_or_default().to_string_lossy());
