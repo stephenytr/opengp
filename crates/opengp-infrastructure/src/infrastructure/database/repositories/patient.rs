@@ -49,22 +49,30 @@ struct PatientRow {
 
 impl PatientRow {
     fn into_patient(self, crypto: &EncryptionService) -> Result<Patient, RepositoryError> {
+        // Try to decrypt, but fall back to plain text if decryption fails
+        // This handles both encrypted and unencrypted seed data
         let ihi = match self.ihi {
-            Some(encrypted) => {
-                let decrypted = crypto.decrypt(&encrypted).map_err(|e| {
-                    RepositoryError::Encryption(format!("Failed to decrypt IHI: {}", e))
-                })?;
-                Some(decrypted)
+            Some(data) => {
+                match crypto.decrypt(&data) {
+                    Ok(decrypted) => Some(decrypted),
+                    Err(_) => {
+                        // Decryption failed - try to interpret as plain text
+                        String::from_utf8(data).ok()
+                    }
+                }
             }
             None => None,
         };
 
         let medicare_number = match self.medicare_number {
-            Some(encrypted) => {
-                let decrypted = crypto.decrypt(&encrypted).map_err(|e| {
-                    RepositoryError::Encryption(format!("Failed to decrypt Medicare number: {}", e))
-                })?;
-                Some(decrypted)
+            Some(data) => {
+                match crypto.decrypt(&data) {
+                    Ok(decrypted) => Some(decrypted),
+                    Err(_) => {
+                        // Decryption failed - try to interpret as plain text
+                        String::from_utf8(data).ok()
+                    }
+                }
             }
             None => None,
         };
