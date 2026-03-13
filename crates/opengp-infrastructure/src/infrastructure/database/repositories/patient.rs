@@ -20,7 +20,7 @@ struct PatientRow {
     id: Uuid,
     ihi: Option<Vec<u8>>,
     medicare_number: Option<Vec<u8>>,
-    medicare_irn: Option<i64>,
+    medicare_irn: Option<i32>,
     medicare_expiry: Option<NaiveDate>,
     title: Option<String>,
     first_name: String,
@@ -296,7 +296,7 @@ impl PatientRepository for SqlxPatientRepository {
         let gender_str = patient.gender.to_string();
         let dob = patient.date_of_birth;
         let medicare_expiry = patient.medicare_expiry;
-        let medicare_irn_i64 = patient.medicare_irn.map(|i| i as i64);
+        let medicare_irn_i32 = patient.medicare_irn.map(|i| i as i32);
 
         // Encrypt sensitive fields
         let ihi_encrypted: Option<Vec<u8>> = match &patient.ihi {
@@ -341,7 +341,7 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(patient.id)
         .bind(ihi_encrypted)
         .bind(medicare_encrypted)
-        .bind(medicare_irn_i64)
+        .bind(medicare_irn_i32)
         .bind(medicare_expiry)
         .bind(&patient.title)
         .bind(&patient.first_name)
@@ -383,7 +383,7 @@ impl PatientRepository for SqlxPatientRepository {
         let gender_str = patient.gender.to_string();
         let dob = patient.date_of_birth;
         let medicare_expiry = patient.medicare_expiry;
-        let medicare_irn_i64 = patient.medicare_irn.map(|i| i as i64);
+        let medicare_irn_i32 = patient.medicare_irn.map(|i| i as i32);
 
         // Encrypt sensitive fields
         let ihi_encrypted: Option<Vec<u8>> = match &patient.ihi {
@@ -464,7 +464,7 @@ impl PatientRepository for SqlxPatientRepository {
         )
         .bind(ihi_encrypted)
         .bind(medicare_encrypted)
-        .bind(medicare_irn_i64)
+        .bind(medicare_irn_i32)
         .bind(medicare_expiry)
         .bind(&patient.title)
         .bind(&patient.first_name)
