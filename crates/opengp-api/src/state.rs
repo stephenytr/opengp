@@ -8,8 +8,6 @@ use std::{
 use opengp_domain::domain::audit::AuditEmitter;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::PgPool;
-use std::path::Path;
-use tracing::info;
 
 use crate::services::ApiServices;
 use crate::{ApiConfig, ApiError};
@@ -56,7 +54,9 @@ impl ApiState {
             .acquire_timeout(Duration::from_secs(config.connect_timeout_secs))
             .idle_timeout(Duration::from_secs(config.idle_timeout_secs))
             .test_before_acquire(false)
-            .connect_lazy_with(connect_options);
+            .connect_with(connect_options)
+            .await
+            .map_err(|e| ApiError::Configuration(format!("Failed to initialize database pool: {e}")))?;
 
         crate::migrations::run_migrations(&pool).await?;
 
