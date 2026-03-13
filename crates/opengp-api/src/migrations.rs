@@ -26,7 +26,7 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), crate::ApiError> {
         if !sql.trim().is_empty() {
             // Execute the entire SQL file as a single statement to preserve DO $$ ... $$; blocks
             // which contain internal semicolons that would break statement splitting
-            let result = sqlx::query(&sql).execute(pool).await;
+            let result = sqlx::raw_sql(&sql).execute(pool).await;
             if let Err(e) = result {
                 if !e.to_string().contains("duplicate key") {
                     return Err(crate::ApiError::Configuration(format!(
