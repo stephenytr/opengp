@@ -80,15 +80,15 @@ impl ApiServices {
         let audit_repository: Arc<dyn AuditRepository> = Arc::new(NoopAuditRepository);
         let audit_service = Arc::new(AuditService::new(audit_repository));
 
-        let appointment_repository: Arc<dyn opengp_domain::domain::appointment::AppointmentRepository> = Arc::new(
+        let appointment_repository = Arc::new(
             opengp_infrastructure::infrastructure::database::repositories::SqlxAppointmentRepository::new(
                 pool.clone(),
             ),
         );
         let appointment_service = Arc::new(AppointmentService::new(
-            appointment_repository.clone(),
+            appointment_repository.clone() as Arc<dyn opengp_domain::domain::appointment::AppointmentRepository>,
             audit_service.clone(),
-            appointment_repository.clone(),
+            appointment_repository.clone() as Arc<dyn opengp_domain::domain::appointment::AppointmentCalendarQuery>,
         ));
         let working_hours_repository: Arc<dyn WorkingHoursRepository> = Arc::new(
             opengp_infrastructure::infrastructure::database::repositories::SqlxWorkingHoursRepository::new(
