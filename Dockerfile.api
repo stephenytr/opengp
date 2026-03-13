@@ -55,7 +55,7 @@ EXPOSE 8080
 # Environment variables
 ENV API_HOST=0.0.0.0
 ENV API_PORT=8080
-ENV RUST_LOG=info
+ENV RUST_LOG=debug
 ENV RUST_BACKTRACE=1
 
 # Health check
