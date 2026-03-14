@@ -7,8 +7,10 @@ use chrono::DateTime;
 use opengp::domain::appointment::Appointment;
 use opengp::domain::audit::{AuditAction, AuditEntry};
 use opengp::domain::clinical::Consultation;
+#[cfg(feature = "immunisation")]
 use opengp::domain::immunisation::Immunisation;
 use opengp::domain::patient::Patient;
+#[cfg(feature = "prescription")]
 use opengp::domain::prescription::Prescription;
 
 /// Assert that two Patient entities are equal
@@ -313,6 +315,7 @@ fn assert_audit_action_eq(actual: &AuditAction, expected: &AuditAction) {
 /// let rx2 = Prescription::new(patient_id, practitioner_id, None, med, dosage, qty, repeats, directions, user_id);
 /// assert_prescription_eq(&rx1, &rx2);
 /// ```
+#[cfg(feature = "prescription")]
 pub fn assert_prescription_eq(actual: &Prescription, expected: &Prescription) {
     assert_eq!(actual.id, expected.id, "Prescription ID mismatch");
     assert_eq!(
@@ -435,6 +438,7 @@ pub fn assert_prescription_eq(actual: &Prescription, expected: &Prescription) {
 /// let imm2 = Immunisation::new(patient_id, practitioner_id, vaccine, date, dose, batch, route, site, user_id);
 /// assert_immunisation_eq(&imm1, &imm2);
 /// ```
+#[cfg(feature = "immunisation")]
 pub fn assert_immunisation_eq(actual: &Immunisation, expected: &Immunisation) {
     assert_eq!(actual.id, expected.id, "Immunisation ID mismatch");
     assert_eq!(

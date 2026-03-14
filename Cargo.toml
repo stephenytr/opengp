@@ -17,6 +17,13 @@ license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 
+[features]
+billing = ["opengp-domain/billing"]
+referral = ["opengp-domain/referral"]
+pathology = ["opengp-domain/pathology"]
+immunisation = ["opengp-domain/immunisation"]
+prescription = ["opengp-domain/prescription"]
+
 [dependencies]
 opengp-domain = { path = "crates/opengp-domain" }
 opengp-infrastructure = { path = "crates/opengp-infrastructure" }

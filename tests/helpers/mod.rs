@@ -4,7 +4,10 @@
 
 pub mod assertions;
 
+#[cfg(feature = "immunisation")]
+pub use assertions::assert_immunisation_eq;
+#[cfg(feature = "prescription")]
+pub use assertions::assert_prescription_eq;
 pub use assertions::{
-    assert_appointment_eq, assert_audit_entry_eq, assert_consultation_eq, assert_immunisation_eq,
-    assert_patient_eq, assert_prescription_eq,
+    assert_appointment_eq, assert_audit_entry_eq, assert_consultation_eq, assert_patient_eq,
 };

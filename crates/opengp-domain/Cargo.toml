@@ -17,7 +17,16 @@ strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 derive_builder = "0.20"
 tracing = "0.1"
-tokio = { version = "1", features = ["test-util", "macros"] }
 rand = "0.8"
 hex = "0.4"
 utoipa = { version = "5", features = ["chrono", "uuid"] }
+
+[features]
+billing = []
+referral = []
+pathology = []
+immunisation = []
+prescription = []
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util", "macros"] }

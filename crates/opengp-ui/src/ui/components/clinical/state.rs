@@ -9,6 +9,7 @@ use crate::ui::widgets::SearchableListState;
 use opengp_domain::domain::clinical::{
     Allergy, Consultation, FamilyHistory, MedicalHistory, SocialHistory, VitalSigns,
 };
+#[cfg(feature = "prescription")]
 use opengp_domain::domain::prescription::Prescription;
 use uuid::Uuid;
 
@@ -62,7 +63,10 @@ pub struct ClinicalState {
     pub social_history_component: Option<SocialHistoryComponent>,
     pub consultation_filter_start: Option<String>,
     pub consultation_filter_end: Option<String>,
+    #[cfg(feature = "prescription")]
     pub consultation_prescriptions: Vec<Prescription>,
+    #[cfg(not(feature = "prescription"))]
+    pub consultation_prescriptions: Vec<()>,
     pub consultation_list: ConsultationList,
     pub allergy_list: AllergyList,
     pub medical_history_list: MedicalHistoryList,

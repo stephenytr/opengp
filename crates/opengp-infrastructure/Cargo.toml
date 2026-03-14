@@ -10,6 +10,8 @@ rust-version.workspace = true
 [features]
 default = ["postgres"]
 postgres = ["sqlx/postgres"]
+immunisation = ["opengp-domain/immunisation"]
+prescription = ["opengp-domain/prescription"]
 
 [dependencies]
 tokio.workspace = true

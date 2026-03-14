@@ -7,6 +7,9 @@ license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 
+[features]
+prescription = ["opengp-domain/prescription"]
+
 [dependencies]
 ratatui.workspace = true
 crossterm.workspace = true

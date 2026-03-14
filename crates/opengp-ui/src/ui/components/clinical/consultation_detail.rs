@@ -1,5 +1,6 @@
 use crate::ui::theme::Theme;
 use opengp_domain::domain::clinical::Consultation;
+#[cfg(feature = "prescription")]
 use opengp_domain::domain::prescription::Prescription;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -8,7 +9,10 @@ use ratatui::widgets::{Block, Borders, Widget};
 
 pub struct ConsultationDetail {
     pub consultation: Option<Consultation>,
+    #[cfg(feature = "prescription")]
     pub prescriptions: Vec<Prescription>,
+    #[cfg(not(feature = "prescription"))]
+    pub prescriptions: Vec<()>,
     pub is_editing: bool,
     pub signed: bool,
     pub theme: Theme,
@@ -44,7 +48,13 @@ impl ConsultationDetail {
         }
     }
 
+    #[cfg(feature = "prescription")]
     pub fn set_prescriptions(&mut self, prescriptions: Vec<Prescription>) {
+        self.prescriptions = prescriptions;
+    }
+
+    #[cfg(not(feature = "prescription"))]
+    pub fn set_prescriptions(&mut self, prescriptions: Vec<()>) {
         self.prescriptions = prescriptions;
     }
 
@@ -272,99 +282,102 @@ impl Widget for ConsultationDetail {
         }
 
         // Prescriptions Section
-        y += 1;
-        buf.set_string(
-            inner.x + 1,
-            y,
-            " Prescriptions ",
-            Style::default()
-                .fg(self.theme.colors.primary)
-                .add_modifier(Modifier::BOLD),
-        );
-        y += 1;
+        #[cfg(feature = "prescription")]
+        {
+            y += 1;
+            buf.set_string(
+                inner.x + 1,
+                y,
+                " Prescriptions ",
+                Style::default()
+                    .fg(self.theme.colors.primary)
+                    .add_modifier(Modifier::BOLD),
+            );
+            y += 1;
 
-        if self.prescriptions.is_empty() {
-            if y < inner.y + inner.height - 4 {
-                buf.set_string(
-                    inner.x + 1,
-                    y,
-                    "  No prescriptions",
-                    Style::default().fg(self.theme.colors.disabled),
-                );
-                y += 1;
-            }
-        } else {
-            for prescription in &self.prescriptions {
-                if y >= inner.y + inner.height - 4 {
-                    break;
-                }
-
-                // Medication name (prefer brand name if available)
-                let med_name = prescription
-                    .medication
-                    .brand_name
-                    .as_ref()
-                    .unwrap_or(&prescription.medication.generic_name);
-                buf.set_string(
-                    inner.x + 1,
-                    y,
-                    "  ",
-                    Style::default().fg(self.theme.colors.foreground),
-                );
-                buf.set_string(
-                    inner.x + 3,
-                    y,
-                    med_name,
-                    Style::default()
-                        .fg(self.theme.colors.foreground)
-                        .add_modifier(Modifier::BOLD),
-                );
-                y += 1;
-
-                // Dosage
+            if self.prescriptions.is_empty() {
                 if y < inner.y + inner.height - 4 {
-                    let dosage_str = format!("    Dosage: {}", prescription.dosage);
                     buf.set_string(
                         inner.x + 1,
                         y,
-                        dosage_str,
-                        Style::default().fg(self.theme.colors.foreground),
+                        "  No prescriptions",
+                        Style::default().fg(self.theme.colors.disabled),
                     );
                     y += 1;
                 }
+            } else {
+                for prescription in &self.prescriptions {
+                    if y >= inner.y + inner.height - 4 {
+                        break;
+                    }
 
-                // Frequency (from directions)
-                if y < inner.y + inner.height - 4 {
-                    let freq_str = format!("    {}", prescription.directions);
-                    let display_freq = if freq_str.len() > value_width as usize {
-                        format!("{}...", &freq_str[..value_width as usize - 3])
-                    } else {
-                        freq_str
-                    };
+                    // Medication name (prefer brand name if available)
+                    let med_name = prescription
+                        .medication
+                        .brand_name
+                        .as_ref()
+                        .unwrap_or(&prescription.medication.generic_name);
                     buf.set_string(
                         inner.x + 1,
                         y,
-                        display_freq,
+                        "  ",
                         Style::default().fg(self.theme.colors.foreground),
                     );
-                    y += 1;
-                }
-
-                // Quantity
-                if y < inner.y + inner.height - 4 {
-                    let qty_str = format!("    Quantity: {}", prescription.quantity);
                     buf.set_string(
-                        inner.x + 1,
+                        inner.x + 3,
                         y,
-                        qty_str,
-                        Style::default().fg(self.theme.colors.foreground),
+                        med_name,
+                        Style::default()
+                            .fg(self.theme.colors.foreground)
+                            .add_modifier(Modifier::BOLD),
                     );
                     y += 1;
-                }
 
-                // Add spacing between prescriptions
-                if y < inner.y + inner.height - 4 {
-                    y += 1;
+                    // Dosage
+                    if y < inner.y + inner.height - 4 {
+                        let dosage_str = format!("    Dosage: {}", prescription.dosage);
+                        buf.set_string(
+                            inner.x + 1,
+                            y,
+                            dosage_str,
+                            Style::default().fg(self.theme.colors.foreground),
+                        );
+                        y += 1;
+                    }
+
+                    // Frequency (from directions)
+                    if y < inner.y + inner.height - 4 {
+                        let freq_str = format!("    {}", prescription.directions);
+                        let display_freq = if freq_str.len() > value_width as usize {
+                            format!("{}...", &freq_str[..value_width as usize - 3])
+                        } else {
+                            freq_str
+                        };
+                        buf.set_string(
+                            inner.x + 1,
+                            y,
+                            display_freq,
+                            Style::default().fg(self.theme.colors.foreground),
+                        );
+                        y += 1;
+                    }
+
+                    // Quantity
+                    if y < inner.y + inner.height - 4 {
+                        let qty_str = format!("    Quantity: {}", prescription.quantity);
+                        buf.set_string(
+                            inner.x + 1,
+                            y,
+                            qty_str,
+                            Style::default().fg(self.theme.colors.foreground),
+                        );
+                        y += 1;
+                    }
+
+                    // Add spacing between prescriptions
+                    if y < inner.y + inner.height - 4 {
+                        y += 1;
+                    }
                 }
             }
         }
