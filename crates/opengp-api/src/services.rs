@@ -28,7 +28,9 @@ use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::mocks::{
     MockAppointmentRepository, MockConsultationRepository, MockPatientRepository,
 };
-use opengp_infrastructure::infrastructure::database::repositories::InMemorySessionRepository;
+use opengp_infrastructure::infrastructure::database::repositories::{
+    InMemorySessionRepository, SqlxAuditRepository, SqlxSessionRepository,
+};
 #[cfg(not(test))]
 use opengp_infrastructure::infrastructure::database::repositories::PostgresUserRepository;
 use sqlx::PgPool;
@@ -51,18 +53,15 @@ pub struct ApiServices {
 
 impl ApiServices {
     pub async fn new(config: &ApiConfig, pool: &PgPool) -> Result<Self, ApiError> {
-        unsafe {
-            std::env::set_var("ENCRYPTION_KEY", &config.encryption_key);
-        }
-
         let encryption_service = Arc::new(
-            EncryptionService::new().map_err(|e| ApiError::EncryptionInit(e.to_string()))?,
+            EncryptionService::new_with_key(&config.encryption_key)
+                .map_err(|e| ApiError::EncryptionInit(e.to_string()))?,
         );
 
         let password_hasher: Arc<dyn PasswordHasher> = Arc::new(BcryptPasswordHasher::new());
         let user_repository = build_user_repository(pool, password_hasher.clone());
         let session_repository: Arc<dyn SessionRepository> =
-            Arc::new(InMemorySessionRepository::new());
+            Arc::new(SqlxSessionRepository::new(pool.clone()));
         let auth_service = Arc::new(AuthService::new(
             user_repository.clone(),
             password_hasher,
@@ -78,7 +77,8 @@ impl ApiServices {
         );
         let patient_service = Arc::new(PatientService::new(patient_repository));
 
-        let audit_repository: Arc<dyn AuditRepository> = Arc::new(NoopAuditRepository);
+        let audit_repository: Arc<dyn AuditRepository> =
+            Arc::new(SqlxAuditRepository::new(pool.clone()));
         let audit_service = Arc::new(AuditService::new(audit_repository));
 
         let appointment_repository = Arc::new(
@@ -358,45 +358,6 @@ impl UserRepository for InMemoryUserRepository {
         existing.is_active = false;
         existing.updated_at = Utc::now();
         Ok(())
-    }
-}
-
-struct NoopAuditRepository;
-
-#[async_trait]
-impl AuditRepository for NoopAuditRepository {
-    async fn create(&self, entry: AuditEntry) -> Result<AuditEntry, AuditRepositoryError> {
-        Ok(entry)
-    }
-
-    async fn find_by_entity(
-        &self,
-        _entity_type: &str,
-        _entity_id: Uuid,
-    ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
-        Ok(vec![])
-    }
-
-    async fn find_by_user(&self, _user_id: Uuid) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
-        Ok(vec![])
-    }
-
-    async fn find_by_time_range(
-        &self,
-        _start_time: DateTime<Utc>,
-        _end_time: DateTime<Utc>,
-    ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
-        Ok(vec![])
-    }
-
-    async fn find_by_entity_and_time_range(
-        &self,
-        _entity_type: &str,
-        _entity_id: Uuid,
-        _start_time: DateTime<Utc>,
-        _end_time: DateTime<Utc>,
-    ) -> Result<Vec<AuditEntry>, AuditRepositoryError> {
-        Ok(vec![])
     }
 }
 
