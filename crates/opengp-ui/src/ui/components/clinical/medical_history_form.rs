@@ -48,7 +48,7 @@ impl MedicalHistoryFormField {
     }
 
     pub fn label(&self) -> &'static str {
-        use strum::IntoStaticStr;
+        
         (*self).into()
     }
 
@@ -543,8 +543,8 @@ impl Widget for MedicalHistoryForm {
 
             let is_focused = field == self.focused_field;
 
-            if y >= inner.y as i32 && y < max_y {
-                if !field.is_dropdown() {
+            if y >= inner.y as i32 && y < max_y
+                && !field.is_dropdown() {
                     let label_style = if is_focused {
                         Style::default()
                             .fg(self.theme.colors.primary)
@@ -564,7 +564,6 @@ impl Widget for MedicalHistoryForm {
                         );
                     }
                 }
-            }
 
             match field {
                 MedicalHistoryFormField::Status => {

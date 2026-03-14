@@ -106,7 +106,7 @@ impl Schedule {
     fn fit_viewport_to_height(&mut self) {
         let visible = self.visible_slots();
         // Convert visible slots to whole hours (ceiling), minimum 1 hour
-        let hours_needed = (((visible as u16 + 3) / 4) as u8).max(1);
+        let hours_needed = ((visible as u16).div_ceil(4) as u8).max(1);
         let new_end = (self.viewport_start_hour + hours_needed).min(self.config.max_hour);
         self.viewport_end_hour = new_end.max(self.viewport_start_hour + 1);
     }
@@ -305,7 +305,7 @@ impl Schedule {
                 let col = mouse.column.saturating_sub(inner.x + time_column_width);
                 let practitioner_cols = inner.width.saturating_sub(time_column_width);
 
-                if practitioner_cols > 0 && self.practitioners.len() > 0 {
+                if practitioner_cols > 0 && !self.practitioners.is_empty() {
                     let col_width = practitioner_cols / self.practitioners.len() as u16;
                     if col_width > 0 {
                         let practitioner_index = (col / col_width) as usize;
@@ -354,7 +354,7 @@ impl Schedule {
     }
 
     fn max_time_slot(&self) -> u8 {
-        ((self.config.max_hour - self.viewport_start_hour) * 4 - 1) as u8
+        (self.config.max_hour - self.viewport_start_hour) * 4 - 1
     }
 
     /// Ensure the viewport includes the currently selected time slot.
@@ -410,7 +410,7 @@ impl Schedule {
             return false;
         };
         let end_slot = start_slot
-            .saturating_add(apt.slot_span as u8)
+            .saturating_add(apt.slot_span)
             .saturating_sub(1);
         slot >= start_slot && slot <= end_slot
     }
@@ -593,12 +593,12 @@ impl Schedule {
         }
 
         // Handle appointments that start before visible area
-        let clipped_top = if y < area.y { area.y - y } else { 0 };
+        let clipped_top = area.y.saturating_sub(y);
         y = y.max(area.y);
         let height = height.saturating_sub(clipped_top);
 
         // Clamp height to fit within buffer
-        let max_height = (area.y + area.height - y) as u16;
+        let max_height = area.y + area.height - y;
         let actual_height = height.min(max_height).max(1);
 
         let color = self.get_appointment_color(apt.status);
@@ -653,7 +653,7 @@ impl Schedule {
                 let name_x = content_x + 1;
                 if name_x < area.x + area.width {
                     let full_text = format!("{} {}", name, abbreviation);
-                    let _ = buf.set_string(
+                    buf.set_string(
                         name_x,
                         content_y,
                         full_text,
@@ -702,7 +702,7 @@ impl Schedule {
                 let name_x = content_x + 1;
                 if name_x < area.x + area.width {
                     let full_text = format!("{} {}", name, abbreviation);
-                    let _ = buf.set_string(
+                    buf.set_string(
                         name_x,
                         content_y,
                         full_text,

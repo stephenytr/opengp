@@ -185,19 +185,11 @@ impl FamilyHistoryList {
                 Some(FamilyHistoryListAction::Select(self.selected_index))
             }
             KeyCode::Enter => {
-                if let Some(entry) = self.selected() {
-                    Some(FamilyHistoryListAction::Open(entry.clone()))
-                } else {
-                    None
-                }
+                self.selected().map(|entry| FamilyHistoryListAction::Open(entry.clone()))
             }
             KeyCode::Char('n') => Some(FamilyHistoryListAction::New),
             KeyCode::Char('d') => {
-                if let Some(entry) = self.selected() {
-                    Some(FamilyHistoryListAction::Delete(entry.clone()))
-                } else {
-                    None
-                }
+                self.selected().map(|entry| FamilyHistoryListAction::Delete(entry.clone()))
             }
             _ => None,
         }

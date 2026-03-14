@@ -339,18 +339,14 @@ fn format_dob(patient: &PatientListItem) -> String {
 
 fn format_medicare(patient: &PatientListItem) -> String {
     patient
-        .medicare_number
-        .as_ref()
-        .map(|s| s.as_str())
+        .medicare_number.as_deref()
         .unwrap_or("-")
         .to_string()
 }
 
 fn format_phone(patient: &PatientListItem) -> String {
     patient
-        .phone_mobile
-        .as_ref()
-        .map(|s| s.as_str())
+        .phone_mobile.as_deref()
         .unwrap_or("-")
         .to_string()
 }

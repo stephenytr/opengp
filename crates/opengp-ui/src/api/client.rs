@@ -525,7 +525,7 @@ impl ApiClient {
 
     fn map_request_error(error: reqwest::Error) -> ApiClientError {
         if error.is_connect() || error.is_timeout() {
-            return ApiClientError::ServerUnavailable(Self::server_unavailable_message(&error));
+            ApiClientError::ServerUnavailable(Self::server_unavailable_message(&error))
         } else {
             ApiClientError::Server("Unable to complete request".to_string())
         }

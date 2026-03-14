@@ -87,7 +87,7 @@ pub fn format_user_input(input: &str) -> String {
     match digits.len() {
         0 => String::new(),
         1 => digits.clone(),
-        2 => format!("{}", digits),
+        2 => digits.to_string(),
         3 => format!("{}/{}", &digits[0..2], &digits[2..3]),
         4 => format!("{}/{}", &digits[0..2], &digits[2..4]),
         5 => format!("{}/{}/{}", &digits[0..2], &digits[2..4], &digits[4..5]),

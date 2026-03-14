@@ -33,7 +33,7 @@ impl ConsultationFormField {
     }
 
     pub fn label(&self) -> &'static str {
-        use strum::IntoStaticStr;
+        
         (*self).into()
     }
 

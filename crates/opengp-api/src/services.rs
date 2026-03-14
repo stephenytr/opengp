@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentSearchCriteria, AppointmentService, AvailabilityService,
     CalendarAppointment,
 };
 use opengp_domain::domain::audit::{
-    AuditEntry, AuditRepository, AuditRepositoryError, AuditService,
+    AuditRepository, AuditService,
 };
 use opengp_domain::domain::clinical::{
     Allergy, AllergyRepository, ClinicalRepositories, ClinicalService, ConsultationRepository,
@@ -25,11 +24,8 @@ use opengp_domain::domain::user::{
 use opengp_domain::domain::user::{Permission, Role, User};
 use opengp_infrastructure::infrastructure::crypto::password::BcryptPasswordHasher;
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
-use opengp_infrastructure::infrastructure::database::mocks::{
-    MockAppointmentRepository, MockConsultationRepository, MockPatientRepository,
-};
 use opengp_infrastructure::infrastructure::database::repositories::{
-    InMemorySessionRepository, SqlxAuditRepository, SqlxSessionRepository,
+    SqlxAuditRepository, SqlxSessionRepository,
 };
 #[cfg(not(test))]
 use opengp_infrastructure::infrastructure::database::repositories::PostgresUserRepository;

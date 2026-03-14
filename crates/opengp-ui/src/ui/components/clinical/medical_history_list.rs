@@ -231,11 +231,7 @@ impl MedicalHistoryList {
                 Some(MedicalHistoryListAction::Select(self.selected_index))
             }
             KeyCode::Enter => {
-                if let Some(condition) = self.selected() {
-                    Some(MedicalHistoryListAction::Open(condition.clone()))
-                } else {
-                    None
-                }
+                self.selected().map(|condition| MedicalHistoryListAction::Open(condition.clone()))
             }
             KeyCode::Char('n') => Some(MedicalHistoryListAction::New),
             KeyCode::Char('f') => {
@@ -248,11 +244,7 @@ impl MedicalHistoryList {
                 Some(MedicalHistoryListAction::SetFilter(self.filter.clone()))
             }
             KeyCode::Char('d') => {
-                if let Some(condition) = self.selected() {
-                    Some(MedicalHistoryListAction::Delete(condition.clone()))
-                } else {
-                    None
-                }
+                self.selected().map(|condition| MedicalHistoryListAction::Delete(condition.clone()))
             }
             _ => None,
         }

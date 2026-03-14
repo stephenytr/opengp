@@ -187,11 +187,7 @@ impl VitalSignsList {
                 Some(VitalSignsListAction::Select(self.selected_index))
             }
             KeyCode::Enter => {
-                if let Some(vitals) = self.selected() {
-                    Some(VitalSignsListAction::Open(vitals.clone()))
-                } else {
-                    None
-                }
+                self.selected().map(|vitals| VitalSignsListAction::Open(vitals.clone()))
             }
             KeyCode::Char('n') => Some(VitalSignsListAction::New),
             KeyCode::Char('+') | KeyCode::Char('=') => Some(VitalSignsListAction::NextPage),

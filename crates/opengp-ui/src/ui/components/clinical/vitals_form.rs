@@ -55,7 +55,7 @@ impl VitalSignsFormField {
     }
 
     pub fn label(&self) -> &'static str {
-        use strum::IntoStaticStr;
+        
         (*self).into()
     }
 
@@ -341,7 +341,7 @@ impl VitalSignsForm {
             VitalSignsFormField::SystolicBp => {
                 if !value.is_empty() {
                     match value.parse::<u16>() {
-                        Ok(v) if v < 50 || v > 300 => {
+                        Ok(v) if !(50..=300).contains(&v) => {
                             self.errors
                                 .insert(*field, "Systolic BP must be 50-300 mmHg".to_string());
                         }
@@ -356,7 +356,7 @@ impl VitalSignsForm {
             VitalSignsFormField::DiastolicBp => {
                 if !value.is_empty() {
                     match value.parse::<u16>() {
-                        Ok(v) if v < 20 || v > 200 => {
+                        Ok(v) if !(20..=200).contains(&v) => {
                             self.errors
                                 .insert(*field, "Diastolic BP must be 20-200 mmHg".to_string());
                         }
@@ -371,7 +371,7 @@ impl VitalSignsForm {
             VitalSignsFormField::HeartRate => {
                 if !value.is_empty() {
                     match value.parse::<u16>() {
-                        Ok(v) if v < 20 || v > 300 => {
+                        Ok(v) if !(20..=300).contains(&v) => {
                             self.errors
                                 .insert(*field, "Heart rate must be 20-300 bpm".to_string());
                         }
@@ -386,7 +386,7 @@ impl VitalSignsForm {
             VitalSignsFormField::RespiratoryRate => {
                 if !value.is_empty() {
                     match value.parse::<u16>() {
-                        Ok(v) if v < 4 || v > 60 => {
+                        Ok(v) if !(4..=60).contains(&v) => {
                             self.errors
                                 .insert(*field, "Respiratory rate must be 4-60 /min".to_string());
                         }
@@ -401,7 +401,7 @@ impl VitalSignsForm {
             VitalSignsFormField::Temperature => {
                 if !value.is_empty() {
                     match value.parse::<f32>() {
-                        Ok(v) if v < 30.0 || v > 45.0 => {
+                        Ok(v) if !(30.0..=45.0).contains(&v) => {
                             self.errors
                                 .insert(*field, "Temperature must be 30-45 C".to_string());
                         }
@@ -416,7 +416,7 @@ impl VitalSignsForm {
             VitalSignsFormField::O2Saturation => {
                 if !value.is_empty() {
                     match value.parse::<u8>() {
-                        Ok(v) if v < 50 || v > 100 => {
+                        Ok(v) if !(50..=100).contains(&v) => {
                             self.errors
                                 .insert(*field, "O2 saturation must be 50-100%".to_string());
                         }
@@ -431,7 +431,7 @@ impl VitalSignsForm {
             VitalSignsFormField::Height => {
                 if !value.is_empty() {
                     match value.parse::<u16>() {
-                        Ok(v) if v < 30 || v > 300 => {
+                        Ok(v) if !(30..=300).contains(&v) => {
                             self.errors
                                 .insert(*field, "Height must be 30-300 cm".to_string());
                         }
@@ -446,7 +446,7 @@ impl VitalSignsForm {
             VitalSignsFormField::Weight => {
                 if !value.is_empty() {
                     match value.parse::<f32>() {
-                        Ok(v) if v < 0.5 || v > 700.0 => {
+                        Ok(v) if !(0.5..=700.0).contains(&v) => {
                             self.errors
                                 .insert(*field, "Weight must be 0.5-700 kg".to_string());
                         }

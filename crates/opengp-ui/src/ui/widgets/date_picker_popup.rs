@@ -80,8 +80,7 @@ impl DatePickerPopup {
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 if self.calendar.focused_date.day() > 7 {
-                    self.calendar.focused_date =
-                        self.calendar.focused_date - chrono::Duration::days(7);
+                    self.calendar.focused_date -= chrono::Duration::days(7);
                 } else {
                     self.calendar.prev_month();
                     let (year, month) = self.calendar.current_month;
@@ -98,9 +97,8 @@ impl DatePickerPopup {
             KeyCode::Down | KeyCode::Char('j') => {
                 let (year, month) = self.calendar.current_month;
                 let days_in_month = self.days_in_month(year, month);
-                if self.calendar.focused_date.day() + 7 <= days_in_month as u32 {
-                    self.calendar.focused_date =
-                        self.calendar.focused_date + chrono::Duration::days(7);
+                if self.calendar.focused_date.day() + 7 <= days_in_month {
+                    self.calendar.focused_date += chrono::Duration::days(7);
                 } else {
                     self.calendar.next_month();
                     let (new_year, new_month) = self.calendar.current_month;
@@ -120,7 +118,7 @@ impl DatePickerPopup {
             KeyCode::Left | KeyCode::Char('h') => {
                 let prev = self.calendar.focused_date - chrono::Duration::days(1);
                 self.calendar.focused_date = prev;
-                let current_month = self.calendar.current_month.1 as u32;
+                let current_month = self.calendar.current_month.1;
                 if prev.month() != current_month {
                     self.calendar.prev_month();
                 }
@@ -129,7 +127,7 @@ impl DatePickerPopup {
             KeyCode::Right | KeyCode::Char('l') => {
                 let next = self.calendar.focused_date + chrono::Duration::days(1);
                 self.calendar.focused_date = next;
-                let current_month = self.calendar.current_month.1 as u32;
+                let current_month = self.calendar.current_month.1;
                 if next.month() != current_month {
                     self.calendar.next_month();
                 }

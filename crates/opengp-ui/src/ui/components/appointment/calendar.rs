@@ -109,7 +109,7 @@ impl Calendar {
             let date = start_date + chrono::Duration::days(i as i64);
             let is_current_month = date.month() == current_month_naive.month();
             let is_today = date == today;
-            let is_selected = self.selected_date.map_or(false, |d| d == date);
+            let is_selected = self.selected_date == Some(date);
 
             self.days.push(CalendarDay {
                 date,
@@ -161,12 +161,12 @@ impl Calendar {
                     Some(CalendarAction::FocusDate(self.widget.focused_date))
                 }
                 Action::PrevWeek => {
-                    self.widget.focused_date = self.widget.focused_date - chrono::Duration::days(7);
+                    self.widget.focused_date -= chrono::Duration::days(7);
                     self.rebuild_days();
                     Some(CalendarAction::FocusDate(self.widget.focused_date))
                 }
                 Action::NextWeek => {
-                    self.widget.focused_date = self.widget.focused_date + chrono::Duration::days(7);
+                    self.widget.focused_date += chrono::Duration::days(7);
                     self.rebuild_days();
                     Some(CalendarAction::FocusDate(self.widget.focused_date))
                 }

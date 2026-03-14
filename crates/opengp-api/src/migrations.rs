@@ -13,7 +13,7 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), crate::ApiError> {
     let mut entries = std::fs::read_dir(migrations_dir)
         .map_err(|e| crate::ApiError::Configuration(e.to_string()))?
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "sql"))
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "sql"))
         .collect::<Vec<_>>();
     
     entries.sort_by_key(|e| e.file_name());

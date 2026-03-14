@@ -56,7 +56,7 @@ impl ClinicalService {
                 PatientServiceError::NotFound(_) => ServiceError::PatientNotFound(data.patient_id),
                 _ => ServiceError::Validation(format!("Patient lookup error: {}", e)),
             })?
-            .ok_or_else(|| ServiceError::PatientNotFound(data.patient_id))?;
+            .ok_or(ServiceError::PatientNotFound(data.patient_id))?;
 
         let mut consultation = Consultation::new(
             data.patient_id,
@@ -118,7 +118,7 @@ impl ClinicalService {
             .consultation
             .find_by_id(consultation_id)
             .await?
-            .ok_or_else(|| ServiceError::ConsultationNotFound(consultation_id))?;
+            .ok_or(ServiceError::ConsultationNotFound(consultation_id))?;
 
         if consultation.version != expected_version {
             return Err(ServiceError::Conflict(
@@ -181,7 +181,7 @@ impl ClinicalService {
             .consultation
             .find_by_id(consultation_id)
             .await?
-            .ok_or_else(|| ServiceError::ConsultationNotFound(consultation_id))?;
+            .ok_or(ServiceError::ConsultationNotFound(consultation_id))?;
 
         if consultation.is_signed {
             return Err(ServiceError::AlreadySigned);
@@ -226,7 +226,7 @@ impl ClinicalService {
                 PatientServiceError::NotFound(_) => ServiceError::PatientNotFound(data.patient_id),
                 _ => ServiceError::Validation(format!("Patient lookup error: {}", e)),
             })?
-            .ok_or_else(|| ServiceError::PatientNotFound(data.patient_id))?;
+            .ok_or(ServiceError::PatientNotFound(data.patient_id))?;
 
         let allergy = Allergy {
             id: Uuid::new_v4(),
@@ -327,7 +327,7 @@ impl ClinicalService {
                 PatientServiceError::NotFound(_) => ServiceError::PatientNotFound(data.patient_id),
                 _ => ServiceError::Validation(format!("Patient lookup error: {}", e)),
             })?
-            .ok_or_else(|| ServiceError::PatientNotFound(data.patient_id))?;
+            .ok_or(ServiceError::PatientNotFound(data.patient_id))?;
 
         let history = MedicalHistory {
             id: Uuid::new_v4(),
@@ -404,7 +404,7 @@ impl ClinicalService {
             .medical_history
             .find_by_id(history_id)
             .await?
-            .ok_or_else(|| ServiceError::MedicalHistoryNotFound(history_id))?;
+            .ok_or(ServiceError::MedicalHistoryNotFound(history_id))?;
 
         let old_status = format!("{:?}", history.status);
         history.status = status;
@@ -447,7 +447,7 @@ impl ClinicalService {
                 PatientServiceError::NotFound(_) => ServiceError::PatientNotFound(data.patient_id),
                 _ => ServiceError::Validation(format!("Patient lookup error: {}", e)),
             })?
-            .ok_or_else(|| ServiceError::PatientNotFound(data.patient_id))?;
+            .ok_or(ServiceError::PatientNotFound(data.patient_id))?;
 
         let mut vitals = VitalSigns {
             id: Uuid::new_v4(),
@@ -538,7 +538,7 @@ impl ClinicalService {
                 PatientServiceError::NotFound(_) => ServiceError::PatientNotFound(patient_id),
                 _ => ServiceError::Validation(format!("Patient lookup error: {}", e)),
             })?
-            .ok_or_else(|| ServiceError::PatientNotFound(patient_id))?;
+            .ok_or(ServiceError::PatientNotFound(patient_id))?;
 
         // Check if social history exists
         let existing = self
@@ -632,7 +632,7 @@ impl ClinicalService {
                 PatientServiceError::NotFound(_) => ServiceError::PatientNotFound(data.patient_id),
                 _ => ServiceError::Validation(format!("Patient lookup error: {}", e)),
             })?
-            .ok_or_else(|| ServiceError::PatientNotFound(data.patient_id))?;
+            .ok_or(ServiceError::PatientNotFound(data.patient_id))?;
 
         let history = FamilyHistory {
             id: Uuid::new_v4(),

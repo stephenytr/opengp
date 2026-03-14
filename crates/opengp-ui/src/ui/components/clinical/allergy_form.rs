@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use chrono::NaiveDate;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -51,7 +51,7 @@ impl AllergyFormField {
     }
 
     pub fn label(&self) -> &'static str {
-        use strum::IntoStaticStr;
+        
         (*self).into()
     }
 
@@ -353,17 +353,16 @@ impl AllergyForm {
             return Some(AllergyFormAction::FocusChanged);
         }
 
-        if self.focused_field == AllergyFormField::OnsetDate {
-            if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
+        if self.focused_field == AllergyFormField::OnsetDate
+            && matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
                 let current_value = self.onset_date;
                 self.date_picker.open(current_value);
                 return Some(AllergyFormAction::FocusChanged);
             }
-        }
 
         match self.focused_field {
             AllergyFormField::AllergyType => {
-                if let Some(action) = self.allergy_type_dropdown.handle_key(key) {
+                if let Some(_action) = self.allergy_type_dropdown.handle_key(key) {
                     // Allow Tab/BackTab/Esc to pass through to form's navigation handler
                     match key.code {
                         KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {
@@ -381,7 +380,7 @@ impl AllergyForm {
                 }
             }
             AllergyFormField::Severity => {
-                if let Some(action) = self.severity_dropdown.handle_key(key) {
+                if let Some(_action) = self.severity_dropdown.handle_key(key) {
                     // Allow Tab/BackTab/Esc to pass through to form's navigation handler
                     match key.code {
                         KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {
@@ -620,8 +619,8 @@ impl Widget for AllergyForm {
 
             let has_error = self.error(field).is_some();
 
-            if y >= inner.y as i32 && y < max_y {
-                if !field.is_dropdown() {
+            if y >= inner.y as i32 && y < max_y
+                && !field.is_dropdown() {
                     let label_style = if is_focused {
                         Style::default()
                             .fg(self.theme.colors.primary)
@@ -641,7 +640,6 @@ impl Widget for AllergyForm {
                         );
                     }
                 }
-            }
 
             let max_value_width = inner.width.saturating_sub(label_width + 4);
 

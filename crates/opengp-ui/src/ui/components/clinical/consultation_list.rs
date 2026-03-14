@@ -273,11 +273,7 @@ impl ConsultationList {
                 Some(ConsultationListAction::Select(self.selected_index))
             }
             KeyCode::Enter => {
-                if let Some(consultation) = self.selected() {
-                    Some(ConsultationListAction::Open(consultation.clone()))
-                } else {
-                    None
-                }
+                self.selected().map(|consultation| ConsultationListAction::Open(consultation.clone()))
             }
             KeyCode::Char('n') => Some(ConsultationListAction::New),
             KeyCode::Char('+') | KeyCode::Char('=') => Some(ConsultationListAction::NextPage),

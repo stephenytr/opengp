@@ -572,7 +572,7 @@ impl App {
             }
         }
 
-        if self.tab_bar.selected() == Tab::Clinical && self.clinical_state.is_form_open() == false {
+        if self.tab_bar.selected() == Tab::Clinical && !self.clinical_state.is_form_open() {
             use crate::ui::components::clinical::ClinicalView;
             let clinical_area = Rect::new(
                 area.x,

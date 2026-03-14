@@ -14,6 +14,7 @@ pub enum FieldType {
 }
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct FormFieldState {
     pub label: &'static str,
     pub value: String,
@@ -23,18 +24,6 @@ pub struct FormFieldState {
     pub field_type: FieldType,
 }
 
-impl Default for FormFieldState {
-    fn default() -> Self {
-        Self {
-            label: "",
-            value: String::new(),
-            error: None,
-            focused: false,
-            required: false,
-            field_type: FieldType::default(),
-        }
-    }
-}
 
 impl FormFieldState {
     pub fn new(label: &'static str) -> Self {

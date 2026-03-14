@@ -107,7 +107,7 @@ impl TimePickerPopup {
     }
 
     fn is_slot_booked(&self, time: NaiveTime) -> bool {
-        self.booked_slots.iter().any(|&slot| slot == time)
+        self.booked_slots.contains(&time)
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<TimePickerAction> {
@@ -179,7 +179,7 @@ impl TimePickerPopup {
 
     fn grid_max_row(&self) -> u8 {
         let hours_range = self.config.max_hour - self.config.viewport_start_hour;
-        (hours_range as u8).min(GRID_ROWS - 1)
+        hours_range.min(GRID_ROWS - 1)
     }
 
     fn update_time_from_grid(&mut self) {
@@ -198,7 +198,7 @@ impl TimePickerPopup {
     }
 
     fn total_slots(&self) -> u8 {
-        ((self.config.max_hour - self.config.min_hour) * 4) as u8
+        (self.config.max_hour - self.config.min_hour) * 4
     }
 
     fn slot_to_time(&self, slot: u8) -> String {
@@ -221,7 +221,7 @@ impl TimePickerPopup {
 
     fn ensure_visible(&mut self) {
         let min_hour = self.config.min_hour as u32;
-        let max_hour = self.config.max_hour as u32;
+        let _max_hour = self.config.max_hour as u32;
         let viewport_hours = self.viewport_end_hour() - self.viewport_start_hour;
 
         if self.selected_time.hour() < self.viewport_start_hour as u32 {
@@ -234,7 +234,7 @@ impl TimePickerPopup {
     }
 
     fn viewport_end_hour(&self) -> u8 {
-        let min_hour = self.config.min_hour as u32;
+        let _min_hour = self.config.min_hour as u32;
         let max_hour = self.config.max_hour as u32;
         let viewport_hours = 8;
         (self.viewport_start_hour + viewport_hours).min(max_hour as u8)

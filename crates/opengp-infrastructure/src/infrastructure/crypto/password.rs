@@ -12,7 +12,7 @@ impl Default for BcryptPasswordHasher {
 
 impl BcryptPasswordHasher {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 }
 

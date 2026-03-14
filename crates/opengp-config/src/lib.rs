@@ -228,6 +228,7 @@ pub enum ConfigError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use temp_env;
 
     #[test]
     fn test_calendar_config_default() {
@@ -240,41 +241,40 @@ mod tests {
 
     #[test]
     fn test_calendar_config_from_env() {
-        std::env::remove_var("CALENDAR_MIN_HOUR");
-        std::env::remove_var("CALENDAR_MAX_HOUR");
-        std::env::remove_var("CALENDAR_START_HOUR");
-        std::env::remove_var("CALENDAR_END_HOUR");
-
-        let config = CalendarConfig::from_env().expect("should load with defaults");
-        assert_eq!(config.min_hour, 6);
-        assert_eq!(config.max_hour, 22);
-        assert_eq!(config.viewport_start_hour, 8);
-        assert_eq!(config.viewport_end_hour, 18);
-
-        std::env::remove_var("CALENDAR_MIN_HOUR");
-        std::env::remove_var("CALENDAR_MAX_HOUR");
-        std::env::remove_var("CALENDAR_START_HOUR");
-        std::env::remove_var("CALENDAR_END_HOUR");
+        temp_env::with_vars(
+            [
+                ("CALENDAR_MIN_HOUR", None::<&str>),
+                ("CALENDAR_MAX_HOUR", None::<&str>),
+                ("CALENDAR_START_HOUR", None::<&str>),
+                ("CALENDAR_END_HOUR", None::<&str>),
+            ],
+            || {
+                let config = CalendarConfig::from_env().expect("should load with defaults");
+                assert_eq!(config.min_hour, 6);
+                assert_eq!(config.max_hour, 22);
+                assert_eq!(config.viewport_start_hour, 8);
+                assert_eq!(config.viewport_end_hour, 18);
+            },
+        );
     }
 
     #[test]
     fn test_calendar_config_from_env_custom_values() {
-        std::env::set_var("CALENDAR_MIN_HOUR", "5");
-        std::env::set_var("CALENDAR_MAX_HOUR", "23");
-        std::env::set_var("CALENDAR_START_HOUR", "7");
-        std::env::set_var("CALENDAR_END_HOUR", "19");
-
-        let config = CalendarConfig::from_env().expect("should load custom values");
-        assert_eq!(config.min_hour, 5);
-        assert_eq!(config.max_hour, 23);
-        assert_eq!(config.viewport_start_hour, 7);
-        assert_eq!(config.viewport_end_hour, 19);
-
-        // Cleanup
-        std::env::remove_var("CALENDAR_MIN_HOUR");
-        std::env::remove_var("CALENDAR_MAX_HOUR");
-        std::env::remove_var("CALENDAR_START_HOUR");
-        std::env::remove_var("CALENDAR_END_HOUR");
+        temp_env::with_vars(
+            [
+                ("CALENDAR_MIN_HOUR", Some("5")),
+                ("CALENDAR_MAX_HOUR", Some("23")),
+                ("CALENDAR_START_HOUR", Some("7")),
+                ("CALENDAR_END_HOUR", Some("19")),
+            ],
+            || {
+                let config = CalendarConfig::from_env().expect("should load custom values");
+                assert_eq!(config.min_hour, 5);
+                assert_eq!(config.max_hour, 23);
+                assert_eq!(config.viewport_start_hour, 7);
+                assert_eq!(config.viewport_end_hour, 19);
+            },
+        );
     }
 
     #[test]

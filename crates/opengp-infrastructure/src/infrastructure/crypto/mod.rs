@@ -86,6 +86,39 @@ impl EncryptionService {
         Ok(Self { cipher })
     }
 
+    /// Initialize encryption service with provided key
+    ///
+    /// Creates an encryption service with an explicitly provided key.
+    /// Key must be hex-encoded and 32 bytes (64 hex characters).
+    ///
+    /// # Arguments
+    ///
+    /// * `key_hex` - Hex-encoded encryption key (must be 64 characters for 32 bytes)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Key is not valid hex
+    /// - Key is not 32 bytes
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use opengp_infrastructure::infrastructure::crypto::EncryptionService;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let key_hex = "0".repeat(64);
+    /// let service = EncryptionService::new_with_key(&key_hex)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn new_with_key(key_hex: &str) -> Result<Self, CryptoError> {
+        let key_bytes = Self::decode_key(key_hex)?;
+        let cipher = Aes256Gcm::new_from_slice(&key_bytes).map_err(|_| CryptoError::InvalidKey)?;
+
+        Ok(Self { cipher })
+    }
+
     /// Encrypt sensitive data
     ///
     /// Encrypts plaintext using AES-256-GCM with a random nonce.
@@ -192,7 +225,13 @@ impl EncryptionService {
     /// Reads `ENCRYPTION_KEY` environment variable and decodes from hex.
     fn load_key_from_env() -> Result<Vec<u8>, CryptoError> {
         let key_hex = std::env::var("ENCRYPTION_KEY").map_err(|_| CryptoError::MissingKey)?;
+        Self::decode_key(&key_hex)
+    }
 
+    /// Decode and validate hex-encoded encryption key
+    ///
+    /// Decodes a hex string to bytes and validates it's 32 bytes for AES-256.
+    fn decode_key(key_hex: &str) -> Result<Vec<u8>, CryptoError> {
         // Decode hex string to bytes
         let key_bytes = hex::decode(key_hex).map_err(|_| CryptoError::InvalidKeyFormat)?;
 

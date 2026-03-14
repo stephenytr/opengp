@@ -13,3 +13,6 @@ serde_json.workspace = true
 chrono.workspace = true
 dotenvy.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+temp-env = "0.3"

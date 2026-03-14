@@ -31,3 +31,6 @@ path = "../opengp-domain"
 [dependencies.opengp-infrastructure]
 path = "../opengp-infrastructure"
 features = ["postgres"]
+
+[dev-dependencies]
+temp-env = "0.3"

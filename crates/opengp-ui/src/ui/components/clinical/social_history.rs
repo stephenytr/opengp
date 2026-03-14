@@ -57,7 +57,7 @@ impl SocialHistoryField {
     }
 
     fn label(&self) -> &'static str {
-        use strum::IntoStaticStr;
+        
         (*self).into()
     }
 
@@ -109,7 +109,7 @@ impl Clone for SocialHistoryComponent {
             drinks_per_week: self.drinks_per_week.clone(),
             support_network: self.support_network.clone(),
             notes: self.notes.clone(),
-            focused_field: self.focused_field.clone(),
+            focused_field: self.focused_field,
             loading: self.loading,
             loading_state: self.loading_state.clone(),
             theme: self.theme.clone(),
@@ -215,7 +215,7 @@ impl SocialHistoryComponent {
                 .with_value(
                     history
                         .smoking_quit_date
-                        .map(|d| format_date(d))
+                        .map(format_date)
                         .unwrap_or_default(),
                 );
             self.drinks_per_week = TextareaState::new("Drinks/week")
@@ -397,7 +397,7 @@ impl SocialHistoryComponent {
             .iter()
             .position(|f| f == &self.focused_field)
             .unwrap_or(0);
-        self.focused_field = fields[(current + 1) % fields.len()].clone();
+        self.focused_field = fields[(current + 1) % fields.len()];
     }
 
     fn prev_field(&mut self) {
@@ -406,7 +406,7 @@ impl SocialHistoryComponent {
             .iter()
             .position(|f| f == &self.focused_field)
             .unwrap_or(0);
-        self.focused_field = fields[(current + fields.len() - 1) % fields.len()].clone();
+        self.focused_field = fields[(current + fields.len() - 1) % fields.len()];
     }
 
     pub fn get_field_value(&self, field: &SocialHistoryField) -> String {
@@ -681,7 +681,7 @@ fn render_view_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
                 Span::styled(
                     history
                         .exercise_frequency
-                        .map(|e| format_exercise_frequency(e))
+                        .map(format_exercise_frequency)
                         .unwrap_or_else(|| "-".to_string()),
                     value_style,
                 ),

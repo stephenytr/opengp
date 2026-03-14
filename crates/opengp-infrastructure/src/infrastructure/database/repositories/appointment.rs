@@ -793,6 +793,7 @@ mod tests {
     use crate::infrastructure::database::test_utils::create_test_pool;
 
     #[tokio::test]
+    #[ignore] // Requires PostgreSQL database connection
     async fn update_uses_optimistic_locking_and_increments_version() {
         let pool = create_test_pool().await.expect("pool should initialize");
         let repo = SqlxAppointmentRepository::new(pool.clone());

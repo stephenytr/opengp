@@ -48,9 +48,11 @@ impl ApiConfig {
                 .ok()
                 .and_then(|v| v.parse::<u64>().ok())
                 .unwrap_or(600),
-            encryption_key: std::env::var("ENCRYPTION_KEY").unwrap_or_else(|_| {
-                "0000000000000000000000000000000000000000000000000000000000000000".to_string()
-            }),
+            encryption_key: std::env::var("ENCRYPTION_KEY").map_err(|_| {
+                ApiError::Configuration(
+                    "ENCRYPTION_KEY environment variable is required".to_string(),
+                )
+            })?,
             session_timeout_minutes: std::env::var("SESSION_TIMEOUT_MINUTES")
                 .ok()
                 .and_then(|v| v.parse::<i64>().ok())
@@ -67,34 +69,40 @@ impl ApiConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn loads_default_port_when_env_missing() {
-        let _guard = ENV_LOCK.lock().expect("env lock should not be poisoned");
-        unsafe {
-            std::env::remove_var("API_PORT");
-            std::env::remove_var("SESSION_TIMEOUT_MINUTES");
-        }
-        let config = ApiConfig::from_env().expect("config should load defaults");
-        assert_eq!(config.port, 8080);
-        assert_eq!(config.session_timeout_minutes, 480);
+        temp_env::with_vars(
+            [
+                ("API_PORT", None::<&str>),
+                ("SESSION_TIMEOUT_MINUTES", None::<&str>),
+                (
+                    "ENCRYPTION_KEY",
+                    Some("0000000000000000000000000000000000000000000000000000000000000000"),
+                ),
+            ],
+            || {
+                let config = ApiConfig::from_env().expect("config should load defaults");
+                assert_eq!(config.port, 8080);
+                assert_eq!(config.session_timeout_minutes, 480);
+            },
+        );
     }
 
     #[test]
     fn loads_session_timeout_minutes_from_env() {
-        let _guard = ENV_LOCK.lock().expect("env lock should not be poisoned");
-        unsafe {
-            std::env::set_var("SESSION_TIMEOUT_MINUTES", "15");
-        }
-
-        let config = ApiConfig::from_env().expect("config should load session timeout");
-        assert_eq!(config.session_timeout_minutes, 15);
-
-        unsafe {
-            std::env::remove_var("SESSION_TIMEOUT_MINUTES");
-        }
+        temp_env::with_vars(
+            [
+                ("SESSION_TIMEOUT_MINUTES", Some("15")),
+                (
+                    "ENCRYPTION_KEY",
+                    Some("0000000000000000000000000000000000000000000000000000000000000000"),
+                ),
+            ],
+            || {
+                let config = ApiConfig::from_env().expect("config should load session timeout");
+                assert_eq!(config.session_timeout_minutes, 15);
+            },
+        );
     }
 }

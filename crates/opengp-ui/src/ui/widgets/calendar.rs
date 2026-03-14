@@ -485,7 +485,7 @@ impl DatePickerStyler {
 impl Default for DatePickerStyler {
     fn default() -> Self {
         let base = Style::default();
-        let focus = base.clone().add_modifier(Modifier::UNDERLINED);
+        let focus = base.add_modifier(Modifier::UNDERLINED);
         Self::new(base, focus)
     }
 }
@@ -493,9 +493,9 @@ impl Default for DatePickerStyler {
 impl DateStyler for DatePickerStyler {
     fn get_style(&self, date: Date) -> Style {
         if Some(date) == self.focus_date {
-            self.focus_style.clone()
+            self.focus_style
         } else {
-            self.base_style.clone()
+            self.base_style
         }
     }
 }

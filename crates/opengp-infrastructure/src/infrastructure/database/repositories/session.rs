@@ -233,6 +233,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // Requires PostgreSQL database connection
     async fn sqlx_repository_creates_finds_and_deletes_session() {
         let pool = create_test_pool().await.expect("pool should initialize");
         let user_id = Uuid::new_v4();

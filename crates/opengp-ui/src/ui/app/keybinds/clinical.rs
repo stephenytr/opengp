@@ -384,7 +384,7 @@ impl App {
                                 id: p.id,
                                 full_name: p.full_name.clone(),
                                 date_of_birth: p.date_of_birth,
-                                gender: p.gender.clone(),
+                                gender: p.gender,
                                 medicare_number: p.medicare_number.clone(),
                                 medicare_irn: p.medicare_irn,
                                 ihi: p.ihi.clone(),

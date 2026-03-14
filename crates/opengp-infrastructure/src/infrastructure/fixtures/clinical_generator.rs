@@ -1,4 +1,4 @@
-use chrono::{Duration, NaiveDate, Utc};
+use chrono::{Duration, Utc};
 use rand::seq::SliceRandom;
 use rand::Rng;
 use uuid::Uuid;

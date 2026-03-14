@@ -210,7 +210,7 @@ impl AppointmentService {
             .repository
             .find_by_id(id)
             .await?
-            .ok_or_else(|| ServiceError::NotFound(id))?;
+            .ok_or(ServiceError::NotFound(id))?;
 
         if appointment.version != expected_version {
             return Err(ServiceError::Conflict(
@@ -319,7 +319,7 @@ impl AppointmentService {
             }
             Err(e) => {
                 error!("Failed to update appointment in database: {}", e);
-                Err(e.into())
+                Err(e)
             }
         }
     }
@@ -350,7 +350,7 @@ impl AppointmentService {
             .repository
             .find_by_id(id)
             .await?
-            .ok_or_else(|| ServiceError::NotFound(id))?;
+            .ok_or(ServiceError::NotFound(id))?;
 
         // Use domain method to cancel (enforces business rules)
         appointment.cancel(reason, user_id);
@@ -368,7 +368,7 @@ impl AppointmentService {
             }
             Err(e) => {
                 error!("Failed to cancel appointment in database: {}", e);
-                Err(e.into())
+                Err(e)
             }
         }
     }
@@ -515,7 +515,7 @@ impl AppointmentService {
             .repository
             .find_by_id(appointment_id)
             .await?
-            .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
+            .ok_or(ServiceError::NotFound(appointment_id))?;
 
         let old_status = appointment.status;
 
@@ -567,7 +567,7 @@ impl AppointmentService {
             .repository
             .find_by_id(appointment_id)
             .await?
-            .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
+            .ok_or(ServiceError::NotFound(appointment_id))?;
 
         let old_status = appointment.status;
 
@@ -619,7 +619,7 @@ impl AppointmentService {
             .repository
             .find_by_id(appointment_id)
             .await?
-            .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
+            .ok_or(ServiceError::NotFound(appointment_id))?;
 
         let old_status = appointment.status;
 
@@ -671,7 +671,7 @@ impl AppointmentService {
             .repository
             .find_by_id(appointment_id)
             .await?
-            .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
+            .ok_or(ServiceError::NotFound(appointment_id))?;
 
         let old_status = appointment.status;
 
@@ -716,7 +716,7 @@ impl AppointmentService {
             .repository
             .find_by_id(appointment_id)
             .await?
-            .ok_or_else(|| ServiceError::NotFound(appointment_id))?;
+            .ok_or(ServiceError::NotFound(appointment_id))?;
 
         let old_start_time = appointment.start_time;
         let new_end_time = new_start_time + chrono::Duration::minutes(new_duration_minutes);
@@ -842,7 +842,7 @@ impl AvailabilityService {
                 available_slots.push(current_time);
             }
 
-            current_time = current_time + slot_duration;
+            current_time += slot_duration;
         }
 
         info!(

@@ -149,6 +149,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore] // Requires PostgreSQL database connection
     async fn test_create_test_pool() {
         let pool = create_test_pool().await;
         assert!(pool.is_ok());

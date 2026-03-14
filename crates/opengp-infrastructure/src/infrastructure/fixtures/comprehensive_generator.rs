@@ -3,7 +3,6 @@
 //! Generates complete patient profiles including demographics, clinical history,
 //! allergies, medical conditions, and consultation records in a single unified interface.
 
-use chrono::Utc;
 use uuid::Uuid;
 
 use opengp_domain::domain::clinical::{Allergy, Consultation, MedicalHistory};

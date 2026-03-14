@@ -251,7 +251,7 @@ impl App {
     }
 
     pub fn keybinds(&self) -> &KeybindRegistry {
-        &self.keybinds
+        self.keybinds
     }
 
     pub fn current_tab(&self) -> Tab {

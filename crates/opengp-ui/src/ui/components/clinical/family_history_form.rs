@@ -44,7 +44,7 @@ impl FamilyHistoryFormField {
     }
 
     pub fn label(&self) -> &'static str {
-        use strum::IntoStaticStr;
+        
         (*self).into()
     }
 

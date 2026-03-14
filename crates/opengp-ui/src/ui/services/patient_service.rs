@@ -86,7 +86,7 @@ impl PatientUiService {
             .find_patient(id)
             .await
             .map_err(|e| UiServiceError::Repository(e.to_string()))?
-            .ok_or_else(|| UiServiceError::NotFound(id))
+            .ok_or(UiServiceError::NotFound(id))
     }
 
     /// Create a new patient
@@ -104,7 +104,7 @@ impl PatientUiService {
             .find_patient(id)
             .await
             .map_err(|e| UiServiceError::Repository(e.to_string()))?
-            .ok_or_else(|| UiServiceError::NotFound(id))?
+            .ok_or(UiServiceError::NotFound(id))?
             .version;
 
         self.service
@@ -120,7 +120,7 @@ impl PatientUiService {
             .find_patient(id)
             .await
             .map_err(|e| UiServiceError::Repository(e.to_string()))?
-            .ok_or_else(|| UiServiceError::NotFound(id))?;
+            .ok_or(UiServiceError::NotFound(id))?;
 
         // TODO: Implement deactivate in repository
         // For now, we'll just return Ok

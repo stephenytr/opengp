@@ -204,11 +204,7 @@ impl AllergyList {
                 Some(AllergyListAction::Select(self.selected_index))
             }
             KeyCode::Enter => {
-                if let Some(allergy) = self.selected() {
-                    Some(AllergyListAction::Open(allergy.clone()))
-                } else {
-                    None
-                }
+                self.selected().map(|allergy| AllergyListAction::Open(allergy.clone()))
             }
             KeyCode::Char('n') => Some(AllergyListAction::New),
             KeyCode::Char('i') => {
@@ -216,11 +212,7 @@ impl AllergyList {
                 Some(AllergyListAction::ToggleInactive)
             }
             KeyCode::Char('d') => {
-                if let Some(allergy) = self.selected() {
-                    Some(AllergyListAction::Delete(allergy.clone()))
-                } else {
-                    None
-                }
+                self.selected().map(|allergy| AllergyListAction::Delete(allergy.clone()))
             }
             _ => None,
         }
