@@ -81,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ PostgreSQL connected");
     println!("  URL: {db_url}\n");
 
-    println!("Running migrations from ./migrations_postgres ...");
+    println!("Running migrations from ./migrations ...");
     run_postgres_migrations(&pool).await?;
     println!("✓ Migrations complete\n");
 
@@ -345,7 +345,7 @@ async fn load_practitioner_ids(pool: &PgPool) -> Result<Vec<Uuid>, sqlx::Error> 
 }
 
 async fn run_postgres_migrations(pool: &PgPool) -> Result<(), Box<dyn std::error::Error>> {
-    let migrations_dir = Path::new("./migrations_postgres");
+    let migrations_dir = Path::new("./migrations");
     let mut files = fs::read_dir(migrations_dir)?
         .filter_map(|entry| entry.ok())
         .filter(|entry| {

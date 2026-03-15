@@ -1,7 +1,7 @@
 use thiserror::Error;
 use uuid::Uuid;
 
-pub use crate::domain::error::RepositoryError;
+use crate::domain::error::RepositoryError as BaseRepositoryError;
 
 #[derive(Debug, Error)]
 pub enum ServiceError {
@@ -40,4 +40,28 @@ pub enum AuthError {
 
     #[error("Repository error: {0}")]
     Repository(#[from] RepositoryError),
+}
+
+#[derive(Debug, Error)]
+pub enum RepositoryError {
+    #[error(transparent)]
+    Base(#[from] BaseRepositoryError),
+
+    #[error("Database error: {0}")]
+    Database(String),
+
+    #[error("Not found")]
+    NotFound,
+
+    #[error("Constraint violation: {0}")]
+    ConstraintViolation(String),
+
+    #[error("Conflict: {0}")]
+    Conflict(String),
+}
+
+impl crate::domain::error::InfrastructureError for RepositoryError {
+    fn map_sqlx_error<E: std::error::Error + Send + Sync + 'static>(error: E) -> Self {
+        BaseRepositoryError::from_infrastructure(error).into()
+    }
 }

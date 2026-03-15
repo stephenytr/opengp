@@ -9,7 +9,7 @@ use crate::ui::components::appointment::{
 };
 use crate::ui::components::clinical::ClinicalState;
 use crate::ui::components::help::HelpOverlay;
-use crate::ui::components::patient::{PatientForm, PatientList, PatientState};
+use crate::ui::components::patient::{PatientForm, PatientList};
 use crate::ui::components::status_bar::StatusBar;
 use crate::ui::components::tabs::{Tab, TabBar};
 use crate::ui::keybinds::{KeyContext, KeybindRegistry};
@@ -74,21 +74,11 @@ pub struct App {
     should_quit: bool,
     /// The authenticated user performing operations - used for audit logging
     pub current_user_id: uuid::Uuid,
-    #[allow(dead_code)]
-    title: String,
-    #[allow(dead_code)]
-    version: String,
-    #[allow(dead_code)]
-    patient_state: PatientState,
     patient_list: PatientList,
     patient_form: Option<PatientForm>,
     pending_patient_data: Option<PendingPatientData>,
     pending_edit_patient_id: Option<uuid::Uuid>,
     appointment_state: AppointmentState,
-    #[allow(dead_code)]
-    appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
-    #[allow(dead_code)]
-    patient_service: Option<Arc<crate::ui::services::PatientUiService>>,
     pending_appointment_date: Option<NaiveDate>,
     pending_load_practitioners: bool,
     pending_load_booked_slots: Option<(uuid::Uuid, NaiveDate, u32)>,
@@ -99,8 +89,6 @@ pub struct App {
     pending_clinical_patient_id: Option<uuid::Uuid>,
     pending_clinical_save_data: Option<PendingClinicalSaveData>,
     clinical_state: ClinicalState,
-    #[allow(dead_code)]
-    clinical_service: Option<Arc<crate::ui::services::ClinicalUiService>>,
     api_client: Option<Arc<crate::api::ApiClient>>,
     patient_page_limit: u32,
     appointment_page_limit: u32,
@@ -179,9 +167,6 @@ pub enum RetryOperation {
 impl App {
     pub fn new(
         api_client: Option<Arc<crate::api::ApiClient>>,
-        appointment_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
-        patient_service: Option<Arc<crate::ui::services::PatientUiService>>,
-        clinical_service: Option<Arc<crate::ui::services::ClinicalUiService>>,
         calendar_config: CalendarConfig,
     ) -> Self {
         let theme = Theme::dark();
@@ -197,16 +182,11 @@ impl App {
             current_context: KeyContext::Global,
             should_quit: false,
             current_user_id: uuid::Uuid::nil(),
-            title: "OpenGP".to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            patient_state: PatientState::new(),
             patient_list: PatientList::new(theme.clone()),
             patient_form: None,
             pending_patient_data: None,
             pending_edit_patient_id: None,
             appointment_state: AppointmentState::new(theme.clone(), calendar_config),
-            appointment_service,
-            patient_service,
             pending_appointment_date: None,
             pending_load_practitioners: false,
             pending_load_booked_slots: None,
@@ -217,7 +197,6 @@ impl App {
             pending_clinical_patient_id: None,
             pending_clinical_save_data: None,
             clinical_state: ClinicalState::with_theme(theme.clone()),
-            clinical_service,
             api_client,
             patient_page_limit: DEFAULT_PATIENT_PAGE_LIMIT,
             appointment_page_limit: DEFAULT_APPOINTMENT_PAGE_LIMIT,
@@ -370,7 +349,7 @@ impl App {
 
 impl Default for App {
     fn default() -> Self {
-        Self::new(None, None, None, None, CalendarConfig::default())
+        Self::new(None, CalendarConfig::default())
     }
 }
 
@@ -380,14 +359,14 @@ mod tests {
 
     #[test]
     fn test_app_creation() {
-        let app = App::new(None, None, None, None, CalendarConfig::default());
+        let app = App::new(None, CalendarConfig::default());
         assert_eq!(app.current_tab(), Tab::Patient);
         assert!(!app.should_quit());
     }
 
     #[test]
     fn test_tab_switching() {
-        let mut app = App::new(None, None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -399,7 +378,7 @@ mod tests {
 
     #[test]
     fn test_help_toggle() {
-        let mut app = App::new(None, None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default());
 
         assert!(!app.help_overlay.is_visible());
 
@@ -418,7 +397,7 @@ mod tests {
 
     #[test]
     fn test_quit() {
-        let mut app = App::new(None, None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default());
 
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('q'),
@@ -431,7 +410,7 @@ mod tests {
 
     #[test]
     fn test_calendar_keybind_routing() {
-        let mut app = App::new(None, None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -459,7 +438,7 @@ mod tests {
 
     #[test]
     fn test_calendar_enter_selects_date() {
-        let mut app = App::new(None, None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -482,7 +461,7 @@ mod tests {
 
     #[test]
     fn test_schedule_keybind_routing() {
-        let mut app = App::new(None, None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -514,7 +493,7 @@ mod tests {
 
     #[test]
     fn test_q_does_not_quit_on_appointment() {
-        let mut app = App::new(None, None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -535,7 +514,7 @@ mod tests {
 
     #[test]
     fn test_ctrl_q_always_quits() {
-        let mut app = App::new(None, None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -552,7 +531,7 @@ mod tests {
 
     #[test]
     fn test_schedule_escape_returns_to_calendar() {
-        let mut app = App::new(None, None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -584,7 +563,7 @@ mod tests {
 
     #[test]
     fn test_patient_keybind_regression() {
-        let mut app = App::new(None, None, None, None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default());
         assert_eq!(app.current_tab(), Tab::Patient);
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('q'),

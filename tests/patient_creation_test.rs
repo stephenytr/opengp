@@ -25,7 +25,7 @@ async fn setup_test_database() -> PgPool {
 
     MIGRATIONS
         .get_or_init(|| async {
-            if let Err(err) = sqlx::migrate!("./migrations_postgres").run(&pool).await {
+            if let Err(err) = sqlx::migrate!("./migrations").run(&pool).await {
                 let msg = err.to_string();
                 assert!(
                     msg.contains("users_pkey") && msg.contains("duplicate key value"),
@@ -44,6 +44,7 @@ fn generate_unique_medicare() -> String {
 }
 
 #[tokio::test]
+#[ignore = "requires running PostgreSQL instance"]
 async fn test_create_patient_with_database() {
     let pool = setup_test_database().await;
 
@@ -96,6 +97,7 @@ async fn test_create_patient_with_database() {
 }
 
 #[tokio::test]
+#[ignore = "requires running PostgreSQL instance"]
 async fn test_duplicate_medicare_number() {
     let pool = setup_test_database().await;
 
@@ -142,6 +144,7 @@ async fn test_duplicate_medicare_number() {
 }
 
 #[tokio::test]
+#[ignore = "requires running PostgreSQL instance"]
 async fn test_find_patient_by_id() {
     let pool = setup_test_database().await;
 

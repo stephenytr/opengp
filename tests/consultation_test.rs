@@ -33,7 +33,7 @@ async fn setup_test_database() -> PgPool {
 
     MIGRATIONS
         .get_or_init(|| async {
-            if let Err(err) = sqlx::migrate!("./migrations_postgres").run(&pool).await {
+            if let Err(err) = sqlx::migrate!("./migrations").run(&pool).await {
                 let msg = err.to_string();
                 assert!(
                     msg.contains("users_pkey") && msg.contains("duplicate key value"),
@@ -148,6 +148,7 @@ fn create_clinical_service(pool: &PgPool) -> ClinicalService {
 }
 
 #[tokio::test]
+#[ignore = "requires running PostgreSQL instance"]
 async fn test_create_consultation_with_reason() {
     let pool = setup_test_database().await;
     let service = create_clinical_service(&pool);
@@ -202,6 +203,7 @@ async fn test_create_consultation_with_reason() {
 }
 
 #[tokio::test]
+#[ignore = "requires running PostgreSQL instance"]
 async fn test_update_soap_notes_fails_on_signed_consultation() {
     let pool = setup_test_database().await;
     let service = create_clinical_service(&pool);
@@ -252,6 +254,7 @@ async fn test_update_soap_notes_fails_on_signed_consultation() {
 }
 
 #[tokio::test]
+#[ignore = "requires running PostgreSQL instance"]
 async fn test_sign_consultation() {
     let pool = setup_test_database().await;
     let service = create_clinical_service(&pool);
@@ -303,6 +306,7 @@ async fn test_sign_consultation() {
 }
 
 #[tokio::test]
+#[ignore = "requires running PostgreSQL instance"]
 async fn test_sign_consultation_twice_fails() {
     let pool = setup_test_database().await;
     let service = create_clinical_service(&pool);
@@ -340,6 +344,7 @@ async fn test_sign_consultation_twice_fails() {
 }
 
 #[tokio::test]
+#[ignore = "requires running PostgreSQL instance"]
 async fn test_find_consultations_by_date_range_for_patient() {
     let pool = setup_test_database().await;
     let service = create_clinical_service(&pool);
@@ -425,6 +430,7 @@ async fn test_find_consultations_by_date_range_for_patient() {
 }
 
 #[tokio::test]
+#[ignore = "requires running PostgreSQL instance"]
 async fn test_find_consultations_by_date_range_future_returns_empty() {
     let pool = setup_test_database().await;
     let service = create_clinical_service(&pool);

@@ -11,17 +11,18 @@
 1. [Overview](#overview)
 2. [Architectural Principles](#architectural-principles)
 3. [System Architecture](#system-architecture)
-4. [Layer Architecture](#layer-architecture)
-5. [Module Structure](#module-structure)
-6. [Component Architecture](#component-architecture)
-7. [Data Architecture](#data-architecture)
-8. [Security Architecture](#security-architecture)
-9. [Integration Architecture](#integration-architecture)
-10. [Development Patterns](#development-patterns)
-11. [Testing Strategy](#testing-strategy)
-12. [Deployment Architecture](#deployment-architecture)
-13. [Performance Considerations](#performance-considerations)
-14. [Decision Log](#decision-log)
+4. [TUI Architecture](#tui-architecture)
+5. [Layer Architecture](#layer-architecture)
+6. [Module Structure](#module-structure)
+7. [Component Architecture](#component-architecture)
+8. [Data Architecture](#data-architecture)
+9. [Security Architecture](#security-architecture)
+10. [Integration Architecture](#integration-architecture)
+11. [Development Patterns](#development-patterns)
+12. [Testing Strategy](#testing-strategy)
+13. [Deployment Architecture](#deployment-architecture)
+14. [Performance Considerations](#performance-considerations)
+15. [Decision Log](#decision-log)
 
 ---
 
@@ -256,7 +257,26 @@ pub trait Renderable {
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
----
+## TUI Architecture
+
+The terminal user interface lives in the `opengp-ui` crate. It runs as a thin client that talks to the backend over HTTP instead of calling domain services directly.
+
+### Client server split
+
+- The TUI uses an `ApiClient` to send HTTP requests to the `opengp-api` backend.
+- All domain services such as `PatientService`, `ClinicalService`, and similar types run on the server side inside `opengp-api`.
+- The TUI never holds `Arc<dyn ...Service>` instances and never calls service methods inside the terminal process.
+
+### Relationship to opengp-domain
+
+- `opengp-ui` depends on `opengp-domain` only for shared types, for example models, DTOs, and enums that are used in request and response payloads.
+- Business rules, validation, and orchestration in the domain layer are executed on the server when the API handles a request.
+
+This separation is intentional. The TUI is treated as an external client, even though it ships in the same repository as the backend.
+
+### Validation and enforcement
+
+Because the TUI bypasses domain services locally and goes through HTTP instead, domain validation only applies when the API enforces it. If the API handler does not call the appropriate domain service or validation method, the TUI will not get those guarantees.
 
 ## Layer Architecture
 

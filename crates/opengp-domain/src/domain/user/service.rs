@@ -7,11 +7,13 @@ use uuid::Uuid;
 
 use crate::service;
 
-use super::dto::{LoginRequest, LoginResponse, NewUserData};
-use super::error::{AuthError, ServiceError};
+use super::dto::NewUserData;
+use crate::domain::api::{LoginRequest, LoginResponse, AuthenticatedUserResponse};
+use super::error::{AuthError, RepositoryError, ServiceError};
 use super::model::{Practitioner, Role, Session, User};
 use super::password::PasswordHasher;
 use super::repository::{PractitionerRepository, SessionRepository, UserRepository};
+use crate::domain::error::RepositoryError as BaseRepositoryError;
 
 const MAX_FAILED_LOGIN_ATTEMPTS: u8 = 5;
 const DEFAULT_SESSION_TIMEOUT_MINUTES: i64 = 8 * 60;
@@ -149,8 +151,15 @@ impl AuthService {
         self.session_repository.create(session).await?;
 
         Ok(LoginResponse {
-            user_id: user.id,
-            session_token,
+            access_token: session_token,
+            token_type: "Bearer".to_string(),
+            expires_in_seconds: self.session_ttl_seconds(),
+            user: AuthenticatedUserResponse {
+                id: user.id,
+                username: user.username.clone(),
+                role: user.role.to_string().to_lowercase(),
+                display_name: user.full_name(),
+            },
         })
     }
 
@@ -177,7 +186,10 @@ impl AuthService {
     pub async fn logout(&self, session_token: &str) -> Result<(), AuthError> {
         match self.session_repository.delete_by_token(session_token).await {
             Ok(()) => Ok(()),
-            Err(crate::domain::error::RepositoryError::NotFound) => Err(AuthError::SessionExpired),
+            Err(RepositoryError::Base(BaseRepositoryError::NotFound)) => {
+                Err(AuthError::SessionExpired)
+            }
+            Err(RepositoryError::NotFound) => Err(AuthError::SessionExpired),
             Err(err) => Err(AuthError::Repository(err)),
         }
     }
@@ -434,7 +446,7 @@ mod tests {
     use async_trait::async_trait;
     use std::sync::Mutex;
 
-    use crate::domain::error::RepositoryError;
+    use crate::domain::user::RepositoryError;
 
     struct MockPasswordHasher {
         valid_hash: String,
@@ -492,7 +504,7 @@ mod tests {
             sessions.retain(|s| s.token != token);
 
             if sessions.len() == before {
-                Err(RepositoryError::NotFound)
+                Err(RepositoryError::Base(BaseRepositoryError::NotFound))
             } else {
                 Ok(())
             }
@@ -621,10 +633,10 @@ mod tests {
             .await
             .expect("login should succeed");
 
-        assert_eq!(response.user_id, expected_user_id);
-        assert_eq!(response.session_token.len(), 64);
+        assert_eq!(response.user.id, expected_user_id);
+        assert_eq!(response.access_token.len(), 64);
         let validated_user_id = service
-            .validate_session(&response.session_token)
+            .validate_session(&response.access_token)
             .await
             .expect("session should be valid");
         assert_eq!(validated_user_id, expected_user_id);
@@ -650,7 +662,7 @@ mod tests {
             .await
             .expect("second login should succeed");
 
-        assert_ne!(first.session_token, second.session_token);
+        assert_ne!(first.access_token, second.access_token);
     }
 
     #[tokio::test]
@@ -679,9 +691,9 @@ mod tests {
             .await
             .expect("login should succeed");
 
-        assert!(service.logout(&login.session_token).await.is_ok());
+        assert!(service.logout(&login.access_token).await.is_ok());
         assert!(matches!(
-            service.logout(&login.session_token).await,
+            service.logout(&login.access_token).await,
             Err(AuthError::SessionExpired)
         ));
     }

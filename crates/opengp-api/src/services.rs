@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::Utc;
 use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentSearchCriteria, AppointmentService, AvailabilityService,
-    CalendarAppointment,
+    CalendarAppointment, RepositoryError as AppointmentRepositoryError,
 };
 use opengp_domain::domain::audit::{
     AuditRepository, AuditService,
@@ -14,10 +15,10 @@ use opengp_domain::domain::clinical::{
     RepositoryError as ClinicalRepositoryError, SocialHistory, SocialHistoryRepository, VitalSigns,
     VitalSignsRepository,
 };
-use opengp_domain::domain::error::RepositoryError;
 use opengp_domain::domain::patient::{PatientRepository, PatientService};
 use opengp_domain::domain::user::{
-    AuthService, PasswordError, PasswordHasher, SessionRepository, UserRepository,
+    AuthService, PasswordError, PasswordHasher, RepositoryError as UserRepositoryError,
+    SessionRepository, UserRepository,
     WorkingHours, WorkingHoursRepository,
 };
 #[cfg(test)]
@@ -177,7 +178,7 @@ impl AppointmentCalendarQuery for NoopAppointmentCalendarQuery {
     async fn find_calendar_appointments(
         &self,
         _criteria: &AppointmentSearchCriteria,
-    ) -> Result<Vec<CalendarAppointment>, RepositoryError> {
+    ) -> Result<Vec<CalendarAppointment>, AppointmentRepositoryError> {
         Ok(vec![])
     }
 }
@@ -189,7 +190,7 @@ impl WorkingHoursRepository for NoopWorkingHoursRepository {
     async fn find_by_practitioner(
         &self,
         _practitioner_id: Uuid,
-    ) -> Result<Vec<WorkingHours>, RepositoryError> {
+    ) -> Result<Vec<WorkingHours>, UserRepositoryError> {
         Ok(vec![])
     }
 
@@ -197,15 +198,15 @@ impl WorkingHoursRepository for NoopWorkingHoursRepository {
         &self,
         _practitioner_id: Uuid,
         _day_of_week: u8,
-    ) -> Result<Option<WorkingHours>, RepositoryError> {
+    ) -> Result<Option<WorkingHours>, UserRepositoryError> {
         Ok(None)
     }
 
-    async fn save(&self, working_hours: WorkingHours) -> Result<WorkingHours, RepositoryError> {
+    async fn save(&self, working_hours: WorkingHours) -> Result<WorkingHours, UserRepositoryError> {
         Ok(working_hours)
     }
 
-    async fn delete(&self, _id: Uuid) -> Result<(), RepositoryError> {
+    async fn delete(&self, _id: Uuid) -> Result<(), UserRepositoryError> {
         Ok(())
     }
 }
@@ -291,11 +292,11 @@ impl InMemoryUserRepository {
 #[cfg(test)]
 #[async_trait]
 impl UserRepository for InMemoryUserRepository {
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, RepositoryError> {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, UserRepositoryError> {
         Ok(self.users.read().await.iter().find(|u| u.id == id).cloned())
     }
 
-    async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepositoryError> {
+    async fn find_by_username(&self, username: &str) -> Result<Option<User>, UserRepositoryError> {
         Ok(self
             .users
             .read()
@@ -305,11 +306,11 @@ impl UserRepository for InMemoryUserRepository {
             .cloned())
     }
 
-    async fn find_all(&self) -> Result<Vec<User>, RepositoryError> {
+    async fn find_all(&self) -> Result<Vec<User>, UserRepositoryError> {
         Ok(self.users.read().await.clone())
     }
 
-    async fn find_by_role(&self, role: Role) -> Result<Vec<User>, RepositoryError> {
+    async fn find_by_role(&self, role: Role) -> Result<Vec<User>, UserRepositoryError> {
         Ok(self
             .users
             .read()
@@ -320,13 +321,13 @@ impl UserRepository for InMemoryUserRepository {
             .collect())
     }
 
-    async fn create(&self, user: User) -> Result<User, RepositoryError> {
+    async fn create(&self, user: User) -> Result<User, UserRepositoryError> {
         let mut users = self.users.write().await;
         if users
             .iter()
             .any(|existing| existing.username == user.username)
         {
-            return Err(RepositoryError::ConstraintViolation(
+            return Err(UserRepositoryError::ConstraintViolation(
                 "Username already exists".to_string(),
             ));
         }
@@ -335,20 +336,20 @@ impl UserRepository for InMemoryUserRepository {
         Ok(user)
     }
 
-    async fn update(&self, user: User) -> Result<User, RepositoryError> {
+    async fn update(&self, user: User) -> Result<User, UserRepositoryError> {
         let mut users = self.users.write().await;
         let Some(existing) = users.iter_mut().find(|u| u.id == user.id) else {
-            return Err(RepositoryError::NotFound);
+            return Err(UserRepositoryError::NotFound);
         };
 
         *existing = user.clone();
         Ok(user)
     }
 
-    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
+    async fn delete(&self, id: Uuid) -> Result<(), UserRepositoryError> {
         let mut users = self.users.write().await;
         let Some(existing) = users.iter_mut().find(|u| u.id == id) else {
-            return Err(RepositoryError::NotFound);
+            return Err(UserRepositoryError::NotFound);
         };
 
         existing.is_active = false;

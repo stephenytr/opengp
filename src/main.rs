@@ -4,15 +4,10 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use chrono::Utc;
 use opengp_domain::domain::api::{
-    AllergyRequest, AllergyResponse, AppointmentRequest, ConsultationRequest, FamilyHistoryRequest,
-    FamilyHistoryResponse, MedicalHistoryRequest, MedicalHistoryResponse, PatientRequest,
-    PatientResponse, SocialHistoryRequest, SocialHistoryResponse, VitalSignsRequest,
-    VitalSignsResponse,
+    AllergyRequest, ConsultationRequest, FamilyHistoryRequest, MedicalHistoryRequest,
+    SocialHistoryRequest, VitalSignsRequest,
 };
-use opengp_domain::domain::appointment::AppointmentType;
-use opengp_domain::domain::patient::{Gender, Patient};
 use opengp_ui::api::ApiClient;
 use opengp_ui::ui::app::App;
 use ratatui::backend::CrosstermBackend;
@@ -23,6 +18,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use opengp_config::CalendarConfig;
 use opengp_config::Config;
+
+mod conversions;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -67,9 +64,6 @@ async fn run_tui(
 
     let mut app = App::new(
         Some(api_client.clone()),
-        None,
-        None,
-        None,
         calendar_config.clone(),
     );
     app.set_authenticated(has_session_token);
@@ -88,13 +82,13 @@ async fn run_tui(
         if let Some(pending) = app.take_pending_patient_data() {
             match pending {
                 opengp_ui::ui::app::PendingPatientData::New(data) => {
-                    let request = patient_request_from_new(data);
+                    let request = conversions::patient_request_from_new(data);
                     api_client.create_patient(&request).await?;
                     tracing::info!("Created new patient via API");
                 }
                 opengp_ui::ui::app::PendingPatientData::Update { id, data } => {
                     let existing = api_client.get_patient(id).await?;
-                    let request = patient_request_from_update(data, &existing);
+                    let request = conversions::patient_request_from_update(data, &existing);
                     api_client.update_patient(id, request).await?;
                     tracing::info!("Updated patient via API");
                 }
@@ -107,7 +101,7 @@ async fn run_tui(
         if let Some(patient_id) = app.take_pending_edit_patient_id() {
             match api_client.get_patient(patient_id).await {
                 Ok(patient) => {
-                    app.open_patient_form(domain_patient_from_api_response(patient));
+                    app.open_patient_form(conversions::domain_patient_from_api_response(patient));
                     tracing::info!("Loaded patient for editing: {}", patient_id);
                 }
                 Err(e) => {
@@ -167,7 +161,7 @@ async fn run_tui(
 
         if let Some(data) = app.take_pending_appointment_save() {
             let appointment_date = data.start_time.date_naive();
-            let request = appointment_request_from_new(data);
+            let request = conversions::appointment_request_from_new(data);
             match api_client.create_appointment(&request).await {
                 Ok(_) => {
                     tracing::info!("Created new appointment via API");
@@ -219,8 +213,9 @@ async fn run_tui(
                 } => {
                     let request = AllergyRequest {
                         allergen: allergy.allergen,
-                        allergy_type: allergy_type_to_api_string(allergy.allergy_type).to_string(),
-                        severity: severity_to_api_string(allergy.severity).to_string(),
+                        allergy_type: conversions::allergy_type_to_api_string(allergy.allergy_type)
+                            .to_string(),
+                        severity: conversions::severity_to_api_string(allergy.severity).to_string(),
                         reaction: allergy.reaction,
                         onset_date: allergy.onset_date,
                         notes: allergy.notes,
@@ -232,7 +227,7 @@ async fn run_tui(
                                 Ok(allergies) => {
                                     app.clinical_state_mut().allergies = allergies
                                         .into_iter()
-                                        .map(domain_allergy_from_api_response)
+                                        .map(conversions::domain_allergy_from_api_response)
                                         .collect()
                                 }
                                 Err(e) => {
@@ -257,10 +252,11 @@ async fn run_tui(
                     let request = MedicalHistoryRequest {
                         condition: history.condition,
                         diagnosis_date: history.diagnosis_date,
-                        status: condition_status_to_api_string(history.status).to_string(),
+                        status: conversions::condition_status_to_api_string(history.status)
+                            .to_string(),
                         severity: history
                             .severity
-                            .map(|severity| severity_to_api_string(severity).to_string()),
+                            .map(|severity| conversions::severity_to_api_string(severity).to_string()),
                         notes: history.notes,
                     };
                     match api_client.create_medical_history(patient_id, &request).await {
@@ -270,7 +266,7 @@ async fn run_tui(
                                 Ok(conditions) => {
                                     app.clinical_state_mut().medical_history = conditions
                                         .into_iter()
-                                        .map(domain_medical_history_from_api_response)
+                                        .map(conversions::domain_medical_history_from_api_response)
                                         .collect()
                                 }
                                 Err(e) => {
@@ -308,7 +304,7 @@ async fn run_tui(
                                 Ok(v) => {
                                     app.clinical_state_mut().vital_signs = v
                                         .into_iter()
-                                        .map(domain_vital_signs_from_api_response)
+                                        .map(conversions::domain_vital_signs_from_api_response)
                                         .collect()
                                 }
                                 Err(e) => {
@@ -343,7 +339,7 @@ async fn run_tui(
                                 Ok(entries) => {
                                     app.clinical_state_mut().family_history = entries
                                         .into_iter()
-                                        .map(domain_family_history_from_api_response)
+                                        .map(conversions::domain_family_history_from_api_response)
                                         .collect()
                                 }
                                 Err(e) => {
@@ -401,16 +397,22 @@ async fn run_tui(
                     history,
                 } => {
                     let request = SocialHistoryRequest {
-                        smoking_status: smoking_status_to_api_string(history.smoking_status)
+                        smoking_status: conversions::smoking_status_to_api_string(
+                            history.smoking_status,
+                        )
                             .to_string(),
                         cigarettes_per_day: history.cigarettes_per_day,
                         smoking_quit_date: history.smoking_quit_date,
-                        alcohol_status: alcohol_status_to_api_string(history.alcohol_status)
+                        alcohol_status: conversions::alcohol_status_to_api_string(
+                            history.alcohol_status,
+                        )
                             .to_string(),
                         standard_drinks_per_week: history.standard_drinks_per_week,
                         exercise_frequency: history
                             .exercise_frequency
-                            .map(|frequency| exercise_frequency_to_api_string(frequency).to_string()),
+                            .map(|frequency| {
+                                conversions::exercise_frequency_to_api_string(frequency).to_string()
+                            }),
                         occupation: history.occupation,
                         living_situation: history.living_situation,
                         support_network: history.support_network,
@@ -422,7 +424,9 @@ async fn run_tui(
                             match api_client.get_social_history(patient_id).await {
                                 Ok(sh) => {
                                     app.clinical_state_mut().social_history =
-                                        Some(domain_social_history_from_api_response(sh))
+                                        Some(conversions::domain_social_history_from_api_response(
+                                            sh,
+                                        ))
                                 }
                                 Err(e) => {
                                     tracing::error!("Failed to reload social history: {}", e);
@@ -451,7 +455,7 @@ async fn run_tui(
                 Ok(allergies) => {
                     app.clinical_state_mut().allergies = allergies
                         .into_iter()
-                        .map(domain_allergy_from_api_response)
+                        .map(conversions::domain_allergy_from_api_response)
                         .collect();
                     tracing::info!("Loaded allergies for clinical view");
                 }
@@ -462,7 +466,7 @@ async fn run_tui(
                 Ok(conditions) => {
                     app.clinical_state_mut().medical_history = conditions
                         .into_iter()
-                        .map(domain_medical_history_from_api_response)
+                        .map(conversions::domain_medical_history_from_api_response)
                         .collect();
                     tracing::info!("Loaded medical history for clinical view");
                 }
@@ -473,7 +477,7 @@ async fn run_tui(
                 Ok(vitals) => {
                     app.clinical_state_mut().vital_signs = vitals
                         .into_iter()
-                        .map(domain_vital_signs_from_api_response)
+                        .map(conversions::domain_vital_signs_from_api_response)
                         .collect();
                     tracing::info!("Loaded vital signs for clinical view");
                 }
@@ -483,7 +487,7 @@ async fn run_tui(
             match api_client.get_social_history(patient_id).await {
                 Ok(history) => {
                     app.clinical_state_mut().social_history =
-                        Some(domain_social_history_from_api_response(history));
+                        Some(conversions::domain_social_history_from_api_response(history));
                     tracing::info!("Loaded social history for clinical view");
                 }
                 Err(e) => tracing::error!("Failed to load social history: {}", e),
@@ -493,7 +497,7 @@ async fn run_tui(
                 Ok(entries) => {
                     app.clinical_state_mut().family_history = entries
                         .into_iter()
-                        .map(domain_family_history_from_api_response)
+                        .map(conversions::domain_family_history_from_api_response)
                         .collect();
                     tracing::info!("Loaded family history for clinical view");
                 }
@@ -559,363 +563,6 @@ fn compute_booked_slots(
         .into_iter()
         .filter(|slot| !available_slots.contains(slot))
         .collect()
-}
-
-fn patient_request_from_new(data: opengp_domain::domain::patient::NewPatientData) -> PatientRequest {
-    PatientRequest {
-        first_name: data.first_name,
-        last_name: data.last_name,
-        date_of_birth: data.date_of_birth,
-        gender: gender_to_api_string(data.gender),
-        phone_mobile: data.phone_mobile,
-        email: data.email,
-        medicare_number: data.medicare_number,
-        version: 1,
-    }
-}
-
-fn appointment_request_from_new(
-    data: opengp_domain::domain::appointment::NewAppointmentData,
-) -> AppointmentRequest {
-    AppointmentRequest {
-        patient_id: data.patient_id,
-        practitioner_id: data.practitioner_id,
-        start_time: data.start_time,
-        duration_minutes: data.duration.num_minutes(),
-        appointment_type: appointment_type_to_api_string(data.appointment_type).to_string(),
-        reason: data.reason,
-        is_urgent: data.is_urgent,
-        version: 1,
-    }
-}
-
-fn patient_request_from_update(
-    data: opengp_domain::domain::patient::UpdatePatientData,
-    current: &PatientResponse,
-) -> PatientRequest {
-    PatientRequest {
-        first_name: data.first_name.unwrap_or_else(|| current.first_name.clone()),
-        last_name: data.last_name.unwrap_or_else(|| current.last_name.clone()),
-        date_of_birth: data.date_of_birth.unwrap_or(current.date_of_birth),
-        gender: data
-            .gender
-            .map(gender_to_api_string)
-            .unwrap_or_else(|| current.gender.clone()),
-        phone_mobile: data.phone_mobile.or_else(|| current.phone_mobile.clone()),
-        email: data.email.or_else(|| current.email.clone()),
-        medicare_number: data.medicare_number,
-        version: current.version,
-    }
-}
-
-fn domain_patient_from_api_response(response: PatientResponse) -> Patient {
-    Patient {
-        id: response.id,
-        ihi: None,
-        medicare_number: None,
-        medicare_irn: None,
-        medicare_expiry: None,
-        title: None,
-        first_name: response.first_name,
-        middle_name: None,
-        last_name: response.last_name,
-        preferred_name: None,
-        date_of_birth: response.date_of_birth,
-        gender: parse_api_gender(&response.gender),
-        address: opengp_domain::domain::patient::Address::default(),
-        phone_home: None,
-        phone_mobile: response.phone_mobile,
-        email: response.email,
-        emergency_contact: None,
-        concession_type: None,
-        concession_number: None,
-        preferred_language: "English".to_string(),
-        interpreter_required: false,
-        aboriginal_torres_strait_islander: None,
-        is_active: response.is_active,
-        is_deceased: false,
-        deceased_date: None,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-        version: response.version,
-    }
-}
-
-fn domain_allergy_from_api_response(response: AllergyResponse) -> opengp_domain::domain::clinical::Allergy {
-    opengp_domain::domain::clinical::Allergy {
-        id: response.id,
-        patient_id: response.patient_id,
-        allergen: response.allergen,
-        allergy_type: parse_api_allergy_type(&response.allergy_type),
-        severity: parse_api_severity(&response.severity),
-        reaction: response.reaction,
-        onset_date: response.onset_date,
-        notes: response.notes,
-        is_active: response.is_active,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-        created_by: uuid::Uuid::nil(),
-        updated_by: None,
-    }
-}
-
-fn domain_medical_history_from_api_response(
-    response: MedicalHistoryResponse,
-) -> opengp_domain::domain::clinical::MedicalHistory {
-    opengp_domain::domain::clinical::MedicalHistory {
-        id: response.id,
-        patient_id: response.patient_id,
-        condition: response.condition,
-        diagnosis_date: response.diagnosis_date,
-        status: parse_api_condition_status(&response.status),
-        severity: response
-            .severity
-            .map(|severity| parse_api_severity(&severity)),
-        notes: response.notes,
-        is_active: response.is_active,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-        created_by: uuid::Uuid::nil(),
-        updated_by: None,
-    }
-}
-
-fn domain_vital_signs_from_api_response(
-    response: VitalSignsResponse,
-) -> opengp_domain::domain::clinical::VitalSigns {
-    opengp_domain::domain::clinical::VitalSigns {
-        id: response.id,
-        patient_id: response.patient_id,
-        consultation_id: response.consultation_id,
-        measured_at: response.measured_at,
-        systolic_bp: response.systolic_bp,
-        diastolic_bp: response.diastolic_bp,
-        heart_rate: response.heart_rate,
-        respiratory_rate: response.respiratory_rate,
-        temperature: response.temperature,
-        oxygen_saturation: response.oxygen_saturation,
-        height_cm: response.height_cm,
-        weight_kg: response.weight_kg,
-        bmi: response.bmi,
-        notes: response.notes,
-        created_at: response.measured_at,
-        created_by: uuid::Uuid::nil(),
-    }
-}
-
-fn domain_social_history_from_api_response(
-    response: SocialHistoryResponse,
-) -> opengp_domain::domain::clinical::SocialHistory {
-    opengp_domain::domain::clinical::SocialHistory {
-        id: response.id,
-        patient_id: response.patient_id,
-        smoking_status: parse_api_smoking_status(&response.smoking_status),
-        cigarettes_per_day: response.cigarettes_per_day,
-        smoking_quit_date: response.smoking_quit_date,
-        alcohol_status: parse_api_alcohol_status(&response.alcohol_status),
-        standard_drinks_per_week: response.standard_drinks_per_week,
-        exercise_frequency: response
-            .exercise_frequency
-            .map(|frequency| parse_api_exercise_frequency(&frequency)),
-        occupation: response.occupation,
-        living_situation: response.living_situation,
-        support_network: response.support_network,
-        notes: response.notes,
-        updated_at: response.updated_at,
-        updated_by: response.updated_by,
-    }
-}
-
-fn domain_family_history_from_api_response(
-    response: FamilyHistoryResponse,
-) -> opengp_domain::domain::clinical::FamilyHistory {
-    opengp_domain::domain::clinical::FamilyHistory {
-        id: response.id,
-        patient_id: response.patient_id,
-        relative_relationship: response.relative_relationship,
-        condition: response.condition,
-        age_at_diagnosis: response.age_at_diagnosis,
-        notes: response.notes,
-        created_at: response.created_at,
-        created_by: response.created_by,
-    }
-}
-
-fn gender_to_api_string(gender: Gender) -> String {
-    match gender {
-        Gender::Male => "male".to_string(),
-        Gender::Female => "female".to_string(),
-        Gender::Other => "other".to_string(),
-        Gender::PreferNotToSay => "prefer_not_to_say".to_string(),
-    }
-}
-
-fn appointment_type_to_api_string(appointment_type: AppointmentType) -> &'static str {
-    match appointment_type {
-        AppointmentType::Standard => "standard",
-        AppointmentType::Long => "long",
-        AppointmentType::Brief => "brief",
-        AppointmentType::NewPatient => "new_patient",
-        AppointmentType::HealthAssessment => "health_assessment",
-        AppointmentType::ChronicDiseaseReview => "chronic_disease_review",
-        AppointmentType::MentalHealthPlan => "mental_health_plan",
-        AppointmentType::Immunisation => "immunisation",
-        AppointmentType::Procedure => "procedure",
-        AppointmentType::Telephone => "telephone",
-        AppointmentType::Telehealth => "telehealth",
-        AppointmentType::HomeVisit => "home_visit",
-        AppointmentType::Emergency => "emergency",
-    }
-}
-
-fn allergy_type_to_api_string(allergy_type: opengp_domain::domain::clinical::AllergyType) -> &'static str {
-    match allergy_type {
-        opengp_domain::domain::clinical::AllergyType::Drug => "drug",
-        opengp_domain::domain::clinical::AllergyType::Food => "food",
-        opengp_domain::domain::clinical::AllergyType::Environmental => "environmental",
-        opengp_domain::domain::clinical::AllergyType::Other => "other",
-    }
-}
-
-fn severity_to_api_string(severity: opengp_domain::domain::clinical::Severity) -> &'static str {
-    match severity {
-        opengp_domain::domain::clinical::Severity::Mild => "mild",
-        opengp_domain::domain::clinical::Severity::Moderate => "moderate",
-        opengp_domain::domain::clinical::Severity::Severe => "severe",
-    }
-}
-
-fn condition_status_to_api_string(
-    condition_status: opengp_domain::domain::clinical::ConditionStatus,
-) -> &'static str {
-    match condition_status {
-        opengp_domain::domain::clinical::ConditionStatus::Active => "active",
-        opengp_domain::domain::clinical::ConditionStatus::Resolved => "resolved",
-        opengp_domain::domain::clinical::ConditionStatus::Chronic => "chronic",
-        opengp_domain::domain::clinical::ConditionStatus::Recurring => "recurring",
-        opengp_domain::domain::clinical::ConditionStatus::InRemission => "in_remission",
-    }
-}
-
-fn smoking_status_to_api_string(
-    smoking_status: opengp_domain::domain::clinical::SmokingStatus,
-) -> &'static str {
-    match smoking_status {
-        opengp_domain::domain::clinical::SmokingStatus::NeverSmoked => "never_smoked",
-        opengp_domain::domain::clinical::SmokingStatus::CurrentSmoker => "current_smoker",
-        opengp_domain::domain::clinical::SmokingStatus::ExSmoker => "ex_smoker",
-    }
-}
-
-fn alcohol_status_to_api_string(
-    alcohol_status: opengp_domain::domain::clinical::AlcoholStatus,
-) -> &'static str {
-    match alcohol_status {
-        opengp_domain::domain::clinical::AlcoholStatus::None => "none",
-        opengp_domain::domain::clinical::AlcoholStatus::Occasional => "occasional",
-        opengp_domain::domain::clinical::AlcoholStatus::Moderate => "moderate",
-        opengp_domain::domain::clinical::AlcoholStatus::Heavy => "heavy",
-    }
-}
-
-fn exercise_frequency_to_api_string(
-    exercise_frequency: opengp_domain::domain::clinical::ExerciseFrequency,
-) -> &'static str {
-    match exercise_frequency {
-        opengp_domain::domain::clinical::ExerciseFrequency::None => "none",
-        opengp_domain::domain::clinical::ExerciseFrequency::Rarely => "rarely",
-        opengp_domain::domain::clinical::ExerciseFrequency::OnceOrTwicePerWeek => {
-            "once_or_twice_per_week"
-        }
-        opengp_domain::domain::clinical::ExerciseFrequency::ThreeToFiveTimes => {
-            "three_to_five_times"
-        }
-        opengp_domain::domain::clinical::ExerciseFrequency::Daily => "daily",
-    }
-}
-
-fn parse_api_gender(gender: &str) -> Gender {
-    match gender.trim().to_ascii_lowercase().as_str() {
-        "male" => Gender::Male,
-        "female" => Gender::Female,
-        "other" => Gender::Other,
-        "prefer_not_to_say" | "prefer-not-to-say" => Gender::PreferNotToSay,
-        _ => Gender::PreferNotToSay,
-    }
-}
-
-fn parse_api_allergy_type(allergy_type: &str) -> opengp_domain::domain::clinical::AllergyType {
-    match allergy_type.trim().to_ascii_lowercase().as_str() {
-        "drug" => opengp_domain::domain::clinical::AllergyType::Drug,
-        "food" => opengp_domain::domain::clinical::AllergyType::Food,
-        "environmental" => opengp_domain::domain::clinical::AllergyType::Environmental,
-        _ => opengp_domain::domain::clinical::AllergyType::Other,
-    }
-}
-
-fn parse_api_severity(severity: &str) -> opengp_domain::domain::clinical::Severity {
-    match severity.trim().to_ascii_lowercase().as_str() {
-        "mild" => opengp_domain::domain::clinical::Severity::Mild,
-        "moderate" => opengp_domain::domain::clinical::Severity::Moderate,
-        _ => opengp_domain::domain::clinical::Severity::Severe,
-    }
-}
-
-fn parse_api_condition_status(
-    condition_status: &str,
-) -> opengp_domain::domain::clinical::ConditionStatus {
-    match condition_status.trim().to_ascii_lowercase().as_str() {
-        "active" => opengp_domain::domain::clinical::ConditionStatus::Active,
-        "resolved" => opengp_domain::domain::clinical::ConditionStatus::Resolved,
-        "chronic" => opengp_domain::domain::clinical::ConditionStatus::Chronic,
-        "recurring" => opengp_domain::domain::clinical::ConditionStatus::Recurring,
-        "in_remission" | "in-remission" => {
-            opengp_domain::domain::clinical::ConditionStatus::InRemission
-        }
-        _ => opengp_domain::domain::clinical::ConditionStatus::Active,
-    }
-}
-
-fn parse_api_smoking_status(
-    smoking_status: &str,
-) -> opengp_domain::domain::clinical::SmokingStatus {
-    match smoking_status.trim().to_ascii_lowercase().as_str() {
-        "never_smoked" | "never-smoked" => opengp_domain::domain::clinical::SmokingStatus::NeverSmoked,
-        "current_smoker" | "current-smoker" => {
-            opengp_domain::domain::clinical::SmokingStatus::CurrentSmoker
-        }
-        "ex_smoker" | "ex-smoker" => opengp_domain::domain::clinical::SmokingStatus::ExSmoker,
-        _ => opengp_domain::domain::clinical::SmokingStatus::NeverSmoked,
-    }
-}
-
-fn parse_api_alcohol_status(
-    alcohol_status: &str,
-) -> opengp_domain::domain::clinical::AlcoholStatus {
-    match alcohol_status.trim().to_ascii_lowercase().as_str() {
-        "none" => opengp_domain::domain::clinical::AlcoholStatus::None,
-        "occasional" => opengp_domain::domain::clinical::AlcoholStatus::Occasional,
-        "moderate" => opengp_domain::domain::clinical::AlcoholStatus::Moderate,
-        "heavy" => opengp_domain::domain::clinical::AlcoholStatus::Heavy,
-        _ => opengp_domain::domain::clinical::AlcoholStatus::None,
-    }
-}
-
-fn parse_api_exercise_frequency(
-    exercise_frequency: &str,
-) -> opengp_domain::domain::clinical::ExerciseFrequency {
-    match exercise_frequency.trim().to_ascii_lowercase().as_str() {
-        "none" => opengp_domain::domain::clinical::ExerciseFrequency::None,
-        "rarely" => opengp_domain::domain::clinical::ExerciseFrequency::Rarely,
-        "once_or_twice_per_week" | "once-or-twice-per-week" => {
-            opengp_domain::domain::clinical::ExerciseFrequency::OnceOrTwicePerWeek
-        }
-        "three_to_five_times" | "three-to-five-times" => {
-            opengp_domain::domain::clinical::ExerciseFrequency::ThreeToFiveTimes
-        }
-        "daily" => opengp_domain::domain::clinical::ExerciseFrequency::Daily,
-        _ => opengp_domain::domain::clinical::ExerciseFrequency::None,
-    }
 }
 
 fn init_logging(level: &str) {

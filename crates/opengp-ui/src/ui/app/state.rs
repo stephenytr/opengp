@@ -807,12 +807,9 @@ mod tests {
             .await;
 
         let mut app = App::new(
-            Some(api_client),
-            None,
-            None,
-            None,
-            opengp_config::CalendarConfig::default(),
-        );
+                    Some(api_client),
+                    opengp_config::CalendarConfig::default(),
+                );
         app.request_refresh_patients();
 
         for _ in 0..20 {
@@ -842,12 +839,9 @@ mod tests {
             .await;
 
         let mut app = App::new(
-            Some(api_client),
-            None,
-            None,
-            None,
-            opengp_config::CalendarConfig::default(),
-        );
+                    Some(api_client),
+                    opengp_config::CalendarConfig::default(),
+                );
 
         let patient_id = uuid::Uuid::new_v4();
         app.request_refresh_appointments(Utc::now().date_naive());
@@ -880,12 +874,9 @@ mod tests {
         let api_client = Arc::new(crate::api::ApiClient::new(base_url));
 
         let mut app = App::new(
-            Some(api_client.clone()),
-            None,
-            None,
-            None,
-            opengp_config::CalendarConfig::default(),
-        );
+                    Some(api_client.clone()),
+                    opengp_config::CalendarConfig::default(),
+                );
         app.set_authenticated(false);
 
         enter_login_credentials(&mut app, "dr_smith", "correct-password");
@@ -913,12 +904,9 @@ mod tests {
         let api_client = Arc::new(crate::api::ApiClient::new(base_url));
 
         let mut app = App::new(
-            Some(api_client.clone()),
-            None,
-            None,
-            None,
-            opengp_config::CalendarConfig::default(),
-        );
+                    Some(api_client.clone()),
+                    opengp_config::CalendarConfig::default(),
+                );
         app.set_authenticated(false);
 
         enter_login_credentials(&mut app, "dr_smith", "wrong-password");
@@ -943,12 +931,9 @@ mod tests {
             .await;
 
         let mut app = App::new(
-            Some(api_client.clone()),
-            None,
-            None,
-            None,
-            opengp_config::CalendarConfig::default(),
-        );
+                    Some(api_client.clone()),
+                    opengp_config::CalendarConfig::default(),
+                );
         app.set_authenticated(true);
         app.request_refresh_patients();
 
@@ -966,7 +951,7 @@ mod tests {
 
     #[test]
     fn pending_form_data_is_preserved_while_logged_out_and_available_after_relogin() {
-        let mut app = App::new(None, None, None, None, opengp_config::CalendarConfig::default());
+        let mut app = App::new(None, opengp_config::CalendarConfig::default());
 
         let patient_id = uuid::Uuid::new_v4();
         let practitioner_id = uuid::Uuid::new_v4();
@@ -1042,12 +1027,9 @@ mod tests {
             .await;
 
         let mut app = App::new(
-            Some(api_client),
-            None,
-            None,
-            None,
-            opengp_config::CalendarConfig::default(),
-        );
+                    Some(api_client),
+                    opengp_config::CalendarConfig::default(),
+                );
 
         app.request_refresh_patients();
 

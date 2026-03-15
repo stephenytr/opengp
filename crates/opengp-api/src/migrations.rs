@@ -3,10 +3,10 @@ use std::path::Path;
 use tracing::info;
 
 pub async fn run_migrations(pool: &PgPool) -> Result<(), crate::ApiError> {
-    let migrations_dir = Path::new("/app/migrations_postgres");
+    let migrations_dir = Path::new("/app/migrations");
 
     if !migrations_dir.exists() {
-        info!("Migrations directory not found at /app/migrations_postgres, skipping");
+        info!("Migrations directory not found at /app/migrations, skipping");
         return Ok(());
     }
 

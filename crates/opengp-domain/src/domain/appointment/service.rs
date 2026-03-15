@@ -8,7 +8,7 @@ use crate::service;
 use super::dto::{
     AppointmentSearchCriteria, CalendarAppointment, NewAppointmentData, UpdateAppointmentData,
 };
-use super::error::ServiceError;
+use super::error::{RepositoryError, ServiceError};
 use super::model::{Appointment, AppointmentStatus};
 use super::query::AppointmentCalendarQuery;
 use super::repository::AppointmentRepository;
@@ -32,9 +32,12 @@ service! {
 }
 
 impl AppointmentService {
-    fn map_repository_error(error: BaseRepositoryError) -> ServiceError {
+    fn map_repository_error(error: RepositoryError) -> ServiceError {
         match error {
-            BaseRepositoryError::Conflict(message) => ServiceError::Conflict(message),
+            RepositoryError::Base(BaseRepositoryError::Conflict(message)) => {
+                ServiceError::Conflict(message)
+            }
+            RepositoryError::Conflict(message) => ServiceError::Conflict(message),
             other => ServiceError::Repository(other),
         }
     }
@@ -789,7 +792,8 @@ impl AvailabilityService {
         let working_hours = self
             .working_hours_repository
             .find_for_day(practitioner_id, day_of_week as u8)
-            .await?;
+            .await
+            .map_err(|error| ServiceError::Repository(error.into()))?;
 
         let working_hours = match working_hours {
             Some(wh) => wh,
@@ -858,8 +862,9 @@ impl AvailabilityService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::appointment::{AppointmentType, RepositoryError};
+    use crate::domain::appointment::{AppointmentType, RepositoryError as AppointmentRepositoryError};
     use crate::domain::audit::AuditEmitterError;
+    use crate::domain::user::RepositoryError as UserRepositoryError;
     use async_trait::async_trait;
     use chrono::Duration;
     use std::sync::Mutex;
@@ -878,16 +883,22 @@ mod tests {
         overlapping: Vec<Appointment>,
         created: Mutex<Vec<Appointment>>,
         updated: Mutex<Vec<Appointment>>,
-        update_error: Mutex<Option<RepositoryError>>,
+        update_error: Mutex<Option<AppointmentRepositoryError>>,
     }
 
     #[async_trait]
     impl AppointmentRepository for MockAppointmentRepository {
-        async fn find_by_id(&self, id: Uuid) -> Result<Option<Appointment>, RepositoryError> {
+        async fn find_by_id(
+            &self,
+            id: Uuid,
+        ) -> Result<Option<Appointment>, AppointmentRepositoryError> {
             Ok(self.appointments.iter().find(|a| a.id == id).cloned())
         }
 
-        async fn create(&self, appointment: Appointment) -> Result<Appointment, RepositoryError> {
+        async fn create(
+            &self,
+            appointment: Appointment,
+        ) -> Result<Appointment, AppointmentRepositoryError> {
             self.created
                 .lock()
                 .expect("created lock poisoned")
@@ -895,7 +906,10 @@ mod tests {
             Ok(appointment)
         }
 
-        async fn update(&self, appointment: Appointment) -> Result<Appointment, RepositoryError> {
+        async fn update(
+            &self,
+            appointment: Appointment,
+        ) -> Result<Appointment, AppointmentRepositoryError> {
             if let Some(err) = self
                 .update_error
                 .lock()
@@ -911,14 +925,14 @@ mod tests {
             Ok(appointment)
         }
 
-        async fn delete(&self, _id: Uuid) -> Result<(), RepositoryError> {
+        async fn delete(&self, _id: Uuid) -> Result<(), AppointmentRepositoryError> {
             Ok(())
         }
 
         async fn find_by_criteria(
             &self,
             _criteria: &AppointmentSearchCriteria,
-        ) -> Result<Vec<Appointment>, RepositoryError> {
+        ) -> Result<Vec<Appointment>, AppointmentRepositoryError> {
             Ok(self.appointments.clone())
         }
 
@@ -927,7 +941,7 @@ mod tests {
             _practitioner_id: Uuid,
             _start_time: chrono::DateTime<Utc>,
             _end_time: chrono::DateTime<Utc>,
-        ) -> Result<Vec<Appointment>, RepositoryError> {
+        ) -> Result<Vec<Appointment>, AppointmentRepositoryError> {
             Ok(self.overlapping.clone())
         }
     }
@@ -939,7 +953,7 @@ mod tests {
         async fn find_calendar_appointments(
             &self,
             _criteria: &AppointmentSearchCriteria,
-        ) -> Result<Vec<CalendarAppointment>, RepositoryError> {
+        ) -> Result<Vec<CalendarAppointment>, AppointmentRepositoryError> {
             Ok(vec![])
         }
     }
@@ -1041,7 +1055,7 @@ mod tests {
         async fn find_by_practitioner(
             &self,
             _practitioner_id: Uuid,
-        ) -> Result<Vec<WorkingHours>, RepositoryError> {
+        ) -> Result<Vec<WorkingHours>, UserRepositoryError> {
             Ok(self.working_hours.iter().cloned().collect())
         }
 
@@ -1049,19 +1063,23 @@ mod tests {
             &self,
             _practitioner_id: Uuid,
             _day_of_week: u8,
-        ) -> Result<Option<WorkingHours>, RepositoryError> {
+        ) -> Result<Option<WorkingHours>, UserRepositoryError> {
             Ok(self.working_hours.clone())
         }
 
         async fn save(
             &self,
             _working_hours: WorkingHours,
-        ) -> Result<WorkingHours, RepositoryError> {
-            Err(RepositoryError::Database("not implemented".to_string()))
+        ) -> Result<WorkingHours, UserRepositoryError> {
+            Err(UserRepositoryError::Base(
+                crate::domain::error::RepositoryError::Database("not implemented".to_string()),
+            ))
         }
 
-        async fn delete(&self, _id: Uuid) -> Result<(), RepositoryError> {
-            Err(RepositoryError::Database("not implemented".to_string()))
+        async fn delete(&self, _id: Uuid) -> Result<(), UserRepositoryError> {
+            Err(UserRepositoryError::Base(
+                crate::domain::error::RepositoryError::Database("not implemented".to_string()),
+            ))
         }
     }
 
@@ -1100,8 +1118,10 @@ mod tests {
                 overlapping: vec![],
                 created: Mutex::new(vec![]),
                 updated: Mutex::new(vec![]),
-                update_error: Mutex::new(Some(RepositoryError::Conflict(
-                    "Appointment was modified by another user".to_string(),
+                update_error: Mutex::new(Some(AppointmentRepositoryError::Base(
+                    crate::domain::error::RepositoryError::Conflict(
+                        "Appointment was modified by another user".to_string(),
+                    ),
                 ))),
             }),
             Arc::new(NoOpAuditEmitter),

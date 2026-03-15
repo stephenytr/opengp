@@ -6,7 +6,6 @@
 
 pub mod app;
 pub mod components;
-pub mod error;
 pub mod input;
 pub mod keybinds;
 pub mod layout;
@@ -21,7 +20,6 @@ mod tests;
 
 pub use app::App;
 pub use components::tabs::Tab;
-pub use error::{UiComponent, UiError};
 pub use keybinds::{Action, KeybindRegistry};
 pub use screens::{LoginAction, LoginScreen};
 pub use theme::{ColorPalette, Theme};

@@ -133,6 +133,7 @@ async fn seed_login_user(pool: &PgPool) -> (String, String) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires running PostgreSQL instance"]
 async fn concurrent_booking_returns_conflict_for_second_writer() {
     let state = ApiState::new(test_config())
         .await

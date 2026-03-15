@@ -16,7 +16,7 @@ WORKDIR /app
 # Copy all workspace files (required for cargo to resolve dependencies)
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
-COPY migrations_postgres ./migrations_postgres
+COPY migrations ./migrations
 
 # Build the API binary
 RUN RUSTFLAGS="-A unused" cargo build --release -p opengp-api
@@ -41,7 +41,7 @@ WORKDIR /app
 COPY --from=builder /app/target/release/opengp-api /app/opengp-api
 
 # Copy migrations
-COPY migrations_postgres /app/migrations_postgres
+COPY migrations /app/migrations
 
 # Set ownership
 RUN chown -R opengp:opengp /app

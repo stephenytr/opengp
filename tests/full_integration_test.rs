@@ -105,6 +105,7 @@ async fn seed_login_user(pool: &PgPool, role: &str) -> (String, String) {
 }
 
 #[tokio::test]
+#[ignore = "requires running PostgreSQL instance"]
 async fn full_workflow_login_view_patients_create_appointment_logout_then_unauthorized() {
     let state = ApiState::new(test_config())
         .await
@@ -216,6 +217,7 @@ async fn full_workflow_login_view_patients_create_appointment_logout_then_unauth
 }
 
 #[tokio::test]
+#[ignore = "requires running PostgreSQL instance"]
 async fn receptionist_can_view_patients_but_is_denied_clinical_endpoints() {
     let state = ApiState::new(test_config())
         .await
@@ -294,6 +296,7 @@ async fn receptionist_can_view_patients_but_is_denied_clinical_endpoints() {
 }
 
 #[tokio::test]
+#[ignore = "requires running PostgreSQL instance"]
 async fn concurrent_appointment_creates_return_one_created_and_one_conflict() {
     let state = ApiState::new(test_config())
         .await

@@ -66,7 +66,7 @@ pub async fn create_pool(config: &DatabaseConfig) -> Result<DatabasePool, sqlx::
 /// Run database migrations
 pub async fn run_migrations(pool: &DatabasePool) -> Result<(), sqlx::Error> {
     info!("Running database migrations");
-    sqlx::migrate!("../../migrations_postgres").run(&pool.0).await?;
+    sqlx::migrate!("../../migrations").run(&pool.0).await?;
     info!("Database migrations completed successfully");
     Ok(())
 }
