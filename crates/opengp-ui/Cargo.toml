@@ -40,3 +40,4 @@ path = "../opengp-config"
 axum = "0.8"
 insta = { version = "1", features = ["redactions"] }
 tokio = { workspace = true, features = ["test-util", "macros"] }
+opengp-infrastructure = { path = "../opengp-infrastructure" }
