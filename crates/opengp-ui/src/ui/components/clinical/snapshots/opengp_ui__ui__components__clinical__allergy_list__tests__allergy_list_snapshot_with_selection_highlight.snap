@@ -1,0 +1,15 @@
+---
+source: crates/opengp-ui/src/ui/components/clinical/allergy_list.rs
+assertion_line: 840
+expression: terminal.backend()
+---
+"┌ Allergies ───────────────────────────────────────────────────────────────────┐"
+"│Allergen             Type            Severity   Reaction            Status    │"
+"│Penicillin           Drug            Moderate   Rash                Active    │"
+"│Aspirin              Drug            Moderate   Rash                Active    │"
+"│Ibuprofen            Drug            Moderate   Rash                Inactive  │"
+"│                                                                              │"
+"│                                                                              │"
+"│                                                                              │"
+"│                                                                              │"
+"└──────────────────────────────────────────────────────────────────────────────┘"

@@ -1,0 +1,8 @@
+---
+source: crates/opengp-ui/src/ui/components/status_bar.rs
+assertion_line: 263
+expression: terminal.backend()
+---
+"Patients───────────────────Search: / | New: n | Refre────────────────────F1 Help"
+"                                                                                "
+"                                                                                "

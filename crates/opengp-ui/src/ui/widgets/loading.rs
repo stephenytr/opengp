@@ -192,4 +192,67 @@ mod tests {
         let indicator = state.to_indicator(theme);
         assert_eq!(indicator.frame_index, 1);
     }
+
+    #[test]
+    fn test_loading_indicator_snapshot_default_dots_spinner() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let mut terminal = Terminal::new(TestBackend::new(40, 3)).unwrap();
+        let indicator = LoadingIndicator::new(Theme::dark()).message("Loading allergies...");
+
+        terminal
+            .draw(|f| {
+                let rect = f.area();
+                f.render_widget(indicator, rect);
+            })
+            .unwrap();
+
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn test_loading_indicator_snapshot_line_spinner() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let mut terminal = Terminal::new(TestBackend::new(40, 3)).unwrap();
+        let mut indicator = LoadingIndicator::new(Theme::dark())
+            .message("Processing...")
+            .style(SpinnerStyle::Line);
+        indicator.tick();
+        indicator.tick();
+
+        terminal
+            .draw(|f| {
+                let rect = f.area();
+                f.render_widget(indicator, rect);
+            })
+            .unwrap();
+
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn test_loading_indicator_snapshot_arrow_spinner() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let mut terminal = Terminal::new(TestBackend::new(40, 3)).unwrap();
+        let mut indicator = LoadingIndicator::new(Theme::dark())
+            .message("Saving...")
+            .style(SpinnerStyle::Arrow);
+        indicator.tick();
+        indicator.tick();
+        indicator.tick();
+
+        terminal
+            .draw(|f| {
+                let rect = f.area();
+                f.render_widget(indicator, rect);
+            })
+            .unwrap();
+
+        insta::assert_snapshot!(terminal.backend());
+    }
 }

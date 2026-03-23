@@ -1,0 +1,8 @@
+---
+source: crates/opengp-ui/src/ui/components/status_bar.rs
+assertion_line: 305
+expression: terminal.backend()
+---
+"Custom Section─────────────Custom Center────────────────────────────Custom Right"
+"                                                                                "
+"                                                                                "

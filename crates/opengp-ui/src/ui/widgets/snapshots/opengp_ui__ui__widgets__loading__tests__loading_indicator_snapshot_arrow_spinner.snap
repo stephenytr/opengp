@@ -1,0 +1,8 @@
+---
+source: crates/opengp-ui/src/ui/widgets/loading.rs
+assertion_line: 256
+expression: terminal.backend()
+---
+"                                        "
+"              ↗ Saving...               "
+"                                        "

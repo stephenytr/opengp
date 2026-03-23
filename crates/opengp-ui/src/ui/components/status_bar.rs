@@ -244,4 +244,64 @@ mod tests {
         bar.set_visible(true);
         assert!(bar.is_visible());
     }
+
+    #[test]
+    fn test_status_bar_snapshot_normal_state() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let mut terminal = Terminal::new(TestBackend::new(80, 3)).unwrap();
+        let bar = StatusBar::patient_list(Theme::dark());
+
+        terminal
+            .draw(|f| {
+                let rect = f.area();
+                f.render_widget(bar, rect);
+            })
+            .unwrap();
+
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn test_status_bar_snapshot_with_error() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let mut terminal = Terminal::new(TestBackend::new(80, 3)).unwrap();
+        let mut bar = StatusBar::new(Theme::dark());
+        bar.set_left("Patients");
+        bar.set_error("Error: Patient not found");
+        bar.set_right("F1 Help");
+
+        terminal
+            .draw(|f| {
+                let rect = f.area();
+                f.render_widget(bar, rect);
+            })
+            .unwrap();
+
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn test_status_bar_snapshot_with_custom_content() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let mut terminal = Terminal::new(TestBackend::new(80, 3)).unwrap();
+        let mut bar = StatusBar::new(Theme::dark());
+        bar.set_left("Custom Section");
+        bar.set_center("Custom Center");
+        bar.set_right("Custom Right");
+
+        terminal
+            .draw(|f| {
+                let rect = f.area();
+                f.render_widget(bar, rect);
+            })
+            .unwrap();
+
+        insta::assert_snapshot!(terminal.backend());
+    }
 }

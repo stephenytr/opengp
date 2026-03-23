@@ -203,17 +203,17 @@ impl AllergyList {
                 self.selected_index = new_index;
                 Some(AllergyListAction::Select(self.selected_index))
             }
-            KeyCode::Enter => {
-                self.selected().map(|allergy| AllergyListAction::Open(allergy.clone()))
-            }
+            KeyCode::Enter => self
+                .selected()
+                .map(|allergy| AllergyListAction::Open(allergy.clone())),
             KeyCode::Char('n') => Some(AllergyListAction::New),
             KeyCode::Char('i') => {
                 self.toggle_inactive();
                 Some(AllergyListAction::ToggleInactive)
             }
-            KeyCode::Char('d') => {
-                self.selected().map(|allergy| AllergyListAction::Delete(allergy.clone()))
-            }
+            KeyCode::Char('d') => self
+                .selected()
+                .map(|allergy| AllergyListAction::Delete(allergy.clone())),
             _ => None,
         }
     }
@@ -391,5 +391,452 @@ impl Widget for AllergyList {
             .widths(col_widths);
 
         table.render(inner, buf);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+    use uuid::Uuid;
+
+    fn create_test_allergy(allergen: &str, is_active: bool) -> Allergy {
+        Allergy {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            allergen: allergen.to_string(),
+            allergy_type: AllergyType::Drug,
+            severity: Severity::Moderate,
+            reaction: Some("Rash".to_string()),
+            onset_date: None,
+            notes: None,
+            is_active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            created_by: Uuid::new_v4(),
+            updated_by: None,
+        }
+    }
+
+    #[test]
+    fn test_next_at_end_stays_at_last() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+            create_test_allergy("Ibuprofen", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.selected_index = 2;
+        list.next();
+        assert_eq!(list.selected_index, 2);
+    }
+
+    #[test]
+    fn test_next_advances_selection() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.next();
+        assert_eq!(list.selected_index, 1);
+    }
+
+    #[test]
+    fn test_prev_at_zero_stays_at_zero() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.prev();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_prev_decreases_selection() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.selected_index = 1;
+        list.prev();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_up_decreases_selection() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.selected_index = 1;
+        list.move_up();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_down_increases_selection() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.move_down();
+        assert_eq!(list.selected_index, 1);
+    }
+
+    #[test]
+    fn test_move_first_sets_to_zero() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+            create_test_allergy("Ibuprofen", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.selected_index = 2;
+        list.move_first();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_last_sets_to_end() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+            create_test_allergy("Ibuprofen", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.move_last();
+        assert_eq!(list.selected_index, 2);
+    }
+
+    #[test]
+    fn test_selected_returns_correct_allergy() {
+        let allergy1 = create_test_allergy("Penicillin", true);
+        let allergy2 = create_test_allergy("Aspirin", true);
+        let id1 = allergy1.id;
+        let list = AllergyList::with_allergies(vec![allergy1, allergy2], Theme::dark());
+        assert_eq!(list.selected().map(|a| a.id), Some(id1));
+    }
+
+    #[test]
+    fn test_selected_id_returns_correct_uuid() {
+        let allergy = create_test_allergy("Penicillin", true);
+        let id = allergy.id;
+        let list = AllergyList::with_allergies(vec![allergy], Theme::dark());
+        assert_eq!(list.selected_id(), Some(id));
+    }
+
+    #[test]
+    fn test_toggle_inactive_flips_flag() {
+        let allergies = vec![create_test_allergy("Penicillin", true)];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        assert!(list.show_inactive);
+        list.toggle_inactive();
+        assert!(!list.show_inactive);
+        list.toggle_inactive();
+        assert!(list.show_inactive);
+    }
+
+    #[test]
+    fn test_filtered_allergies_shows_all_when_show_inactive_true() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", false),
+            create_test_allergy("Ibuprofen", true),
+        ];
+        let list = AllergyList::with_allergies(allergies, Theme::dark());
+        let filtered = list.filtered_allergies();
+        assert_eq!(filtered.len(), 3);
+    }
+
+    #[test]
+    fn test_filtered_allergies_excludes_inactive_when_show_inactive_false() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", false),
+            create_test_allergy("Ibuprofen", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.show_inactive = false;
+        let filtered = list.filtered_allergies();
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.iter().all(|a| a.is_active));
+    }
+
+    #[test]
+    fn test_adjust_scroll_moves_selection_into_view_top() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+            create_test_allergy("Ibuprofen", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.scroll_offset = 2;
+        list.selected_index = 0;
+        list.adjust_scroll(10);
+        assert_eq!(list.scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_adjust_scroll_moves_selection_into_view_bottom() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+            create_test_allergy("Ibuprofen", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.scroll_offset = 0;
+        list.selected_index = 2;
+        list.adjust_scroll(2);
+        assert_eq!(list.scroll_offset, 1);
+    }
+
+    #[test]
+    fn test_adjust_scroll_returns_early_when_visible_rows_zero() {
+        let allergies = vec![create_test_allergy("Penicillin", true)];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.scroll_offset = 5;
+        list.adjust_scroll(0);
+        assert_eq!(list.scroll_offset, 5);
+    }
+
+    #[test]
+    fn test_handle_key_up_moves_up() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.selected_index = 1;
+        let key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+        let action = list.handle_key(key);
+        assert_eq!(list.selected_index, 0);
+        assert!(matches!(action, Some(AllergyListAction::Select(0))));
+    }
+
+    #[test]
+    fn test_handle_key_k_moves_up() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.selected_index = 1;
+        let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
+        let action = list.handle_key(key);
+        assert_eq!(list.selected_index, 0);
+        assert!(matches!(action, Some(AllergyListAction::Select(0))));
+    }
+
+    #[test]
+    fn test_handle_key_down_moves_down() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        let key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        let action = list.handle_key(key);
+        assert_eq!(list.selected_index, 1);
+        assert!(matches!(action, Some(AllergyListAction::Select(1))));
+    }
+
+    #[test]
+    fn test_handle_key_j_moves_down() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
+        let action = list.handle_key(key);
+        assert_eq!(list.selected_index, 1);
+        assert!(matches!(action, Some(AllergyListAction::Select(1))));
+    }
+
+    #[test]
+    fn test_handle_key_enter_opens_selected() {
+        let allergy = create_test_allergy("Penicillin", true);
+        let id = allergy.id;
+        let mut list = AllergyList::with_allergies(vec![allergy], Theme::dark());
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        let action = list.handle_key(key);
+        assert!(matches!(action, Some(AllergyListAction::Open(_))));
+        if let Some(AllergyListAction::Open(a)) = action {
+            assert_eq!(a.id, id);
+        }
+    }
+
+    #[test]
+    fn test_handle_key_n_creates_new() {
+        let allergies = vec![create_test_allergy("Penicillin", true)];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        let key = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE);
+        let action = list.handle_key(key);
+        assert!(matches!(action, Some(AllergyListAction::New)));
+    }
+
+    #[test]
+    fn test_handle_key_i_toggles_inactive() {
+        let allergies = vec![create_test_allergy("Penicillin", true)];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        let key = KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE);
+        let action = list.handle_key(key);
+        assert!(!list.show_inactive);
+        assert!(matches!(action, Some(AllergyListAction::ToggleInactive)));
+    }
+
+    #[test]
+    fn test_handle_key_d_deletes_selected() {
+        let allergy = create_test_allergy("Penicillin", true);
+        let id = allergy.id;
+        let mut list = AllergyList::with_allergies(vec![allergy], Theme::dark());
+        let key = KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE);
+        let action = list.handle_key(key);
+        assert!(matches!(action, Some(AllergyListAction::Delete(_))));
+        if let Some(AllergyListAction::Delete(a)) = action {
+            assert_eq!(a.id, id);
+        }
+    }
+
+    #[test]
+    fn test_handle_key_home_moves_to_first() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+            create_test_allergy("Ibuprofen", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.selected_index = 2;
+        let key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
+        let action = list.handle_key(key);
+        assert_eq!(list.selected_index, 0);
+        assert!(matches!(action, Some(AllergyListAction::Select(0))));
+    }
+
+    #[test]
+    fn test_handle_key_end_moves_to_last() {
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+            create_test_allergy("Ibuprofen", true),
+        ];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        let key = KeyEvent::new(KeyCode::End, KeyModifiers::NONE);
+        let action = list.handle_key(key);
+        assert_eq!(list.selected_index, 2);
+        assert!(matches!(action, Some(AllergyListAction::Select(2))));
+    }
+
+    #[test]
+    fn test_handle_key_release_event_returns_none() {
+        let allergies = vec![create_test_allergy("Penicillin", true)];
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        let mut key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+        key.kind = KeyEventKind::Release;
+        let action = list.handle_key(key);
+        assert!(action.is_none());
+    }
+
+    #[test]
+    fn test_has_selection_true_when_non_empty() {
+        let allergies = vec![create_test_allergy("Penicillin", true)];
+        let list = AllergyList::with_allergies(allergies, Theme::dark());
+        assert!(list.has_selection());
+    }
+
+    #[test]
+    fn test_has_selection_false_when_empty() {
+        let list = AllergyList::new(Theme::dark());
+        assert!(!list.has_selection());
+    }
+
+    #[test]
+    fn test_selected_returns_none_when_empty() {
+        let list = AllergyList::new(Theme::dark());
+        assert!(list.selected().is_none());
+    }
+
+    #[test]
+    fn test_selected_id_returns_none_when_empty() {
+        let list = AllergyList::new(Theme::dark());
+        assert!(list.selected_id().is_none());
+    }
+
+    #[test]
+    fn test_move_last_on_empty_list_stays_at_zero() {
+        let mut list = AllergyList::new(Theme::dark());
+        list.move_last();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_enter_on_empty_list_returns_none() {
+        let mut list = AllergyList::new(Theme::dark());
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        let action = list.handle_key(key);
+        assert!(action.is_none());
+    }
+
+    #[test]
+    fn test_delete_on_empty_list_returns_none() {
+        let mut list = AllergyList::new(Theme::dark());
+        let key = KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE);
+        let action = list.handle_key(key);
+        assert!(action.is_none());
+    }
+
+    #[test]
+    fn test_allergy_list_snapshot_with_three_allergies() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+            create_test_allergy("Ibuprofen", false),
+        ];
+
+        let mut terminal = Terminal::new(TestBackend::new(80, 10)).unwrap();
+        let list = AllergyList::with_allergies(allergies, Theme::dark());
+
+        terminal
+            .draw(|f| {
+                let rect = f.area();
+                f.render_widget(list.clone(), rect);
+            })
+            .unwrap();
+
+        insta::assert_snapshot!(terminal.backend());
+    }
+
+    #[test]
+    fn test_allergy_list_snapshot_with_selection_highlight() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let allergies = vec![
+            create_test_allergy("Penicillin", true),
+            create_test_allergy("Aspirin", true),
+            create_test_allergy("Ibuprofen", false),
+        ];
+
+        let mut terminal = Terminal::new(TestBackend::new(80, 10)).unwrap();
+        let mut list = AllergyList::with_allergies(allergies, Theme::dark());
+        list.selected_index = 1;
+
+        terminal
+            .draw(|f| {
+                let rect = f.area();
+                f.render_widget(list.clone(), rect);
+            })
+            .unwrap();
+
+        insta::assert_snapshot!(terminal.backend());
     }
 }
