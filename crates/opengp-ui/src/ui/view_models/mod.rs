@@ -247,3 +247,248 @@ impl From<opengp_domain::domain::user::Practitioner> for PractitionerViewItem {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration;
+    use opengp_domain::domain::patient::{Address, EmergencyContact};
+
+    // ============================================================================
+    // From<Patient> for PatientListItem Tests
+    // ============================================================================
+
+    fn create_test_patient(
+        first_name: &str,
+        last_name: &str,
+        middle_name: Option<&str>,
+        preferred_name: Option<&str>,
+    ) -> Patient {
+        Patient::new(
+            first_name.to_string(),
+            last_name.to_string(),
+            NaiveDate::from_ymd_opt(1990, 1, 1).unwrap(),
+            Gender::Male,
+            None,
+            None,
+            None,
+            None,
+            None,
+            middle_name.map(|s| s.to_string()),
+            preferred_name.map(|s| s.to_string()),
+            Address::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn patient_list_item_full_name_no_middle_no_preferred() {
+        let patient = create_test_patient("John", "Smith", None, None);
+        let item: PatientListItem = patient.into();
+        assert_eq!(item.full_name, "John Smith");
+    }
+
+    #[test]
+    fn patient_list_item_full_name_with_middle_no_preferred() {
+        let patient = create_test_patient("John", "Smith", Some("Michael"), None);
+        let item: PatientListItem = patient.into();
+        assert_eq!(item.full_name, "John Michael Smith");
+    }
+
+    #[test]
+    fn patient_list_item_full_name_no_middle_with_preferred() {
+        let patient = create_test_patient("John", "Smith", None, Some("Johnny"));
+        let item: PatientListItem = patient.into();
+        assert_eq!(item.full_name, "Johnny (Smith)");
+    }
+
+    #[test]
+    fn patient_list_item_full_name_with_middle_and_preferred() {
+        let patient = create_test_patient("John", "Smith", Some("Michael"), Some("Johnny"));
+        let item: PatientListItem = patient.into();
+        assert_eq!(item.full_name, "John Michael (Johnny) Smith");
+    }
+
+    // ============================================================================
+    // From<Patient> for PatientFormData Tests
+    // ============================================================================
+
+    #[test]
+    fn patient_form_data_address_fields_mapped_correctly() {
+        let address = Address {
+            line1: Some("123 Main St".to_string()),
+            line2: Some("Apt 4B".to_string()),
+            suburb: Some("Sydney".to_string()),
+            state: Some("NSW".to_string()),
+            postcode: Some("2000".to_string()),
+            country: "Australia".to_string(),
+        };
+
+        let patient = Patient::new(
+            "John".to_string(),
+            "Smith".to_string(),
+            NaiveDate::from_ymd_opt(1990, 1, 1).unwrap(),
+            Gender::Male,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            address,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let form_data: PatientFormData = patient.into();
+        assert_eq!(form_data.address_line1, Some("123 Main St".to_string()));
+        assert_eq!(form_data.address_line2, Some("Apt 4B".to_string()));
+        assert_eq!(form_data.suburb, Some("Sydney".to_string()));
+        assert_eq!(form_data.state, Some("NSW".to_string()));
+        assert_eq!(form_data.postcode, Some("2000".to_string()));
+        assert_eq!(form_data.country, Some("Australia".to_string()));
+    }
+
+    #[test]
+    fn patient_form_data_emergency_contact_mapped_correctly() {
+        let emergency_contact = EmergencyContact {
+            name: "Jane Smith".to_string(),
+            phone: "0412345678".to_string(),
+            relationship: "Spouse".to_string(),
+        };
+
+        let patient = Patient::new(
+            "John".to_string(),
+            "Smith".to_string(),
+            NaiveDate::from_ymd_opt(1990, 1, 1).unwrap(),
+            Gender::Male,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Address::default(),
+            None,
+            None,
+            None,
+            Some(emergency_contact),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let form_data: PatientFormData = patient.into();
+        assert_eq!(
+            form_data.emergency_contact_name,
+            Some("Jane Smith".to_string())
+        );
+        assert_eq!(
+            form_data.emergency_contact_phone,
+            Some("0412345678".to_string())
+        );
+        assert_eq!(
+            form_data.emergency_contact_relationship,
+            Some("Spouse".to_string())
+        );
+    }
+
+    #[test]
+    fn patient_form_data_empty_form_defaults() {
+        let form_data = PatientFormData::empty();
+        assert_eq!(form_data.country, Some("Australia".to_string()));
+        assert_eq!(form_data.preferred_language, Some("English".to_string()));
+        assert_eq!(form_data.first_name, "");
+        assert_eq!(form_data.last_name, "");
+        assert_eq!(form_data.interpreter_required, false);
+        assert_eq!(form_data.emergency_contact_name, None);
+        assert_eq!(form_data.emergency_contact_phone, None);
+        assert_eq!(form_data.emergency_contact_relationship, None);
+    }
+
+    // ============================================================================
+    // From<Appointment> for AppointmentViewItem Tests
+    // ============================================================================
+
+    fn create_test_appointment(duration_minutes: i64) -> Appointment {
+        let start_time = Utc::now();
+        let end_time = start_time + Duration::minutes(duration_minutes);
+        Appointment {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            practitioner_id: Uuid::new_v4(),
+            start_time,
+            end_time,
+            appointment_type: AppointmentType::Standard,
+            status: AppointmentStatus::Scheduled,
+            reason: None,
+            notes: None,
+            is_urgent: false,
+            reminder_sent: false,
+            confirmed: false,
+            cancellation_reason: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            version: 1,
+            created_by: None,
+            updated_by: None,
+        }
+    }
+
+    #[test]
+    fn appointment_view_item_slot_span_15_minutes() {
+        let appointment = create_test_appointment(15);
+        let view_item: AppointmentViewItem = appointment.into();
+        assert_eq!(view_item.slot_span, 1);
+    }
+
+    #[test]
+    fn appointment_view_item_slot_span_30_minutes() {
+        let appointment = create_test_appointment(30);
+        let view_item: AppointmentViewItem = appointment.into();
+        assert_eq!(view_item.slot_span, 2);
+    }
+
+    #[test]
+    fn appointment_view_item_slot_span_45_minutes() {
+        let appointment = create_test_appointment(45);
+        let view_item: AppointmentViewItem = appointment.into();
+        assert_eq!(view_item.slot_span, 3);
+    }
+
+    #[test]
+    fn appointment_view_item_slot_span_20_minutes_rounds_up() {
+        let appointment = create_test_appointment(20);
+        let view_item: AppointmentViewItem = appointment.into();
+        assert_eq!(view_item.slot_span, 2);
+    }
+
+    #[test]
+    fn appointment_view_item_patient_name_initialized_empty() {
+        let appointment = create_test_appointment(30);
+        let view_item: AppointmentViewItem = appointment.into();
+        assert_eq!(view_item.patient_name, "");
+    }
+}
