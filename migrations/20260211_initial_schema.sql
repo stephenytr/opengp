@@ -20,8 +20,8 @@ CREATE INDEX idx_users_active ON users(is_active) WHERE is_active = TRUE;
 CREATE TABLE IF NOT EXISTS patients (
     id UUID PRIMARY KEY,
     
-    ihi TEXT,
-    medicare_number TEXT,
+    ihi BYTEA,
+    medicare_number BYTEA,
     medicare_irn INTEGER CHECK(medicare_irn BETWEEN 1 AND 9),
     medicare_expiry DATE,
     
