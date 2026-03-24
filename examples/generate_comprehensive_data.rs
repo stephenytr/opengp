@@ -168,7 +168,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let social_history = generate_social_history(profile.patient.id, default_actor, seed);
 
-        match insert_patient(&pool, &profile.patient, default_actor).await {
+        match insert_patient(&pool, &crypto, &profile.patient, default_actor).await {
             Ok(_) => {
                 stats.patients_created += 1;
 
@@ -394,7 +394,21 @@ async fn run_postgres_migrations(pool: &PgPool) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
-async fn insert_patient(pool: &PgPool, patient: &Patient, actor_id: Uuid) -> Result<(), sqlx::Error> {
+async fn insert_patient(pool: &PgPool, crypto: &EncryptionService, patient: &Patient, actor_id: Uuid) -> Result<(), sqlx::Error> {
+    let encrypted_ihi = patient
+        .ihi
+        .as_ref()
+        .map(|s| crypto.encrypt(s))
+        .transpose()
+        .map_err(|e| sqlx::Error::Protocol(format!("IHI encryption failed: {e}")))?;
+
+    let encrypted_medicare = patient
+        .medicare_number
+        .as_ref()
+        .map(|s| crypto.encrypt(s))
+        .transpose()
+        .map_err(|e| sqlx::Error::Protocol(format!("Medicare encryption failed: {e}")))?;
+
     sqlx::query(
         r#"
         INSERT INTO patients (
@@ -420,8 +434,8 @@ async fn insert_patient(pool: &PgPool, patient: &Patient, actor_id: Uuid) -> Res
         "#,
     )
     .bind(patient.id)
-    .bind(&patient.ihi)
-    .bind(&patient.medicare_number)
+    .bind(encrypted_ihi)
+    .bind(encrypted_medicare)
     .bind(patient.medicare_irn.map(i32::from))
     .bind(patient.medicare_expiry)
     .bind(&patient.title)
