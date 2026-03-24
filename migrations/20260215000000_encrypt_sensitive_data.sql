@@ -3,26 +3,26 @@
 
 -- Consultations table with encrypted SOAP notes
 CREATE TABLE IF NOT EXISTS consultations (
-    id BLOB PRIMARY KEY,
-    patient_id BLOB NOT NULL,
-    practitioner_id BLOB NOT NULL,
-    appointment_id BLOB,
+    id UUID PRIMARY KEY,
+    patient_id UUID NOT NULL,
+    practitioner_id UUID NOT NULL,
+    appointment_id UUID,
     consultation_date TIMESTAMP WITH TIME ZONE NOT NULL,
     
-    -- Encrypted SOAP notes (BLOB for encrypted bytes)
-    soap_subjective BLOB,
-    soap_objective BLOB,
-    soap_assessment BLOB,
-    soap_plan BLOB,
+    -- Encrypted SOAP notes (UUID for encrypted bytes)
+    soap_subjective UUID,
+    soap_objective UUID,
+    soap_assessment UUID,
+    soap_plan UUID,
     
     is_signed BOOLEAN NOT NULL DEFAULT FALSE,
     signed_at TIMESTAMP WITH TIME ZONE,
-    signed_by BLOB,
+    signed_by UUID,
     
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by BLOB NOT NULL,
-    updated_by BLOB,
+    created_by UUID NOT NULL,
+    updated_by UUID,
     
     FOREIGN KEY (patient_id) REFERENCES patients(id),
     FOREIGN KEY (practitioner_id) REFERENCES users(id),
@@ -38,8 +38,8 @@ CREATE INDEX idx_consultations_practitioner ON consultations(practitioner_id);
 
 -- Social history table with encrypted notes
 CREATE TABLE IF NOT EXISTS social_history (
-    id BLOB PRIMARY KEY,
-    patient_id BLOB NOT NULL,
+    id UUID PRIMARY KEY,
+    patient_id UUID NOT NULL,
     
     smoking_status TEXT,
     cigarettes_per_day INTEGER,
@@ -54,10 +54,10 @@ CREATE TABLE IF NOT EXISTS social_history (
     support_network TEXT,
     
     -- Encrypted notes field
-    notes BLOB,
+    notes UUID,
     
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_by BLOB NOT NULL,
+    updated_by UUID NOT NULL,
     
     FOREIGN KEY (patient_id) REFERENCES patients(id),
     FOREIGN KEY (updated_by) REFERENCES users(id),

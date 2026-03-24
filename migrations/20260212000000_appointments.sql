@@ -2,9 +2,9 @@
 -- Stores appointment scheduling and status information
 
 CREATE TABLE IF NOT EXISTS appointments (
-    id BLOB PRIMARY KEY,
-    patient_id BLOB NOT NULL,
-    practitioner_id BLOB NOT NULL,
+    id UUID PRIMARY KEY,
+    patient_id UUID NOT NULL,
+    practitioner_id UUID NOT NULL,
     
     start_time TIMESTAMP WITH TIME ZONE NOT NULL,
     end_time TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -29,8 +29,8 @@ CREATE TABLE IF NOT EXISTS appointments (
     
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by BLOB,
-    updated_by BLOB,
+    created_by UUID,
+    updated_by UUID,
     
     FOREIGN KEY (patient_id) REFERENCES patients(id),
     FOREIGN KEY (practitioner_id) REFERENCES users(id),

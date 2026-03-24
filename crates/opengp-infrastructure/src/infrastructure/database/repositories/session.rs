@@ -6,10 +6,6 @@ use uuid::Uuid;
 
 use opengp_domain::domain::user::{RepositoryError, Session, SessionRepository};
 
-use crate::infrastructure::database::helpers::{
-    datetime_to_string, string_to_datetime,
-};
-
 pub struct InMemorySessionRepository {
     sessions: RwLock<Vec<Session>>,
 }
@@ -75,8 +71,8 @@ impl SessionRepository for InMemorySessionRepository {
 struct SessionRow {
     id: Uuid,
     user_id: Uuid,
-    created_at: String,
-    expires_at: String,
+    created_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
     token: String,
 }
 
@@ -85,8 +81,8 @@ impl SessionRow {
         Ok(Session {
             id: self.id,
             user_id: self.user_id,
-            created_at: string_to_datetime(&self.created_at),
-            expires_at: string_to_datetime(&self.expires_at),
+            created_at: self.created_at,
+            expires_at: self.expires_at,
             token: self.token,
         })
     }
@@ -118,8 +114,8 @@ impl SessionRepository for SqlxSessionRepository {
         )
         .bind(session.id)
         .bind(session.user_id)
-        .bind(datetime_to_string(&session.created_at))
-        .bind(datetime_to_string(&session.expires_at))
+        .bind(session.created_at)
+        .bind(session.expires_at)
         .bind(&session.token)
         .execute(&self.pool)
         .await;
@@ -172,7 +168,7 @@ impl SessionRepository for SqlxSessionRepository {
 
     async fn cleanup_expired(&self, now: DateTime<Utc>) -> Result<u64, RepositoryError> {
         let result = sqlx::query("DELETE FROM sessions WHERE expires_at <= $1")
-        .bind(datetime_to_string(&now))
+        .bind(now)
         .execute(&self.pool)
         .await
         .map_err(|e| RepositoryError::Database(e.to_string()))?;
@@ -187,7 +183,6 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
-    use crate::infrastructure::database::helpers::datetime_to_string;
     use crate::infrastructure::database::test_utils::create_test_pool;
 
     fn build_session(user_id: Uuid, token: &str, expires_in_minutes: i64) -> Session {
@@ -252,8 +247,8 @@ mod tests {
         .bind("hash")
         .bind("Doctor")
         .bind(true)
-        .bind(datetime_to_string(&now))
-        .bind(datetime_to_string(&now))
+        .bind(now)
+        .bind(now)
         .bind("Test")
         .bind("User")
         .execute(&pool)

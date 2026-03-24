@@ -430,3 +430,230 @@ impl Widget for ConsultationDetail {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    fn create_test_consultation() -> Consultation {
+        Consultation {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            practitioner_id: Uuid::new_v4(),
+            appointment_id: Some(Uuid::new_v4()),
+            consultation_date: Utc::now(),
+            reason: Some("Annual checkup".to_string()),
+            clinical_notes: Some("Patient in good health".to_string()),
+            is_signed: false,
+            signed_at: None,
+            signed_by: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            version: 1,
+            created_by: Uuid::new_v4(),
+            updated_by: None,
+        }
+    }
+
+    #[test]
+    fn test_new_creates_empty_detail() {
+        let theme = Theme::dark();
+        let detail = ConsultationDetail::new(theme.clone());
+
+        assert!(detail.consultation.is_none());
+        assert!(detail.prescriptions.is_empty());
+        assert!(!detail.is_editing);
+        assert!(!detail.signed);
+    }
+
+    #[test]
+    fn test_with_consultation_sets_signed_from_domain() {
+        let theme = Theme::dark();
+        let mut consultation = create_test_consultation();
+        consultation.signed_at = Some(Utc::now());
+
+        let detail = ConsultationDetail::with_consultation(consultation.clone(), theme);
+
+        assert!(detail.consultation.is_some());
+        assert!(detail.signed);
+        assert!(!detail.is_editing);
+    }
+
+    #[test]
+    fn test_with_consultation_unsigned_sets_signed_false() {
+        let theme = Theme::dark();
+        let consultation = create_test_consultation();
+
+        let detail = ConsultationDetail::with_consultation(consultation, theme);
+
+        assert!(!detail.signed);
+    }
+
+    #[test]
+    fn test_can_edit_returns_false_when_signed() {
+        let theme = Theme::dark();
+        let mut consultation = create_test_consultation();
+        consultation.signed_at = Some(Utc::now());
+        let detail = ConsultationDetail::with_consultation(consultation, theme);
+
+        assert!(!detail.can_edit());
+    }
+
+    #[test]
+    fn test_can_edit_returns_true_when_not_signed() {
+        let theme = Theme::dark();
+        let consultation = create_test_consultation();
+        let detail = ConsultationDetail::with_consultation(consultation, theme);
+
+        assert!(detail.can_edit());
+    }
+
+    #[test]
+    fn test_start_editing_sets_flag_when_can_edit() {
+        let theme = Theme::dark();
+        let consultation = create_test_consultation();
+        let mut detail = ConsultationDetail::with_consultation(consultation, theme);
+
+        detail.start_editing();
+
+        assert!(detail.is_editing);
+    }
+
+    #[test]
+    fn test_start_editing_does_not_set_flag_when_signed() {
+        let theme = Theme::dark();
+        let mut consultation = create_test_consultation();
+        consultation.signed_at = Some(Utc::now());
+        let mut detail = ConsultationDetail::with_consultation(consultation, theme);
+
+        detail.start_editing();
+
+        assert!(!detail.is_editing);
+    }
+
+    #[test]
+    fn test_stop_editing_clears_flag() {
+        let theme = Theme::dark();
+        let consultation = create_test_consultation();
+        let mut detail = ConsultationDetail::with_consultation(consultation, theme);
+        detail.is_editing = true;
+
+        detail.stop_editing();
+
+        assert!(!detail.is_editing);
+    }
+
+    #[test]
+    fn test_format_date_with_consultation() {
+        let theme = Theme::dark();
+        let consultation = create_test_consultation();
+        let detail = ConsultationDetail::with_consultation(consultation, theme);
+
+        let formatted = detail.format_date();
+
+        assert!(!formatted.is_empty());
+        assert!(formatted.contains("at"));
+    }
+
+    #[test]
+    fn test_format_date_without_consultation() {
+        let theme = Theme::dark();
+        let detail = ConsultationDetail::new(theme);
+
+        let formatted = detail.format_date();
+
+        assert_eq!(formatted, "New Consultation");
+    }
+
+    #[test]
+    fn test_format_status_draft_when_not_signed() {
+        let theme = Theme::dark();
+        let consultation = create_test_consultation();
+        let detail = ConsultationDetail::with_consultation(consultation, theme);
+
+        let status = detail.format_status();
+
+        assert_eq!(status, "Draft");
+    }
+
+    #[test]
+    fn test_format_status_signed_when_signed() {
+        let theme = Theme::dark();
+        let mut consultation = create_test_consultation();
+        consultation.signed_at = Some(Utc::now());
+        let detail = ConsultationDetail::with_consultation(consultation, theme);
+
+        let status = detail.format_status();
+
+        assert!(status.contains("Signed"));
+    }
+
+    #[test]
+    fn test_get_status_color_success_when_signed() {
+        let theme = Theme::dark();
+        let mut consultation = create_test_consultation();
+        consultation.signed_at = Some(Utc::now());
+        let detail = ConsultationDetail::with_consultation(consultation, theme.clone());
+
+        let color = detail.get_status_color();
+
+        assert_eq!(color, theme.colors.success);
+    }
+
+    #[test]
+    fn test_get_status_color_warning_when_not_signed() {
+        let theme = Theme::dark();
+        let consultation = create_test_consultation();
+        let detail = ConsultationDetail::with_consultation(consultation, theme.clone());
+
+        let color = detail.get_status_color();
+
+        assert_eq!(color, theme.colors.warning);
+    }
+
+    #[test]
+    fn test_consultation_detail_action_enum_variants() {
+        let _edit = ConsultationDetailAction::Edit;
+        let _save = ConsultationDetailAction::Save;
+        let _sign = ConsultationDetailAction::Sign;
+        let _cancel = ConsultationDetailAction::Cancel;
+    }
+
+    #[test]
+    fn test_set_prescriptions_stores_empty_vec() {
+        let theme = Theme::dark();
+        let consultation = create_test_consultation();
+        let mut detail = ConsultationDetail::with_consultation(consultation, theme);
+
+        detail.set_prescriptions(Vec::new());
+
+        assert!(detail.prescriptions.is_empty());
+    }
+
+    #[test]
+    fn test_state_transitions_edit_flow() {
+        let theme = Theme::dark();
+        let consultation = create_test_consultation();
+        let mut detail = ConsultationDetail::with_consultation(consultation, theme);
+
+        assert!(!detail.is_editing);
+        detail.start_editing();
+        assert!(detail.is_editing);
+        detail.stop_editing();
+        assert!(!detail.is_editing);
+    }
+
+    #[test]
+    fn test_signed_consultation_prevents_editing() {
+        let theme = Theme::dark();
+        let mut consultation = create_test_consultation();
+        consultation.signed_at = Some(Utc::now());
+        let mut detail = ConsultationDetail::with_consultation(consultation, theme);
+
+        assert!(!detail.can_edit());
+        detail.start_editing();
+        assert!(!detail.is_editing);
+    }
+}

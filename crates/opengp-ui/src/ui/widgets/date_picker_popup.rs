@@ -193,3 +193,344 @@ impl Default for DatePickerPopup {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    #[test]
+    fn test_new_popup_not_visible() {
+        let popup = DatePickerPopup::new();
+        assert!(!popup.is_visible());
+    }
+
+    #[test]
+    fn test_open_sets_visible_with_date() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+        assert!(popup.is_visible());
+        assert_eq!(popup.calendar.focused_date, date);
+        assert_eq!(popup.initial_date, Some(date));
+    }
+
+    #[test]
+    fn test_open_sets_visible_without_date() {
+        let mut popup = DatePickerPopup::new();
+        popup.open(None);
+        assert!(popup.is_visible());
+        assert_eq!(popup.initial_date, None);
+    }
+
+    #[test]
+    fn test_close_clears_visibility() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+        popup.close();
+        assert!(!popup.is_visible());
+    }
+
+    #[test]
+    fn test_handle_key_enter_confirms_selection() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(matches!(action, Some(DatePickerAction::Selected(_))));
+        assert!(!popup.is_visible());
+    }
+
+    #[test]
+    fn test_handle_key_space_confirms_selection() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(matches!(action, Some(DatePickerAction::Selected(_))));
+        assert!(!popup.is_visible());
+    }
+
+    #[test]
+    fn test_handle_key_esc_dismisses() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(matches!(action, Some(DatePickerAction::Dismissed)));
+        assert!(!popup.is_visible());
+    }
+
+    #[test]
+    fn test_handle_key_up_navigates_previous_week() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(action.is_none());
+        assert!(popup.is_visible());
+        assert_eq!(
+            popup.calendar.focused_date,
+            NaiveDate::from_ymd_opt(2024, 3, 8).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_handle_key_k_navigates_previous_week() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(action.is_none());
+        assert_eq!(
+            popup.calendar.focused_date,
+            NaiveDate::from_ymd_opt(2024, 3, 8).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_handle_key_down_navigates_next_week() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(action.is_none());
+        assert_eq!(
+            popup.calendar.focused_date,
+            NaiveDate::from_ymd_opt(2024, 3, 22).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_handle_key_j_navigates_next_week() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(action.is_none());
+        assert_eq!(
+            popup.calendar.focused_date,
+            NaiveDate::from_ymd_opt(2024, 3, 22).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_handle_key_left_navigates_previous_day() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(action.is_none());
+        assert_eq!(
+            popup.calendar.focused_date,
+            NaiveDate::from_ymd_opt(2024, 3, 14).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_handle_key_h_navigates_previous_day() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(action.is_none());
+        assert_eq!(
+            popup.calendar.focused_date,
+            NaiveDate::from_ymd_opt(2024, 3, 14).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_handle_key_right_navigates_next_day() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(action.is_none());
+        assert_eq!(
+            popup.calendar.focused_date,
+            NaiveDate::from_ymd_opt(2024, 3, 16).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_handle_key_l_navigates_next_day() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(action.is_none());
+        assert_eq!(
+            popup.calendar.focused_date,
+            NaiveDate::from_ymd_opt(2024, 3, 16).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_handle_key_up_at_month_boundary_wraps_to_previous_month() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 5).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+        popup.handle_key(key);
+
+        assert_eq!(popup.calendar.current_month.1, 2);
+        assert_eq!(popup.calendar.focused_date.month(), 2);
+    }
+
+    #[test]
+    fn test_handle_key_down_at_month_boundary_wraps_to_next_month() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 28).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        popup.handle_key(key);
+
+        assert_eq!(popup.calendar.current_month.1, 4);
+        assert_eq!(popup.calendar.focused_date.month(), 4);
+    }
+
+    #[test]
+    fn test_handle_key_left_at_month_boundary_wraps_to_previous_month() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 1).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
+        popup.handle_key(key);
+
+        assert_eq!(popup.calendar.current_month.1, 2);
+        assert_eq!(
+            popup.calendar.focused_date,
+            NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_handle_key_right_at_month_boundary_wraps_to_next_month() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 31).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
+        popup.handle_key(key);
+
+        assert_eq!(popup.calendar.current_month.1, 4);
+        assert_eq!(
+            popup.calendar.focused_date,
+            NaiveDate::from_ymd_opt(2024, 4, 1).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_handle_key_when_not_visible_returns_none() {
+        let mut popup = DatePickerPopup::new();
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(action.is_none());
+    }
+
+    #[test]
+    fn test_handle_key_unknown_key_returns_none() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        assert!(action.is_none());
+        assert!(popup.is_visible());
+    }
+
+    #[test]
+    fn test_selected_date_is_returned_on_confirmation() {
+        let mut popup = DatePickerPopup::new();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        popup.open(Some(date));
+
+        let key = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
+        popup.handle_key(key);
+
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        let action = popup.handle_key(key);
+
+        if let Some(DatePickerAction::Selected(selected)) = action {
+            assert_eq!(selected, NaiveDate::from_ymd_opt(2024, 3, 16).unwrap());
+        } else {
+            panic!("Expected DatePickerAction::Selected");
+        }
+    }
+
+    #[test]
+    fn test_days_in_month_february_leap_year() {
+        let popup = DatePickerPopup::new();
+        let days = popup.days_in_month(2024, 2);
+        assert_eq!(days, 29);
+    }
+
+    #[test]
+    fn test_days_in_month_february_non_leap_year() {
+        let popup = DatePickerPopup::new();
+        let days = popup.days_in_month(2023, 2);
+        assert_eq!(days, 28);
+    }
+
+    #[test]
+    fn test_days_in_month_april() {
+        let popup = DatePickerPopup::new();
+        let days = popup.days_in_month(2024, 4);
+        assert_eq!(days, 30);
+    }
+
+    #[test]
+    fn test_days_in_month_december() {
+        let popup = DatePickerPopup::new();
+        let days = popup.days_in_month(2024, 12);
+        assert_eq!(days, 31);
+    }
+
+    #[test]
+    fn test_default_creates_new_popup() {
+        let popup = DatePickerPopup::default();
+        assert!(!popup.is_visible());
+    }
+}

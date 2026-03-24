@@ -98,3 +98,140 @@ pub trait HandleMouse {
     /// Handles a mouse event within the given area and returns an optional action
     fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<Self::Action>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyModifiers, MouseEventKind};
+
+    #[test]
+    fn is_key_press_returns_true_for_press_event() {
+        let mut key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+        key.kind = KeyEventKind::Press;
+        assert!(is_key_press(&key));
+    }
+
+    #[test]
+    fn is_key_press_returns_false_for_release_event() {
+        let mut key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+        key.kind = KeyEventKind::Release;
+        assert!(!is_key_press(&key));
+    }
+
+    #[test]
+    fn is_key_press_returns_false_for_repeat_event() {
+        let mut key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+        key.kind = KeyEventKind::Repeat;
+        assert!(!is_key_press(&key));
+    }
+
+    #[test]
+    fn to_ratatui_key_converts_char_key() {
+        let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
+        let ratatui_key = to_ratatui_key(key);
+        assert_eq!(ratatui_key.code, RatatuiKeyCode::Char('x'));
+    }
+
+    #[test]
+    fn to_ratatui_key_converts_special_keys() {
+        let test_cases = vec![
+            (KeyCode::Enter, RatatuiKeyCode::Enter),
+            (KeyCode::Backspace, RatatuiKeyCode::Backspace),
+            (KeyCode::Tab, RatatuiKeyCode::Tab),
+            (KeyCode::Esc, RatatuiKeyCode::Esc),
+            (KeyCode::Delete, RatatuiKeyCode::Delete),
+            (KeyCode::Insert, RatatuiKeyCode::Insert),
+            (KeyCode::Home, RatatuiKeyCode::Home),
+            (KeyCode::End, RatatuiKeyCode::End),
+            (KeyCode::PageUp, RatatuiKeyCode::PageUp),
+            (KeyCode::PageDown, RatatuiKeyCode::PageDown),
+            (KeyCode::Left, RatatuiKeyCode::Left),
+            (KeyCode::Right, RatatuiKeyCode::Right),
+            (KeyCode::Up, RatatuiKeyCode::Up),
+            (KeyCode::Down, RatatuiKeyCode::Down),
+        ];
+
+        for (crossterm_code, expected_ratatui_code) in test_cases {
+            let key = KeyEvent::new(crossterm_code, KeyModifiers::NONE);
+            let ratatui_key = to_ratatui_key(key);
+            assert_eq!(ratatui_key.code, expected_ratatui_code);
+        }
+    }
+
+    #[test]
+    fn to_ratatui_key_converts_function_keys() {
+        for n in 1..=12 {
+            let key = KeyEvent::new(KeyCode::F(n), KeyModifiers::NONE);
+            let ratatui_key = to_ratatui_key(key);
+            assert_eq!(ratatui_key.code, RatatuiKeyCode::F(n));
+        }
+    }
+
+    #[test]
+    fn to_ratatui_key_preserves_modifiers() {
+        let key = KeyEvent::new(
+            KeyCode::Char('a'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        );
+        let ratatui_key = to_ratatui_key(key);
+        assert!(ratatui_key.modifiers.contains(RatatuiKeyModifiers::CONTROL));
+        assert!(ratatui_key.modifiers.contains(RatatuiKeyModifiers::SHIFT));
+    }
+
+    #[test]
+    fn handle_event_trait_can_be_implemented() {
+        #[derive(Debug)]
+        enum TestAction {
+            Pressed,
+        }
+
+        struct TestComponent;
+
+        impl HandleEvent for TestComponent {
+            type Action = TestAction;
+
+            fn handle_key(&mut self, _key: KeyEvent) -> Option<Self::Action> {
+                Some(TestAction::Pressed)
+            }
+        }
+
+        let mut component = TestComponent;
+        let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+        let action = component.handle_key(key);
+        assert!(matches!(action, Some(TestAction::Pressed)));
+    }
+
+    #[test]
+    fn handle_mouse_trait_can_be_implemented() {
+        #[derive(Debug)]
+        enum TestAction {
+            Clicked,
+        }
+
+        struct TestComponent;
+
+        impl HandleMouse for TestComponent {
+            type Action = TestAction;
+
+            fn handle_mouse(&mut self, _mouse: MouseEvent, _area: Rect) -> Option<Self::Action> {
+                Some(TestAction::Clicked)
+            }
+        }
+
+        let mut component = TestComponent;
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            column: 10,
+            row: 5,
+            modifiers: KeyModifiers::NONE,
+        };
+        let area = Rect {
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 10,
+        };
+        let action = component.handle_mouse(mouse, area);
+        assert!(matches!(action, Some(TestAction::Clicked)));
+    }
+}

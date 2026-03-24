@@ -2,8 +2,8 @@
 -- Stores practitioner working hours schedules for each day of the week
 
 CREATE TABLE IF NOT EXISTS working_hours (
-    id BLOB PRIMARY KEY,
-    practitioner_id BLOB NOT NULL,
+    id UUID PRIMARY KEY,
+    practitioner_id UUID NOT NULL,
 
     -- Day of week (0 = Monday, 6 = Sunday)
     day_of_week INTEGER NOT NULL CHECK(day_of_week BETWEEN 0 AND 6),

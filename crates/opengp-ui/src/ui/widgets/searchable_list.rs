@@ -367,3 +367,500 @@ impl<'a, T: Searchable> Widget for SearchableList<'a, T> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::KeyModifiers;
+
+    // Test struct implementing Searchable trait
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct TestItem {
+        id: Uuid,
+        name: String,
+    }
+
+    impl Searchable for TestItem {
+        fn id(&self) -> Uuid {
+            self.id
+        }
+
+        fn display_text(&self) -> &str {
+            &self.name
+        }
+
+        fn search_text(&self) -> &str {
+            &self.name
+        }
+    }
+
+    // Helper function to create test items
+    fn create_test_item(name: &str) -> TestItem {
+        TestItem {
+            id: Uuid::new_v4(),
+            name: name.to_string(),
+        }
+    }
+
+    // Test 1: SearchableListState::new() — filtered == items initially
+    #[test]
+    fn test_new_initializes_filtered_to_items() {
+        let items = vec![create_test_item("Alice"), create_test_item("Bob")];
+        let state = SearchableListState::new(items.clone());
+
+        assert_eq!(state.items.len(), 2);
+        assert_eq!(state.filtered.len(), 2);
+        assert_eq!(state.filtered, state.items);
+        assert_eq!(state.query, "");
+        assert!(!state.open);
+        assert!(!state.focused);
+    }
+
+    // Test 2: set_items() — updates items, re-filters if query active
+    #[test]
+    fn test_set_items_updates_items_and_refilters() {
+        let initial_items = vec![create_test_item("Alice"), create_test_item("Bob")];
+        let mut state = SearchableListState::new(initial_items);
+
+        // No query, filtered should match items
+        assert_eq!(state.filtered.len(), 2);
+
+        // Set items with new data
+        let new_items = vec![
+            create_test_item("Charlie"),
+            create_test_item("Diana"),
+            create_test_item("Eve"),
+        ];
+        state.set_items(new_items);
+
+        assert_eq!(state.items.len(), 3);
+        assert_eq!(state.filtered.len(), 3);
+        assert_eq!(state.filtered, state.items);
+    }
+
+    // Test 3: set_items() with active query re-filters
+    #[test]
+    fn test_set_items_with_active_query_refilters() {
+        let items = vec![create_test_item("Smith"), create_test_item("Johnson")];
+        let mut state = SearchableListState::new(items);
+
+        // Set a query
+        state.set_query("smith".to_string(), true);
+        assert_eq!(state.filtered.len(), 1); // "smith" matches "Smith"
+
+        // Update items
+        let new_items = vec![
+            create_test_item("Smith"),
+            create_test_item("Smithson"),
+            create_test_item("Jones"),
+        ];
+        state.set_items(new_items);
+
+        // Query should still be active and filter should apply
+        assert_eq!(state.filtered.len(), 2); // "smith" matches "Smith" and "Smithson"
+    }
+
+    // Test 4: open() — sets open=true, clears query, resets scroll, filtered = all items
+    #[test]
+    fn test_open_sets_state_correctly() {
+        let items = vec![create_test_item("Alice"), create_test_item("Bob")];
+        let mut state = SearchableListState::new(items);
+
+        // Simulate some prior state
+        state.query = "test".to_string();
+        state.open = false;
+        state.filtered = vec![]; // Filtered to empty
+
+        state.open();
+
+        assert!(state.open);
+        assert_eq!(state.query, "");
+        assert_eq!(state.filtered.len(), 2); // Back to all items
+    }
+
+    // Test 5: close() — sets open=false, clears query
+    #[test]
+    fn test_close_sets_state_correctly() {
+        let items = vec![create_test_item("Alice")];
+        let mut state = SearchableListState::new(items);
+
+        state.open = true;
+        state.query = "test".to_string();
+
+        state.close();
+
+        assert!(!state.open);
+        assert_eq!(state.query, "");
+    }
+
+    // Test 6: filter_fuzzy() — "smi" matches "Smith" but not "Jones"
+    #[test]
+    fn test_filter_fuzzy_matches_substring() {
+        let items = vec![
+            create_test_item("Smith"),
+            create_test_item("Jones"),
+            create_test_item("Smithson"),
+        ];
+        let mut state = SearchableListState::new(items);
+
+        state.set_query("smi".to_string(), true);
+
+        // "smi" should match "Smith" and "Smithson", but not "Jones"
+        assert_eq!(state.filtered.len(), 2);
+        assert!(state.filtered.iter().any(|item| item.name == "Smith"));
+        assert!(state.filtered.iter().any(|item| item.name == "Smithson"));
+        assert!(!state.filtered.iter().any(|item| item.name == "Jones"));
+    }
+
+    // Test 7: filter_fuzzy() — results sorted by score
+    #[test]
+    fn test_filter_fuzzy_sorts_by_score() {
+        let items = vec![
+            create_test_item("Smith"),
+            create_test_item("Smithson"),
+            create_test_item("Smythe"),
+        ];
+        let mut state = SearchableListState::new(items);
+
+        state.set_query("smith".to_string(), true);
+
+        // "smith" should match "Smith" and "Smithson" (exact+substring match),
+        // "Smythe" may or may not match depending on fuzzy score threshold
+        assert!(state.filtered.len() >= 2);
+        // First result should be exact match "Smith"
+        assert_eq!(state.filtered[0].name, "Smith");
+    }
+
+    // Test 8: filter_substring() — case-insensitive substring match
+    #[test]
+    fn test_filter_substring_case_insensitive() {
+        let items = vec![
+            create_test_item("Smith"),
+            create_test_item("JOHNSON"),
+            create_test_item("alice"),
+        ];
+        let mut state = SearchableListState::new(items);
+
+        state.set_query("smith".to_string(), false);
+
+        assert_eq!(state.filtered.len(), 1);
+        assert_eq!(state.filtered[0].name, "Smith");
+
+        state.set_query("JOHN".to_string(), false);
+        assert_eq!(state.filtered.len(), 1);
+        assert_eq!(state.filtered[0].name, "JOHNSON");
+
+        state.set_query("Alice".to_string(), false);
+        assert_eq!(state.filtered.len(), 1);
+        assert_eq!(state.filtered[0].name, "alice");
+    }
+
+    // Test 9: set_query() with fuzzy=true
+    #[test]
+    fn test_set_query_fuzzy_true() {
+        let items = vec![create_test_item("Smith"), create_test_item("Jones")];
+        let mut state = SearchableListState::new(items);
+
+        state.set_query("smi".to_string(), true);
+
+        assert_eq!(state.query, "smi");
+        assert_eq!(state.filtered.len(), 1);
+        assert_eq!(state.filtered[0].name, "Smith");
+    }
+
+    // Test 10: set_query() with fuzzy=false
+    #[test]
+    fn test_set_query_fuzzy_false() {
+        let items = vec![create_test_item("Smith"), create_test_item("Smithson")];
+        let mut state = SearchableListState::new(items);
+
+        state.set_query("smith".to_string(), false);
+
+        assert_eq!(state.query, "smith");
+        assert_eq!(state.filtered.len(), 2);
+    }
+
+    // Test 11: move_up() and move_down() — delegates to ScrollableState
+    #[test]
+    fn test_move_up_and_down() {
+        let items = vec![
+            create_test_item("Alice"),
+            create_test_item("Bob"),
+            create_test_item("Charlie"),
+        ];
+        let mut state = SearchableListState::new(items);
+
+        // Initial index is 0
+        assert_eq!(state.scrollable.selected_index(), 0);
+
+        state.move_down();
+        assert_eq!(state.scrollable.selected_index(), 1);
+
+        state.move_down();
+        assert_eq!(state.scrollable.selected_index(), 2);
+
+        state.move_up();
+        assert_eq!(state.scrollable.selected_index(), 1);
+
+        state.move_up();
+        assert_eq!(state.scrollable.selected_index(), 0);
+    }
+
+    // Test 12: selected_item() — returns correct item after navigation
+    #[test]
+    fn test_selected_item_returns_correct_item() {
+        let items = vec![
+            create_test_item("Alice"),
+            create_test_item("Bob"),
+            create_test_item("Charlie"),
+        ];
+        let mut state = SearchableListState::new(items);
+
+        assert_eq!(state.selected_item().unwrap().name, "Alice");
+
+        state.move_down();
+        assert_eq!(state.selected_item().unwrap().name, "Bob");
+
+        state.move_down();
+        assert_eq!(state.selected_item().unwrap().name, "Charlie");
+    }
+
+    // Test 13: selected_id() and selected_display() — return id/display_text
+    #[test]
+    fn test_selected_id_and_display() {
+        let item = create_test_item("Alice Smith");
+        let item_id = item.id;
+        let state = SearchableListState::new(vec![item]);
+
+        assert_eq!(state.selected_id(), Some(item_id));
+        assert_eq!(state.selected_display(), Some("Alice Smith".to_string()));
+    }
+
+    // Test 14: empty list — selected_item() returns None
+    #[test]
+    fn test_empty_list_returns_none() {
+        let state: SearchableListState<TestItem> = SearchableListState::new(vec![]);
+
+        assert!(state.selected_item().is_none());
+        assert!(state.selected_id().is_none());
+        assert!(state.selected_display().is_none());
+    }
+
+    // Test 15: SearchableListAction enum variants
+    #[test]
+    fn test_searchable_list_action_enum() {
+        let id = Uuid::new_v4();
+        let name = "Test".to_string();
+
+        let action1 = SearchableListAction::Selected(id, name.clone());
+        let action2 = SearchableListAction::Cancelled;
+        let action3 = SearchableListAction::None;
+
+        // Verify enum variants can be instantiated
+        match action1 {
+            SearchableListAction::Selected(_, _) => {}
+            _ => panic!("Should be Selected variant"),
+        }
+
+        match action2 {
+            SearchableListAction::Cancelled => {}
+            _ => panic!("Should be Cancelled variant"),
+        }
+
+        match action3 {
+            SearchableListAction::None => {}
+            _ => panic!("Should be None variant"),
+        }
+    }
+
+    // Test 16: handle_key() — Enter opens when closed
+    #[test]
+    fn test_handle_key_enter_opens_closed_list() {
+        use crate::ui::theme::Theme;
+
+        let items = vec![create_test_item("Alice")];
+        let mut state = SearchableListState::new(items);
+        let theme = Theme::default();
+
+        let mut list = SearchableList::new(&mut state, &theme, "Test", true);
+
+        let key = KeyEvent {
+            code: KeyCode::Enter,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::empty(),
+        };
+
+        let action = list.handle_key(key);
+
+        assert!(list.state.open);
+        assert_eq!(action, SearchableListAction::None);
+    }
+
+    // Test 17: handle_key() — Esc cancels when open
+    #[test]
+    fn test_handle_key_esc_cancels_open_list() {
+        use crate::ui::theme::Theme;
+
+        let items = vec![create_test_item("Alice")];
+        let mut state = SearchableListState::new(items);
+        state.open = true;
+        let theme = Theme::default();
+
+        let mut list = SearchableList::new(&mut state, &theme, "Test", true);
+
+        let key = KeyEvent {
+            code: KeyCode::Esc,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::empty(),
+        };
+
+        let action = list.handle_key(key);
+
+        assert!(!list.state.open);
+        assert_eq!(action, SearchableListAction::Cancelled);
+    }
+
+    // Test 18: handle_key() — Enter selects when open
+    #[test]
+    fn test_handle_key_enter_selects_when_open() {
+        use crate::ui::theme::Theme;
+
+        let item = create_test_item("Alice Smith");
+        let item_id = item.id;
+        let mut state = SearchableListState::new(vec![item]);
+        state.open = true;
+        let theme = Theme::default();
+
+        let mut list = SearchableList::new(&mut state, &theme, "Test", true);
+
+        let key = KeyEvent {
+            code: KeyCode::Enter,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::empty(),
+        };
+
+        let action = list.handle_key(key);
+
+        match action {
+            SearchableListAction::Selected(id, name) => {
+                assert_eq!(id, item_id);
+                assert_eq!(name, "Alice Smith");
+            }
+            _ => panic!("Should return Selected action"),
+        }
+        assert!(!list.state.open);
+    }
+
+    // Test 19: handle_key() — Char appends to query with fuzzy=true
+    #[test]
+    fn test_handle_key_char_appends_to_query_fuzzy() {
+        use crate::ui::theme::Theme;
+
+        let items = vec![
+            create_test_item("David"),
+            create_test_item("Bob"),
+            create_test_item("Charles"),
+        ];
+        let mut state = SearchableListState::new(items);
+        state.open = true;
+        let theme = Theme::default();
+
+        let mut list = SearchableList::new(&mut state, &theme, "Test", true);
+
+        let key = KeyEvent {
+            code: KeyCode::Char('d'),
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::empty(),
+        };
+
+        let action = list.handle_key(key);
+
+        assert_eq!(list.state.query, "d");
+        assert_eq!(action, SearchableListAction::None);
+        assert_eq!(list.state.filtered.len(), 1); // "d" matches "David"
+    }
+
+    // Test 20: handle_key() — Backspace pops from query
+    #[test]
+    fn test_handle_key_backspace_pops_query() {
+        use crate::ui::theme::Theme;
+
+        let items = vec![create_test_item("Smith"), create_test_item("Jones")];
+        let mut state = SearchableListState::new(items);
+        state.open = true;
+        state.query = "smi".to_string();
+        state.filtered = vec![]; // Simulate filtered results
+        let theme = Theme::default();
+
+        let mut list = SearchableList::new(&mut state, &theme, "Test", true);
+
+        let key = KeyEvent {
+            code: KeyCode::Backspace,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::empty(),
+        };
+
+        let action = list.handle_key(key);
+
+        assert_eq!(list.state.query, "sm");
+        assert_eq!(action, SearchableListAction::None);
+    }
+
+    // Test 21: handle_key() — Up/Down navigation
+    #[test]
+    fn test_handle_key_up_down_navigation() {
+        use crate::ui::theme::Theme;
+
+        let items = vec![
+            create_test_item("Alice"),
+            create_test_item("Bob"),
+            create_test_item("Charlie"),
+        ];
+        let mut state = SearchableListState::new(items);
+        state.open = true;
+        let theme = Theme::default();
+
+        let mut list = SearchableList::new(&mut state, &theme, "Test", true);
+
+        // Initial selection is index 0
+        assert_eq!(list.state.scrollable.selected_index(), 0);
+
+        // Move down
+        let down_key = KeyEvent {
+            code: KeyCode::Down,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::empty(),
+        };
+        list.handle_key(down_key);
+        assert_eq!(list.state.scrollable.selected_index(), 1);
+
+        // Move up
+        let up_key = KeyEvent {
+            code: KeyCode::Up,
+            modifiers: KeyModifiers::empty(),
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::empty(),
+        };
+        list.handle_key(up_key);
+        assert_eq!(list.state.scrollable.selected_index(), 0);
+    }
+
+    // Test 22: is_open() returns correct state
+    #[test]
+    fn test_is_open() {
+        let items = vec![create_test_item("Alice")];
+        let mut state = SearchableListState::new(items);
+
+        assert!(!state.is_open());
+        state.open();
+        assert!(state.is_open());
+        state.close();
+        assert!(!state.is_open());
+    }
+}

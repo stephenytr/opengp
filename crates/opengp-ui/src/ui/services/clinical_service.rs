@@ -325,3 +325,71 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ui_service_error_display_not_found() {
+        let err = UiServiceError::NotFound("test message".to_string());
+        assert_eq!(err.to_string(), "Not found: test message");
+    }
+
+    #[test]
+    fn test_ui_service_error_display_validation() {
+        let err = UiServiceError::Validation("invalid input".to_string());
+        assert_eq!(err.to_string(), "Validation error: invalid input");
+    }
+
+    #[test]
+    fn test_ui_service_error_display_repository() {
+        let err = UiServiceError::Repository("db error".to_string());
+        assert_eq!(err.to_string(), "Repository error: db error");
+    }
+
+    #[test]
+    fn test_ui_service_error_display_unknown() {
+        let err = UiServiceError::Unknown("something went wrong".to_string());
+        assert_eq!(err.to_string(), "Error: something went wrong");
+    }
+
+    #[test]
+    fn test_ui_service_error_is_error() {
+        let err: Box<dyn std::error::Error> = Box::new(UiServiceError::Repository("test".to_string()));
+        assert!(err.to_string().contains("Repository error"));
+    }
+
+    #[test]
+    fn test_from_domain_service_error() {
+        let patient_id = uuid::Uuid::new_v4();
+        let domain_err = DomainServiceError::PatientNotFound(patient_id);
+        let ui_err: UiServiceError = domain_err.into();
+        match ui_err {
+            UiServiceError::Repository(msg) => {
+                assert!(msg.contains("Patient not found"));
+            }
+            _ => panic!("Expected Repository error"),
+        }
+    }
+
+    #[test]
+    fn test_ui_service_error_debug() {
+        let err = UiServiceError::Repository("test error".to_string());
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("Repository"));
+    }
+
+    #[test]
+    fn test_ui_service_error_variants() {
+        let not_found = UiServiceError::NotFound("id".to_string());
+        let validation = UiServiceError::Validation("msg".to_string());
+        let repository = UiServiceError::Repository("msg".to_string());
+        let unknown = UiServiceError::Unknown("msg".to_string());
+
+        assert!(matches!(not_found, UiServiceError::NotFound(_)));
+        assert!(matches!(validation, UiServiceError::Validation(_)));
+        assert!(matches!(repository, UiServiceError::Repository(_)));
+        assert!(matches!(unknown, UiServiceError::Unknown(_)));
+    }
+}

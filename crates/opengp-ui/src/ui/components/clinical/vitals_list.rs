@@ -186,9 +186,9 @@ impl VitalSignsList {
                 self.selected_index = new_index;
                 Some(VitalSignsListAction::Select(self.selected_index))
             }
-            KeyCode::Enter => {
-                self.selected().map(|vitals| VitalSignsListAction::Open(vitals.clone()))
-            }
+            KeyCode::Enter => self
+                .selected()
+                .map(|vitals| VitalSignsListAction::Open(vitals.clone())),
             KeyCode::Char('n') => Some(VitalSignsListAction::New),
             KeyCode::Char('+') | KeyCode::Char('=') => Some(VitalSignsListAction::NextPage),
             KeyCode::Char('-') => Some(VitalSignsListAction::PrevPage),
@@ -378,5 +378,192 @@ impl Widget for VitalSignsList {
             .widths(col_widths);
 
         table.render(inner, buf);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn create_test_vitals(id: uuid::Uuid, measured_at: chrono::DateTime<Utc>) -> VitalSigns {
+        VitalSigns {
+            id,
+            patient_id: uuid::Uuid::new_v4(),
+            consultation_id: None,
+            measured_at,
+            systolic_bp: Some(120),
+            diastolic_bp: Some(80),
+            heart_rate: Some(72),
+            respiratory_rate: Some(16),
+            temperature: Some(37.0),
+            oxygen_saturation: Some(98),
+            height_cm: Some(180),
+            weight_kg: Some(75.0),
+            bmi: Some(23.1),
+            notes: None,
+            created_at: Utc::now(),
+            created_by: uuid::Uuid::new_v4(),
+        }
+    }
+
+    #[test]
+    fn test_construction_empty() {
+        let list = VitalSignsList::new(crate::ui::theme::Theme::dark());
+        assert_eq!(list.count(), 0);
+        assert_eq!(list.selected_index, 0);
+        assert_eq!(list.scroll_offset, 0);
+        assert!(!list.is_loading());
+    }
+
+    #[test]
+    fn test_construction_with_vitals() {
+        let now = Utc::now();
+        let vitals = vec![
+            create_test_vitals(uuid::Uuid::new_v4(), now),
+            create_test_vitals(uuid::Uuid::new_v4(), now - chrono::Duration::hours(1)),
+        ];
+        let list = VitalSignsList::with_vitals(vitals, crate::ui::theme::Theme::dark());
+        assert_eq!(list.count(), 2);
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_navigation_next_prev() {
+        let now = Utc::now();
+        let vitals = vec![
+            create_test_vitals(uuid::Uuid::new_v4(), now),
+            create_test_vitals(uuid::Uuid::new_v4(), now - chrono::Duration::hours(1)),
+            create_test_vitals(uuid::Uuid::new_v4(), now - chrono::Duration::hours(2)),
+        ];
+        let mut list = VitalSignsList::with_vitals(vitals, crate::ui::theme::Theme::dark());
+
+        assert_eq!(list.selected_index, 0);
+        list.next();
+        assert_eq!(list.selected_index, 1);
+        list.next();
+        assert_eq!(list.selected_index, 2);
+        list.next();
+        assert_eq!(list.selected_index, 2);
+
+        list.prev();
+        assert_eq!(list.selected_index, 1);
+        list.prev();
+        assert_eq!(list.selected_index, 0);
+        list.prev();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_navigation_first_last() {
+        let now = Utc::now();
+        let vitals = vec![
+            create_test_vitals(uuid::Uuid::new_v4(), now),
+            create_test_vitals(uuid::Uuid::new_v4(), now - chrono::Duration::hours(1)),
+            create_test_vitals(uuid::Uuid::new_v4(), now - chrono::Duration::hours(2)),
+        ];
+        let mut list = VitalSignsList::with_vitals(vitals, crate::ui::theme::Theme::dark());
+
+        list.move_last();
+        assert_eq!(list.selected_index, 2);
+
+        list.move_first();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_selected_item() {
+        let now = Utc::now();
+        let id1 = uuid::Uuid::new_v4();
+        let id2 = uuid::Uuid::new_v4();
+        let vitals = vec![
+            create_test_vitals(id1, now),
+            create_test_vitals(id2, now - chrono::Duration::hours(1)),
+        ];
+        let mut list = VitalSignsList::with_vitals(vitals, crate::ui::theme::Theme::dark());
+
+        assert_eq!(list.selected_id(), Some(id1));
+        assert!(list.selected().is_some());
+
+        list.next();
+        assert_eq!(list.selected_id(), Some(id2));
+    }
+
+    #[test]
+    fn test_empty_list_safety() {
+        let mut list = VitalSignsList::new(crate::ui::theme::Theme::dark());
+
+        assert!(!list.has_selection());
+        assert!(list.selected().is_none());
+        assert!(list.selected_id().is_none());
+
+        list.move_last();
+        assert_eq!(list.selected_index, 0);
+
+        list.next();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_key_handling() {
+        let now = Utc::now();
+        let vitals = vec![
+            create_test_vitals(uuid::Uuid::new_v4(), now),
+            create_test_vitals(uuid::Uuid::new_v4(), now - chrono::Duration::hours(1)),
+        ];
+        let mut list = VitalSignsList::with_vitals(vitals, crate::ui::theme::Theme::dark());
+
+        let key_up = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Up,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        let action = list.handle_key(key_up);
+        assert!(matches!(action, Some(VitalSignsListAction::Select(0))));
+
+        list.next();
+        let key_down = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Down,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        let action = list.handle_key(key_down);
+        assert!(matches!(action, Some(VitalSignsListAction::Select(1))));
+
+        let key_enter = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        let action = list.handle_key(key_enter);
+        assert!(matches!(action, Some(VitalSignsListAction::Open(_))));
+
+        let key_n = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('n'),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        let action = list.handle_key(key_n);
+        assert!(matches!(action, Some(VitalSignsListAction::New)));
+    }
+
+    #[test]
+    fn test_scroll_adjustment() {
+        let now = Utc::now();
+        let vitals = vec![
+            create_test_vitals(uuid::Uuid::new_v4(), now),
+            create_test_vitals(uuid::Uuid::new_v4(), now - chrono::Duration::hours(1)),
+            create_test_vitals(uuid::Uuid::new_v4(), now - chrono::Duration::hours(2)),
+            create_test_vitals(uuid::Uuid::new_v4(), now - chrono::Duration::hours(3)),
+            create_test_vitals(uuid::Uuid::new_v4(), now - chrono::Duration::hours(4)),
+        ];
+        let mut list = VitalSignsList::with_vitals(vitals, crate::ui::theme::Theme::dark());
+
+        list.selected_index = 4;
+        list.adjust_scroll(3);
+        assert_eq!(list.scroll_offset, 2);
+
+        list.selected_index = 0;
+        list.adjust_scroll(3);
+        assert_eq!(list.scroll_offset, 0);
+
+        list.adjust_scroll(0);
+        assert_eq!(list.scroll_offset, 0);
     }
 }

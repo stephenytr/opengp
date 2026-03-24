@@ -184,13 +184,13 @@ impl FamilyHistoryList {
                 self.selected_index = new_index;
                 Some(FamilyHistoryListAction::Select(self.selected_index))
             }
-            KeyCode::Enter => {
-                self.selected().map(|entry| FamilyHistoryListAction::Open(entry.clone()))
-            }
+            KeyCode::Enter => self
+                .selected()
+                .map(|entry| FamilyHistoryListAction::Open(entry.clone())),
             KeyCode::Char('n') => Some(FamilyHistoryListAction::New),
-            KeyCode::Char('d') => {
-                self.selected().map(|entry| FamilyHistoryListAction::Delete(entry.clone()))
-            }
+            KeyCode::Char('d') => self
+                .selected()
+                .map(|entry| FamilyHistoryListAction::Delete(entry.clone())),
             _ => None,
         }
     }
@@ -355,5 +355,410 @@ impl Widget for FamilyHistoryList {
             .widths(col_widths);
 
         table.render(inner, buf);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    fn create_test_family_history(
+        condition: &str,
+        relationship: &str,
+        age: Option<u8>,
+        notes: Option<&str>,
+    ) -> FamilyHistory {
+        FamilyHistory {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            condition: condition.to_string(),
+            relative_relationship: relationship.to_string(),
+            age_at_diagnosis: age,
+            notes: notes.map(|s| s.to_string()),
+            created_at: chrono::Utc::now(),
+            created_by: Uuid::new_v4(),
+        }
+    }
+
+    #[test]
+    fn test_new_creates_empty_list() {
+        let theme = crate::ui::theme::Theme::dark();
+        let list = FamilyHistoryList::new(theme);
+        assert_eq!(list.entries.len(), 0);
+        assert_eq!(list.selected_index, 0);
+        assert_eq!(list.scroll_offset, 0);
+        assert!(!list.loading);
+    }
+
+    #[test]
+    fn test_with_entries_initializes_list() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), Some("Early onset")),
+        ];
+        let list = FamilyHistoryList::with_entries(entries.clone(), theme);
+        assert_eq!(list.entries.len(), 2);
+        assert_eq!(list.selected_index, 0);
+        assert!(!list.loading);
+    }
+
+    #[test]
+    fn test_selected_returns_current_entry() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+        ];
+        let list = FamilyHistoryList::with_entries(entries, theme);
+        let selected = list.selected();
+        assert!(selected.is_some());
+        assert_eq!(selected.unwrap().condition, "Diabetes");
+    }
+
+    #[test]
+    fn test_next_moves_selection_forward() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+            create_test_family_history("Cancer", "Sister", Some(50), None),
+        ];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        assert_eq!(list.selected_index, 0);
+        list.next();
+        assert_eq!(list.selected_index, 1);
+        list.next();
+        assert_eq!(list.selected_index, 2);
+    }
+
+    #[test]
+    fn test_next_does_not_wrap_at_end() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+        ];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        list.selected_index = 1;
+        list.next();
+        assert_eq!(list.selected_index, 1);
+    }
+
+    #[test]
+    fn test_prev_moves_selection_backward() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+            create_test_family_history("Cancer", "Sister", Some(50), None),
+        ];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        list.selected_index = 2;
+        list.prev();
+        assert_eq!(list.selected_index, 1);
+        list.prev();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_prev_does_not_wrap_at_start() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+        ];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        list.prev();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_first_selects_first_entry() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+            create_test_family_history("Cancer", "Sister", Some(50), None),
+        ];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        list.selected_index = 2;
+        list.move_first();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_last_selects_last_entry() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+            create_test_family_history("Cancer", "Sister", Some(50), None),
+        ];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        list.move_last();
+        assert_eq!(list.selected_index, 2);
+    }
+
+    #[test]
+    fn test_handle_key_up_moves_selection() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+        ];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        list.selected_index = 1;
+        let key = KeyEvent::new(
+            crossterm::event::KeyCode::Up,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        let action = list.handle_key(key);
+        assert!(action.is_some());
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_handle_key_down_moves_selection() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+        ];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        let key = KeyEvent::new(
+            crossterm::event::KeyCode::Down,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        let action = list.handle_key(key);
+        assert!(action.is_some());
+        assert_eq!(list.selected_index, 1);
+    }
+
+    #[test]
+    fn test_handle_key_enter_opens_selected() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![create_test_family_history(
+            "Diabetes",
+            "Mother",
+            Some(45),
+            None,
+        )];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        let key = KeyEvent::new(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        let action = list.handle_key(key);
+        assert!(matches!(action, Some(FamilyHistoryListAction::Open(_))));
+    }
+
+    #[test]
+    fn test_handle_key_n_creates_new() {
+        let theme = crate::ui::theme::Theme::dark();
+        let mut list = FamilyHistoryList::new(theme);
+        let key = KeyEvent::new(
+            crossterm::event::KeyCode::Char('n'),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        let action = list.handle_key(key);
+        assert!(matches!(action, Some(FamilyHistoryListAction::New)));
+    }
+
+    #[test]
+    fn test_handle_key_d_deletes_selected() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![create_test_family_history(
+            "Diabetes",
+            "Mother",
+            Some(45),
+            None,
+        )];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        let key = KeyEvent::new(
+            crossterm::event::KeyCode::Char('d'),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        let action = list.handle_key(key);
+        assert!(matches!(action, Some(FamilyHistoryListAction::Delete(_))));
+    }
+
+    #[test]
+    fn test_handle_key_home_moves_to_first() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+            create_test_family_history("Cancer", "Sister", Some(50), None),
+        ];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        list.selected_index = 2;
+        let key = KeyEvent::new(
+            crossterm::event::KeyCode::Home,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        let action = list.handle_key(key);
+        assert!(action.is_some());
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_handle_key_end_moves_to_last() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+            create_test_family_history("Cancer", "Sister", Some(50), None),
+        ];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        let key = KeyEvent::new(
+            crossterm::event::KeyCode::End,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        let action = list.handle_key(key);
+        assert!(action.is_some());
+        assert_eq!(list.selected_index, 2);
+    }
+
+    #[test]
+    fn test_handle_key_release_returns_none() {
+        let theme = crate::ui::theme::Theme::dark();
+        let mut list = FamilyHistoryList::new(theme);
+        let mut key = KeyEvent::new(
+            crossterm::event::KeyCode::Up,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        key.kind = crossterm::event::KeyEventKind::Release;
+        let action = list.handle_key(key);
+        assert!(action.is_none());
+    }
+
+    #[test]
+    fn test_selected_id_returns_uuid() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![create_test_family_history(
+            "Diabetes",
+            "Mother",
+            Some(45),
+            None,
+        )];
+        let list = FamilyHistoryList::with_entries(entries.clone(), theme);
+        let selected_id = list.selected_id();
+        assert_eq!(selected_id, Some(entries[0].id));
+    }
+
+    #[test]
+    fn test_has_selection_true_when_entries_exist() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![create_test_family_history(
+            "Diabetes",
+            "Mother",
+            Some(45),
+            None,
+        )];
+        let list = FamilyHistoryList::with_entries(entries, theme);
+        assert!(list.has_selection());
+    }
+
+    #[test]
+    fn test_has_selection_false_when_empty() {
+        let theme = crate::ui::theme::Theme::dark();
+        let list = FamilyHistoryList::new(theme);
+        assert!(!list.has_selection());
+    }
+
+    #[test]
+    fn test_count_returns_entry_count() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+        ];
+        let list = FamilyHistoryList::with_entries(entries, theme);
+        assert_eq!(list.count(), 2);
+    }
+
+    #[test]
+    fn test_set_loading_updates_state() {
+        let theme = crate::ui::theme::Theme::dark();
+        let mut list = FamilyHistoryList::new(theme);
+        assert!(!list.is_loading());
+        list.set_loading(true);
+        assert!(list.is_loading());
+        list.set_loading(false);
+        assert!(!list.is_loading());
+    }
+
+    #[test]
+    fn test_adjust_scroll_keeps_selection_visible() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![
+            create_test_family_history("Diabetes", "Mother", Some(45), None),
+            create_test_family_history("Heart Disease", "Father", Some(60), None),
+            create_test_family_history("Cancer", "Sister", Some(50), None),
+            create_test_family_history("Stroke", "Grandfather", Some(70), None),
+        ];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        list.selected_index = 3;
+        list.adjust_scroll(2);
+        assert!(list.scroll_offset <= list.selected_index);
+        assert!(list.selected_index < list.scroll_offset + 2);
+    }
+
+    #[test]
+    fn test_format_age_with_value() {
+        let entry = create_test_family_history("Diabetes", "Mother", Some(45), None);
+        let formatted = format_age(&entry);
+        assert_eq!(formatted, "45 years");
+    }
+
+    #[test]
+    fn test_format_age_without_value() {
+        let entry = create_test_family_history("Diabetes", "Mother", None, None);
+        let formatted = format_age(&entry);
+        assert_eq!(formatted, "-");
+    }
+
+    #[test]
+    fn test_format_notes_with_short_text() {
+        let entry = create_test_family_history("Diabetes", "Mother", Some(45), Some("Early onset"));
+        let formatted = format_notes(&entry);
+        assert_eq!(formatted, "Early onset");
+    }
+
+    #[test]
+    fn test_format_notes_with_long_text() {
+        let long_note = "This is a very long note that should be truncated";
+        let entry = create_test_family_history("Diabetes", "Mother", Some(45), Some(long_note));
+        let formatted = format_notes(&entry);
+        assert!(formatted.ends_with("..."));
+        assert!(formatted.len() <= 31);
+    }
+
+    #[test]
+    fn test_format_notes_without_value() {
+        let entry = create_test_family_history("Diabetes", "Mother", Some(45), None);
+        let formatted = format_notes(&entry);
+        assert_eq!(formatted, "-");
+    }
+
+    #[test]
+    fn test_clone_preserves_state() {
+        let theme = crate::ui::theme::Theme::dark();
+        let entries = vec![create_test_family_history(
+            "Diabetes",
+            "Mother",
+            Some(45),
+            None,
+        )];
+        let mut list = FamilyHistoryList::with_entries(entries, theme);
+        list.selected_index = 0;
+        list.scroll_offset = 5;
+        list.set_loading(true);
+        let cloned = list.clone();
+        assert_eq!(cloned.selected_index, list.selected_index);
+        assert_eq!(cloned.scroll_offset, list.scroll_offset);
+        assert_eq!(cloned.loading, list.loading);
     }
 }

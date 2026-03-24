@@ -214,3 +214,38 @@ impl AppointmentUiService {
             .map_err(|e| UiServiceError::Unknown(e.to_string()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ui_service_error_display_repository() {
+        let err = UiServiceError::Repository("db error".to_string());
+        assert_eq!(err.to_string(), "Repository error: db error");
+    }
+
+    #[test]
+    fn test_ui_service_error_display_unknown() {
+        let err = UiServiceError::Unknown("something failed".to_string());
+        assert_eq!(err.to_string(), "Error: something failed");
+    }
+
+    #[test]
+    fn test_ui_service_error_from_repository_error() {
+        let repo_err = RepositoryError::Database("connection lost".to_string());
+        let ui_err: UiServiceError = repo_err.into();
+        match ui_err {
+            UiServiceError::Repository(msg) => {
+                assert!(msg.contains("connection lost"));
+            }
+            _ => panic!("Expected Repository error"),
+        }
+    }
+
+    #[test]
+    fn test_ui_service_error_is_error_trait() {
+        let err: Box<dyn std::error::Error> = Box::new(UiServiceError::Unknown("test".to_string()));
+        assert_eq!(err.to_string(), "Error: test");
+    }
+}

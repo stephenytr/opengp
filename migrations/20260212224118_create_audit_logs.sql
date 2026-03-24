@@ -3,11 +3,11 @@
 -- This is an append-only table - NO UPDATE or DELETE operations allowed
 
 CREATE TABLE IF NOT EXISTS audit_logs (
-    id BLOB PRIMARY KEY,
+    id UUID PRIMARY KEY,
     
     -- Entity information
     entity_type TEXT NOT NULL,
-    entity_id BLOB NOT NULL,
+    entity_id UUID NOT NULL,
     
     -- Action details (JSON serialized AuditAction enum)
     action TEXT NOT NULL,
@@ -17,10 +17,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     new_value TEXT,
     
     -- Audit metadata
-    changed_by BLOB NOT NULL,
-    changed_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    
-    FOREIGN KEY (changed_by) REFERENCES users(id)
+    changed_by UUID,
+    changed_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
 -- Indexes for common audit queries

@@ -57,7 +57,6 @@ impl SocialHistoryField {
     }
 
     fn label(&self) -> &'static str {
-        
         (*self).into()
     }
 
@@ -121,7 +120,7 @@ impl Clone for SocialHistoryComponent {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SocialHistoryAction {
     Edit,
     Save,
@@ -822,4 +821,185 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
         "Tab: Next  Ctrl+S: Save  Esc: Cancel",
         Style::default().fg(component.theme.colors.disabled),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_component_construction_with_theme() {
+        let theme = Theme::dark();
+        let component = SocialHistoryComponent::new(theme.clone());
+
+        assert!(!component.is_editing);
+        assert!(component.social_history.is_none());
+        assert!(!component.loading);
+        assert_eq!(component.focused_field, SocialHistoryField::SmokingStatus);
+    }
+
+    #[test]
+    fn test_form_state_field_values() {
+        let theme = Theme::dark();
+        let mut component = SocialHistoryComponent::new(theme);
+
+        // Test getting default field values
+        let smoking_val = component.get_field_value(&SocialHistoryField::SmokingStatus);
+        assert_eq!(smoking_val, "Never smoked");
+
+        let alcohol_val = component.get_field_value(&SocialHistoryField::AlcoholStatus);
+        assert_eq!(alcohol_val, "None");
+
+        let occupation_val = component.get_field_value(&SocialHistoryField::Occupation);
+        assert_eq!(occupation_val, "");
+
+        // Test setting field values
+        component.set_field_value(&SocialHistoryField::Occupation, "Doctor".to_string());
+        let occupation_val = component.get_field_value(&SocialHistoryField::Occupation);
+        assert_eq!(occupation_val, "Doctor");
+    }
+
+    #[test]
+    fn test_editing_mode_toggle() {
+        let theme = Theme::dark();
+        let mut component = SocialHistoryComponent::new(theme);
+
+        assert!(!component.is_editing);
+
+        // Start editing
+        component.start_editing();
+        assert!(component.is_editing);
+        assert_eq!(component.focused_field, SocialHistoryField::SmokingStatus);
+
+        // Stop editing
+        component.stop_editing();
+        assert!(!component.is_editing);
+    }
+
+    #[test]
+    fn test_key_handling_tab_navigation() {
+        let theme = Theme::dark();
+        let mut component = SocialHistoryComponent::new(theme);
+
+        component.start_editing();
+        assert_eq!(component.focused_field, SocialHistoryField::SmokingStatus);
+
+        // Tab should move to next field
+        let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::empty());
+        let action = component.handle_key(key);
+        assert_eq!(action, Some(SocialHistoryAction::FocusChanged));
+        assert_eq!(
+            component.focused_field,
+            SocialHistoryField::CigarettesPerDay
+        );
+
+        // Shift+Tab should move to previous field
+        let key = KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT);
+        let action = component.handle_key(key);
+        assert_eq!(action, Some(SocialHistoryAction::FocusChanged));
+        assert_eq!(component.focused_field, SocialHistoryField::SmokingStatus);
+    }
+
+    #[test]
+    fn test_key_handling_escape_cancels_editing() {
+        let theme = Theme::dark();
+        let mut component = SocialHistoryComponent::new(theme);
+
+        component.start_editing();
+        assert!(component.is_editing);
+
+        let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::empty());
+        let action = component.handle_key(key);
+        assert_eq!(action, Some(SocialHistoryAction::Cancel));
+        assert!(!component.is_editing);
+    }
+
+    #[test]
+    fn test_key_handling_ctrl_s_saves() {
+        let theme = Theme::dark();
+        let mut component = SocialHistoryComponent::new(theme);
+
+        component.start_editing();
+
+        let key = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        let action = component.handle_key(key);
+        assert_eq!(action, Some(SocialHistoryAction::Save));
+    }
+
+    #[test]
+    fn test_data_conversion_to_social_history() {
+        let theme = Theme::dark();
+        let mut component = SocialHistoryComponent::new(theme);
+
+        // Set some field values
+        component.set_field_value(&SocialHistoryField::Occupation, "Engineer".to_string());
+        component.set_field_value(&SocialHistoryField::CigarettesPerDay, "5".to_string());
+        component.set_field_value(&SocialHistoryField::DrinksPerWeek, "10".to_string());
+
+        let patient_id = uuid::Uuid::new_v4();
+        let updated_by = uuid::Uuid::new_v4();
+
+        let data = component.to_social_history(patient_id, updated_by);
+
+        assert_eq!(data.smoking_status, SmokingStatus::NeverSmoked);
+        assert_eq!(data.cigarettes_per_day, Some(5));
+        assert_eq!(data.standard_drinks_per_week, Some(10));
+        assert_eq!(data.occupation, Some("Engineer".to_string()));
+        assert_eq!(data.alcohol_status, AlcoholStatus::None);
+    }
+
+    #[test]
+    fn test_start_editing_populates_fields_from_data() {
+        let theme = Theme::dark();
+        let mut component = SocialHistoryComponent::new(theme);
+
+        // Set initial data
+        let data = SocialHistoryData {
+            smoking_status: SmokingStatus::CurrentSmoker,
+            cigarettes_per_day: Some(20),
+            smoking_quit_date: None,
+            alcohol_status: AlcoholStatus::Moderate,
+            standard_drinks_per_week: Some(15),
+            exercise_frequency: Some(ExerciseFrequency::OnceOrTwicePerWeek),
+            occupation: Some("Doctor".to_string()),
+            living_situation: Some("House".to_string()),
+            support_network: Some("Family".to_string()),
+            notes: Some("Test notes".to_string()),
+        };
+        component.social_history = Some(data);
+
+        // Start editing should populate fields
+        component.start_editing();
+
+        assert_eq!(
+            component.get_field_value(&SocialHistoryField::CigarettesPerDay),
+            "20"
+        );
+        assert_eq!(
+            component.get_field_value(&SocialHistoryField::DrinksPerWeek),
+            "15"
+        );
+        assert_eq!(
+            component.get_field_value(&SocialHistoryField::Occupation),
+            "Doctor"
+        );
+        assert_eq!(
+            component.get_field_value(&SocialHistoryField::LivingSituation),
+            "House"
+        );
+    }
+
+    #[test]
+    fn test_loading_state() {
+        let theme = Theme::dark();
+        let mut component = SocialHistoryComponent::new(theme);
+
+        assert!(!component.is_loading());
+
+        component.set_loading(true);
+        assert!(component.is_loading());
+
+        component.set_loading(false);
+        assert!(!component.is_loading());
+    }
 }

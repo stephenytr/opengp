@@ -143,3 +143,335 @@ pub fn list_handle_mouse(
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::MouseButton;
+
+    // ============================================================================
+    // KEYBOARD NAVIGATION TESTS
+    // ============================================================================
+
+    #[test]
+    fn test_list_handle_key_up_arrow_moves_selection_up() {
+        let mut scrollable = ScrollableState::with_items(10);
+        scrollable.move_down();
+        scrollable.move_down();
+
+        let key = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+
+        let action = list_handle_key(key, &mut scrollable, 5);
+        assert_eq!(action, Some(ListNavAction::SelectionChanged));
+        assert_eq!(scrollable.selected_index(), 1);
+    }
+
+    #[test]
+    fn test_list_handle_key_k_moves_selection_up() {
+        let mut scrollable = ScrollableState::with_items(10);
+        scrollable.move_down();
+        scrollable.move_down();
+
+        let key = KeyEvent::new(KeyCode::Char('k'), crossterm::event::KeyModifiers::NONE);
+
+        let action = list_handle_key(key, &mut scrollable, 5);
+        assert_eq!(action, Some(ListNavAction::SelectionChanged));
+        assert_eq!(scrollable.selected_index(), 1);
+    }
+
+    #[test]
+    fn test_list_handle_key_down_arrow_moves_selection_down() {
+        let mut scrollable = ScrollableState::with_items(10);
+
+        let key = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+
+        let action = list_handle_key(key, &mut scrollable, 5);
+        assert_eq!(action, Some(ListNavAction::SelectionChanged));
+        assert_eq!(scrollable.selected_index(), 1);
+    }
+
+    #[test]
+    fn test_list_handle_key_j_moves_selection_down() {
+        let mut scrollable = ScrollableState::with_items(10);
+
+        let key = KeyEvent::new(KeyCode::Char('j'), crossterm::event::KeyModifiers::NONE);
+
+        let action = list_handle_key(key, &mut scrollable, 5);
+        assert_eq!(action, Some(ListNavAction::SelectionChanged));
+        assert_eq!(scrollable.selected_index(), 1);
+    }
+
+    #[test]
+    fn test_list_handle_key_home_moves_to_first() {
+        let mut scrollable = ScrollableState::with_items(10);
+        for _ in 0..5 {
+            scrollable.move_down();
+        }
+
+        let key = KeyEvent::new(KeyCode::Home, crossterm::event::KeyModifiers::NONE);
+
+        let action = list_handle_key(key, &mut scrollable, 5);
+        assert_eq!(action, Some(ListNavAction::SelectionChanged));
+        assert_eq!(scrollable.selected_index(), 0);
+    }
+
+    #[test]
+    fn test_list_handle_key_end_moves_to_last() {
+        let mut scrollable = ScrollableState::with_items(10);
+
+        let key = KeyEvent::new(KeyCode::End, crossterm::event::KeyModifiers::NONE);
+
+        let action = list_handle_key(key, &mut scrollable, 5);
+        assert_eq!(action, Some(ListNavAction::SelectionChanged));
+        assert_eq!(scrollable.selected_index(), 9);
+    }
+
+    #[test]
+    fn test_list_handle_key_page_up_moves_by_visible_rows() {
+        let mut scrollable = ScrollableState::with_items(20);
+        for _ in 0..10 {
+            scrollable.move_down();
+        }
+
+        let key = KeyEvent::new(KeyCode::PageUp, crossterm::event::KeyModifiers::NONE);
+
+        let action = list_handle_key(key, &mut scrollable, 5);
+        assert_eq!(action, Some(ListNavAction::SelectionChanged));
+        assert_eq!(scrollable.selected_index(), 5);
+    }
+
+    #[test]
+    fn test_list_handle_key_page_down_moves_by_visible_rows() {
+        let mut scrollable = ScrollableState::with_items(20);
+
+        let key = KeyEvent::new(KeyCode::PageDown, crossterm::event::KeyModifiers::NONE);
+
+        let action = list_handle_key(key, &mut scrollable, 5);
+        assert_eq!(action, Some(ListNavAction::SelectionChanged));
+        assert_eq!(scrollable.selected_index(), 5);
+    }
+
+    #[test]
+    fn test_list_handle_key_non_navigation_key_returns_none() {
+        let mut scrollable = ScrollableState::with_items(10);
+
+        let key = KeyEvent::new(KeyCode::Char('a'), crossterm::event::KeyModifiers::NONE);
+
+        let action = list_handle_key(key, &mut scrollable, 5);
+        assert_eq!(action, None);
+        assert_eq!(scrollable.selected_index(), 0);
+    }
+
+    #[test]
+    fn test_list_handle_key_release_event_returns_none() {
+        use crossterm::event::KeyEventKind;
+
+        let mut scrollable = ScrollableState::with_items(10);
+
+        let mut key = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+        key.kind = KeyEventKind::Release;
+
+        let action = list_handle_key(key, &mut scrollable, 5);
+        assert_eq!(action, None);
+        assert_eq!(scrollable.selected_index(), 0);
+    }
+
+    // ============================================================================
+    // MOUSE NAVIGATION TESTS
+    // ============================================================================
+
+    #[test]
+    fn test_list_handle_mouse_scroll_up_reduces_offset() {
+        let mut scrollable = ScrollableState::with_items(20);
+        scrollable.scroll_down();
+        scrollable.scroll_down();
+        scrollable.scroll_down();
+        let initial_offset = scrollable.scroll_offset();
+
+        let mouse = MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 10,
+            row: 5,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+
+        let area = Rect {
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 10,
+        };
+
+        let action = list_handle_mouse(mouse, area, 1, &mut scrollable, 5);
+        assert_eq!(action, Some(ListNavAction::SelectionChanged));
+        assert!(scrollable.scroll_offset() < initial_offset);
+    }
+
+    #[test]
+    fn test_list_handle_mouse_scroll_down_increases_offset() {
+        let mut scrollable = ScrollableState::with_items(20);
+
+        let mouse = MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 10,
+            row: 5,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+
+        let area = Rect {
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 10,
+        };
+
+        let action = list_handle_mouse(mouse, area, 1, &mut scrollable, 5);
+        assert_eq!(action, Some(ListNavAction::SelectionChanged));
+        assert!(scrollable.scroll_offset() > 0);
+    }
+
+    #[test]
+    fn test_list_handle_mouse_scroll_down_capped_at_max() {
+        let mut scrollable = ScrollableState::with_items(10);
+
+        let mouse = MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 10,
+            row: 5,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+
+        let area = Rect {
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 10,
+        };
+
+        // Scroll down multiple times
+        for _ in 0..10 {
+            let _ = list_handle_mouse(mouse, area, 1, &mut scrollable, 5);
+        }
+
+        // Should be capped at max_scroll (10 - 5 = 5)
+        assert!(scrollable.scroll_offset() <= 5);
+    }
+
+    #[test]
+    fn test_list_handle_mouse_left_click_selects_row() {
+        let mut scrollable = ScrollableState::with_items(20);
+
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            column: 10,
+            row: 5,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+
+        let area = Rect {
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 10,
+        };
+
+        let action = list_handle_mouse(mouse, area, 1, &mut scrollable, 5);
+        assert_eq!(action, Some(ListNavAction::SelectionChanged));
+        assert_eq!(scrollable.selected_index(), 4);
+    }
+
+    #[test]
+    fn test_list_handle_mouse_left_click_accounts_for_scroll_offset() {
+        let mut scrollable = ScrollableState::with_items(20);
+        scrollable.scroll_down();
+        scrollable.scroll_down();
+        scrollable.scroll_down();
+
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            column: 10,
+            row: 5,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+
+        let area = Rect {
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 10,
+        };
+
+        let action = list_handle_mouse(mouse, area, 1, &mut scrollable, 5);
+        assert_eq!(action, Some(ListNavAction::SelectionChanged));
+        assert_eq!(scrollable.selected_index(), 7);
+    }
+
+    #[test]
+    fn test_list_handle_mouse_left_click_outside_area_returns_none() {
+        let mut scrollable = ScrollableState::with_items(20);
+
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            column: 50,
+            row: 5,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+
+        let area = Rect {
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 10,
+        };
+
+        let action = list_handle_mouse(mouse, area, 1, &mut scrollable, 5);
+        assert_eq!(action, None);
+        assert_eq!(scrollable.selected_index(), 0);
+    }
+
+    #[test]
+    fn test_list_handle_mouse_left_click_on_header_returns_none() {
+        let mut scrollable = ScrollableState::with_items(20);
+
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            column: 10,
+            row: 0,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+
+        let area = Rect {
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 10,
+        };
+
+        let action = list_handle_mouse(mouse, area, 1, &mut scrollable, 5);
+        assert_eq!(action, None);
+        assert_eq!(scrollable.selected_index(), 0);
+    }
+
+    #[test]
+    fn test_list_handle_mouse_right_click_returns_none() {
+        let mut scrollable = ScrollableState::with_items(20);
+
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Right),
+            column: 10,
+            row: 5,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+
+        let area = Rect {
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 10,
+        };
+
+        let action = list_handle_mouse(mouse, area, 1, &mut scrollable, 5);
+        assert_eq!(action, None);
+        assert_eq!(scrollable.selected_index(), 0);
+    }
+}

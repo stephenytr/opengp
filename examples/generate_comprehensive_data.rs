@@ -376,8 +376,7 @@ async fn run_postgres_migrations(pool: &PgPool) -> Result<(), Box<dyn std::error
                 let message = err.to_string();
                 let duplicate = message.contains("duplicate key")
                     || message.contains("already exists")
-                    || message.contains("already applied")
-                    || message.contains("does not exist");
+                    || message.contains("already applied");
                 if !duplicate {
                     return Err(format!(
                         "Migration failed in {}: {}",

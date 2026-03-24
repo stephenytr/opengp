@@ -9,7 +9,7 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub enum HistoryFilter {
     #[default]
     All,
@@ -230,9 +230,9 @@ impl MedicalHistoryList {
                 self.selected_index = new_index;
                 Some(MedicalHistoryListAction::Select(self.selected_index))
             }
-            KeyCode::Enter => {
-                self.selected().map(|condition| MedicalHistoryListAction::Open(condition.clone()))
-            }
+            KeyCode::Enter => self
+                .selected()
+                .map(|condition| MedicalHistoryListAction::Open(condition.clone())),
             KeyCode::Char('n') => Some(MedicalHistoryListAction::New),
             KeyCode::Char('f') => {
                 self.filter = match self.filter {
@@ -243,9 +243,9 @@ impl MedicalHistoryList {
                 self.selected_index = 0;
                 Some(MedicalHistoryListAction::SetFilter(self.filter.clone()))
             }
-            KeyCode::Char('d') => {
-                self.selected().map(|condition| MedicalHistoryListAction::Delete(condition.clone()))
-            }
+            KeyCode::Char('d') => self
+                .selected()
+                .map(|condition| MedicalHistoryListAction::Delete(condition.clone())),
             _ => None,
         }
     }
@@ -434,5 +434,279 @@ impl Widget for MedicalHistoryList {
             .widths(col_widths);
 
         table.render(inner, buf);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+    use uuid::Uuid;
+
+    fn create_test_medical_history(condition: &str, status: ConditionStatus) -> MedicalHistory {
+        MedicalHistory {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            condition: condition.to_string(),
+            diagnosis_date: Some(NaiveDate::from_ymd_opt(2020, 1, 15).unwrap()),
+            status,
+            severity: Some(Severity::Moderate),
+            notes: Some("Test notes".to_string()),
+            is_active: true,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            created_by: Uuid::new_v4(),
+            updated_by: None,
+        }
+    }
+
+    #[test]
+    fn test_next_at_end_stays_at_last() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+            create_test_medical_history("Asthma", ConditionStatus::Active),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.selected_index = 2;
+        list.next();
+        assert_eq!(list.selected_index, 2);
+    }
+
+    #[test]
+    fn test_next_advances_selection() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.next();
+        assert_eq!(list.selected_index, 1);
+    }
+
+    #[test]
+    fn test_prev_at_zero_stays_at_zero() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.prev();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_prev_decreases_selection() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.selected_index = 1;
+        list.prev();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_up_decreases_selection() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.selected_index = 1;
+        list.move_up();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_down_increases_selection() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.move_down();
+        assert_eq!(list.selected_index, 1);
+    }
+
+    #[test]
+    fn test_move_first_sets_to_zero() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+            create_test_medical_history("Asthma", ConditionStatus::Active),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.selected_index = 2;
+        list.move_first();
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_last_sets_to_end() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+            create_test_medical_history("Asthma", ConditionStatus::Active),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.move_last();
+        assert_eq!(list.selected_index, 2);
+    }
+
+    #[test]
+    fn test_selected_returns_correct_condition() {
+        let condition1 = create_test_medical_history("Diabetes", ConditionStatus::Active);
+        let condition2 = create_test_medical_history("Hypertension", ConditionStatus::Chronic);
+        let id1 = condition1.id;
+        let list = MedicalHistoryList::with_conditions(vec![condition1, condition2], Theme::dark());
+        assert_eq!(list.selected().map(|c| c.id), Some(id1));
+    }
+
+    #[test]
+    fn test_selected_id_returns_correct_uuid() {
+        let condition = create_test_medical_history("Diabetes", ConditionStatus::Active);
+        let id = condition.id;
+        let list = MedicalHistoryList::with_conditions(vec![condition], Theme::dark());
+        assert_eq!(list.selected_id(), Some(id));
+    }
+
+    #[test]
+    fn test_select_updates_index() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+            create_test_medical_history("Asthma", ConditionStatus::Active),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.select(2);
+        assert_eq!(list.selected_index, 2);
+    }
+
+    #[test]
+    fn test_select_out_of_bounds_stays_same() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.select(5);
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_set_filter_resets_selection() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Resolved),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.selected_index = 1;
+        list.set_filter(HistoryFilter::Active);
+        assert_eq!(list.selected_index, 0);
+        assert_eq!(list.filter, HistoryFilter::Active);
+    }
+
+    #[test]
+    fn test_filtered_conditions_all_returns_all() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Resolved),
+        ];
+        let list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        let filtered = list.filtered_conditions();
+        assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn test_filtered_conditions_active_excludes_resolved() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Resolved),
+            create_test_medical_history("Asthma", ConditionStatus::Chronic),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.set_filter(HistoryFilter::Active);
+        let filtered = list.filtered_conditions();
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.iter().all(|c| matches!(
+            c.status,
+            ConditionStatus::Active | ConditionStatus::Chronic | ConditionStatus::Recurring
+        )));
+    }
+
+    #[test]
+    fn test_filtered_conditions_resolved_excludes_active() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Resolved),
+            create_test_medical_history("Asthma", ConditionStatus::InRemission),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.set_filter(HistoryFilter::Resolved);
+        let filtered = list.filtered_conditions();
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.iter().all(|c| matches!(
+            c.status,
+            ConditionStatus::Resolved | ConditionStatus::InRemission
+        )));
+    }
+
+    #[test]
+    fn test_adjust_scroll_moves_offset_up() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+            create_test_medical_history("Asthma", ConditionStatus::Active),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.selected_index = 0;
+        list.scroll_offset = 2;
+        list.adjust_scroll(5);
+        assert_eq!(list.scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_adjust_scroll_moves_offset_down() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+            create_test_medical_history("Asthma", ConditionStatus::Active),
+            create_test_medical_history("Arthritis", ConditionStatus::Chronic),
+            create_test_medical_history("Migraine", ConditionStatus::Active),
+        ];
+        let mut list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        list.selected_index = 4;
+        list.scroll_offset = 0;
+        list.adjust_scroll(3);
+        assert!(list.scroll_offset > 0);
+    }
+
+    #[test]
+    fn test_has_selection_true_when_conditions_exist() {
+        let conditions = vec![create_test_medical_history(
+            "Diabetes",
+            ConditionStatus::Active,
+        )];
+        let list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        assert!(list.has_selection());
+    }
+
+    #[test]
+    fn test_has_selection_false_when_empty() {
+        let list = MedicalHistoryList::new(Theme::dark());
+        assert!(!list.has_selection());
+    }
+
+    #[test]
+    fn test_count_returns_correct_number() {
+        let conditions = vec![
+            create_test_medical_history("Diabetes", ConditionStatus::Active),
+            create_test_medical_history("Hypertension", ConditionStatus::Chronic),
+            create_test_medical_history("Asthma", ConditionStatus::Active),
+        ];
+        let list = MedicalHistoryList::with_conditions(conditions, Theme::dark());
+        assert_eq!(list.count(), 3);
     }
 }
