@@ -1,4 +1,4 @@
-ALTER TABLE sessions ADD COLUMN token TEXT;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS token TEXT;
 
 UPDATE sessions
 SET token = lower(hex(randomblob(32)))
