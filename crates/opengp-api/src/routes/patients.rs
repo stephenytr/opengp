@@ -92,17 +92,41 @@ pub(super) async fn get_patient(
 ) -> Result<(StatusCode, Json<PatientResponse>), (StatusCode, Json<ApiErrorResponse>)> {
     authorize_read(&context)?;
 
-    let patient = state
-        .services
-        .patient_service
-        .find_patient(id)
-        .await
-        .map_err(patient_service_error_to_response)?
+    let mut source = "database";
+    let patient = if let Some(cache_service) = &state.cache_service {
+        match opengp_cache::patient_cache::get_patient_by_id(cache_service, id).await {
+            Ok(Some(cached_patient)) => {
+                source = "cache";
+                Some(cached_patient)
+            }
+            _ => {
+                state
+                    .services
+                    .patient_service
+                    .find_patient(id)
+                    .await
+                    .map_err(patient_service_error_to_response)?
+            }
+        }
+    } else {
+        state
+            .services
+            .patient_service
+            .find_patient(id)
+            .await
+            .map_err(patient_service_error_to_response)?
+    };
+
+    let patient = patient
         .ok_or_else(|| not_found_response("patient_not_found", "Patient not found"))?;
 
     if !patient.is_active {
         return Err(not_found_response("patient_not_found", "Patient not found"));
     }
+
+    let mut audit_entry = AuditEntry::new_read("patient", id, context.user_id);
+    audit_entry.source = source.to_string();
+    emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 
     Ok((StatusCode::OK, Json(patient_to_response(patient))))
 }

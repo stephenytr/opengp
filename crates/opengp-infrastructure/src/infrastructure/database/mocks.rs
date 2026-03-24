@@ -94,9 +94,13 @@ impl PatientRepository for MockPatientRepository {
             .cloned())
     }
 
-    async fn list_active(&self) -> Result<Vec<Patient>, PatientRepositoryError> {
+    async fn list_active(&self, limit: Option<i64>) -> Result<Vec<Patient>, PatientRepositoryError> {
         let storage = self.storage.lock().await;
-        Ok(storage.iter().filter(|p| p.is_active).cloned().collect())
+        let mut active: Vec<Patient> = storage.iter().filter(|p| p.is_active).cloned().collect();
+        if let Some(limit_value) = limit {
+            active.truncate(limit_value.max(0) as usize);
+        }
+        Ok(active)
     }
 
     async fn search(&self, query: &str) -> Result<Vec<Patient>, PatientRepositoryError> {
@@ -200,6 +204,7 @@ impl ConsultationRepository for MockConsultationRepository {
     async fn find_by_patient(
         &self,
         patient_id: Uuid,
+        limit: Option<i64>,
     ) -> Result<Vec<Consultation>, ClinicalRepositoryError> {
         let storage = self.storage.lock().await;
         let mut consultations: Vec<Consultation> = storage
@@ -208,6 +213,9 @@ impl ConsultationRepository for MockConsultationRepository {
             .cloned()
             .collect();
         consultations.sort_by(|a, b| b.consultation_date.cmp(&a.consultation_date));
+        if let Some(l) = limit {
+            consultations.truncate(l as usize);
+        }
         Ok(consultations)
     }
 
@@ -712,6 +720,7 @@ mod tests {
             new_value: Some("{}".to_string()),
             changed_by: Uuid::new_v4(),
             changed_at: Utc::now(),
+            source: "database".to_string(),
         };
 
         let entry_id = entry.id;

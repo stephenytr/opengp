@@ -116,6 +116,7 @@ impl AppointmentUiService {
             appointment_type: None,
             is_urgent: None,
             confirmed: None,
+            limit: Some(1000),
         };
 
         // Fetch appointments for the date

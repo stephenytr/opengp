@@ -27,6 +27,8 @@ time.workspace = true
 uuid.workspace = true
 async-trait.workspace = true
 aes-gcm.workspace = true
+hmac.workspace = true
+sha2.workspace = true
 rand.workspace = true
 hex.workspace = true
 bcrypt.workspace = true
@@ -38,3 +40,7 @@ path = "../opengp-domain"
 
 [dependencies.opengp-config]
 path = "../opengp-config"
+
+[[bin]]
+name = "backfill_hashes"
+path = "src/bin/backfill_hashes.rs"

@@ -6,6 +6,7 @@ members = [
     "crates/opengp-config",
     "crates/opengp-ui",
     "crates/opengp-api",
+    "crates/opengp-cache",
 ]
 
 [package]
@@ -70,6 +71,8 @@ time = "0.3"
 uuid = { version = "1", features = ["v4", "serde"] }
 async-trait = "0.1.89"
 aes-gcm = "0.10"
+hmac = "0.12"
+sha2 = "0.10"
 bcrypt = "0.15"
 rand = "0.8"
 hex = "0.4"
@@ -80,6 +83,9 @@ strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 derive_builder = "0.20"
 ratatui-textarea = "0.8"
+deadpool-redis = "0.23"
+redis = "0.28"
+opengp-config = { path = "crates/opengp-config" }
 
 [dev-dependencies]
 sqlx.workspace = true

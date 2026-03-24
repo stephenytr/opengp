@@ -108,9 +108,11 @@ impl ConsultationRepository for SqlxClinicalRepository {
     async fn find_by_patient(
         &self,
         patient_id: Uuid,
+        limit: Option<i64>,
     ) -> Result<Vec<Consultation>, RepositoryError> {
-        let rows = sqlx::query_as::<_, ConsultationRow>(
-            r#"
+        let query_str = match limit {
+            Some(l) => format!(
+                r#"
         SELECT 
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
@@ -118,12 +120,27 @@ impl ConsultationRepository for SqlxClinicalRepository {
         FROM consultations
         WHERE patient_id = $1
         ORDER BY consultation_date DESC
+        LIMIT {}
         "#,
-        )
-        .bind(patient_id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(sqlx_to_clinical_error)?;
+                l
+            ),
+            None => r#"
+        SELECT 
+            id, patient_id, practitioner_id, appointment_id,
+            consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
+            created_at, updated_at, version, created_by, updated_by
+        FROM consultations
+        WHERE patient_id = $1
+        ORDER BY consultation_date DESC
+        "#
+            .to_string(),
+        };
+
+        let rows = sqlx::query_as::<_, ConsultationRow>(&query_str)
+            .bind(patient_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(sqlx_to_clinical_error)?;
 
         rows.into_iter()
             .map(|r| r.into_consultation(&self.crypto))
@@ -574,11 +591,23 @@ impl AllergyRepository for SqlxAllergyRepository {
         }
     }
 
-    async fn find_by_patient(&self, patient_id: Uuid) -> Result<Vec<Allergy>, RepositoryError> {
-        let rows = sqlx::query_as::<_, AllergyRow>("SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE patient_id = $1 ORDER BY created_at DESC")
-        .bind(patient_id)
-        .fetch_all(&self.pool)
-        .await
+    async fn find_by_patient(
+        &self,
+        patient_id: Uuid,
+        limit: Option<i64>,
+    ) -> Result<Vec<Allergy>, RepositoryError> {
+        let query_str = match limit {
+            Some(l) => format!(
+                "SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE patient_id = $1 ORDER BY created_at DESC LIMIT {}",
+                l
+            ),
+            None => "SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE patient_id = $1 ORDER BY created_at DESC".to_string(),
+        };
+
+        let rows = sqlx::query_as::<_, AllergyRow>(&query_str)
+            .bind(patient_id)
+            .fetch_all(&self.pool)
+            .await
             .map_err(sqlx_to_clinical_error)?;
 
         rows.into_iter()
@@ -589,11 +618,20 @@ impl AllergyRepository for SqlxAllergyRepository {
     async fn find_active_by_patient(
         &self,
         patient_id: Uuid,
+        limit: Option<i64>,
     ) -> Result<Vec<Allergy>, RepositoryError> {
-        let rows = sqlx::query_as::<_, AllergyRow>("SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE patient_id = $1 AND is_active = TRUE ORDER BY created_at DESC")
-        .bind(patient_id)
-        .fetch_all(&self.pool)
-        .await
+        let query_str = match limit {
+            Some(l) => format!(
+                "SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE patient_id = $1 AND is_active = TRUE ORDER BY created_at DESC LIMIT {}",
+                l
+            ),
+            None => "SELECT id, patient_id, allergen, allergy_type, severity, reaction, onset_date, notes, is_active, created_at, updated_at, created_by, updated_by FROM allergies WHERE patient_id = $1 AND is_active = TRUE ORDER BY created_at DESC".to_string(),
+        };
+
+        let rows = sqlx::query_as::<_, AllergyRow>(&query_str)
+            .bind(patient_id)
+            .fetch_all(&self.pool)
+            .await
             .map_err(sqlx_to_clinical_error)?;
 
         rows.into_iter()
@@ -776,11 +814,20 @@ impl MedicalHistoryRepository for SqlxMedicalHistoryRepository {
     async fn find_by_patient(
         &self,
         patient_id: Uuid,
+        limit: Option<i64>,
     ) -> Result<Vec<MedicalHistory>, RepositoryError> {
-        let rows = sqlx::query_as::<_, MedicalHistoryRow>("SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE patient_id = $1 ORDER BY created_at DESC")
-        .bind(patient_id)
-        .fetch_all(&self.pool)
-        .await
+        let query_str = match limit {
+            Some(l) => format!(
+                "SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE patient_id = $1 ORDER BY created_at DESC LIMIT {}",
+                l
+            ),
+            None => "SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE patient_id = $1 ORDER BY created_at DESC".to_string(),
+        };
+
+        let rows = sqlx::query_as::<_, MedicalHistoryRow>(&query_str)
+            .bind(patient_id)
+            .fetch_all(&self.pool)
+            .await
             .map_err(sqlx_to_clinical_error)?;
 
         rows.into_iter()
@@ -791,11 +838,20 @@ impl MedicalHistoryRepository for SqlxMedicalHistoryRepository {
     async fn find_active_by_patient(
         &self,
         patient_id: Uuid,
+        limit: Option<i64>,
     ) -> Result<Vec<MedicalHistory>, RepositoryError> {
-        let rows = sqlx::query_as::<_, MedicalHistoryRow>("SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE patient_id = $1 AND is_active = TRUE ORDER BY created_at DESC")
-        .bind(patient_id)
-        .fetch_all(&self.pool)
-        .await
+        let query_str = match limit {
+            Some(l) => format!(
+                "SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE patient_id = $1 AND is_active = TRUE ORDER BY created_at DESC LIMIT {}",
+                l
+            ),
+            None => "SELECT id, patient_id, condition, diagnosis_date, status, severity, notes, is_active, created_at, updated_at, created_by, updated_by FROM medical_history WHERE patient_id = $1 AND is_active = TRUE ORDER BY created_at DESC".to_string(),
+        };
+
+        let rows = sqlx::query_as::<_, MedicalHistoryRow>(&query_str)
+            .bind(patient_id)
+            .fetch_all(&self.pool)
+            .await
             .map_err(sqlx_to_clinical_error)?;
 
         rows.into_iter()
@@ -1074,11 +1130,20 @@ impl FamilyHistoryRepository for SqlxFamilyHistoryRepository {
     async fn find_by_patient(
         &self,
         patient_id: Uuid,
+        limit: Option<i64>,
     ) -> Result<Vec<FamilyHistory>, RepositoryError> {
-        let rows = sqlx::query_as::<_, FamilyHistoryRow>("SELECT id, patient_id, relative_relationship, condition, age_at_diagnosis, notes, created_at, created_by FROM family_history WHERE patient_id = $1 ORDER BY created_at DESC")
-        .bind(patient_id)
-        .fetch_all(&self.pool)
-        .await
+        let query_str = match limit {
+            Some(l) => format!(
+                "SELECT id, patient_id, relative_relationship, condition, age_at_diagnosis, notes, created_at, created_by FROM family_history WHERE patient_id = $1 ORDER BY created_at DESC LIMIT {}",
+                l
+            ),
+            None => "SELECT id, patient_id, relative_relationship, condition, age_at_diagnosis, notes, created_at, created_by FROM family_history WHERE patient_id = $1 ORDER BY created_at DESC".to_string(),
+        };
+
+        let rows = sqlx::query_as::<_, FamilyHistoryRow>(&query_str)
+            .bind(patient_id)
+            .fetch_all(&self.pool)
+            .await
             .map_err(sqlx_to_clinical_error)?;
 
         rows.into_iter()

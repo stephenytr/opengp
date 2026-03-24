@@ -100,6 +100,8 @@ pub struct AppointmentSearchCriteria {
 
     /// Filter by confirmation status
     pub confirmed: Option<bool>,
+
+    pub limit: Option<i64>,
 }
 
 /// Calendar view for a specific day showing all practitioners and appointments

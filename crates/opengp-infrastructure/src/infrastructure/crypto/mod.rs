@@ -37,7 +37,12 @@ use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
+use hmac::{Hmac, Mac};
 use rand::Rng;
+use sha2::{Digest, Sha256};
+
+const HMAC_DERIVATION_DOMAIN: &[u8] = b"OpenGP:HMAC_SEARCH_KEY:v1";
+type HmacSha256 = Hmac<Sha256>;
 
 /// Encryption service for sensitive data
 ///
@@ -45,6 +50,7 @@ use rand::Rng;
 /// Key is loaded from environment variable on initialization.
 pub struct EncryptionService {
     cipher: Aes256Gcm,
+    hmac_key: [u8; 32],
 }
 
 impl std::fmt::Debug for EncryptionService {
@@ -82,8 +88,9 @@ impl EncryptionService {
     pub fn new() -> Result<Self, CryptoError> {
         let key_bytes = Self::load_key_from_env()?;
         let cipher = Aes256Gcm::new_from_slice(&key_bytes).map_err(|_| CryptoError::InvalidKey)?;
+        let hmac_key = Self::load_hmac_key_from_env_or_derive(&key_bytes)?;
 
-        Ok(Self { cipher })
+        Ok(Self { cipher, hmac_key })
     }
 
     /// Initialize encryption service with provided key
@@ -115,8 +122,17 @@ impl EncryptionService {
     pub fn new_with_key(key_hex: &str) -> Result<Self, CryptoError> {
         let key_bytes = Self::decode_key(key_hex)?;
         let cipher = Aes256Gcm::new_from_slice(&key_bytes).map_err(|_| CryptoError::InvalidKey)?;
+        let hmac_key = Self::load_hmac_key_from_env_or_derive(&key_bytes)?;
 
-        Ok(Self { cipher })
+        Ok(Self { cipher, hmac_key })
+    }
+
+    pub fn hash_for_search(&self, plaintext: &str) -> String {
+        let mut mac = <HmacSha256 as Mac>::new_from_slice(&self.hmac_key)
+            .expect("HMAC-SHA256 key initialization should not fail");
+        mac.update(plaintext.as_bytes());
+        let digest = mac.finalize().into_bytes();
+        hex::encode(digest)
     }
 
     /// Encrypt sensitive data
@@ -226,6 +242,26 @@ impl EncryptionService {
     fn load_key_from_env() -> Result<Vec<u8>, CryptoError> {
         let key_hex = std::env::var("ENCRYPTION_KEY").map_err(|_| CryptoError::MissingKey)?;
         Self::decode_key(&key_hex)
+    }
+
+    fn load_hmac_key_from_env_or_derive(encryption_key: &[u8]) -> Result<[u8; 32], CryptoError> {
+        match std::env::var("HMAC_SEARCH_KEY") {
+            Ok(hmac_key_hex) => {
+                let key_bytes = Self::decode_key(&hmac_key_hex)?;
+                let key_len = key_bytes.len();
+                key_bytes
+                    .try_into()
+                    .map_err(|_| CryptoError::InvalidKeyLength(key_len))
+            }
+            Err(_) => Ok(Self::derive_hmac_key_from_encryption_key(encryption_key)),
+        }
+    }
+
+    fn derive_hmac_key_from_encryption_key(encryption_key: &[u8]) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(HMAC_DERIVATION_DOMAIN);
+        hasher.update(encryption_key);
+        hasher.finalize().into()
     }
 
     /// Decode and validate hex-encoded encryption key
@@ -452,5 +488,36 @@ mod tests {
         let encrypted = crypto.encrypt(&plaintext).unwrap();
         let decrypted = crypto.decrypt(&encrypted).unwrap();
         assert_eq!(plaintext, decrypted);
+    }
+
+    #[test]
+    fn test_hash_for_search_is_deterministic() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let key = generate_test_key();
+        std::env::set_var("ENCRYPTION_KEY", &key);
+        std::env::remove_var("HMAC_SEARCH_KEY");
+
+        let crypto = EncryptionService::new().unwrap();
+
+        let hash1 = crypto.hash_for_search("searchable field value");
+        let hash2 = crypto.hash_for_search("searchable field value");
+
+        assert_eq!(hash1, hash2);
+        assert_eq!(hash1.len(), 64);
+    }
+
+    #[test]
+    fn test_hash_for_search_differs_for_different_inputs() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let key = generate_test_key();
+        std::env::set_var("ENCRYPTION_KEY", &key);
+        std::env::remove_var("HMAC_SEARCH_KEY");
+
+        let crypto = EncryptionService::new().unwrap();
+
+        let hash1 = crypto.hash_for_search("value one");
+        let hash2 = crypto.hash_for_search("value two");
+
+        assert_ne!(hash1, hash2);
     }
 }

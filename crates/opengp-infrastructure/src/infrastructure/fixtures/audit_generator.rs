@@ -74,6 +74,7 @@ impl AuditGenerator {
                 Some(self.random_json_value()),
                 Some(self.random_json_value()),
             ),
+            AuditAction::Read => (None, None),
             AuditAction::StatusChanged { from, to } => (Some(from.clone()), Some(to.clone())),
             AuditAction::Rescheduled { from, to } => {
                 (Some(from.to_rfc3339()), Some(to.to_rfc3339()))
@@ -90,6 +91,7 @@ impl AuditGenerator {
             new_value,
             changed_by,
             changed_at,
+            source: "database".to_string(),
         }
     }
 
@@ -262,6 +264,9 @@ mod tests {
                 AuditAction::Updated => {
                     assert!(entry.old_value.is_some());
                     assert!(entry.new_value.is_some());
+                }
+                AuditAction::Read => {
+                    // Read actions don't require old/new values
                 }
                 AuditAction::StatusChanged { from, to } => {
                     assert!(!from.is_empty());

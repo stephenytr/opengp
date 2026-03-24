@@ -1,0 +1,22 @@
+[package]
+name = "opengp-cache"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+deadpool-redis = "0.23"
+redis = "0.28"
+sha2 = "0.10"
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+opengp-config = { path = "../opengp-config" }
+opengp-domain = { path = "../opengp-domain" }

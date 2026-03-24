@@ -21,6 +21,20 @@ pub struct DatabaseConfig {
     pub idle_timeout_secs: u64,
 }
 
+/// Redis configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RedisConfig {
+    /// Redis URL (e.g., "redis://localhost:6379")
+    /// If None, Redis caching is disabled
+    pub url: Option<String>,
+    /// Maximum number of connections
+    pub max_connections: u32,
+    /// Minimum number of connections
+    pub min_connections: u32,
+    /// Default TTL in seconds
+    pub ttl_default_secs: u64,
+}
+
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
@@ -33,11 +47,25 @@ impl Default for DatabaseConfig {
     }
 }
 
+impl Default for RedisConfig {
+    fn default() -> Self {
+        Self {
+            url: None,
+            max_connections: 10,
+            min_connections: 2,
+            ttl_default_secs: 3600,
+        }
+    }
+}
+
 /// Application configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Database configuration
     pub database: DatabaseConfig,
+
+    /// Redis configuration
+    pub redis: RedisConfig,
 
     /// Calendar configuration
     pub calendar: CalendarConfig,
@@ -73,6 +101,20 @@ impl Config {
             .and_then(|s| s.parse().ok())
             .unwrap_or(2);
 
+        let redis_url = std::env::var("REDIS_URL").ok();
+        let redis_max_connections = std::env::var("REDIS_MAX_CONNECTIONS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(10);
+        let redis_min_connections = std::env::var("REDIS_MIN_CONNECTIONS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(2);
+        let redis_ttl_default_secs = std::env::var("REDIS_TTL_DEFAULT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(3600);
+
         Ok(Self {
             database: DatabaseConfig {
                 url: database_url,
@@ -80,6 +122,12 @@ impl Config {
                 min_connections,
                 connect_timeout_secs: 30,
                 idle_timeout_secs: 600,
+            },
+            redis: RedisConfig {
+                url: redis_url,
+                max_connections: redis_max_connections,
+                min_connections: redis_min_connections,
+                ttl_default_secs: redis_ttl_default_secs,
             },
             calendar: CalendarConfig::from_env()?,
             encryption_key: std::env::var("ENCRYPTION_KEY")
@@ -100,6 +148,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             database: DatabaseConfig::default(),
+            redis: RedisConfig::default(),
             calendar: CalendarConfig::default(),
             encryption_key: String::new(),
             session_timeout_secs: 900,

@@ -95,7 +95,7 @@ impl ClinicalService {
         patient_id: Uuid,
     ) -> Result<Vec<Consultation>, ServiceError> {
         info!("Listing consultations for patient: {}", patient_id);
-        let consultations = self.repos.consultation.find_by_patient(patient_id).await?;
+        let consultations = self.repos.consultation.find_by_patient(patient_id, None).await?;
         Ok(consultations)
     }
 
@@ -278,10 +278,10 @@ impl ClinicalService {
         let allergies = if active_only {
             self.repos
                 .allergy
-                .find_active_by_patient(patient_id)
+                .find_active_by_patient(patient_id, None)
                 .await?
         } else {
-            self.repos.allergy.find_by_patient(patient_id).await?
+            self.repos.allergy.find_by_patient(patient_id, None).await?
         };
 
         Ok(allergies)
@@ -378,12 +378,12 @@ impl ClinicalService {
         let history = if active_only {
             self.repos
                 .medical_history
-                .find_active_by_patient(patient_id)
+                .find_active_by_patient(patient_id, None)
                 .await?
         } else {
             self.repos
                 .medical_history
-                .find_by_patient(patient_id)
+                .find_by_patient(patient_id, None)
                 .await?
         };
 
@@ -677,7 +677,7 @@ impl ClinicalService {
         let history = self
             .repos
             .family_history
-            .find_by_patient(patient_id)
+            .find_by_patient(patient_id, None)
             .await?;
         Ok(history)
     }
@@ -743,13 +743,18 @@ mod tests {
         async fn find_by_patient(
             &self,
             patient_id: Uuid,
+            limit: Option<i64>,
         ) -> Result<Vec<Consultation>, RepositoryError> {
-            Ok(self
+            let mut results: Vec<_> = self
                 .consultations
                 .iter()
                 .filter(|c| c.patient_id == patient_id)
                 .cloned()
-                .collect())
+                .collect();
+            if let Some(l) = limit {
+                results.truncate(l as usize);
+            }
+            Ok(results)
         }
 
         async fn find_by_date_range(
@@ -806,6 +811,7 @@ mod tests {
         async fn find_by_patient(
             &self,
             _patient_id: Uuid,
+            _limit: Option<i64>,
         ) -> Result<Vec<Allergy>, RepositoryError> {
             Ok(vec![])
         }
@@ -813,6 +819,7 @@ mod tests {
         async fn find_active_by_patient(
             &self,
             _patient_id: Uuid,
+            _limit: Option<i64>,
         ) -> Result<Vec<Allergy>, RepositoryError> {
             Ok(vec![])
         }
@@ -840,6 +847,7 @@ mod tests {
         async fn find_by_patient(
             &self,
             _patient_id: Uuid,
+            _limit: Option<i64>,
         ) -> Result<Vec<MedicalHistory>, RepositoryError> {
             Ok(vec![])
         }
@@ -847,6 +855,7 @@ mod tests {
         async fn find_active_by_patient(
             &self,
             _patient_id: Uuid,
+            _limit: Option<i64>,
         ) -> Result<Vec<MedicalHistory>, RepositoryError> {
             Ok(vec![])
         }
@@ -916,6 +925,7 @@ mod tests {
         async fn find_by_patient(
             &self,
             _patient_id: Uuid,
+            _limit: Option<i64>,
         ) -> Result<Vec<FamilyHistory>, RepositoryError> {
             Ok(vec![])
         }
@@ -959,6 +969,7 @@ mod tests {
 
         async fn list_active(
             &self,
+            _limit: Option<i64>,
         ) -> Result<Vec<Patient>, crate::domain::patient::RepositoryError> {
             Ok(self.patients.clone())
         }

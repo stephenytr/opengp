@@ -37,6 +37,9 @@ pub struct AuditEntry {
 
     /// Timestamp when the action occurred
     pub changed_at: DateTime<Utc>,
+
+    /// Source of the data access: "cache" or "database"
+    pub source: String,
 }
 
 impl AuditEntry {
@@ -65,6 +68,7 @@ impl AuditEntry {
             new_value: Some(new_value.into()),
             changed_by,
             changed_at: Utc::now(),
+            source: "database".to_string(),
         }
     }
 
@@ -95,6 +99,30 @@ impl AuditEntry {
             new_value: Some(new_value.into()),
             changed_by,
             changed_at: Utc::now(),
+            source: "database".to_string(),
+        }
+    }
+
+    /// Create a new audit entry for a read action
+    ///
+    /// # Arguments
+    /// * `entity_type` - Type of entity (e.g., "patient", "appointment")
+    /// * `entity_id` - ID of the entity that was read
+    /// * `changed_by` - User who read the entity
+    ///
+    /// # Returns
+    /// A new audit entry with action set to Read
+    pub fn new_read(entity_type: impl Into<String>, entity_id: Uuid, changed_by: Uuid) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            entity_type: entity_type.into(),
+            entity_id,
+            action: AuditAction::Read,
+            old_value: None,
+            new_value: None,
+            changed_by,
+            changed_at: Utc::now(),
+            source: "database".to_string(),
         }
     }
 
@@ -131,6 +159,7 @@ impl AuditEntry {
             new_value: Some(to),
             changed_by,
             changed_at: Utc::now(),
+            source: "database".to_string(),
         }
     }
 
@@ -162,6 +191,7 @@ impl AuditEntry {
             new_value: Some(to_time.to_rfc3339()),
             changed_by,
             changed_at: Utc::now(),
+            source: "database".to_string(),
         }
     }
 
@@ -194,6 +224,7 @@ impl AuditEntry {
             new_value: Some(reason_str),
             changed_by,
             changed_at: Utc::now(),
+            source: "database".to_string(),
         }
     }
 }
@@ -227,6 +258,9 @@ pub enum AuditAction {
     /// Entity was updated (general update)
     Updated,
 
+    /// Entity was read (for compliance logging of data access)
+    Read,
+
     /// Entity status changed
     StatusChanged {
         /// Previous status
@@ -255,6 +289,7 @@ impl std::fmt::Display for AuditAction {
         match self {
             AuditAction::Created => write!(f, "Created"),
             AuditAction::Updated => write!(f, "Updated"),
+            AuditAction::Read => write!(f, "Read"),
             AuditAction::StatusChanged { from, to } => {
                 write!(f, "Status Changed: {} → {}", from, to)
             }

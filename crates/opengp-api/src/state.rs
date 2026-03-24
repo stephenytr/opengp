@@ -6,6 +6,7 @@ use std::{
 };
 
 use opengp_domain::domain::audit::AuditEmitter;
+use opengp_cache::{CacheServiceImpl, CircuitBreaker, CacheConfig, RedisPool};
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::PgPool;
 
@@ -19,6 +20,7 @@ pub struct ApiState {
     pub config: ApiConfig,
     pub metrics: Arc<ApiMetrics>,
     pub audit_emitter: Arc<dyn AuditEmitter>,
+    pub cache_service: Option<Arc<CacheServiceImpl>>,
 }
 
 pub struct ApiMetrics {
@@ -53,7 +55,7 @@ impl ApiState {
             .min_connections(config.database_min_connections)
             .acquire_timeout(Duration::from_secs(config.connect_timeout_secs))
             .idle_timeout(Duration::from_secs(config.idle_timeout_secs))
-            .test_before_acquire(false)
+            .test_before_acquire(true)
             .connect_with(connect_options)
             .await
             .map_err(|e| {
@@ -66,13 +68,63 @@ impl ApiState {
         let metrics = Arc::new(ApiMetrics::new());
         let audit_emitter = services.audit_service.clone() as Arc<dyn AuditEmitter>;
 
+        // Initialize cache service - gracefully handle missing Redis URL
+        let cache_service = Self::init_cache_service().await;
+
         Ok(Self {
             pool,
             services,
             config,
             metrics,
             audit_emitter,
+            cache_service,
         })
+    }
+
+    /// Initialize cache service from Redis configuration
+    /// Returns None if Redis is not configured or connection fails
+    async fn init_cache_service() -> Option<Arc<CacheServiceImpl>> {
+        // Load Redis config from environment
+        let redis_url = std::env::var("REDIS_URL").ok();
+
+        // If no Redis URL, cache is disabled
+        if redis_url.is_none() {
+            return None;
+        }
+
+        // Create RedisConfig with the URL
+        let redis_config = opengp_config::RedisConfig {
+            url: redis_url,
+            max_connections: std::env::var("REDIS_MAX_CONNECTIONS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10),
+            min_connections: std::env::var("REDIS_MIN_CONNECTIONS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(2),
+            ttl_default_secs: std::env::var("REDIS_TTL_DEFAULT_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(3600),
+        };
+
+        // Attempt to create Redis pool
+        let pool = match RedisPool::new(&redis_config).await {
+            Ok(pool) => pool,
+            Err(_) => {
+                // Log and return None on connection failure
+                tracing::warn!("Failed to initialize Redis cache service - cache disabled");
+                return None;
+            }
+        };
+
+        // Create cache config and service
+        let cache_config = CacheConfig::from_redis_config(&redis_config);
+        let circuit_breaker = CircuitBreaker::new();
+        let cache_service = CacheServiceImpl::new(pool, cache_config, circuit_breaker);
+
+        Some(Arc::new(cache_service))
     }
 
     #[cfg(test)]
@@ -84,6 +136,7 @@ impl ApiState {
             config,
             metrics: Arc::new(ApiMetrics::new()),
             audit_emitter,
+            cache_service: None,
         }
     }
 }

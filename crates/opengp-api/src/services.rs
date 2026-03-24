@@ -368,6 +368,7 @@ impl AllergyRepository for NoopAllergyRepository {
     async fn find_by_patient(
         &self,
         _patient_id: Uuid,
+        _limit: Option<i64>,
     ) -> Result<Vec<Allergy>, ClinicalRepositoryError> {
         Ok(vec![])
     }
@@ -375,6 +376,7 @@ impl AllergyRepository for NoopAllergyRepository {
     async fn find_active_by_patient(
         &self,
         _patient_id: Uuid,
+        _limit: Option<i64>,
     ) -> Result<Vec<Allergy>, ClinicalRepositoryError> {
         Ok(vec![])
     }
@@ -406,6 +408,7 @@ impl MedicalHistoryRepository for NoopMedicalHistoryRepository {
     async fn find_by_patient(
         &self,
         _patient_id: Uuid,
+        _limit: Option<i64>,
     ) -> Result<Vec<MedicalHistory>, ClinicalRepositoryError> {
         Ok(vec![])
     }
@@ -413,6 +416,7 @@ impl MedicalHistoryRepository for NoopMedicalHistoryRepository {
     async fn find_active_by_patient(
         &self,
         _patient_id: Uuid,
+        _limit: Option<i64>,
     ) -> Result<Vec<MedicalHistory>, ClinicalRepositoryError> {
         Ok(vec![])
     }
@@ -500,6 +504,7 @@ impl FamilyHistoryRepository for NoopFamilyHistoryRepository {
     async fn find_by_patient(
         &self,
         _patient_id: Uuid,
+        _limit: Option<i64>,
     ) -> Result<Vec<FamilyHistory>, ClinicalRepositoryError> {
         Ok(vec![])
     }

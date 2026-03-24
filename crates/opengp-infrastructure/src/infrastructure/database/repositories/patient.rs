@@ -208,7 +208,7 @@ impl PatientRepository for SqlxPatientRepository {
     async fn find_by_medicare(&self, medicare: &str) -> Result<Option<Patient>, RepositoryError> {
         // With encryption, we cannot search directly on medicare number
         // We must fetch all patients and filter in memory
-        let patients = self.list_active().await?;
+        let patients = self.list_active(None).await?;
         Ok(patients.into_iter().find(|p| {
             p.medicare_number
                 .as_ref()
@@ -217,18 +217,35 @@ impl PatientRepository for SqlxPatientRepository {
         }))
     }
 
-    async fn list_active(&self) -> Result<Vec<Patient>, RepositoryError> {
+    async fn list_active(&self, limit: Option<i64>) -> Result<Vec<Patient>, RepositoryError> {
         debug!("Executing patient list_active query");
-        let rows = sqlx::query_as::<_, PatientRow>(&format!(
-            "{} WHERE is_active = TRUE ORDER BY last_name, first_name",
-            PATIENT_SELECT_QUERY
-        ))
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|err| {
-            error!(error = %err, "Patient list_active query failed");
-            sqlx_to_patient_error(err)
-        })?;
+        let rows = match limit {
+            Some(limit_value) => {
+                sqlx::query_as::<_, PatientRow>(&format!(
+                    "{} WHERE is_active = TRUE ORDER BY last_name, first_name LIMIT $1",
+                    PATIENT_SELECT_QUERY
+                ))
+                .bind(limit_value)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|err| {
+                    error!(error = %err, limit = limit_value, "Patient list_active query failed");
+                    sqlx_to_patient_error(err)
+                })?
+            }
+            None => {
+                sqlx::query_as::<_, PatientRow>(&format!(
+                    "{} WHERE is_active = TRUE ORDER BY last_name, first_name",
+                    PATIENT_SELECT_QUERY
+                ))
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|err| {
+                    error!(error = %err, "Patient list_active query failed");
+                    sqlx_to_patient_error(err)
+                })?
+            }
+        };
 
         debug!(
             row_count = rows.len(),
@@ -255,48 +272,31 @@ impl PatientRepository for SqlxPatientRepository {
     }
 
     async fn search(&self, query: &str) -> Result<Vec<Patient>, RepositoryError> {
-        let all_patients = self.list_active().await?;
+        debug!(search_query = %query, "Executing patient search query");
+        let rows = sqlx::query_as::<_, PatientRow>(&format!(
+            "{} WHERE is_active = TRUE AND (first_name || ' ' || last_name) ILIKE '%' || $1 || '%' ORDER BY last_name LIMIT 50",
+            PATIENT_SELECT_QUERY
+        ))
+        .bind(query)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|err| {
+            error!(error = %err, search_query = %query, "Patient search query failed");
+            sqlx_to_patient_error(err)
+        })?;
 
-        if query.is_empty() {
-            return Ok(all_patients);
+        let mut patients = Vec::with_capacity(rows.len());
+        for row in rows {
+            match row.into_patient(&self.crypto) {
+                Ok(patient) => patients.push(patient),
+                Err(err) => {
+                    error!(error = %err, "Failed converting patient search row into domain model");
+                    return Err(err);
+                }
+            }
         }
 
-        let query_lower = query.to_lowercase();
-        let filtered: Vec<Patient> = all_patients
-            .into_iter()
-            .filter(|p| {
-                let full_name = format!("{} {}", p.first_name, p.last_name).to_lowercase();
-                let preferred = p
-                    .preferred_name
-                    .as_ref()
-                    .map(|n| n.to_lowercase())
-                    .unwrap_or_default();
-                let medicare = p
-                    .medicare_number
-                    .as_ref()
-                    .map(|m| m.to_lowercase())
-                    .unwrap_or_default();
-                let email = p
-                    .email
-                    .as_ref()
-                    .map(|e| e.to_lowercase())
-                    .unwrap_or_default();
-                let phone = p
-                    .phone_mobile
-                    .as_ref()
-                    .or(p.phone_home.as_ref())
-                    .map(|p| p.to_lowercase())
-                    .unwrap_or_default();
-
-                full_name.contains(&query_lower)
-                    || preferred.contains(&query_lower)
-                    || medicare.contains(&query_lower)
-                    || email.contains(&query_lower)
-                    || phone.contains(&query_lower)
-            })
-            .collect();
-
-        Ok(filtered)
+        Ok(patients)
     }
 
     async fn create(&self, patient: Patient) -> Result<Patient, RepositoryError> {

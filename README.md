@@ -33,6 +33,40 @@ opengp/
 
 - Rust toolchain (stable)
 - SQLite available locally
+- Redis (optional, for caching performance improvements)
+
+### 1a) Redis Setup (Optional)
+
+OpenGP supports Redis caching to improve performance. Redis is optional—if not configured, the system operates without caching.
+
+**Install Redis:**
+
+- **macOS**: `brew install redis`
+- **Ubuntu/Debian**: `sudo apt-get install redis-server`
+- **Docker**: `docker run -d -p 6379:6379 redis:latest`
+
+**Configure in `.env`:**
+
+```bash
+# Copy .env.example to .env
+cp .env.example .env
+
+# Edit .env and set:
+REDIS_URL=redis://localhost:6379
+REDIS_MAX_CONNECTIONS=32
+REDIS_MIN_CONNECTIONS=2
+REDIS_TTL_DEFAULT_SECS=3600
+```
+
+**Start Redis:**
+
+```bash
+# Locally
+redis-server
+
+# Or with Docker
+docker run -d -p 6379:6379 redis:latest
+```
 
 ### 2) Build
 

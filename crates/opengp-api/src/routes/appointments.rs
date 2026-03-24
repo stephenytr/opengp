@@ -34,6 +34,7 @@ pub(super) async fn list_appointments(
 
     let page = query.page.unwrap_or(1).max(1);
     let limit = query.limit.unwrap_or(25).clamp(1, 100);
+    let repository_limit = i64::from(page.saturating_mul(limit)).max(100);
     let (date_from, date_to) =
         if let Some(date) = query.date {
             (
@@ -61,6 +62,7 @@ pub(super) async fn list_appointments(
         appointment_type: None,
         is_urgent: None,
         confirmed: None,
+        limit: Some(repository_limit),
     };
 
     let appointments = state

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::{postgres::PgPool, FromRow};
+use sqlx::{postgres::PgPool, FromRow, Postgres, QueryBuilder};
 use uuid::Uuid;
 
 use crate::infrastructure::database::helpers::string_to_datetime;
@@ -152,6 +152,37 @@ pub struct SqlxAppointmentRepository {
 impl SqlxAppointmentRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    fn appointment_type_to_str(appointment_type: AppointmentType) -> &'static str {
+        match appointment_type {
+            AppointmentType::Standard => "Standard",
+            AppointmentType::Long => "Long",
+            AppointmentType::Brief => "Brief",
+            AppointmentType::NewPatient => "NewPatient",
+            AppointmentType::HealthAssessment => "HealthAssessment",
+            AppointmentType::ChronicDiseaseReview => "ChronicDiseaseReview",
+            AppointmentType::MentalHealthPlan => "MentalHealthPlan",
+            AppointmentType::Immunisation => "Immunisation",
+            AppointmentType::Procedure => "Procedure",
+            AppointmentType::Telephone => "Telephone",
+            AppointmentType::Telehealth => "Telehealth",
+            AppointmentType::HomeVisit => "HomeVisit",
+            AppointmentType::Emergency => "Emergency",
+        }
+    }
+
+    fn appointment_status_to_str(status: AppointmentStatus) -> &'static str {
+        match status {
+            AppointmentStatus::Scheduled => "Scheduled",
+            AppointmentStatus::Confirmed => "Confirmed",
+            AppointmentStatus::Arrived => "Arrived",
+            AppointmentStatus::InProgress => "InProgress",
+            AppointmentStatus::Completed => "Completed",
+            AppointmentStatus::NoShow => "NoShow",
+            AppointmentStatus::Cancelled => "Cancelled",
+            AppointmentStatus::Rescheduled => "Rescheduled",
+        }
     }
 }
 
@@ -404,155 +435,62 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         &self,
         criteria: &AppointmentSearchCriteria,
     ) -> Result<Vec<Appointment>, RepositoryError> {
-        let mut query = String::from(
-            r#"
-            SELECT 
-                id, patient_id, practitioner_id,
-                start_time, end_time,
-                appointment_type, status,
-                reason, notes,
-                is_urgent, reminder_sent, confirmed,
-                cancellation_reason,
-                created_at, updated_at,
-                version,
-                created_by, updated_by
-            FROM appointments
-            WHERE 1=1
-            "#,
-        );
+        let mut query_builder = QueryBuilder::<Postgres>::new(APPOINTMENT_SELECT_QUERY);
+        let mut has_condition = false;
 
-        let mut placeholder_idx = 1;
-
-        if criteria.patient_id.is_some() {
-            query.push_str(&format!(" AND patient_id = ${}", placeholder_idx));
-            placeholder_idx += 1;
+        if let Some(patient_id) = criteria.patient_id {
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder.push("patient_id = ").push_bind(patient_id);
+            has_condition = true;
         }
 
-        if criteria.practitioner_id.is_some() {
-            query.push_str(&format!(" AND practitioner_id = ${}", placeholder_idx));
-            placeholder_idx += 1;
+        if let Some(practitioner_id) = criteria.practitioner_id {
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder
+                .push("practitioner_id = ")
+                .push_bind(practitioner_id);
+            has_condition = true;
         }
 
-        if criteria.date_from.is_some() {
-            query.push_str(&format!(" AND start_time >= ${}", placeholder_idx));
-            placeholder_idx += 1;
+        if let Some(date_from) = criteria.date_from {
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder
+                .push("start_time >= ")
+                .push_bind(date_from.to_rfc3339());
+            has_condition = true;
         }
 
-        if criteria.date_to.is_some() {
-            query.push_str(&format!(" AND start_time < ${}", placeholder_idx));
-            placeholder_idx += 1;
+        if let Some(date_to) = criteria.date_to {
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder
+                .push("start_time < ")
+                .push_bind(date_to.to_rfc3339());
+            has_condition = true;
         }
 
         if let Some(appointment_type) = criteria.appointment_type {
-            let _type_str = match appointment_type {
-                AppointmentType::Standard => "Standard",
-                AppointmentType::Long => "Long",
-                AppointmentType::Brief => "Brief",
-                AppointmentType::NewPatient => "NewPatient",
-                AppointmentType::HealthAssessment => "HealthAssessment",
-                AppointmentType::ChronicDiseaseReview => "ChronicDiseaseReview",
-                AppointmentType::MentalHealthPlan => "MentalHealthPlan",
-                AppointmentType::Immunisation => "Immunisation",
-                AppointmentType::Procedure => "Procedure",
-                AppointmentType::Telephone => "Telephone",
-                AppointmentType::Telehealth => "Telehealth",
-                AppointmentType::HomeVisit => "HomeVisit",
-                AppointmentType::Emergency => "Emergency",
-            };
-            query.push_str(&format!(" AND appointment_type = ${}", placeholder_idx));
-            placeholder_idx += 1;
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder
+                .push("appointment_type = ")
+                .push_bind(Self::appointment_type_to_str(appointment_type));
+            has_condition = true;
         }
 
         if let Some(status) = criteria.status {
-            let _status_str = match status {
-                AppointmentStatus::Scheduled => "Scheduled",
-                AppointmentStatus::Confirmed => "Confirmed",
-                AppointmentStatus::Arrived => "Arrived",
-                AppointmentStatus::InProgress => "InProgress",
-                AppointmentStatus::Completed => "Completed",
-                AppointmentStatus::NoShow => "NoShow",
-                AppointmentStatus::Cancelled => "Cancelled",
-                AppointmentStatus::Rescheduled => "Rescheduled",
-            };
-            query.push_str(&format!(" AND status = ${}", placeholder_idx));
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder
+                .push("status = ")
+                .push_bind(Self::appointment_status_to_str(status));
         }
 
-        query.push_str(" ORDER BY start_time");
+        let limit = criteria.limit.unwrap_or(100).max(1);
+        query_builder.push(" ORDER BY start_time LIMIT ").push_bind(limit);
 
-        let patient_id_filter = criteria.patient_id;
-        let practitioner_id_filter = criteria.practitioner_id;
-        let date_from_str = criteria.date_from.map(|dt| dt.to_rfc3339());
-        let date_to_str = criteria.date_to.map(|dt| dt.to_rfc3339());
-
-        let all_rows = sqlx::query_as::<_, AppointmentRow>(&format!(
-            "{}ORDER BY start_time",
-            APPOINTMENT_SELECT_QUERY
-        ))
-        .fetch_all(&self.pool)
-        .await
-        .map_err(sqlx_to_appointment_error)?;
-
-        let rows: Vec<AppointmentRow> = all_rows
-            .into_iter()
-            .filter(|row| {
-                if let Some(pid) = patient_id_filter {
-                    if row.patient_id != pid {
-                        return false;
-                    }
-                }
-                if let Some(prid) = practitioner_id_filter {
-                    if row.practitioner_id != prid {
-                        return false;
-                    }
-                }
-                if let Some(ref start) = date_from_str {
-                    if &row.start_time < start {
-                        return false;
-                    }
-                }
-                if let Some(ref end) = date_to_str {
-                    if &row.start_time >= end {
-                        return false;
-                    }
-                }
-                if let Some(atype) = criteria.appointment_type {
-                    let type_str = match atype {
-                        AppointmentType::Standard => "Standard",
-                        AppointmentType::Long => "Long",
-                        AppointmentType::Brief => "Brief",
-                        AppointmentType::NewPatient => "NewPatient",
-                        AppointmentType::HealthAssessment => "HealthAssessment",
-                        AppointmentType::ChronicDiseaseReview => "ChronicDiseaseReview",
-                        AppointmentType::MentalHealthPlan => "MentalHealthPlan",
-                        AppointmentType::Immunisation => "Immunisation",
-                        AppointmentType::Procedure => "Procedure",
-                        AppointmentType::Telephone => "Telephone",
-                        AppointmentType::Telehealth => "Telehealth",
-                        AppointmentType::HomeVisit => "HomeVisit",
-                        AppointmentType::Emergency => "Emergency",
-                    };
-                    if row.appointment_type != type_str {
-                        return false;
-                    }
-                }
-                if let Some(st) = criteria.status {
-                    let status_str = match st {
-                        AppointmentStatus::Scheduled => "Scheduled",
-                        AppointmentStatus::Confirmed => "Confirmed",
-                        AppointmentStatus::Arrived => "Arrived",
-                        AppointmentStatus::InProgress => "InProgress",
-                        AppointmentStatus::Completed => "Completed",
-                        AppointmentStatus::NoShow => "NoShow",
-                        AppointmentStatus::Cancelled => "Cancelled",
-                        AppointmentStatus::Rescheduled => "Rescheduled",
-                    };
-                    if row.status != status_str {
-                        return false;
-                    }
-                }
-                true
-            })
-            .collect();
+        let rows = query_builder
+            .build_query_as::<AppointmentRow>()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(sqlx_to_appointment_error)?;
 
         rows.into_iter().map(|r| r.into_appointment()).collect()
     }
@@ -587,197 +525,80 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
         &self,
         criteria: &AppointmentSearchCriteria,
     ) -> Result<Vec<CalendarAppointment>, RepositoryError> {
-        let mut query = String::from(
-            r#"
-            SELECT 
-                a.id,
-                a.patient_id,
-                a.practitioner_id,
-                COALESCE(p.preferred_name, p.first_name) || ' ' || p.last_name as patient_name,
-                a.start_time,
-                a.end_time,
-                a.appointment_type,
-                a.status,
-                a.is_urgent,
-                a.confirmed,
-                a.reason,
-                a.notes
-            FROM appointments a
-            LEFT JOIN patients p ON a.patient_id = p.id
-            WHERE 1=1
-            "#,
-        );
+        let mut query_builder = QueryBuilder::<Postgres>::new(CALENDAR_APPOINTMENT_SELECT_QUERY);
+        let mut has_condition = false;
 
-        let mut placeholder_idx = 1;
-
-        if criteria.patient_id.is_some() {
-            query.push_str(&format!(" AND a.patient_id = ${}", placeholder_idx));
-            placeholder_idx += 1;
+        if let Some(patient_id) = criteria.patient_id {
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder.push("a.patient_id = ").push_bind(patient_id);
+            has_condition = true;
         }
 
-        if criteria.practitioner_id.is_some() {
-            query.push_str(&format!(" AND a.practitioner_id = ${}", placeholder_idx));
-            placeholder_idx += 1;
+        if let Some(practitioner_id) = criteria.practitioner_id {
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder
+                .push("a.practitioner_id = ")
+                .push_bind(practitioner_id);
+            has_condition = true;
         }
 
-        if criteria.date_from.is_some() {
-            query.push_str(&format!(" AND a.start_time >= ${}", placeholder_idx));
-            placeholder_idx += 1;
+        if let Some(date_from) = criteria.date_from {
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder
+                .push("a.start_time >= ")
+                .push_bind(date_from.to_rfc3339());
+            has_condition = true;
         }
 
-        if criteria.date_to.is_some() {
-            query.push_str(&format!(" AND a.start_time < ${}", placeholder_idx));
-            placeholder_idx += 1;
+        if let Some(date_to) = criteria.date_to {
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder
+                .push("a.start_time < ")
+                .push_bind(date_to.to_rfc3339());
+            has_condition = true;
         }
 
         if let Some(appointment_type) = criteria.appointment_type {
-            let _type_str = match appointment_type {
-                AppointmentType::Standard => "Standard",
-                AppointmentType::Long => "Long",
-                AppointmentType::Brief => "Brief",
-                AppointmentType::NewPatient => "NewPatient",
-                AppointmentType::HealthAssessment => "HealthAssessment",
-                AppointmentType::ChronicDiseaseReview => "ChronicDiseaseReview",
-                AppointmentType::MentalHealthPlan => "MentalHealthPlan",
-                AppointmentType::Immunisation => "Immunisation",
-                AppointmentType::Procedure => "Procedure",
-                AppointmentType::Telephone => "Telephone",
-                AppointmentType::Telehealth => "Telehealth",
-                AppointmentType::HomeVisit => "HomeVisit",
-                AppointmentType::Emergency => "Emergency",
-            };
-            query.push_str(&format!(" AND a.appointment_type = ${}", placeholder_idx));
-            placeholder_idx += 1;
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder
+                .push("a.appointment_type = ")
+                .push_bind(Self::appointment_type_to_str(appointment_type));
+            has_condition = true;
         }
 
-        if let Some(_status) = criteria.status {
-            let _status_str = match _status {
-                AppointmentStatus::Scheduled => "Scheduled",
-                AppointmentStatus::Confirmed => "Confirmed",
-                AppointmentStatus::Arrived => "Arrived",
-                AppointmentStatus::InProgress => "InProgress",
-                AppointmentStatus::Completed => "Completed",
-                AppointmentStatus::NoShow => "NoShow",
-                AppointmentStatus::Cancelled => "Cancelled",
-                AppointmentStatus::Rescheduled => "Rescheduled",
-            };
-            query.push_str(&format!(" AND a.status = ${}", placeholder_idx));
-            placeholder_idx += 1;
+        if let Some(status) = criteria.status {
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder
+                .push("a.status = ")
+                .push_bind(Self::appointment_status_to_str(status));
+            has_condition = true;
+        } else {
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder.push("a.status NOT IN ('Cancelled', 'NoShow')");
+            has_condition = true;
         }
 
-        if let Some(_is_urgent) = criteria.is_urgent {
-            query.push_str(&format!(" AND a.is_urgent = ${}", placeholder_idx));
-            placeholder_idx += 1;
+        if let Some(is_urgent) = criteria.is_urgent {
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder.push("a.is_urgent = ").push_bind(is_urgent);
+            has_condition = true;
         }
 
-        if let Some(_confirmed) = criteria.confirmed {
-            query.push_str(&format!(" AND a.confirmed = ${}", placeholder_idx));
+        if let Some(confirmed) = criteria.confirmed {
+            query_builder.push(if has_condition { " AND " } else { " WHERE " });
+            query_builder.push("a.confirmed = ").push_bind(confirmed);
         }
 
-        query.push_str(" ORDER BY a.start_time");
+        let limit = criteria.limit.unwrap_or(100).max(1);
+        query_builder
+            .push(" ORDER BY a.start_time LIMIT ")
+            .push_bind(limit);
 
-        let rows = if criteria.patient_id.is_some()
-            || criteria.practitioner_id.is_some()
-            || criteria.date_from.is_some()
-            || criteria.date_to.is_some()
-            || criteria.appointment_type.is_some()
-            || criteria.status.is_some()
-            || criteria.is_urgent.is_some()
-            || criteria.confirmed.is_some()
-        {
-            let patient_id_filter = criteria.patient_id;
-            let practitioner_id_filter = criteria.practitioner_id;
-            let date_from_str = criteria.date_from.map(|dt| dt.to_rfc3339());
-            let date_to_str = criteria.date_to.map(|dt| dt.to_rfc3339());
-
-            let all_rows = sqlx::query_as::<_, CalendarAppointmentRow>(&format!(
-                "{}ORDER BY a.start_time",
-                CALENDAR_APPOINTMENT_SELECT_QUERY
-            ))
+        let rows = query_builder
+            .build_query_as::<CalendarAppointmentRow>()
             .fetch_all(&self.pool)
             .await
             .map_err(sqlx_to_appointment_error)?;
-
-            all_rows
-                .into_iter()
-                .filter(|row| {
-                    if let Some(pid) = patient_id_filter {
-                        if row.patient_id != pid {
-                            return false;
-                        }
-                    }
-                    if let Some(prid) = practitioner_id_filter {
-                        if row.practitioner_id != prid {
-                            return false;
-                        }
-                    }
-                    if let Some(ref start) = date_from_str {
-                        if &row.start_time < start {
-                            return false;
-                        }
-                    }
-                    if let Some(ref end) = date_to_str {
-                        if &row.start_time >= end {
-                            return false;
-                        }
-                    }
-                    if let Some(atype) = criteria.appointment_type {
-                        let type_str = match atype {
-                            AppointmentType::Standard => "Standard",
-                            AppointmentType::Long => "Long",
-                            AppointmentType::Brief => "Brief",
-                            AppointmentType::NewPatient => "NewPatient",
-                            AppointmentType::HealthAssessment => "HealthAssessment",
-                            AppointmentType::ChronicDiseaseReview => "ChronicDiseaseReview",
-                            AppointmentType::MentalHealthPlan => "MentalHealthPlan",
-                            AppointmentType::Immunisation => "Immunisation",
-                            AppointmentType::Procedure => "Procedure",
-                            AppointmentType::Telephone => "Telephone",
-                            AppointmentType::Telehealth => "Telehealth",
-                            AppointmentType::HomeVisit => "HomeVisit",
-                            AppointmentType::Emergency => "Emergency",
-                        };
-                        if row.appointment_type != type_str {
-                            return false;
-                        }
-                    }
-                    if let Some(st) = criteria.status {
-                        let status_str = match st {
-                            AppointmentStatus::Scheduled => "Scheduled",
-                            AppointmentStatus::Confirmed => "Confirmed",
-                            AppointmentStatus::Arrived => "Arrived",
-                            AppointmentStatus::InProgress => "InProgress",
-                            AppointmentStatus::Completed => "Completed",
-                            AppointmentStatus::NoShow => "NoShow",
-                            AppointmentStatus::Cancelled => "Cancelled",
-                            AppointmentStatus::Rescheduled => "Rescheduled",
-                        };
-                        if row.status != status_str {
-                            return false;
-                        }
-                    }
-                    if let Some(urgent) = criteria.is_urgent {
-                        if row.is_urgent != urgent {
-                            return false;
-                        }
-                    }
-                    if let Some(conf) = criteria.confirmed {
-                        if row.confirmed != conf {
-                            return false;
-                        }
-                    }
-                    true
-                })
-                .collect()
-        } else {
-            sqlx::query_as::<_, CalendarAppointmentRow>(&format!(
-                "{}ORDER BY a.start_time",
-                CALENDAR_APPOINTMENT_SELECT_QUERY
-            ))
-            .fetch_all(&self.pool)
-            .await
-            .map_err(sqlx_to_appointment_error)?
-        };
 
         rows.into_iter()
             .map(|r| r.into_calendar_appointment())

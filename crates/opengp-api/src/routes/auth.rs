@@ -43,6 +43,7 @@ pub(super) async fn login(
         new_value: Some(format!("User logged in: {}", login.user.username)),
         changed_by: login.user.id,
         changed_at: Utc::now(),
+        source: "database".to_string(),
     };
     emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 
@@ -219,6 +220,7 @@ pub(super) fn emit_auth_failure_audit(state: &ApiState, username: Option<&str>, 
         new_value: Some(details),
         changed_by: Uuid::nil(),
         changed_at: Utc::now(),
+        source: "database".to_string(),
     };
 
     emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);

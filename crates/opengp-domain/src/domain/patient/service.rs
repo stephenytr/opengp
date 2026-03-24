@@ -112,7 +112,7 @@ impl PatientService {
 
     pub async fn list_active_patients(&self) -> Result<Vec<Patient>, ServiceError> {
         debug!("Listing active patients from repository");
-        let patients = self.repository.list_active().await.map_err(|err| {
+        let patients = self.repository.list_active(None).await.map_err(|err| {
             error!(error = %err, "Failed to list active patients from repository");
             ServiceError::from(err)
         })?;
@@ -170,7 +170,7 @@ mod tests {
                 .cloned())
         }
 
-        async fn list_active(&self) -> Result<Vec<Patient>, RepositoryError> {
+        async fn list_active(&self, _limit: Option<i64>) -> Result<Vec<Patient>, RepositoryError> {
             Ok(self.existing_patients.clone())
         }
 

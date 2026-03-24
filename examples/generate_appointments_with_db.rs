@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Fetching existing patients and practitioners...\n");
 
-    let patients = patient_repo.list_active().await?;
+    let patients = patient_repo.list_active(None).await?;
     let practitioners = practitioner_repo.list_active().await?;
 
     println!("Found {} active patients", patients.len());

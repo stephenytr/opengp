@@ -13,7 +13,7 @@ const AUDIT_SELECT_QUERY: &str = r#"
     SELECT
         id, entity_type, entity_id, action,
         old_value, new_value,
-        changed_by, changed_at
+        changed_by, changed_at, source
     FROM audit_logs
 "#;
 
@@ -27,6 +27,7 @@ struct AuditLogRow {
     new_value: Option<String>,
     changed_by: Uuid,
     changed_at: DateTime<Utc>,
+    source: String,
 }
 
 impl AuditLogRow {
@@ -47,6 +48,7 @@ impl AuditLogRow {
             new_value: self.new_value,
             changed_by: self.changed_by,
             changed_at: self.changed_at,
+            source: self.source,
         })
     }
 }
@@ -76,8 +78,8 @@ impl AuditRepository for SqlxAuditRepository {
         INSERT INTO audit_logs (
             id, entity_type, entity_id, action,
             old_value, new_value,
-            changed_by, changed_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            changed_by, changed_at, source
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         "#,
         )
         .bind(entry.id)
@@ -88,6 +90,7 @@ impl AuditRepository for SqlxAuditRepository {
         .bind(&entry.new_value)
         .bind(entry.changed_by)
         .bind(entry.changed_at)
+        .bind(&entry.source)
         .execute(&self.pool)
         .await;
 

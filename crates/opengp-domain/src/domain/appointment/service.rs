@@ -476,6 +476,7 @@ impl AppointmentService {
             appointment_type: None,
             is_urgent: None,
             confirmed: None,
+            limit: Some(1000),
         };
 
         let mut appointments = self.search_appointments(&criteria).await?;
@@ -820,6 +821,7 @@ impl AvailabilityService {
                 appointment_type: None,
                 is_urgent: None,
                 confirmed: None,
+                limit: Some(1000),
             })
             .await?;
 
