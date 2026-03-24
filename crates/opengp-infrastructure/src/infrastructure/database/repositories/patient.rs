@@ -230,7 +230,10 @@ impl PatientRepository for SqlxPatientRepository {
             sqlx_to_patient_error(err)
         })?;
 
-        debug!(row_count = rows.len(), "Patient list_active query returned rows");
+        debug!(
+            row_count = rows.len(),
+            "Patient list_active query returned rows"
+        );
 
         let mut patients = Vec::with_capacity(rows.len());
         for row in rows {
@@ -243,7 +246,10 @@ impl PatientRepository for SqlxPatientRepository {
             }
         }
 
-        debug!(patient_count = patients.len(), "Patient list_active returning converted patients");
+        debug!(
+            patient_count = patients.len(),
+            "Patient list_active returning converted patients"
+        );
 
         Ok(patients)
     }
@@ -411,11 +417,12 @@ impl PatientRepository for SqlxPatientRepository {
             .as_ref()
             .map(|ec| ec.relationship.clone());
 
-        let current_version = sqlx::query_scalar::<_, i32>("SELECT version FROM patients WHERE id = $1")
-        .bind(patient.id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(sqlx_to_patient_error)?;
+        let current_version =
+            sqlx::query_scalar::<_, i32>("SELECT version FROM patients WHERE id = $1")
+                .bind(patient.id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(sqlx_to_patient_error)?;
 
         let current_version = match current_version {
             Some(version) => version,

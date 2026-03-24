@@ -86,46 +86,29 @@ impl PostgresUserRepository {
 #[async_trait]
 impl UserRepository for PostgresUserRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, RepositoryError> {
-        let row = sqlx::query_as::<_, UserRow>(&format!(
-            "{}WHERE id = $1",
-            USER_SELECT_QUERY
-        ))
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| {
-            sqlx_to_user_error(e)
-        })?;
+        let row = sqlx::query_as::<_, UserRow>(&format!("{}WHERE id = $1", USER_SELECT_QUERY))
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| sqlx_to_user_error(e))?;
 
         match row {
-            Some(r) => {
-                Ok(Some(r.into_user()?))
-            }
-            None => {
-                Ok(None)
-            }
+            Some(r) => Ok(Some(r.into_user()?)),
+            None => Ok(None),
         }
     }
 
     async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepositoryError> {
-        let row = sqlx::query_as::<_, UserRow>(&format!(
-            "{}WHERE username = $1",
-            USER_SELECT_QUERY
-        ))
-        .bind(username)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| {
-            sqlx_to_user_error(e)
-        })?;
+        let row =
+            sqlx::query_as::<_, UserRow>(&format!("{}WHERE username = $1", USER_SELECT_QUERY))
+                .bind(username)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| sqlx_to_user_error(e))?;
 
         match row {
-            Some(r) => {
-                Ok(Some(r.into_user()?))
-            }
-            None => {
-                Ok(None)
-            }
+            Some(r) => Ok(Some(r.into_user()?)),
+            None => Ok(None),
         }
     }
 
@@ -276,7 +259,8 @@ impl UserRepository for PostgresUserRepository {
         .bind(user.updated_at)
         .bind(user.id)
         .execute(&self.pool)
-        .await.map_err(|e| RepositoryError::Database(e.to_string()))?;
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             Err(RepositoryError::NotFound)

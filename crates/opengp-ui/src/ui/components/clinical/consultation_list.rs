@@ -272,9 +272,9 @@ impl ConsultationList {
                 self.selected_index = new_index;
                 Some(ConsultationListAction::Select(self.selected_index))
             }
-            KeyCode::Enter => {
-                self.selected().map(|consultation| ConsultationListAction::Open(consultation.clone()))
-            }
+            KeyCode::Enter => self
+                .selected()
+                .map(|consultation| ConsultationListAction::Open(consultation.clone())),
             KeyCode::Char('n') => Some(ConsultationListAction::New),
             KeyCode::Char('+') | KeyCode::Char('=') => Some(ConsultationListAction::NextPage),
             KeyCode::Char('-') => Some(ConsultationListAction::PrevPage),

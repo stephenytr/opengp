@@ -13,8 +13,7 @@ pub enum FieldType {
     Select(Vec<&'static str>),
 }
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct FormFieldState {
     pub label: &'static str,
     pub value: String,
@@ -23,7 +22,6 @@ pub struct FormFieldState {
     pub required: bool,
     pub field_type: FieldType,
 }
-
 
 impl FormFieldState {
     pub fn new(label: &'static str) -> Self {

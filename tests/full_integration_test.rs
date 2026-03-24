@@ -1,11 +1,11 @@
 use axum::body::{to_bytes, Body};
 use axum::http::{header, Request, StatusCode};
 use chrono::Utc;
-use opengp_domain::user::PasswordHasher;
 use opengp_api::{router, ApiConfig, ApiState};
 use opengp_domain::domain::api::{
     ApiErrorResponse, AppointmentResponse, LoginResponse, PaginatedResponse, PatientResponse,
 };
+use opengp_domain::user::PasswordHasher;
 use opengp_infrastructure::infrastructure::crypto::password::BcryptPasswordHasher;
 use sqlx::PgPool;
 use tower::util::ServiceExt;

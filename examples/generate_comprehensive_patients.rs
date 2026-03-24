@@ -7,8 +7,8 @@
 //! Run with: cargo run --example generate_comprehensive_patients
 
 use opengp_infrastructure::infrastructure::fixtures::{
-    ComprehensivePatientGenerator, ComprehensivePatientGeneratorConfig,
-    PatientGeneratorConfig, ClinicalDataGeneratorConfig,
+    ClinicalDataGeneratorConfig, ComprehensivePatientGenerator,
+    ComprehensivePatientGeneratorConfig, PatientGeneratorConfig,
 };
 use uuid::Uuid;
 
@@ -20,7 +20,7 @@ fn main() {
     // Example 1: Generate 5 patients with default settings
     println!("Example 1: Generate 5 patients with default settings");
     println!("─────────────────────────────────────────────────────────");
-    
+
     let config = ComprehensivePatientGeneratorConfig {
         patient_count: 5,
         ..Default::default()
@@ -99,19 +99,27 @@ fn main() {
             age
         );
         println!("    Address: {:?}", profile.patient.address.suburb);
-        println!("    Emergency contact: {:?}", profile.patient.emergency_contact.is_some());
+        println!(
+            "    Emergency contact: {:?}",
+            profile.patient.emergency_contact.is_some()
+        );
         println!("    Concession type: {:?}", profile.patient.concession_type);
         println!("    Medical conditions: {}", profile.medical_history.len());
-        
+
         for (j, condition) in profile.medical_history.iter().enumerate() {
             println!("      {}. {:?}", j + 1, condition.condition);
         }
-        
+
         println!("    Allergies: {}", profile.allergies.len());
         for (j, allergy) in profile.allergies.iter().enumerate() {
-            println!("      {}. {:?} ({})", j + 1, allergy.allergen, allergy.severity);
+            println!(
+                "      {}. {:?} ({})",
+                j + 1,
+                allergy.allergen,
+                allergy.severity
+            );
         }
-        
+
         println!("    Consultations: {}", profile.consultations.len());
     }
 

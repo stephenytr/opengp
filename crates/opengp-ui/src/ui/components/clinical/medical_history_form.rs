@@ -48,7 +48,6 @@ impl MedicalHistoryFormField {
     }
 
     pub fn label(&self) -> &'static str {
-        
         (*self).into()
     }
 
@@ -543,27 +542,26 @@ impl Widget for MedicalHistoryForm {
 
             let is_focused = field == self.focused_field;
 
-            if y >= inner.y as i32 && y < max_y
-                && !field.is_dropdown() {
-                    let label_style = if is_focused {
-                        Style::default()
-                            .fg(self.theme.colors.primary)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(self.theme.colors.foreground)
-                    };
+            if y >= inner.y as i32 && y < max_y && !field.is_dropdown() {
+                let label_style = if is_focused {
+                    Style::default()
+                        .fg(self.theme.colors.primary)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(self.theme.colors.foreground)
+                };
 
-                    buf.set_string(inner.x + 1, y as u16, field.label(), label_style);
+                buf.set_string(inner.x + 1, y as u16, field.label(), label_style);
 
-                    if is_focused {
-                        buf.set_string(
-                            field_start - 1,
-                            y as u16,
-                            ">",
-                            Style::default().fg(self.theme.colors.primary),
-                        );
-                    }
+                if is_focused {
+                    buf.set_string(
+                        field_start - 1,
+                        y as u16,
+                        ">",
+                        Style::default().fg(self.theme.colors.primary),
+                    );
                 }
+            }
 
             match field {
                 MedicalHistoryFormField::Status => {

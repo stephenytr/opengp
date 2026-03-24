@@ -14,10 +14,12 @@ use uuid::Uuid;
 use crate::ApiState;
 
 use super::middleware::{
-    appointment_request_to_new_data, appointment_request_to_update_data, appointment_service_error_to_response,
-    appointment_to_response, authorize_practitioner_access, authorize_practitioner_write, authorize_read,
-    bad_request_response, emit_audit_event_non_blocking, not_found_response, validate_appointment_booking_time,
-    AppointmentAvailabilityQuery, AppointmentListQuery, AppointmentStatusActionRequest, AuthContext,
+    appointment_request_to_new_data, appointment_request_to_update_data,
+    appointment_service_error_to_response, appointment_to_response, authorize_practitioner_access,
+    authorize_practitioner_write, authorize_read, bad_request_response,
+    emit_audit_event_non_blocking, not_found_response, validate_appointment_booking_time,
+    AppointmentAvailabilityQuery, AppointmentListQuery, AppointmentStatusActionRequest,
+    AuthContext,
 };
 
 pub(super) async fn list_appointments(
@@ -32,22 +34,23 @@ pub(super) async fn list_appointments(
 
     let page = query.page.unwrap_or(1).max(1);
     let limit = query.limit.unwrap_or(25).clamp(1, 100);
-    let (date_from, date_to) = if let Some(date) = query.date {
-        (
-            Some(Utc.from_utc_datetime(
-                &date
-                    .and_hms_opt(0, 0, 0)
-                    .expect("00:00:00 should be valid"),
-            )),
-            Some(Utc.from_utc_datetime(
-                &date
-                    .and_hms_opt(23, 59, 59)
-                    .expect("23:59:59 should be valid"),
-            )),
-        )
-    } else {
-        (query.date_from, query.date_to)
-    };
+    let (date_from, date_to) =
+        if let Some(date) = query.date {
+            (
+                Some(Utc.from_utc_datetime(
+                    &date.and_hms_opt(0, 0, 0).expect("00:00:00 should be valid"),
+                )),
+                Some(
+                    Utc.from_utc_datetime(
+                        &date
+                            .and_hms_opt(23, 59, 59)
+                            .expect("23:59:59 should be valid"),
+                    ),
+                ),
+            )
+        } else {
+            (query.date_from, query.date_to)
+        };
 
     let criteria = AppointmentSearchCriteria {
         patient_id: None,
@@ -87,7 +90,6 @@ pub(super) async fn list_appointments(
     ))
 }
 
-
 pub(super) async fn get_appointment(
     State(state): State<ApiState>,
     Extension(context): Extension<AuthContext>,
@@ -105,7 +107,6 @@ pub(super) async fn get_appointment(
 
     Ok((StatusCode::OK, Json(appointment_to_response(appointment))))
 }
-
 
 pub(super) async fn get_available_slots(
     State(state): State<ApiState>,
@@ -136,7 +137,6 @@ pub(super) async fn get_available_slots(
     Ok((StatusCode::OK, Json(response_slots)))
 }
 
-
 pub(super) async fn create_appointment(
     State(state): State<ApiState>,
     Extension(context): Extension<AuthContext>,
@@ -166,7 +166,6 @@ pub(super) async fn create_appointment(
         Json(appointment_to_response(appointment)),
     ))
 }
-
 
 pub(super) async fn update_appointment(
     State(state): State<ApiState>,
@@ -202,7 +201,6 @@ pub(super) async fn update_appointment(
     Ok((StatusCode::OK, Json(appointment_to_response(appointment))))
 }
 
-
 pub(super) async fn cancel_appointment(
     State(state): State<ApiState>,
     Extension(context): Extension<AuthContext>,
@@ -224,7 +222,6 @@ pub(super) async fn cancel_appointment(
     Ok(StatusCode::NO_CONTENT)
 }
 
-
 pub(super) async fn update_appointment_status(
     State(state): State<ApiState>,
     Extension(context): Extension<AuthContext>,
@@ -235,21 +232,27 @@ pub(super) async fn update_appointment_status(
 
     let action = payload.action.trim().to_ascii_lowercase();
     let appointment = match action.as_str() {
-        "arrived" => state
-            .services
-            .appointment_service
-            .mark_arrived(id, context.user_id)
-            .await,
-        "in_progress" => state
-            .services
-            .appointment_service
-            .mark_in_progress(id, context.user_id)
-            .await,
-        "completed" => state
-            .services
-            .appointment_service
-            .mark_completed(id, context.user_id)
-            .await,
+        "arrived" => {
+            state
+                .services
+                .appointment_service
+                .mark_arrived(id, context.user_id)
+                .await
+        }
+        "in_progress" => {
+            state
+                .services
+                .appointment_service
+                .mark_in_progress(id, context.user_id)
+                .await
+        }
+        "completed" => {
+            state
+                .services
+                .appointment_service
+                .mark_completed(id, context.user_id)
+                .await
+        }
         _ => {
             return Err(bad_request_response(
                 "validation_error",
@@ -261,7 +264,6 @@ pub(super) async fn update_appointment_status(
 
     Ok((StatusCode::OK, Json(appointment_to_response(appointment))))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -277,10 +279,10 @@ mod tests {
             date_to: None,
             practitioner_id: None,
         };
-        
+
         let page = query.page.unwrap_or(1).max(1);
         let limit = query.limit.unwrap_or(25).clamp(1, 100);
-        
+
         assert_eq!(page, 1);
         assert_eq!(limit, 25);
     }
@@ -292,7 +294,7 @@ mod tests {
             date: chrono::Local::now().date_naive(),
             duration: 0,
         };
-        
+
         assert!(query.duration <= 0);
     }
 
@@ -303,7 +305,7 @@ mod tests {
             date: chrono::Local::now().date_naive(),
             duration: 30,
         };
-        
+
         assert!(query.duration > 0);
     }
 
@@ -311,7 +313,7 @@ mod tests {
     fn appointment_status_action_normalizes_to_lowercase() {
         let action = "ARRIVED";
         let normalized = action.trim().to_ascii_lowercase();
-        
+
         assert_eq!(normalized, "arrived");
     }
 }

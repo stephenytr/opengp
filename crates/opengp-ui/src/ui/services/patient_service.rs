@@ -210,7 +210,10 @@ mod tests {
         let domain_service = Arc::new(PatientService::new(repo));
         let ui_service = PatientUiService::new(domain_service);
 
-        let result = ui_service.get_patient(patient_id).await.expect("should succeed");
+        let result = ui_service
+            .get_patient(patient_id)
+            .await
+            .expect("should succeed");
 
         assert_eq!(result.id, patient_id);
         assert_eq!(result.first_name, "John");
@@ -255,7 +258,10 @@ mod tests {
         assert!(not_found_err.to_string().contains(&id.to_string()));
 
         let validation_err = UiServiceError::Validation("invalid email".to_string());
-        assert_eq!(validation_err.to_string(), "Validation error: invalid email");
+        assert_eq!(
+            validation_err.to_string(),
+            "Validation error: invalid email"
+        );
 
         let repo_err = UiServiceError::Repository("connection failed".to_string());
         assert_eq!(repo_err.to_string(), "Repository error: connection failed");

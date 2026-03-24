@@ -73,7 +73,6 @@ impl AppointmentFormField {
     }
 
     pub fn label(&self) -> &'static str {
-        
         (*self).into()
     }
 
@@ -680,11 +679,12 @@ impl AppointmentForm {
         }
 
         if self.focused_field == AppointmentFormField::Date
-            && matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
-                let current_value = parse_date(&self.date.value());
-                self.date_picker.open(current_value);
-                return Some(AppointmentFormAction::FocusChanged);
-            }
+            && matches!(key.code, KeyCode::Enter | KeyCode::Char(' '))
+        {
+            let current_value = parse_date(&self.date.value());
+            self.date_picker.open(current_value);
+            return Some(AppointmentFormAction::FocusChanged);
+        }
 
         // Time picker handling
         if self.time_picker.is_visible() {
@@ -706,20 +706,21 @@ impl AppointmentForm {
         }
 
         if self.focused_field == AppointmentFormField::StartTime
-            && matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
-                // Need practitioner_id, date, and duration to open time picker
-                if let (Some(practitioner_id), Some(date), Ok(duration)) = (
-                    self.data.practitioner_id,
-                    parse_date(&self.date.value()),
-                    self.data.duration.parse::<u32>(),
-                ) {
-                    return Some(AppointmentFormAction::OpenTimePicker {
-                        practitioner_id,
-                        date,
-                        duration,
-                    });
-                }
+            && matches!(key.code, KeyCode::Enter | KeyCode::Char(' '))
+        {
+            // Need practitioner_id, date, and duration to open time picker
+            if let (Some(practitioner_id), Some(date), Ok(duration)) = (
+                self.data.practitioner_id,
+                parse_date(&self.date.value()),
+                self.data.duration.parse::<u32>(),
+            ) {
+                return Some(AppointmentFormAction::OpenTimePicker {
+                    practitioner_id,
+                    date,
+                    duration,
+                });
             }
+        }
 
         // Ctrl+S submits the form from any field
         if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
@@ -1027,27 +1028,26 @@ impl Widget for AppointmentForm {
                 continue;
             }
 
-            if y >= inner.y as i32 && y < max_y
-                && !field.is_dropdown() {
-                    let label_style = if is_focused {
-                        Style::default()
-                            .fg(self.theme.colors.primary)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(self.theme.colors.foreground)
-                    };
+            if y >= inner.y as i32 && y < max_y && !field.is_dropdown() {
+                let label_style = if is_focused {
+                    Style::default()
+                        .fg(self.theme.colors.primary)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(self.theme.colors.foreground)
+                };
 
-                    buf.set_string(inner.x + 1, y as u16, field.label(), label_style);
+                buf.set_string(inner.x + 1, y as u16, field.label(), label_style);
 
-                    if is_focused {
-                        buf.set_string(
-                            field_start - 1,
-                            y as u16,
-                            ">",
-                            Style::default().fg(self.theme.colors.primary),
-                        );
-                    }
+                if is_focused {
+                    buf.set_string(
+                        field_start - 1,
+                        y as u16,
+                        ">",
+                        Style::default().fg(self.theme.colors.primary),
+                    );
                 }
+            }
 
             if field == AppointmentFormField::AppointmentType {
                 if y >= inner.y as i32 && y < max_y {

@@ -44,7 +44,6 @@ impl FamilyHistoryFormField {
     }
 
     pub fn label(&self) -> &'static str {
-        
         (*self).into()
     }
 

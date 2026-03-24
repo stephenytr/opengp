@@ -57,15 +57,14 @@ impl WorkingHoursRepository for SqlxWorkingHoursRepository {
         &self,
         practitioner_id: Uuid,
     ) -> Result<Vec<WorkingHours>, RepositoryError> {
-        let rows =
-            sqlx::query_as::<_, WorkingHoursRow>(&format!(
-                "{}WHERE practitioner_id = $1 ORDER BY day_of_week",
-                WORKING_HOURS_SELECT_QUERY
-            ))
-            .bind(practitioner_id)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| RepositoryError::Database(e.to_string()))?;
+        let rows = sqlx::query_as::<_, WorkingHoursRow>(&format!(
+            "{}WHERE practitioner_id = $1 ORDER BY day_of_week",
+            WORKING_HOURS_SELECT_QUERY
+        ))
+        .bind(practitioner_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
 
         rows.into_iter().map(|r| r.into_working_hours()).collect()
     }
@@ -77,16 +76,15 @@ impl WorkingHoursRepository for SqlxWorkingHoursRepository {
     ) -> Result<Option<WorkingHours>, RepositoryError> {
         let day_of_week_i64 = day_of_week as i64;
 
-        let row =
-            sqlx::query_as::<_, WorkingHoursRow>(&format!(
-                "{}WHERE practitioner_id = $1 AND day_of_week = $2",
-                WORKING_HOURS_SELECT_QUERY
-            ))
-            .bind(practitioner_id)
-            .bind(day_of_week_i64)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| RepositoryError::Database(e.to_string()))?;
+        let row = sqlx::query_as::<_, WorkingHoursRow>(&format!(
+            "{}WHERE practitioner_id = $1 AND day_of_week = $2",
+            WORKING_HOURS_SELECT_QUERY
+        ))
+        .bind(practitioner_id)
+        .bind(day_of_week_i64)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
 
         match row {
             Some(r) => Ok(Some(r.into_working_hours()?)),

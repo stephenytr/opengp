@@ -56,7 +56,9 @@ impl ApiState {
             .test_before_acquire(false)
             .connect_with(connect_options)
             .await
-            .map_err(|e| ApiError::Configuration(format!("Failed to initialize database pool: {e}")))?;
+            .map_err(|e| {
+                ApiError::Configuration(format!("Failed to initialize database pool: {e}"))
+            })?;
 
         crate::migrations::run_migrations(&pool).await?;
 

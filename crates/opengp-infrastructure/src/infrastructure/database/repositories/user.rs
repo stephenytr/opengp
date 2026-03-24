@@ -3,9 +3,7 @@ use chrono::Utc;
 use sqlx::{postgres::PgPool, FromRow};
 use uuid::Uuid;
 
-use crate::infrastructure::database::helpers::{
-    datetime_to_string, string_to_datetime,
-};
+use crate::infrastructure::database::helpers::{datetime_to_string, string_to_datetime};
 use crate::infrastructure::database::sqlx_to_user_error;
 use opengp_domain::domain::user::{Permission, RepositoryError, Role, User, UserRepository};
 
@@ -85,14 +83,11 @@ impl SqlxUserRepository {
 #[async_trait]
 impl UserRepository for SqlxUserRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, RepositoryError> {
-        let row = sqlx::query_as::<_, UserRow>(&format!(
-            "{}WHERE id = $1",
-            USER_SELECT_QUERY
-        ))
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(sqlx_to_user_error)?;
+        let row = sqlx::query_as::<_, UserRow>(&format!("{}WHERE id = $1", USER_SELECT_QUERY))
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(sqlx_to_user_error)?;
 
         match row {
             Some(r) => Ok(Some(r.into_user()?)),
@@ -101,14 +96,12 @@ impl UserRepository for SqlxUserRepository {
     }
 
     async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepositoryError> {
-        let row = sqlx::query_as::<_, UserRow>(&format!(
-            "{}WHERE username = $1",
-            USER_SELECT_QUERY
-        ))
-        .bind(username)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(sqlx_to_user_error)?;
+        let row =
+            sqlx::query_as::<_, UserRow>(&format!("{}WHERE username = $1", USER_SELECT_QUERY))
+                .bind(username)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(sqlx_to_user_error)?;
 
         match row {
             Some(r) => Ok(Some(r.into_user()?)),

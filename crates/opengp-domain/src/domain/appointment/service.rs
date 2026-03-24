@@ -862,7 +862,9 @@ impl AvailabilityService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::appointment::{AppointmentType, RepositoryError as AppointmentRepositoryError};
+    use crate::domain::appointment::{
+        AppointmentType, RepositoryError as AppointmentRepositoryError,
+    };
     use crate::domain::audit::AuditEmitterError;
     use crate::domain::user::RepositoryError as UserRepositoryError;
     use async_trait::async_trait;

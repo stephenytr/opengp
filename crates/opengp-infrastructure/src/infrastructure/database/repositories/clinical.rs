@@ -201,11 +201,12 @@ impl ConsultationRepository for SqlxClinicalRepository {
     }
 
     async fn update(&self, consultation: Consultation) -> Result<Consultation, RepositoryError> {
-        let current_version = sqlx::query_scalar::<_, i32>("SELECT version FROM consultations WHERE id = $1")
-        .bind(consultation.id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(sqlx_to_clinical_error)?;
+        let current_version =
+            sqlx::query_scalar::<_, i32>("SELECT version FROM consultations WHERE id = $1")
+                .bind(consultation.id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(sqlx_to_clinical_error)?;
 
         let current_version = match current_version {
             Some(version) => version,
@@ -615,7 +616,7 @@ impl AllergyRepository for SqlxAllergyRepository {
             .as_ref()
             .map(|n| self.crypto.encrypt(n))
             .transpose()
-        .map_err(|e| {
+            .map_err(|e| {
                 RepositoryError::Encryption(format!("Failed to encrypt allergy notes: {}", e))
             })?;
 
@@ -655,7 +656,7 @@ impl AllergyRepository for SqlxAllergyRepository {
             .as_ref()
             .map(|n| self.crypto.encrypt(n))
             .transpose()
-        .map_err(|e| {
+            .map_err(|e| {
                 RepositoryError::Encryption(format!("Failed to encrypt allergy notes: {}", e))
             })?;
 
@@ -681,11 +682,11 @@ impl AllergyRepository for SqlxAllergyRepository {
         let updated_at = Utc::now();
 
         sqlx::query("UPDATE allergies SET is_active = FALSE, updated_at = $1 WHERE id = $2")
-        .bind(updated_at)
-        .bind(id)
-        .execute(&self.pool)
-        .await
-        .map_err(sqlx_to_clinical_error)?;
+            .bind(updated_at)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(sqlx_to_clinical_error)?;
 
         Ok(())
     }
@@ -1142,10 +1143,10 @@ impl FamilyHistoryRepository for SqlxFamilyHistoryRepository {
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
         sqlx::query("DELETE FROM family_history WHERE id = $1")
-        .bind(id)
-        .execute(&self.pool)
-        .await
-        .map_err(sqlx_to_clinical_error)?;
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(sqlx_to_clinical_error)?;
 
         Ok(())
     }

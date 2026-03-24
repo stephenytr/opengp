@@ -961,11 +961,12 @@ impl PatientForm {
         }
 
         if self.focused_field == FormField::DateOfBirth
-            && matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
-                let current_value = parse_date(&self.date_of_birth.value());
-                self.date_picker.open(current_value);
-                return Some(PatientFormAction::FocusChanged);
-            }
+            && matches!(key.code, KeyCode::Enter | KeyCode::Char(' '))
+        {
+            let current_value = parse_date(&self.date_of_birth.value());
+            self.date_picker.open(current_value);
+            return Some(PatientFormAction::FocusChanged);
+        }
 
         if let Some(dropdown_action) = self.handle_dropdown_key(key) {
             return dropdown_action;

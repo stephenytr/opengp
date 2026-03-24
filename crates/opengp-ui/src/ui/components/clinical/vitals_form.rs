@@ -55,7 +55,6 @@ impl VitalSignsFormField {
     }
 
     pub fn label(&self) -> &'static str {
-        
         (*self).into()
     }
 

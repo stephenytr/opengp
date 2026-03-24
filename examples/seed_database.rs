@@ -54,7 +54,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Configuration:");
     println!("  • Patient count: {}", patient_count);
-    println!("  • Clear before seed: {}\n", if clear_first { "Yes" } else { "No" });
+    println!(
+        "  • Clear before seed: {}\n",
+        if clear_first { "Yes" } else { "No" }
+    );
 
     let gen_config = PatientGeneratorConfig {
         count: patient_count,
@@ -108,7 +111,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Err(e) => {
                 error_count += 1;
-                println!("\n  ✗ Error inserting patient {}: {}", patient.first_name, e);
+                println!(
+                    "\n  ✗ Error inserting patient {}: {}",
+                    patient.first_name, e
+                );
             }
         }
     }

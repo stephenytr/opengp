@@ -11,12 +11,12 @@ use chrono::{DateTime, Duration, Utc};
 use opengp_domain::domain::api::{
     ApiErrorResponse, AppointmentResponse, ConsultationResponse, PaginatedResponse, PatientResponse,
 };
-#[cfg(test)]
-use uuid::Uuid;
 use serde::{Deserialize, Serialize};
 use tower::ServiceBuilder;
 use tower_http::compression::CompressionLayer;
 use tower_http::trace::TraceLayer;
+#[cfg(test)]
+use uuid::Uuid;
 
 use crate::ApiState;
 
@@ -28,12 +28,7 @@ mod patients;
 mod practitioners;
 
 use self::{
-    appointments::*,
-    auth::*,
-    consultations::*,
-    middleware::*,
-    patients::*,
-    practitioners::*,
+    appointments::*, auth::*, consultations::*, middleware::*, patients::*, practitioners::*,
 };
 
 pub fn router(state: ApiState) -> Router {
@@ -69,7 +64,10 @@ pub fn router(state: ApiState) -> Router {
             get(get_social_history).put(update_social_history),
         )
         .route("/{id}/vitals", get(list_vitals).post(create_vitals))
-        .route("/{id}/allergies/{allergy_id}", axum::routing::delete(delete_allergy))
+        .route(
+            "/{id}/allergies/{allergy_id}",
+            axum::routing::delete(delete_allergy),
+        )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             session_validation_middleware,
@@ -122,7 +120,6 @@ pub fn router(state: ApiState) -> Router {
         )
 }
 
-
 async fn health(State(state): State<ApiState>) -> impl IntoResponse {
     // Test database connectivity with timeout
     let db_connected =
@@ -149,7 +146,6 @@ async fn health(State(state): State<ApiState>) -> impl IntoResponse {
     (status_code, Json(response))
 }
 
-
 async fn metrics(State(state): State<ApiState>) -> impl IntoResponse {
     let response = MetricsResponse {
         active_sessions: state
@@ -169,7 +165,6 @@ async fn metrics(State(state): State<ApiState>) -> impl IntoResponse {
     (StatusCode::OK, Json(response))
 }
 
-
 #[derive(Serialize, Deserialize)]
 struct HealthResponse {
     status: String,
@@ -177,14 +172,12 @@ struct HealthResponse {
     uptime_seconds: u64,
 }
 
-
 #[derive(Serialize, Deserialize)]
 struct MetricsResponse {
     active_sessions: u64,
     request_count: u64,
     error_count: u64,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -572,7 +565,10 @@ mod tests {
     #[test]
     fn session_token_extraction_supports_cookie_as_header_alternative() {
         let mut headers = HeaderMap::new();
-        headers.insert(header::COOKIE, HeaderValue::from_static("theme=dark; session_token=abc123"));
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_static("theme=dark; session_token=abc123"),
+        );
 
         let token = extract_session_token(&headers);
         assert_eq!(token.as_deref(), Some("abc123"));
@@ -1662,15 +1658,21 @@ mod tests {
             .collect();
 
         assert_eq!(patient_entries.len(), 3);
-        assert!(patient_entries.iter().any(|entry| entry.action == AuditAction::Created));
-        assert!(patient_entries.iter().any(|entry| entry.action == AuditAction::Updated));
-        assert!(
-            patient_entries
-                .iter()
-                .any(|entry| matches!(entry.action, AuditAction::Cancelled { .. }))
-        );
-        assert!(patient_entries.iter().all(|entry| entry.changed_by == user_id));
-        assert!(patient_entries.iter().all(|entry| entry.changed_at <= Utc::now()));
+        assert!(patient_entries
+            .iter()
+            .any(|entry| entry.action == AuditAction::Created));
+        assert!(patient_entries
+            .iter()
+            .any(|entry| entry.action == AuditAction::Updated));
+        assert!(patient_entries
+            .iter()
+            .any(|entry| matches!(entry.action, AuditAction::Cancelled { .. })));
+        assert!(patient_entries
+            .iter()
+            .all(|entry| entry.changed_by == user_id));
+        assert!(patient_entries
+            .iter()
+            .all(|entry| entry.changed_at <= Utc::now()));
     }
 
     #[tokio::test]
@@ -1698,7 +1700,10 @@ mod tests {
                     .uri("/api/v1/appointments")
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
                     .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(sample_appointment_payload(start_time, practitioner_id)))
+                    .body(Body::from(sample_appointment_payload(
+                        start_time,
+                        practitioner_id,
+                    )))
                     .expect("request should be valid"),
             )
             .await
@@ -1752,23 +1757,21 @@ mod tests {
             .collect();
 
         assert_eq!(appointment_entries.len(), 3);
-        assert!(
-            appointment_entries
-                .iter()
-                .any(|entry| entry.action == AuditAction::Created)
-        );
-        assert!(
-            appointment_entries
-                .iter()
-                .any(|entry| entry.action == AuditAction::Updated)
-        );
-        assert!(
-            appointment_entries
-                .iter()
-                .any(|entry| matches!(entry.action, AuditAction::Cancelled { .. }))
-        );
-        assert!(appointment_entries.iter().all(|entry| entry.changed_by == user_id));
-        assert!(appointment_entries.iter().all(|entry| entry.changed_at <= Utc::now()));
+        assert!(appointment_entries
+            .iter()
+            .any(|entry| entry.action == AuditAction::Created));
+        assert!(appointment_entries
+            .iter()
+            .any(|entry| entry.action == AuditAction::Updated));
+        assert!(appointment_entries
+            .iter()
+            .any(|entry| matches!(entry.action, AuditAction::Cancelled { .. })));
+        assert!(appointment_entries
+            .iter()
+            .all(|entry| entry.changed_by == user_id));
+        assert!(appointment_entries
+            .iter()
+            .all(|entry| entry.changed_at <= Utc::now()));
     }
 
     #[tokio::test]
@@ -1803,7 +1806,8 @@ mod tests {
         let patient_body = axum::body::to_bytes(create_patient.into_body(), usize::MAX)
             .await
             .expect("body should be readable");
-        let patient: PatientResponse = serde_json::from_slice(&patient_body).expect("valid patient");
+        let patient: PatientResponse =
+            serde_json::from_slice(&patient_body).expect("valid patient");
 
         let practitioner_id = Uuid::new_v4();
         let create_response = app
@@ -1856,18 +1860,18 @@ mod tests {
             .collect();
 
         assert_eq!(consultation_entries.len(), 2);
-        assert!(
-            consultation_entries
-                .iter()
-                .any(|entry| entry.action == AuditAction::Created)
-        );
-        assert!(
-            consultation_entries
-                .iter()
-                .any(|entry| entry.action == AuditAction::Updated)
-        );
-        assert!(consultation_entries.iter().all(|entry| entry.changed_by == user_id));
-        assert!(consultation_entries.iter().all(|entry| entry.changed_at <= Utc::now()));
+        assert!(consultation_entries
+            .iter()
+            .any(|entry| entry.action == AuditAction::Created));
+        assert!(consultation_entries
+            .iter()
+            .any(|entry| entry.action == AuditAction::Updated));
+        assert!(consultation_entries
+            .iter()
+            .all(|entry| entry.changed_by == user_id));
+        assert!(consultation_entries
+            .iter()
+            .all(|entry| entry.changed_at <= Utc::now()));
     }
 
     #[tokio::test]
@@ -1965,7 +1969,9 @@ mod tests {
     #[async_trait]
     impl AuditEmitter for FailingAuditEmitter {
         async fn emit(&self, _entry: AuditEntry) -> Result<(), AuditEmitterError> {
-            Err(AuditEmitterError::Emit("intentional test failure".to_string()))
+            Err(AuditEmitterError::Emit(
+                "intentional test failure".to_string(),
+            ))
         }
     }
 

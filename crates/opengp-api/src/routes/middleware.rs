@@ -11,16 +11,18 @@ use opengp_domain::domain::api::{
     SocialHistoryRequest, SocialHistoryResponse, VitalSignsRequest, VitalSignsResponse,
 };
 use opengp_domain::domain::appointment::{
-    AppointmentStatus, AppointmentType, NewAppointmentData, ServiceError as AppointmentServiceError,
-    UpdateAppointmentData,
+    AppointmentStatus, AppointmentType, NewAppointmentData,
+    ServiceError as AppointmentServiceError, UpdateAppointmentData,
 };
 use opengp_domain::domain::audit::AuditEntry;
 use opengp_domain::domain::clinical::{
-    AlcoholStatus, AllergyType, ConditionStatus, ExerciseFrequency, NewAllergyData, NewConsultationData,
-    NewFamilyHistoryData, NewMedicalHistoryData, NewVitalSignsData, ServiceError as ClinicalServiceError,
-    Severity, SmokingStatus, UpdateSocialHistoryData,
+    AlcoholStatus, AllergyType, ConditionStatus, ExerciseFrequency, NewAllergyData,
+    NewConsultationData, NewFamilyHistoryData, NewMedicalHistoryData, NewVitalSignsData,
+    ServiceError as ClinicalServiceError, Severity, SmokingStatus, UpdateSocialHistoryData,
 };
-use opengp_domain::domain::patient::{Address, Gender, NewPatientData, ServiceError as PatientServiceError, UpdatePatientData};
+use opengp_domain::domain::patient::{
+    Address, Gender, NewPatientData, ServiceError as PatientServiceError, UpdatePatientData,
+};
 use opengp_domain::domain::user::Role;
 use serde::Deserialize;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -37,8 +39,10 @@ pub(super) fn emit_audit_event_non_blocking(
     });
 }
 
-
-pub(super) fn unauthorized_response(code: &str, message: &str) -> (StatusCode, Json<ApiErrorResponse>) {
+pub(super) fn unauthorized_response(
+    code: &str,
+    message: &str,
+) -> (StatusCode, Json<ApiErrorResponse>) {
     (
         StatusCode::UNAUTHORIZED,
         Json(ApiErrorResponse {
@@ -49,8 +53,10 @@ pub(super) fn unauthorized_response(code: &str, message: &str) -> (StatusCode, J
     )
 }
 
-
-pub(super) fn forbidden_response(code: &str, message: &str) -> (StatusCode, Json<ApiErrorResponse>) {
+pub(super) fn forbidden_response(
+    code: &str,
+    message: &str,
+) -> (StatusCode, Json<ApiErrorResponse>) {
     (
         StatusCode::FORBIDDEN,
         Json(ApiErrorResponse {
@@ -61,8 +67,10 @@ pub(super) fn forbidden_response(code: &str, message: &str) -> (StatusCode, Json
     )
 }
 
-
-pub(super) fn bad_request_response(code: &str, message: &str) -> (StatusCode, Json<ApiErrorResponse>) {
+pub(super) fn bad_request_response(
+    code: &str,
+    message: &str,
+) -> (StatusCode, Json<ApiErrorResponse>) {
     (
         StatusCode::BAD_REQUEST,
         Json(ApiErrorResponse {
@@ -73,8 +81,10 @@ pub(super) fn bad_request_response(code: &str, message: &str) -> (StatusCode, Js
     )
 }
 
-
-pub(super) fn not_found_response(code: &str, message: &str) -> (StatusCode, Json<ApiErrorResponse>) {
+pub(super) fn not_found_response(
+    code: &str,
+    message: &str,
+) -> (StatusCode, Json<ApiErrorResponse>) {
     (
         StatusCode::NOT_FOUND,
         Json(ApiErrorResponse {
@@ -84,7 +94,6 @@ pub(super) fn not_found_response(code: &str, message: &str) -> (StatusCode, Json
         }),
     )
 }
-
 
 pub(super) fn internal_server_error_response(
     code: &str,
@@ -100,8 +109,9 @@ pub(super) fn internal_server_error_response(
     )
 }
 
-
-pub(super) fn authorize_read(context: &AuthContext) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
+pub(super) fn authorize_read(
+    context: &AuthContext,
+) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
     if is_reader(context.role) {
         Ok(())
     } else {
@@ -112,8 +122,9 @@ pub(super) fn authorize_read(context: &AuthContext) -> Result<(), (StatusCode, J
     }
 }
 
-
-pub(super) fn authorize_write(context: &AuthContext) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
+pub(super) fn authorize_write(
+    context: &AuthContext,
+) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
     if is_practitioner(context.role) {
         Ok(())
     } else {
@@ -123,7 +134,6 @@ pub(super) fn authorize_write(context: &AuthContext) -> Result<(), (StatusCode, 
         ))
     }
 }
-
 
 pub(super) fn authorize_practitioner_write(
     context: &AuthContext,
@@ -138,7 +148,6 @@ pub(super) fn authorize_practitioner_write(
     }
 }
 
-
 pub(super) fn authorize_practitioner_access(
     context: &AuthContext,
 ) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
@@ -152,7 +161,6 @@ pub(super) fn authorize_practitioner_access(
     }
 }
 
-
 pub(super) fn is_reader(role: Role) -> bool {
     matches!(
         role,
@@ -160,11 +168,9 @@ pub(super) fn is_reader(role: Role) -> bool {
     )
 }
 
-
 pub(super) fn is_practitioner(role: Role) -> bool {
     matches!(role, Role::Doctor | Role::Nurse)
 }
-
 
 pub(super) fn practitioner_specialty(role: Role) -> &'static str {
     match role {
@@ -173,7 +179,6 @@ pub(super) fn practitioner_specialty(role: Role) -> &'static str {
         _ => "General Practice",
     }
 }
-
 
 pub(super) fn patient_service_error_to_response(
     error: PatientServiceError,
@@ -196,7 +201,6 @@ pub(super) fn patient_service_error_to_response(
     }
 }
 
-
 pub(super) fn appointment_service_error_to_response(
     error: AppointmentServiceError,
 ) -> (StatusCode, Json<ApiErrorResponse>) {
@@ -209,7 +213,9 @@ pub(super) fn appointment_service_error_to_response(
         {
             conflict_response("appointment_conflict", "Overlapping appointment")
         }
-        AppointmentServiceError::Conflict(_) => optimistic_lock_conflict_response("appointment_conflict"),
+        AppointmentServiceError::Conflict(_) => {
+            optimistic_lock_conflict_response("appointment_conflict")
+        }
         AppointmentServiceError::ValidationError(_)
         | AppointmentServiceError::InvalidTransition(_) => {
             bad_request_response("validation_error", "Invalid appointment payload")
@@ -222,7 +228,6 @@ pub(super) fn appointment_service_error_to_response(
         }
     }
 }
-
 
 pub(super) fn clinical_service_error_to_response(
     error: ClinicalServiceError,
@@ -262,12 +267,12 @@ pub(super) fn clinical_service_error_to_response(
             "insufficient_permissions",
             "Role cannot access consultations",
         ),
-        ClinicalServiceError::Repository(_) => {
-            internal_server_error_response("internal_error", "Unable to process consultation request")
-        }
+        ClinicalServiceError::Repository(_) => internal_server_error_response(
+            "internal_error",
+            "Unable to process consultation request",
+        ),
     }
 }
-
 
 pub(super) fn conflict_response(code: &str, message: &str) -> (StatusCode, Json<ApiErrorResponse>) {
     (
@@ -280,14 +285,11 @@ pub(super) fn conflict_response(code: &str, message: &str) -> (StatusCode, Json<
     )
 }
 
-
-pub(super) fn optimistic_lock_conflict_response(code: &str) -> (StatusCode, Json<ApiErrorResponse>) {
-    conflict_response(
-        code,
-        "Resource was modified. Please refresh and try again.",
-    )
+pub(super) fn optimistic_lock_conflict_response(
+    code: &str,
+) -> (StatusCode, Json<ApiErrorResponse>) {
+    conflict_response(code, "Resource was modified. Please refresh and try again.")
 }
-
 
 pub(super) fn patient_request_to_new_data(
     payload: PatientRequest,
@@ -317,7 +319,6 @@ pub(super) fn patient_request_to_new_data(
     })
 }
 
-
 pub(super) fn patient_request_to_update_data(
     payload: PatientRequest,
 ) -> Result<UpdatePatientData, (StatusCode, Json<ApiErrorResponse>)> {
@@ -346,7 +347,6 @@ pub(super) fn patient_request_to_update_data(
     })
 }
 
-
 pub(super) fn appointment_request_to_new_data(
     payload: AppointmentRequest,
 ) -> Result<NewAppointmentData, (StatusCode, Json<ApiErrorResponse>)> {
@@ -367,7 +367,6 @@ pub(super) fn appointment_request_to_new_data(
         is_urgent: payload.is_urgent,
     })
 }
-
 
 pub(super) fn appointment_request_to_update_data(
     payload: AppointmentRequest,
@@ -395,8 +394,9 @@ pub(super) fn appointment_request_to_update_data(
     })
 }
 
-
-pub(super) fn consultation_request_to_new_data(payload: ConsultationRequest) -> NewConsultationData {
+pub(super) fn consultation_request_to_new_data(
+    payload: ConsultationRequest,
+) -> NewConsultationData {
     NewConsultationData {
         patient_id: payload.patient_id,
         practitioner_id: payload.practitioner_id,
@@ -405,7 +405,6 @@ pub(super) fn consultation_request_to_new_data(payload: ConsultationRequest) -> 
         clinical_notes: payload.clinical_notes,
     }
 }
-
 
 pub(super) fn allergy_request_to_new_data(
     patient_id: Uuid,
@@ -421,7 +420,6 @@ pub(super) fn allergy_request_to_new_data(
         notes: payload.notes,
     })
 }
-
 
 pub(super) fn medical_history_request_to_new_data(
     patient_id: Uuid,
@@ -441,7 +439,6 @@ pub(super) fn medical_history_request_to_new_data(
     })
 }
 
-
 pub(super) fn family_history_request_to_new_data(
     patient_id: Uuid,
     payload: FamilyHistoryRequest,
@@ -454,7 +451,6 @@ pub(super) fn family_history_request_to_new_data(
         notes: payload.notes,
     }
 }
-
 
 pub(super) fn vital_signs_request_to_new_data(
     patient_id: Uuid,
@@ -474,7 +470,6 @@ pub(super) fn vital_signs_request_to_new_data(
         notes: payload.notes,
     }
 }
-
 
 pub(super) fn social_history_request_to_update_data(
     payload: SocialHistoryRequest,
@@ -497,7 +492,6 @@ pub(super) fn social_history_request_to_update_data(
     })
 }
 
-
 pub(super) fn validate_appointment_booking_time(
     start_time: DateTime<Utc>,
 ) -> Result<(), (StatusCode, Json<ApiErrorResponse>)> {
@@ -511,7 +505,6 @@ pub(super) fn validate_appointment_booking_time(
     Ok(())
 }
 
-
 pub(super) fn parse_gender(gender: &str) -> Result<Gender, (StatusCode, Json<ApiErrorResponse>)> {
     match gender.trim().to_ascii_lowercase().as_str() {
         "male" => Ok(Gender::Male),
@@ -524,7 +517,6 @@ pub(super) fn parse_gender(gender: &str) -> Result<Gender, (StatusCode, Json<Api
         )),
     }
 }
-
 
 pub(super) fn parse_appointment_type(
     appointment_type: &str,
@@ -552,7 +544,6 @@ pub(super) fn parse_appointment_type(
     }
 }
 
-
 pub(super) fn parse_allergy_type(
     allergy_type: &str,
 ) -> Result<AllergyType, (StatusCode, Json<ApiErrorResponse>)> {
@@ -568,8 +559,9 @@ pub(super) fn parse_allergy_type(
     }
 }
 
-
-pub(super) fn parse_severity(severity: &str) -> Result<Severity, (StatusCode, Json<ApiErrorResponse>)> {
+pub(super) fn parse_severity(
+    severity: &str,
+) -> Result<Severity, (StatusCode, Json<ApiErrorResponse>)> {
     match severity.trim().to_ascii_lowercase().as_str() {
         "mild" => Ok(Severity::Mild),
         "moderate" => Ok(Severity::Moderate),
@@ -580,7 +572,6 @@ pub(super) fn parse_severity(severity: &str) -> Result<Severity, (StatusCode, Js
         )),
     }
 }
-
 
 pub(super) fn parse_condition_status(
     condition_status: &str,
@@ -598,7 +589,6 @@ pub(super) fn parse_condition_status(
     }
 }
 
-
 pub(super) fn parse_smoking_status(
     smoking_status: &str,
 ) -> Result<SmokingStatus, (StatusCode, Json<ApiErrorResponse>)> {
@@ -612,7 +602,6 @@ pub(super) fn parse_smoking_status(
         )),
     }
 }
-
 
 pub(super) fn parse_alcohol_status(
     alcohol_status: &str,
@@ -628,7 +617,6 @@ pub(super) fn parse_alcohol_status(
         )),
     }
 }
-
 
 pub(super) fn parse_exercise_frequency(
     exercise_frequency: &str,
@@ -648,7 +636,6 @@ pub(super) fn parse_exercise_frequency(
     }
 }
 
-
 pub(super) fn appointment_type_to_string(appointment_type: AppointmentType) -> &'static str {
     match appointment_type {
         AppointmentType::Standard => "standard",
@@ -667,7 +654,6 @@ pub(super) fn appointment_type_to_string(appointment_type: AppointmentType) -> &
     }
 }
 
-
 pub(super) fn allergy_type_to_string(allergy_type: AllergyType) -> &'static str {
     match allergy_type {
         AllergyType::Drug => "drug",
@@ -677,7 +663,6 @@ pub(super) fn allergy_type_to_string(allergy_type: AllergyType) -> &'static str 
     }
 }
 
-
 pub(super) fn severity_to_string(severity: Severity) -> &'static str {
     match severity {
         Severity::Mild => "mild",
@@ -685,7 +670,6 @@ pub(super) fn severity_to_string(severity: Severity) -> &'static str {
         Severity::Severe => "severe",
     }
 }
-
 
 pub(super) fn condition_status_to_string(condition_status: ConditionStatus) -> &'static str {
     match condition_status {
@@ -697,7 +681,6 @@ pub(super) fn condition_status_to_string(condition_status: ConditionStatus) -> &
     }
 }
 
-
 pub(super) fn smoking_status_to_string(smoking_status: SmokingStatus) -> &'static str {
     match smoking_status {
         SmokingStatus::NeverSmoked => "never_smoked",
@@ -705,7 +688,6 @@ pub(super) fn smoking_status_to_string(smoking_status: SmokingStatus) -> &'stati
         SmokingStatus::ExSmoker => "ex_smoker",
     }
 }
-
 
 pub(super) fn alcohol_status_to_string(alcohol_status: AlcoholStatus) -> &'static str {
     match alcohol_status {
@@ -716,7 +698,6 @@ pub(super) fn alcohol_status_to_string(alcohol_status: AlcoholStatus) -> &'stati
     }
 }
 
-
 pub(super) fn exercise_frequency_to_string(exercise_frequency: ExerciseFrequency) -> &'static str {
     match exercise_frequency {
         ExerciseFrequency::None => "none",
@@ -726,7 +707,6 @@ pub(super) fn exercise_frequency_to_string(exercise_frequency: ExerciseFrequency
         ExerciseFrequency::Daily => "daily",
     }
 }
-
 
 pub(super) fn appointment_status_to_string(status: AppointmentStatus) -> &'static str {
     match status {
@@ -741,8 +721,9 @@ pub(super) fn appointment_status_to_string(status: AppointmentStatus) -> &'stati
     }
 }
 
-
-pub(super) fn patient_to_response(patient: opengp_domain::domain::patient::Patient) -> PatientResponse {
+pub(super) fn patient_to_response(
+    patient: opengp_domain::domain::patient::Patient,
+) -> PatientResponse {
     PatientResponse {
         id: patient.id,
         first_name: patient.first_name,
@@ -755,7 +736,6 @@ pub(super) fn patient_to_response(patient: opengp_domain::domain::patient::Patie
         version: patient.version,
     }
 }
-
 
 pub(super) fn appointment_to_response(
     appointment: opengp_domain::domain::appointment::Appointment,
@@ -774,7 +754,6 @@ pub(super) fn appointment_to_response(
     }
 }
 
-
 pub(super) fn consultation_to_response(
     consultation: opengp_domain::domain::clinical::Consultation,
 ) -> ConsultationResponse {
@@ -791,8 +770,9 @@ pub(super) fn consultation_to_response(
     }
 }
 
-
-pub(super) fn allergy_to_response(allergy: opengp_domain::domain::clinical::Allergy) -> AllergyResponse {
+pub(super) fn allergy_to_response(
+    allergy: opengp_domain::domain::clinical::Allergy,
+) -> AllergyResponse {
     AllergyResponse {
         id: allergy.id,
         patient_id: allergy.patient_id,
@@ -805,7 +785,6 @@ pub(super) fn allergy_to_response(allergy: opengp_domain::domain::clinical::Alle
         is_active: allergy.is_active,
     }
 }
-
 
 pub(super) fn medical_history_to_response(
     history: opengp_domain::domain::clinical::MedicalHistory,
@@ -824,7 +803,6 @@ pub(super) fn medical_history_to_response(
     }
 }
 
-
 pub(super) fn family_history_to_response(
     history: opengp_domain::domain::clinical::FamilyHistory,
 ) -> FamilyHistoryResponse {
@@ -839,7 +817,6 @@ pub(super) fn family_history_to_response(
         created_by: history.created_by,
     }
 }
-
 
 pub(super) fn social_history_to_response(
     history: opengp_domain::domain::clinical::SocialHistory,
@@ -864,8 +841,9 @@ pub(super) fn social_history_to_response(
     }
 }
 
-
-pub(super) fn vital_signs_to_response(vitals: opengp_domain::domain::clinical::VitalSigns) -> VitalSignsResponse {
+pub(super) fn vital_signs_to_response(
+    vitals: opengp_domain::domain::clinical::VitalSigns,
+) -> VitalSignsResponse {
     VitalSignsResponse {
         id: vitals.id,
         patient_id: vitals.patient_id,
@@ -883,7 +861,6 @@ pub(super) fn vital_signs_to_response(vitals: opengp_domain::domain::clinical::V
         notes: vitals.notes,
     }
 }
-
 
 pub(super) fn cors_layer() -> CorsLayer {
     CorsLayer::new()
@@ -907,7 +884,6 @@ pub(super) fn cors_layer() -> CorsLayer {
         }))
 }
 
-
 pub(super) fn is_allowed_origin(origin: &HeaderValue) -> bool {
     let origin = match origin.to_str() {
         Ok(v) => v,
@@ -927,7 +903,6 @@ pub(super) fn is_allowed_origin(origin: &HeaderValue) -> bool {
     host == "localhost" || host == "127.0.0.1" || host.starts_with("192.168.")
 }
 
-
 #[derive(Debug, Clone)]
 pub(super) struct AuthContext {
     #[allow(dead_code)]
@@ -936,13 +911,11 @@ pub(super) struct AuthContext {
     pub(super) role: Role,
 }
 
-
 #[derive(Debug, Deserialize)]
 pub(super) struct PaginationQuery {
     pub(super) page: Option<u32>,
     pub(super) limit: Option<u32>,
 }
-
 
 #[derive(Debug, Deserialize)]
 pub(super) struct AppointmentListQuery {
@@ -955,7 +928,6 @@ pub(super) struct AppointmentListQuery {
     pub(super) practitioner_id: Option<Uuid>,
 }
 
-
 #[derive(Debug, Deserialize)]
 pub(super) struct AppointmentAvailabilityQuery {
     pub(super) practitioner_id: Uuid,
@@ -963,12 +935,10 @@ pub(super) struct AppointmentAvailabilityQuery {
     pub(super) duration: i64,
 }
 
-
 #[derive(Debug, Deserialize)]
 pub(super) struct AppointmentStatusActionRequest {
     pub(super) action: String,
 }
-
 
 #[derive(Debug, Deserialize)]
 pub(super) struct ConsultationListQuery {

@@ -356,7 +356,8 @@ mod tests {
 
     #[test]
     fn test_ui_service_error_is_error() {
-        let err: Box<dyn std::error::Error> = Box::new(UiServiceError::Repository("test".to_string()));
+        let err: Box<dyn std::error::Error> =
+            Box::new(UiServiceError::Repository("test".to_string()));
         assert!(err.to_string().contains("Repository error"));
     }
 

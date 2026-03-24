@@ -1,11 +1,11 @@
 use axum::body::{to_bytes, Body};
 use axum::http::{header, Request, StatusCode};
 use chrono::Utc;
-use opengp_domain::user::PasswordHasher;
 use opengp_api::{router, ApiConfig, ApiState};
 use opengp_domain::domain::api::{
     ApiErrorResponse, LoginResponse, PaginatedResponse, PatientResponse,
 };
+use opengp_domain::user::PasswordHasher;
 use opengp_infrastructure::infrastructure::crypto::password::BcryptPasswordHasher;
 use sqlx::PgPool;
 use tower::util::ServiceExt;
@@ -48,7 +48,11 @@ async fn login(app: &axum::Router, username: &str, password: &str) -> LoginRespo
         .await
         .expect("login request should succeed");
 
-    assert_eq!(response.status(), StatusCode::OK, "login must succeed before booking");
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "login must succeed before booking"
+    );
     let body = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("login body should be readable");
@@ -208,7 +212,10 @@ async fn concurrent_booking_returns_conflict_for_second_writer() {
         .count();
 
     assert_eq!(created_count, 1, "exactly one booking should succeed");
-    assert_eq!(conflict_count, 1, "exactly one booking should return conflict");
+    assert_eq!(
+        conflict_count, 1,
+        "exactly one booking should return conflict"
+    );
 
     let conflict_response = if first_response.status() == StatusCode::CONFLICT {
         first_response

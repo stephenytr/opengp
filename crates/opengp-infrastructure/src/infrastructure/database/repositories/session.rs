@@ -137,14 +137,12 @@ impl SessionRepository for SqlxSessionRepository {
     }
 
     async fn find_by_token(&self, token: &str) -> Result<Option<Session>, RepositoryError> {
-        let row = sqlx::query_as::<_, SessionRow>(&format!(
-            "{}WHERE token = $1",
-            SESSION_SELECT_QUERY
-        ))
-        .bind(token)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+        let row =
+            sqlx::query_as::<_, SessionRow>(&format!("{}WHERE token = $1", SESSION_SELECT_QUERY))
+                .bind(token)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| RepositoryError::Database(e.to_string()))?;
 
         match row {
             Some(r) => Ok(Some(r.into_session()?)),
@@ -154,10 +152,10 @@ impl SessionRepository for SqlxSessionRepository {
 
     async fn delete_by_token(&self, token: &str) -> Result<(), RepositoryError> {
         let result = sqlx::query("DELETE FROM sessions WHERE token = $1")
-        .bind(token)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+            .bind(token)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             Err(RepositoryError::NotFound)
@@ -168,10 +166,10 @@ impl SessionRepository for SqlxSessionRepository {
 
     async fn cleanup_expired(&self, now: DateTime<Utc>) -> Result<u64, RepositoryError> {
         let result = sqlx::query("DELETE FROM sessions WHERE expires_at <= $1")
-        .bind(now)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+            .bind(now)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))?;
 
         Ok(result.rows_affected())
     }

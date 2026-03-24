@@ -39,21 +39,14 @@ async fn main() -> Result<()> {
         api_client.set_session_token(Some(token)).await;
     }
 
-    run_tui(
-        api_client,
-        config.calendar,
-    )
-    .await?;
+    run_tui(api_client, config.calendar).await?;
 
     tracing::info!("OpenGP shutdown complete");
 
     Ok(())
 }
 
-async fn run_tui(
-    api_client: Arc<ApiClient>,
-    calendar_config: CalendarConfig,
-) -> Result<()> {
+async fn run_tui(api_client: Arc<ApiClient>, calendar_config: CalendarConfig) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -62,10 +55,7 @@ async fn run_tui(
 
     let has_session_token = api_client.current_session_token().await.is_some();
 
-    let mut app = App::new(
-        Some(api_client.clone()),
-        calendar_config.clone(),
-    );
+    let mut app = App::new(Some(api_client.clone()), calendar_config.clone());
     app.set_authenticated(has_session_token);
     if has_session_token {
         app.request_refresh_patients();
@@ -254,12 +244,15 @@ async fn run_tui(
                         diagnosis_date: history.diagnosis_date,
                         status: conversions::condition_status_to_api_string(history.status)
                             .to_string(),
-                        severity: history
-                            .severity
-                            .map(|severity| conversions::severity_to_api_string(severity).to_string()),
+                        severity: history.severity.map(|severity| {
+                            conversions::severity_to_api_string(severity).to_string()
+                        }),
                         notes: history.notes,
                     };
-                    match api_client.create_medical_history(patient_id, &request).await {
+                    match api_client
+                        .create_medical_history(patient_id, &request)
+                        .await
+                    {
                         Ok(_) => {
                             tracing::info!("Saved medical history for patient {}", patient_id);
                             match api_client.get_medical_history(patient_id).await {
@@ -400,19 +393,17 @@ async fn run_tui(
                         smoking_status: conversions::smoking_status_to_api_string(
                             history.smoking_status,
                         )
-                            .to_string(),
+                        .to_string(),
                         cigarettes_per_day: history.cigarettes_per_day,
                         smoking_quit_date: history.smoking_quit_date,
                         alcohol_status: conversions::alcohol_status_to_api_string(
                             history.alcohol_status,
                         )
-                            .to_string(),
+                        .to_string(),
                         standard_drinks_per_week: history.standard_drinks_per_week,
-                        exercise_frequency: history
-                            .exercise_frequency
-                            .map(|frequency| {
-                                conversions::exercise_frequency_to_api_string(frequency).to_string()
-                            }),
+                        exercise_frequency: history.exercise_frequency.map(|frequency| {
+                            conversions::exercise_frequency_to_api_string(frequency).to_string()
+                        }),
                         occupation: history.occupation,
                         living_situation: history.living_situation,
                         support_network: history.support_network,
@@ -423,10 +414,9 @@ async fn run_tui(
                             tracing::info!("Saved social history for patient {}", patient_id);
                             match api_client.get_social_history(patient_id).await {
                                 Ok(sh) => {
-                                    app.clinical_state_mut().social_history =
-                                        Some(conversions::domain_social_history_from_api_response(
-                                            sh,
-                                        ))
+                                    app.clinical_state_mut().social_history = Some(
+                                        conversions::domain_social_history_from_api_response(sh),
+                                    )
                                 }
                                 Err(e) => {
                                     tracing::error!("Failed to reload social history: {}", e);
@@ -486,8 +476,9 @@ async fn run_tui(
 
             match api_client.get_social_history(patient_id).await {
                 Ok(history) => {
-                    app.clinical_state_mut().social_history =
-                        Some(conversions::domain_social_history_from_api_response(history));
+                    app.clinical_state_mut().social_history = Some(
+                        conversions::domain_social_history_from_api_response(history),
+                    );
                     tracing::info!("Loaded social history for clinical view");
                 }
                 Err(e) => tracing::error!("Failed to load social history: {}", e),
@@ -519,8 +510,12 @@ async fn run_tui(
                     }
                     Event::Mouse(mouse) => {
                         let terminal_size = terminal.size().unwrap_or_default();
-                        let terminal_rect =
-                            ratatui::layout::Rect::new(0, 0, terminal_size.width, terminal_size.height);
+                        let terminal_rect = ratatui::layout::Rect::new(
+                            0,
+                            0,
+                            terminal_size.width,
+                            terminal_size.height,
+                        );
                         app.handle_mouse_event(mouse, terminal_rect);
                     }
                     Event::Resize(_, _) => {}

@@ -4,9 +4,9 @@ use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use opengp_domain::domain::api::{
     AllergyRequest, AllergyResponse, ApiErrorResponse, AppointmentRequest, AppointmentResponse,
     ConsultationRequest, ConsultationResponse, FamilyHistoryRequest, FamilyHistoryResponse,
-    LoginRequest, LoginResponse, MedicalHistoryRequest, MedicalHistoryResponse,
-    PaginatedResponse, PatientRequest, PatientResponse, PractitionerResponse,
-    SocialHistoryRequest, SocialHistoryResponse, VitalSignsRequest, VitalSignsResponse,
+    LoginRequest, LoginResponse, MedicalHistoryRequest, MedicalHistoryResponse, PaginatedResponse,
+    PatientRequest, PatientResponse, PractitionerResponse, SocialHistoryRequest,
+    SocialHistoryResponse, VitalSignsRequest, VitalSignsResponse,
 };
 use reqwest::{Method, StatusCode};
 use tokio::sync::Mutex;
@@ -246,8 +246,7 @@ impl ApiClient {
         slot_strings
             .into_iter()
             .map(|slot| {
-                NaiveTime::parse_from_str(&slot, "%H:%M:%S")
-                    .map_err(|_| ApiClientError::Unexpected)
+                NaiveTime::parse_from_str(&slot, "%H:%M:%S").map_err(|_| ApiClientError::Unexpected)
             })
             .collect()
     }
@@ -293,7 +292,10 @@ impl ApiClient {
         patient_id: Uuid,
     ) -> Result<Vec<AllergyResponse>, ApiClientError> {
         let response = self
-            .authenticated_request(Method::GET, &format!("/api/v1/patients/{patient_id}/allergies"))
+            .authenticated_request(
+                Method::GET,
+                &format!("/api/v1/patients/{patient_id}/allergies"),
+            )
             .await?
             .send()
             .await
@@ -308,7 +310,10 @@ impl ApiClient {
         request: &AllergyRequest,
     ) -> Result<AllergyResponse, ApiClientError> {
         let response = self
-            .authenticated_request(Method::POST, &format!("/api/v1/patients/{patient_id}/allergies"))
+            .authenticated_request(
+                Method::POST,
+                &format!("/api/v1/patients/{patient_id}/allergies"),
+            )
             .await?
             .json(request)
             .send()
@@ -426,9 +431,15 @@ impl ApiClient {
         Self::parse_json_response(response).await
     }
 
-    pub async fn get_vitals(&self, patient_id: Uuid) -> Result<Vec<VitalSignsResponse>, ApiClientError> {
+    pub async fn get_vitals(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<Vec<VitalSignsResponse>, ApiClientError> {
         let response = self
-            .authenticated_request(Method::GET, &format!("/api/v1/patients/{patient_id}/vitals"))
+            .authenticated_request(
+                Method::GET,
+                &format!("/api/v1/patients/{patient_id}/vitals"),
+            )
             .await?
             .send()
             .await
@@ -443,7 +454,10 @@ impl ApiClient {
         request: &VitalSignsRequest,
     ) -> Result<VitalSignsResponse, ApiClientError> {
         let response = self
-            .authenticated_request(Method::POST, &format!("/api/v1/patients/{patient_id}/vitals"))
+            .authenticated_request(
+                Method::POST,
+                &format!("/api/v1/patients/{patient_id}/vitals"),
+            )
             .await?
             .json(request)
             .send()
@@ -545,8 +559,7 @@ impl ApiClient {
             "Cannot connect to server (DNS resolution failed)".to_string()
         } else if lower.contains("connection refused") {
             "Cannot connect to server (connection refused)".to_string()
-        } else if lower.contains("network is unreachable")
-            || lower.contains("host is unreachable")
+        } else if lower.contains("network is unreachable") || lower.contains("host is unreachable")
         {
             "Cannot connect to server (network unreachable)".to_string()
         } else {
@@ -1194,7 +1207,10 @@ mod tests {
         Path(_id): Path<Uuid>,
     ) -> (StatusCode, Json<Vec<MedicalHistoryResponse>>) {
         capture_header(state, headers).await;
-        (StatusCode::OK, Json(vec![sample_medical_history_response()]))
+        (
+            StatusCode::OK,
+            Json(vec![sample_medical_history_response()]),
+        )
     }
 
     async fn create_medical_history_handler(

@@ -83,6 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Running migrations from ./migrations ...");
     run_postgres_migrations(&pool).await?;
+    normalize_clinical_encrypted_columns(&pool).await?;
     println!("✓ Migrations complete\n");
 
     ensure_encryption_key();
@@ -103,7 +104,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         DEFAULT_MEDICAL_HISTORY_MAX
     );
     println!("  • Max allergies/patient: {}", DEFAULT_ALLERGIES_MAX);
-    println!("  • Active practitioners found: {}\n", practitioner_ids.len());
+    println!(
+        "  • Active practitioners found: {}\n",
+        practitioner_ids.len()
+    );
 
     let generator_config = ComprehensivePatientGeneratorConfig {
         patient_count: cli.patients,
@@ -181,7 +185,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 for consultation in &profile.consultations {
-                    if insert_consultation(&pool, &crypto, consultation).await.is_ok() {
+                    if insert_consultation(&pool, &crypto, consultation)
+                        .await
+                        .is_ok()
+                    {
                         stats.consultations_created += 1;
                     } else {
                         stats.record_failures += 1;
@@ -189,7 +196,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 for history in &profile.medical_history {
-                    if insert_medical_history(&pool, &crypto, history).await.is_ok() {
+                    if insert_medical_history(&pool, &crypto, history)
+                        .await
+                        .is_ok()
+                    {
                         stats.medical_history_created += 1;
                     } else {
                         stats.record_failures += 1;
@@ -231,9 +241,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ Patients created: {}", stats.patients_created);
     println!("  ✓ Appointments created: {}", stats.appointments_created);
     println!("  ✓ Consultations created: {}", stats.consultations_created);
-    println!("  ✓ Medical history entries: {}", stats.medical_history_created);
+    println!(
+        "  ✓ Medical history entries: {}",
+        stats.medical_history_created
+    );
     println!("  ✓ Allergies created: {}", stats.allergies_created);
-    println!("  ✓ Social history records: {}", stats.social_history_created);
+    println!(
+        "  ✓ Social history records: {}",
+        stats.social_history_created
+    );
     println!("  ✗ Patient insert failures: {}", stats.patient_failures);
     println!("  ✗ Related-record failures: {}", stats.record_failures);
     println!();
@@ -368,7 +384,7 @@ async fn run_postgres_migrations(pool: &PgPool) -> Result<(), Box<dyn std::error
 
         for statement in sql.split(';') {
             let stmt = statement.trim();
-            if stmt.is_empty() || stmt.starts_with("--") {
+            if stmt.is_empty() {
                 continue;
             }
 
@@ -394,7 +410,94 @@ async fn run_postgres_migrations(pool: &PgPool) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
-async fn insert_patient(pool: &PgPool, crypto: &EncryptionService, patient: &Patient, actor_id: Uuid) -> Result<(), sqlx::Error> {
+async fn normalize_clinical_encrypted_columns(
+    pool: &PgPool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    ensure_consultation_reason_column(pool).await?;
+    ensure_column_is_bytea(pool, "consultations", "clinical_notes").await?;
+    ensure_column_is_bytea(pool, "medical_history", "notes").await?;
+    ensure_column_is_bytea(pool, "allergies", "reaction").await?;
+    ensure_column_is_bytea(pool, "allergies", "notes").await?;
+    ensure_column_is_bytea(pool, "social_history", "notes").await?;
+    Ok(())
+}
+
+async fn ensure_consultation_reason_column(pool: &PgPool) -> Result<(), sqlx::Error> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'consultations'
+              AND column_name = 'reason'
+        )
+        "#,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if !exists {
+        sqlx::query("ALTER TABLE consultations ADD COLUMN reason TEXT")
+            .execute(pool)
+            .await?;
+    }
+
+    Ok(())
+}
+
+async fn ensure_column_is_bytea(
+    pool: &PgPool,
+    table: &str,
+    column: &str,
+) -> Result<(), sqlx::Error> {
+    let udt_name = sqlx::query_scalar::<_, Option<String>>(
+        r#"
+        SELECT udt_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = $1
+          AND column_name = $2
+        "#,
+    )
+    .bind(table)
+    .bind(column)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+
+    match udt_name.as_deref() {
+        Some("bytea") => Ok(()),
+        Some("uuid") => {
+            let alter = format!(
+                "ALTER TABLE {table} ALTER COLUMN {column} TYPE BYTEA USING decode(replace({column}::text, '-', ''), 'hex')"
+            );
+            sqlx::query(&alter).execute(pool).await?;
+            Ok(())
+        }
+        None if table == "consultations" && column == "clinical_notes" => {
+            sqlx::query("ALTER TABLE consultations ADD COLUMN clinical_notes BYTEA")
+                .execute(pool)
+                .await?;
+            Ok(())
+        }
+        Some(other) => Err(sqlx::Error::Protocol(format!(
+            "Unsupported column type for {}.{}: {}",
+            table, column, other
+        ))),
+        None => Err(sqlx::Error::Protocol(format!(
+            "Column {}.{} not found",
+            table, column
+        ))),
+    }
+}
+
+async fn insert_patient(
+    pool: &PgPool,
+    crypto: &EncryptionService,
+    patient: &Patient,
+    actor_id: Uuid,
+) -> Result<(), sqlx::Error> {
     let encrypted_ihi = patient
         .ihi
         .as_ref()

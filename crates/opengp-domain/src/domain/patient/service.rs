@@ -116,7 +116,10 @@ impl PatientService {
             error!(error = %err, "Failed to list active patients from repository");
             ServiceError::from(err)
         })?;
-        debug!(patient_count = patients.len(), "Successfully listed active patients");
+        debug!(
+            patient_count = patients.len(),
+            "Successfully listed active patients"
+        );
         Ok(patients)
     }
 

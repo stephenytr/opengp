@@ -409,9 +409,7 @@ impl Schedule {
         let Some(start_slot) = self.time_to_slot(apt.start_time) else {
             return false;
         };
-        let end_slot = start_slot
-            .saturating_add(apt.slot_span)
-            .saturating_sub(1);
+        let end_slot = start_slot.saturating_add(apt.slot_span).saturating_sub(1);
         slot >= start_slot && slot <= end_slot
     }
 

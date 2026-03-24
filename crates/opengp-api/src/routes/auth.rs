@@ -6,7 +6,9 @@ use axum::{
     Extension, Json,
 };
 use chrono::Utc;
-use opengp_domain::domain::api::{ApiErrorResponse, AuthenticatedUserResponse, LoginRequest, LoginResponse};
+use opengp_domain::domain::api::{
+    ApiErrorResponse, AuthenticatedUserResponse, LoginRequest, LoginResponse,
+};
 use opengp_domain::domain::audit::{AuditAction, AuditEntry};
 use opengp_domain::domain::user::{self, AuthError};
 use serde::{Deserialize, Serialize};
@@ -57,7 +59,6 @@ pub(super) async fn login(
     Ok(http_response)
 }
 
-
 pub(super) async fn logout(
     State(state): State<ApiState>,
     Extension(context): Extension<AuthContext>,
@@ -85,7 +86,6 @@ pub(super) async fn logout(
 
     Ok(response)
 }
-
 
 pub(super) async fn refresh(
     State(state): State<ApiState>,
@@ -116,7 +116,6 @@ pub(super) async fn refresh(
 
     Ok(http_response)
 }
-
 
 pub(super) async fn session_validation_middleware(
     State(state): State<ApiState>,
@@ -191,7 +190,6 @@ pub(super) async fn session_validation_middleware(
     Ok(next.run(request).await)
 }
 
-
 pub(super) fn auth_error_to_response(error: AuthError) -> (StatusCode, Json<ApiErrorResponse>) {
     match error {
         AuthError::InvalidCredentials | AuthError::AccountLocked => auth_failed_response(),
@@ -202,11 +200,9 @@ pub(super) fn auth_error_to_response(error: AuthError) -> (StatusCode, Json<ApiE
     }
 }
 
-
 pub(super) fn auth_failed_response() -> (StatusCode, Json<ApiErrorResponse>) {
     unauthorized_response("invalid_credentials", "Invalid username or password")
 }
-
 
 pub(super) fn emit_auth_failure_audit(state: &ApiState, username: Option<&str>, reason: &str) {
     let details = match username {
@@ -228,20 +224,17 @@ pub(super) fn emit_auth_failure_audit(state: &ApiState, username: Option<&str>, 
     emit_audit_event_non_blocking(state.audit_emitter.clone(), audit_entry);
 }
 
-
 pub(super) fn extract_session_token(headers: &HeaderMap) -> Option<String> {
     extract_bearer_token(headers)
         .or_else(|| extract_session_cookie(headers))
         .map(std::string::ToString::to_string)
 }
 
-
 pub(super) fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
     let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     let token = value.strip_prefix("Bearer ")?.trim();
     (!token.is_empty()).then_some(token)
 }
-
 
 pub(super) fn extract_session_cookie(headers: &HeaderMap) -> Option<&str> {
     let raw_cookie = headers.get(header::COOKIE)?.to_str().ok()?;
@@ -258,7 +251,6 @@ pub(super) fn extract_session_cookie(headers: &HeaderMap) -> Option<&str> {
     })
 }
 
-
 pub(super) fn session_cookie(token: &str, ttl_seconds: i64) -> String {
     format!(
         "session_token={}; HttpOnly; Path=/; Max-Age={}; SameSite=Lax",
@@ -267,7 +259,6 @@ pub(super) fn session_cookie(token: &str, ttl_seconds: i64) -> String {
     )
 }
 
-
 #[derive(Serialize, Deserialize)]
 pub(super) struct RefreshResponse {
     pub(super) access_token: String,
@@ -275,13 +266,11 @@ pub(super) struct RefreshResponse {
     pub(super) expires_in_seconds: i64,
 }
 
-
 #[derive(Serialize, Deserialize)]
 pub(super) struct GenericSuccessResponse {
     pub(super) success: bool,
     pub(super) message: String,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -294,8 +283,11 @@ mod tests {
     #[test]
     fn extract_bearer_token_from_authorization_header() {
         let mut headers = http::HeaderMap::new();
-        headers.insert(header::AUTHORIZATION, http::HeaderValue::from_static("Bearer valid-token-123"));
-        
+        headers.insert(
+            header::AUTHORIZATION,
+            http::HeaderValue::from_static("Bearer valid-token-123"),
+        );
+
         let token = extract_bearer_token(&headers);
         assert_eq!(token, Some("valid-token-123"));
     }
@@ -310,8 +302,11 @@ mod tests {
     #[test]
     fn extract_bearer_token_returns_none_for_invalid_format() {
         let mut headers = http::HeaderMap::new();
-        headers.insert(header::AUTHORIZATION, http::HeaderValue::from_static("Invalid token-123"));
-        
+        headers.insert(
+            header::AUTHORIZATION,
+            http::HeaderValue::from_static("Invalid token-123"),
+        );
+
         let token = extract_bearer_token(&headers);
         assert_eq!(token, None);
     }
@@ -319,7 +314,7 @@ mod tests {
     #[test]
     fn session_cookie_format_is_correct() {
         let cookie = session_cookie("test-token-123", 3600);
-        
+
         assert!(cookie.contains("session_token=test-token-123"));
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.contains("Path=/"));
@@ -330,9 +325,15 @@ mod tests {
     #[test]
     fn extract_session_token_prefers_bearer_over_cookie() {
         let mut headers = http::HeaderMap::new();
-        headers.insert(header::COOKIE, http::HeaderValue::from_static("session_token=cookie-token"));
-        headers.insert(header::AUTHORIZATION, http::HeaderValue::from_static("Bearer bearer-token"));
-        
+        headers.insert(
+            header::COOKIE,
+            http::HeaderValue::from_static("session_token=cookie-token"),
+        );
+        headers.insert(
+            header::AUTHORIZATION,
+            http::HeaderValue::from_static("Bearer bearer-token"),
+        );
+
         let token = extract_session_token(&headers);
         assert_eq!(token.as_deref(), Some("bearer-token"));
     }

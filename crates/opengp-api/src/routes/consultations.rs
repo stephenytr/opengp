@@ -60,7 +60,6 @@ pub(super) async fn list_consultations(
     ))
 }
 
-
 pub(super) async fn get_consultation(
     State(state): State<ApiState>,
     Extension(context): Extension<AuthContext>,
@@ -78,7 +77,6 @@ pub(super) async fn get_consultation(
 
     Ok((StatusCode::OK, Json(consultation_to_response(consultation))))
 }
-
 
 pub(super) async fn create_consultation(
     State(state): State<ApiState>,
@@ -108,7 +106,6 @@ pub(super) async fn create_consultation(
         Json(consultation_to_response(consultation)),
     ))
 }
-
 
 pub(super) async fn update_consultation(
     State(state): State<ApiState>,
@@ -144,7 +141,6 @@ pub(super) async fn update_consultation(
     Ok((StatusCode::OK, Json(consultation_to_response(consultation))))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,10 +152,10 @@ mod tests {
             page: None,
             limit: None,
         };
-        
+
         let page = query.page.unwrap_or(1).max(1);
         let limit = query.limit.unwrap_or(25).clamp(1, 100);
-        
+
         assert_eq!(page, 1);
         assert_eq!(limit, 25);
     }
@@ -171,10 +167,9 @@ mod tests {
             page: Some(2),
             limit: Some(200),
         };
-        
+
         let limit = query.limit.unwrap_or(25).clamp(1, 100);
-        
+
         assert_eq!(limit, 100);
     }
 }
-

@@ -8,11 +8,11 @@ use uuid::Uuid;
 use crate::service;
 
 use super::dto::NewUserData;
-use crate::domain::api::{LoginRequest, LoginResponse, AuthenticatedUserResponse};
 use super::error::{AuthError, RepositoryError, ServiceError};
 use super::model::{Practitioner, Role, Session, User};
 use super::password::PasswordHasher;
 use super::repository::{PractitionerRepository, SessionRepository, UserRepository};
+use crate::domain::api::{AuthenticatedUserResponse, LoginRequest, LoginResponse};
 use crate::domain::error::RepositoryError as BaseRepositoryError;
 
 const MAX_FAILED_LOGIN_ATTEMPTS: u8 = 5;
@@ -106,7 +106,6 @@ impl AuthService {
             .find_by_username(&request.username)
             .await?
             .ok_or(AuthError::InvalidCredentials)?;
-
 
         if user.is_locked || user.failed_login_attempts >= MAX_FAILED_LOGIN_ATTEMPTS {
             if !user.is_locked {

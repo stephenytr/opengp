@@ -82,10 +82,13 @@ async fn audit_comprehensive() {
     let practitioner_a = create_test_practitioner(&pool).await;
     let practitioner_b = create_test_practitioner(&pool).await;
 
-    let audit_repository: Arc<dyn AuditRepository> = Arc::new(SqlxAuditRepository::new(pool.clone()));
-    let audit_emitter: Arc<dyn AuditEmitter> = Arc::new(AuditService::new(audit_repository.clone()));
+    let audit_repository: Arc<dyn AuditRepository> =
+        Arc::new(SqlxAuditRepository::new(pool.clone()));
+    let audit_emitter: Arc<dyn AuditEmitter> =
+        Arc::new(AuditService::new(audit_repository.clone()));
 
-    let patient_crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
+    let patient_crypto =
+        Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
     let patient_repository: Arc<dyn PatientRepository> =
         Arc::new(SqlxPatientRepository::new(pool.clone(), patient_crypto));
     let patient_service = Arc::new(PatientService::new(patient_repository));
@@ -162,9 +165,11 @@ async fn audit_comprehensive() {
         .await
         .expect("Failed to emit appointment create audit");
 
-    let clinical_crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
-    let consultation_repository: Arc<dyn ConsultationRepository> =
-        Arc::new(SqlxClinicalRepository::new(pool.clone(), clinical_crypto.clone()));
+    let clinical_crypto =
+        Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
+    let consultation_repository: Arc<dyn ConsultationRepository> = Arc::new(
+        SqlxClinicalRepository::new(pool.clone(), clinical_crypto.clone()),
+    );
 
     let consultation = consultation_repository
         .create(Consultation::new(
@@ -178,12 +183,18 @@ async fn audit_comprehensive() {
 
     let clinical_repos = ClinicalRepositories {
         consultation: consultation_repository,
-        allergy: Arc::new(SqlxAllergyRepository::new(pool.clone(), clinical_crypto.clone())),
+        allergy: Arc::new(SqlxAllergyRepository::new(
+            pool.clone(),
+            clinical_crypto.clone(),
+        )),
         medical_history: Arc::new(SqlxMedicalHistoryRepository::new(
             pool.clone(),
             clinical_crypto.clone(),
         )),
-        vital_signs: Arc::new(SqlxVitalSignsRepository::new(pool.clone(), clinical_crypto.clone())),
+        vital_signs: Arc::new(SqlxVitalSignsRepository::new(
+            pool.clone(),
+            clinical_crypto.clone(),
+        )),
         social_history: Arc::new(SqlxSocialHistoryRepository::new(
             pool.clone(),
             clinical_crypto.clone(),

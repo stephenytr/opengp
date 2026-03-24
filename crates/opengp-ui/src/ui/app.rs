@@ -27,12 +27,12 @@ const DEFAULT_CONSULTATION_PAGE_LIMIT: u32 = 100;
 
 type PatientListFetchTask =
     tokio::task::JoinHandle<Result<Vec<crate::ui::view_models::PatientListItem>, ApiTaskError>>;
-type AppointmentListFetchTask =
-    tokio::task::JoinHandle<
-        Result<opengp_domain::domain::appointment::CalendarDayView, ApiTaskError>,
-    >;
-type ConsultationListFetchTask =
-    tokio::task::JoinHandle<Result<Vec<opengp_domain::domain::clinical::Consultation>, ApiTaskError>>;
+type AppointmentListFetchTask = tokio::task::JoinHandle<
+    Result<opengp_domain::domain::appointment::CalendarDayView, ApiTaskError>,
+>;
+type ConsultationListFetchTask = tokio::task::JoinHandle<
+    Result<Vec<opengp_domain::domain::clinical::Consultation>, ApiTaskError>,
+>;
 type PractitionerListFetchTask =
     tokio::task::JoinHandle<Result<Vec<opengp_domain::domain::user::Practitioner>, ApiTaskError>>;
 type LoginTask = tokio::task::JoinHandle<

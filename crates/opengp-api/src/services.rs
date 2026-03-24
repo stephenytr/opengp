@@ -6,9 +6,7 @@ use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentSearchCriteria, AppointmentService, AvailabilityService,
     CalendarAppointment, RepositoryError as AppointmentRepositoryError,
 };
-use opengp_domain::domain::audit::{
-    AuditRepository, AuditService,
-};
+use opengp_domain::domain::audit::{AuditRepository, AuditService};
 use opengp_domain::domain::clinical::{
     Allergy, AllergyRepository, ClinicalRepositories, ClinicalService, ConsultationRepository,
     FamilyHistory, FamilyHistoryRepository, MedicalHistory, MedicalHistoryRepository,
@@ -18,18 +16,17 @@ use opengp_domain::domain::clinical::{
 use opengp_domain::domain::patient::{PatientRepository, PatientService};
 use opengp_domain::domain::user::{
     AuthService, PasswordError, PasswordHasher, RepositoryError as UserRepositoryError,
-    SessionRepository, UserRepository,
-    WorkingHours, WorkingHoursRepository,
+    SessionRepository, UserRepository, WorkingHours, WorkingHoursRepository,
 };
 #[cfg(test)]
 use opengp_domain::domain::user::{Permission, Role, User};
 use opengp_infrastructure::infrastructure::crypto::password::BcryptPasswordHasher;
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
+#[cfg(not(test))]
+use opengp_infrastructure::infrastructure::database::repositories::PostgresUserRepository;
 use opengp_infrastructure::infrastructure::database::repositories::{
     SqlxAuditRepository, SqlxSessionRepository,
 };
-#[cfg(not(test))]
-use opengp_infrastructure::infrastructure::database::repositories::PostgresUserRepository;
 use sqlx::PgPool;
 #[cfg(test)]
 use tokio::sync::RwLock;
@@ -84,9 +81,11 @@ impl ApiServices {
             ),
         );
         let appointment_service = Arc::new(AppointmentService::new(
-            appointment_repository.clone() as Arc<dyn opengp_domain::domain::appointment::AppointmentRepository>,
+            appointment_repository.clone()
+                as Arc<dyn opengp_domain::domain::appointment::AppointmentRepository>,
             audit_service.clone(),
-            appointment_repository.clone() as Arc<dyn opengp_domain::domain::appointment::AppointmentCalendarQuery>,
+            appointment_repository.clone()
+                as Arc<dyn opengp_domain::domain::appointment::AppointmentCalendarQuery>,
         ));
         let working_hours_repository: Arc<dyn WorkingHoursRepository> = Arc::new(
             opengp_infrastructure::infrastructure::database::repositories::SqlxWorkingHoursRepository::new(

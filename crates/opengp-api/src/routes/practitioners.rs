@@ -4,7 +4,8 @@ use opengp_domain::domain::api::{ApiErrorResponse, PractitionerResponse};
 use crate::ApiState;
 
 use super::middleware::{
-    authorize_read, internal_server_error_response, is_practitioner, practitioner_specialty, AuthContext,
+    authorize_read, internal_server_error_response, is_practitioner, practitioner_specialty,
+    AuthContext,
 };
 
 pub(super) async fn list_practitioners(
@@ -35,4 +36,3 @@ pub(super) async fn list_practitioners(
 
     Ok((StatusCode::OK, Json(practitioners)))
 }
-

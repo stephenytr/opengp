@@ -294,13 +294,12 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         };
         let updated_at_str = appointment.updated_at.to_rfc3339();
 
-        let current_version = sqlx::query_scalar::<_, i32>(
-            "SELECT version FROM appointments WHERE id = $1",
-        )
-        .bind(appointment.id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(sqlx_to_appointment_error)?;
+        let current_version =
+            sqlx::query_scalar::<_, i32>("SELECT version FROM appointments WHERE id = $1")
+                .bind(appointment.id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(sqlx_to_appointment_error)?;
 
         let current_version = match current_version {
             Some(version) => version,
@@ -695,9 +694,9 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
                 "{}ORDER BY a.start_time",
                 CALENDAR_APPOINTMENT_SELECT_QUERY
             ))
-                .fetch_all(&self.pool)
-                .await
-                .map_err(sqlx_to_appointment_error)?;
+            .fetch_all(&self.pool)
+            .await
+            .map_err(sqlx_to_appointment_error)?;
 
             all_rows
                 .into_iter()
@@ -789,8 +788,8 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Duration;
     use crate::infrastructure::database::test_utils::create_test_pool;
+    use chrono::Duration;
 
     #[tokio::test]
     #[ignore] // Requires PostgreSQL database connection

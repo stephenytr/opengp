@@ -57,22 +57,20 @@ impl App {
                     self.request_refresh_patients();
                     self.status_bar.clear_error();
                 }
-                Ok(Err(err)) => {
-                    match err {
-                        crate::api::ApiClientError::ServerUnavailable(message) => {
-                            let retry_operation = retry_login.map(|(username, password)| {
-                                RetryOperation::Login { username, password }
-                            });
-                            if let Some(retry_operation) = retry_operation {
-                                self.show_server_unavailable_error(message, retry_operation);
-                            }
-                            self.login_screen.set_error("Cannot connect to server");
+                Ok(Err(err)) => match err {
+                    crate::api::ApiClientError::ServerUnavailable(message) => {
+                        let retry_operation = retry_login.map(|(username, password)| {
+                            RetryOperation::Login { username, password }
+                        });
+                        if let Some(retry_operation) = retry_operation {
+                            self.show_server_unavailable_error(message, retry_operation);
                         }
-                        other => {
-                            self.login_screen.set_error(other.to_string());
-                        }
+                        self.login_screen.set_error("Cannot connect to server");
                     }
-                }
+                    other => {
+                        self.login_screen.set_error(other.to_string());
+                    }
+                },
                 Err(err) => {
                     self.login_screen
                         .set_error(format!("Login task failed: {}", err));
@@ -101,10 +99,10 @@ impl App {
                         .await
                 }
                 Err(err) => {
-                    self.handle_api_task_error(ApiTaskError::message(format!(
-                        "Failed to load patients: {}",
-                        err
-                    )), None)
+                    self.handle_api_task_error(
+                        ApiTaskError::message(format!("Failed to load patients: {}", err)),
+                        None,
+                    )
                     .await;
                 }
             }
@@ -137,10 +135,10 @@ impl App {
                     .await
                 }
                 Err(err) => {
-                    self.handle_api_task_error(ApiTaskError::message(format!(
-                        "Failed to load appointments: {}",
-                        err
-                    )), None)
+                    self.handle_api_task_error(
+                        ApiTaskError::message(format!("Failed to load appointments: {}", err)),
+                        None,
+                    )
                     .await;
                 }
             }
@@ -175,10 +173,10 @@ impl App {
                     .await
                 }
                 Err(err) => {
-                    self.handle_api_task_error(ApiTaskError::message(format!(
-                        "Failed to load consultations: {}",
-                        err
-                    )), None)
+                    self.handle_api_task_error(
+                        ApiTaskError::message(format!("Failed to load consultations: {}", err)),
+                        None,
+                    )
                     .await;
                 }
             }
@@ -200,14 +198,12 @@ impl App {
                     self.clear_server_unavailable_error();
                     self.status_bar.clear_error();
                 }
-                Ok(Err(err)) => {
-                    self.handle_api_task_error(err, None).await
-                }
+                Ok(Err(err)) => self.handle_api_task_error(err, None).await,
                 Err(err) => {
-                    self.handle_api_task_error(ApiTaskError::message(format!(
-                        "Failed to load practitioners: {}",
-                        err
-                    )), None)
+                    self.handle_api_task_error(
+                        ApiTaskError::message(format!("Failed to load practitioners: {}", err)),
+                        None,
+                    )
                     .await;
                 }
             }
@@ -526,7 +522,10 @@ async fn fetch_patients(
         page += 1;
     }
 
-    tracing::debug!(total_collected = collected.len(), "UI fetch_patients completed");
+    tracing::debug!(
+        total_collected = collected.len(),
+        "UI fetch_patients completed"
+    );
 
     Ok(collected)
 }
@@ -547,9 +546,7 @@ async fn fetch_appointments_for_day(
         let response = api_client
             .get_appointments(page, limit, Some(start), Some(end), None)
             .await
-            .map_err(|e| {
-                ApiTaskError::from_client_error(e, "Failed to fetch appointments")
-            })?;
+            .map_err(|e| ApiTaskError::from_client_error(e, "Failed to fetch appointments"))?;
         let page_count = response.data.len();
 
         all.extend(response.data);
@@ -623,9 +620,7 @@ async fn fetch_consultations(
         let response = api_client
             .get_consultations(patient_id, page, limit)
             .await
-            .map_err(|e| {
-                ApiTaskError::from_client_error(e, "Failed to fetch consultations")
-            })?;
+            .map_err(|e| ApiTaskError::from_client_error(e, "Failed to fetch consultations"))?;
         let page_count = response.data.len();
 
         for item in response.data {
@@ -806,10 +801,7 @@ mod tests {
             .set_session_token(Some("test-token".to_string()))
             .await;
 
-        let mut app = App::new(
-                    Some(api_client),
-                    opengp_config::CalendarConfig::default(),
-                );
+        let mut app = App::new(Some(api_client), opengp_config::CalendarConfig::default());
         app.request_refresh_patients();
 
         for _ in 0..20 {
@@ -838,10 +830,7 @@ mod tests {
             .set_session_token(Some("test-token".to_string()))
             .await;
 
-        let mut app = App::new(
-                    Some(api_client),
-                    opengp_config::CalendarConfig::default(),
-                );
+        let mut app = App::new(Some(api_client), opengp_config::CalendarConfig::default());
 
         let patient_id = uuid::Uuid::new_v4();
         app.request_refresh_appointments(Utc::now().date_naive());
@@ -874,9 +863,9 @@ mod tests {
         let api_client = Arc::new(crate::api::ApiClient::new(base_url));
 
         let mut app = App::new(
-                    Some(api_client.clone()),
-                    opengp_config::CalendarConfig::default(),
-                );
+            Some(api_client.clone()),
+            opengp_config::CalendarConfig::default(),
+        );
         app.set_authenticated(false);
 
         enter_login_credentials(&mut app, "dr_smith", "correct-password");
@@ -904,9 +893,9 @@ mod tests {
         let api_client = Arc::new(crate::api::ApiClient::new(base_url));
 
         let mut app = App::new(
-                    Some(api_client.clone()),
-                    opengp_config::CalendarConfig::default(),
-                );
+            Some(api_client.clone()),
+            opengp_config::CalendarConfig::default(),
+        );
         app.set_authenticated(false);
 
         enter_login_credentials(&mut app, "dr_smith", "wrong-password");
@@ -922,7 +911,8 @@ mod tests {
 
     #[tokio::test]
     async fn app_handles_unauthorized_api_response_by_logging_out() {
-        let app_router = Router::new().route("/api/v1/patients", get(patients_unauthorized_handler));
+        let app_router =
+            Router::new().route("/api/v1/patients", get(patients_unauthorized_handler));
 
         let (base_url, _server) = spawn_server(app_router).await;
         let api_client = Arc::new(crate::api::ApiClient::new(base_url));
@@ -931,9 +921,9 @@ mod tests {
             .await;
 
         let mut app = App::new(
-                    Some(api_client.clone()),
-                    opengp_config::CalendarConfig::default(),
-                );
+            Some(api_client.clone()),
+            opengp_config::CalendarConfig::default(),
+        );
         app.set_authenticated(true);
         app.request_refresh_patients();
 
@@ -982,15 +972,16 @@ mod tests {
             },
         ));
 
-        app.pending_appointment_save = Some(opengp_domain::domain::appointment::NewAppointmentData {
-            patient_id,
-            practitioner_id,
-            start_time: Utc::now(),
-            duration: chrono::Duration::minutes(15),
-            appointment_type: AppointmentType::Standard,
-            reason: Some("Follow-up".to_string()),
-            is_urgent: false,
-        });
+        app.pending_appointment_save =
+            Some(opengp_domain::domain::appointment::NewAppointmentData {
+                patient_id,
+                practitioner_id,
+                start_time: Utc::now(),
+                duration: chrono::Duration::minutes(15),
+                appointment_type: AppointmentType::Standard,
+                reason: Some("Follow-up".to_string()),
+                is_urgent: false,
+            });
 
         app.pending_clinical_save_data = Some(PendingClinicalSaveData::Consultation {
             patient_id,
@@ -1026,10 +1017,7 @@ mod tests {
             .set_session_token(Some("test-token".to_string()))
             .await;
 
-        let mut app = App::new(
-                    Some(api_client),
-                    opengp_config::CalendarConfig::default(),
-                );
+        let mut app = App::new(Some(api_client), opengp_config::CalendarConfig::default());
 
         app.request_refresh_patients();
 
