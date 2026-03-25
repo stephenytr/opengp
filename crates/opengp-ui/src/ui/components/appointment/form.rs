@@ -19,9 +19,9 @@ use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::{
     format_date, parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption,
-    DropdownWidget, FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState,
-    SearchableListAction, SearchableListState, TextareaState, TextareaWidget, TimePickerAction,
-    TimePickerPopup,
+    DropdownWidget, DynamicForm, DynamicFormMeta, FieldType, FormFieldMeta, FormNavigation,
+    HeightMode, ScrollableFormState, SearchableListAction, SearchableListState, TextareaState,
+    TextareaWidget, TimePickerAction, TimePickerPopup,
 };
 use opengp_domain::domain::appointment::{
     Appointment, AppointmentType, NewAppointmentData, UpdateAppointmentData,
@@ -63,6 +63,15 @@ pub enum AppointmentFormField {
     Notes,
 }
 
+const FIELD_PATIENT: &str = "patient";
+const FIELD_PRACTITIONER: &str = "practitioner";
+const FIELD_DATE: &str = "date";
+const FIELD_START_TIME: &str = "start_time";
+const FIELD_DURATION: &str = "duration";
+const FIELD_APPOINTMENT_TYPE: &str = "appointment_type";
+const FIELD_REASON: &str = "reason";
+const FIELD_NOTES: &str = "notes";
+
 impl AppointmentFormField {
     pub fn all() -> Vec<AppointmentFormField> {
         use strum::IntoEnumIterator;
@@ -74,6 +83,33 @@ impl AppointmentFormField {
 
     pub fn label(&self) -> &'static str {
         (*self).into()
+    }
+
+    pub fn id(&self) -> &'static str {
+        match self {
+            AppointmentFormField::Patient => FIELD_PATIENT,
+            AppointmentFormField::Practitioner => FIELD_PRACTITIONER,
+            AppointmentFormField::Date => FIELD_DATE,
+            AppointmentFormField::StartTime => FIELD_START_TIME,
+            AppointmentFormField::Duration => FIELD_DURATION,
+            AppointmentFormField::AppointmentType => FIELD_APPOINTMENT_TYPE,
+            AppointmentFormField::Reason => FIELD_REASON,
+            AppointmentFormField::Notes => FIELD_NOTES,
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            FIELD_PATIENT => Some(AppointmentFormField::Patient),
+            FIELD_PRACTITIONER => Some(AppointmentFormField::Practitioner),
+            FIELD_DATE => Some(AppointmentFormField::Date),
+            FIELD_START_TIME => Some(AppointmentFormField::StartTime),
+            FIELD_DURATION => Some(AppointmentFormField::Duration),
+            FIELD_APPOINTMENT_TYPE => Some(AppointmentFormField::AppointmentType),
+            FIELD_REASON => Some(AppointmentFormField::Reason),
+            FIELD_NOTES => Some(AppointmentFormField::Notes),
+            _ => None,
+        }
     }
 
     pub fn is_required(&self) -> bool {
@@ -154,16 +190,14 @@ impl AppointmentFormData {
 pub struct AppointmentForm {
     mode: FormMode,
     data: AppointmentFormData,
-    date: TextareaState,
-    start_time: TextareaState,
-    reason: TextareaState,
-    notes: TextareaState,
-    errors: HashMap<AppointmentFormField, String>,
-    focused_field: AppointmentFormField,
+    errors: HashMap<String, String>,
+    focused_field: String,
+    field_ids: Vec<String>,
+    textareas: HashMap<String, TextareaState>,
+    dropdowns: HashMap<String, DropdownWidget>,
     saving: bool,
     theme: Theme,
     scroll: ScrollableFormState,
-    type_dropdown: DropdownWidget,
     patient_picker: SearchableListState<PatientListItem>,
     practitioner_picker: SearchableListState<PractitionerViewItem>,
     date_picker: DatePickerPopup,
@@ -175,16 +209,14 @@ impl Clone for AppointmentForm {
         Self {
             mode: self.mode,
             data: self.data.clone(),
-            date: self.date.clone(),
-            start_time: self.start_time.clone(),
-            reason: self.reason.clone(),
-            notes: self.notes.clone(),
             errors: self.errors.clone(),
-            focused_field: self.focused_field,
+            focused_field: self.focused_field.clone(),
+            field_ids: self.field_ids.clone(),
+            textareas: self.textareas.clone(),
+            dropdowns: self.dropdowns.clone(),
             saving: self.saving,
             theme: self.theme.clone(),
             scroll: self.scroll.clone(),
-            type_dropdown: self.type_dropdown.clone(),
             patient_picker: self.patient_picker.clone(),
             practitioner_picker: self.practitioner_picker.clone(),
             date_picker: self.date_picker.clone(),
@@ -211,24 +243,49 @@ impl AppointmentForm {
             DropdownOption::new("Emergency", "Emergency"),
         ];
 
-        let mut type_dropdown = DropdownWidget::new("Type *", type_options, theme.clone());
-        type_dropdown.set_value("Standard");
+        let field_ids: Vec<String> = AppointmentFormField::all()
+            .into_iter()
+            .map(|field| field.id().to_string())
+            .collect();
+
+        let mut textareas = HashMap::new();
+        textareas.insert(
+            FIELD_DATE.to_string(),
+            TextareaState::new("Date * (dd/mm/yyyy)").with_height_mode(HeightMode::SingleLine),
+        );
+        textareas.insert(
+            FIELD_START_TIME.to_string(),
+            TextareaState::new("Start Time * (HH:MM)").with_height_mode(HeightMode::SingleLine),
+        );
+        textareas.insert(
+            FIELD_REASON.to_string(),
+            TextareaState::new("Reason").with_height_mode(HeightMode::SingleLine),
+        );
+        textareas.insert(
+            FIELD_NOTES.to_string(),
+            TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(3)),
+        );
+
+        let mut dropdowns = HashMap::new();
+        let mut appointment_type_dropdown =
+            DropdownWidget::new("Type *", type_options, theme.clone());
+        appointment_type_dropdown.set_value("Standard");
+        dropdowns.insert(
+            FIELD_APPOINTMENT_TYPE.to_string(),
+            appointment_type_dropdown,
+        );
 
         Self {
             mode: FormMode::Create,
             data: AppointmentFormData::empty(),
-            date: TextareaState::new("Date * (dd/mm/yyyy)")
-                .with_height_mode(HeightMode::SingleLine),
-            start_time: TextareaState::new("Start Time * (HH:MM)")
-                .with_height_mode(HeightMode::SingleLine),
-            reason: TextareaState::new("Reason").with_height_mode(HeightMode::SingleLine),
-            notes: TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(3)),
             errors: HashMap::new(),
-            focused_field: AppointmentFormField::Patient,
+            focused_field: FIELD_PATIENT.to_string(),
+            field_ids,
+            textareas,
+            dropdowns,
             saving: false,
             theme: theme.clone(),
             scroll: ScrollableFormState::new(),
-            type_dropdown,
             patient_picker: SearchableListState::new(Vec::new()),
             practitioner_picker: SearchableListState::new(Vec::new()),
             date_picker: DatePickerPopup::new(),
@@ -243,24 +300,26 @@ impl AppointmentForm {
         form.data.patient_id = Some(appointment.patient_id);
         form.data.practitioner_id = Some(appointment.practitioner_id);
 
-        form.date = TextareaState::new("Date * (dd/mm/yyyy)")
-            .with_height_mode(HeightMode::SingleLine)
-            .with_value(format_date(appointment.start_time.date_naive()));
-
-        form.start_time = TextareaState::new("Start Time * (HH:MM)")
-            .with_height_mode(HeightMode::SingleLine)
-            .with_value(appointment.start_time.format("%H:%M").to_string());
-
-        form.reason = TextareaState::new("Reason")
-            .with_height_mode(HeightMode::SingleLine)
-            .with_value(appointment.reason.clone().unwrap_or_default());
-
-        form.notes = TextareaState::new("Notes")
-            .with_height_mode(HeightMode::FixedLines(3))
-            .with_value(appointment.notes.clone().unwrap_or_default());
-
-        form.type_dropdown
-            .set_value(&appointment.appointment_type.to_string());
+        form.set_value(
+            AppointmentFormField::Date,
+            format_date(appointment.start_time.date_naive()),
+        );
+        form.set_value(
+            AppointmentFormField::StartTime,
+            appointment.start_time.format("%H:%M").to_string(),
+        );
+        form.set_value(
+            AppointmentFormField::Reason,
+            appointment.reason.clone().unwrap_or_default(),
+        );
+        form.set_value(
+            AppointmentFormField::Notes,
+            appointment.notes.clone().unwrap_or_default(),
+        );
+        form.set_value(
+            AppointmentFormField::AppointmentType,
+            appointment.appointment_type.to_string(),
+        );
         form.data.appointment_type = appointment.appointment_type.to_string();
 
         let duration_minutes = appointment.duration_minutes();
@@ -283,11 +342,11 @@ impl AppointmentForm {
     // ── Field accessors ──────────────────────────────────────────────────────
 
     pub fn focused_field(&self) -> AppointmentFormField {
-        self.focused_field
+        AppointmentFormField::from_id(&self.focused_field).unwrap_or(AppointmentFormField::Patient)
     }
 
     pub fn set_focus(&mut self, field: AppointmentFormField) {
-        self.focused_field = field;
+        self.focused_field = field.id().to_string();
     }
 
     pub fn is_saving(&self) -> bool {
@@ -302,7 +361,7 @@ impl AppointmentForm {
     pub fn set_patient(&mut self, id: Uuid, display_name: String) {
         self.data.patient_id = Some(id);
         self.data.patient_display = display_name;
-        self.errors.remove(&AppointmentFormField::Patient);
+        self.errors.remove(FIELD_PATIENT);
     }
 
     /// Set patients available for selection in the picker
@@ -329,7 +388,7 @@ impl AppointmentForm {
     pub fn set_practitioner(&mut self, id: Uuid, display_name: String) {
         self.data.practitioner_id = Some(id);
         self.data.practitioner_display = display_name;
-        self.errors.remove(&AppointmentFormField::Practitioner);
+        self.errors.remove(FIELD_PRACTITIONER);
     }
 
     pub fn set_booked_slots(&mut self, booked_slots: Vec<NaiveTime>) {
@@ -345,142 +404,179 @@ impl AppointmentForm {
         self.time_picker.open(practitioner_id, date, duration);
     }
 
-    pub fn get_value(&self, field: AppointmentFormField) -> String {
-        match field {
-            AppointmentFormField::Patient => self.data.patient_display.clone(),
-            AppointmentFormField::Practitioner => self.data.practitioner_display.clone(),
-            AppointmentFormField::Date => self.date.value(),
-            AppointmentFormField::StartTime => self.start_time.value(),
-            AppointmentFormField::Duration => self.data.duration.clone(),
-            AppointmentFormField::AppointmentType => self
-                .type_dropdown
-                .selected_value()
-                .map(|s: &str| s.to_string())
+    fn get_value_by_id(&self, field_id: &str) -> String {
+        match field_id {
+            FIELD_PATIENT => self.data.patient_display.clone(),
+            FIELD_PRACTITIONER => self.data.practitioner_display.clone(),
+            FIELD_DURATION => self.data.duration.clone(),
+            FIELD_APPOINTMENT_TYPE => self
+                .dropdowns
+                .get(FIELD_APPOINTMENT_TYPE)
+                .and_then(|dropdown| dropdown.selected_value())
+                .map(|value| value.to_string())
                 .unwrap_or_default(),
-            AppointmentFormField::Reason => self.reason.value(),
-            AppointmentFormField::Notes => self.notes.value(),
+            _ => self
+                .textareas
+                .get(field_id)
+                .map(|textarea| textarea.value())
+                .unwrap_or_default(),
         }
     }
 
-    pub fn set_value(&mut self, field: AppointmentFormField, value: String) {
-        match field {
-            AppointmentFormField::Patient => {
+    fn set_value_by_id(&mut self, field_id: &str, value: String) {
+        match field_id {
+            FIELD_PATIENT => {
                 self.data.patient_display = value;
                 self.data.patient_id = None;
             }
-            AppointmentFormField::Practitioner => {
+            FIELD_PRACTITIONER => {
                 self.data.practitioner_display = value;
                 self.data.practitioner_id = None;
             }
-            AppointmentFormField::Date => {
-                self.date = TextareaState::new("Date * (YYYY-MM-DD)")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .with_value(value);
+            FIELD_DURATION => {
+                self.data.duration = value;
             }
-            AppointmentFormField::StartTime => {
-                self.start_time = TextareaState::new("Start Time * (HH:MM)")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .with_value(value);
-            }
-            AppointmentFormField::Duration => self.data.duration = value,
-            AppointmentFormField::AppointmentType => {
+            FIELD_APPOINTMENT_TYPE => {
                 if let Ok(apt_type) = value.parse::<AppointmentType>() {
                     let default_mins = apt_type.default_duration_minutes();
                     self.data.duration = default_mins.to_string();
                 }
-                self.type_dropdown.set_value(&value);
+                if let Some(dropdown) = self.dropdowns.get_mut(FIELD_APPOINTMENT_TYPE) {
+                    dropdown.set_value(&value);
+                }
                 self.data.appointment_type = value;
             }
-            AppointmentFormField::Reason => {
-                self.reason = TextareaState::new("Reason")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .with_value(value);
-            }
-            AppointmentFormField::Notes => {
-                self.notes = TextareaState::new("Notes")
-                    .with_height_mode(HeightMode::FixedLines(3))
-                    .with_value(value);
+            _ => {
+                if let Some(existing) = self.textareas.get_mut(field_id) {
+                    let label = existing.label.clone();
+                    let height_mode = existing.height_mode.clone();
+                    let max_length = existing.max_length;
+                    let focused = existing.focused;
+
+                    let mut updated = TextareaState::new(label)
+                        .with_height_mode(height_mode)
+                        .with_value(value)
+                        .focused(focused);
+                    if let Some(limit) = max_length {
+                        updated = updated.max_length(limit);
+                    }
+
+                    *existing = updated;
+                }
             }
         }
-        self.validate_field(&field);
+
+        self.validate_field_by_id(field_id);
+    }
+
+    fn focused_textarea_mut(&mut self) -> Option<&mut TextareaState> {
+        self.textareas.get_mut(&self.focused_field)
+    }
+
+    fn textarea_for(&self, field_id: &str) -> Option<&TextareaState> {
+        self.textareas.get(field_id)
+    }
+
+    pub fn get_value(&self, field: AppointmentFormField) -> String {
+        self.get_value_by_id(field.id())
+    }
+
+    pub fn set_value(&mut self, field: AppointmentFormField, value: String) {
+        self.set_value_by_id(field.id(), value);
     }
 
     // ── Validation ───────────────────────────────────────────────────────────
 
-    fn validate_field(&mut self, field: &AppointmentFormField) {
-        self.errors.remove(field);
+    fn validate_field_by_id(&mut self, field_id: &str) {
+        self.errors.remove(field_id);
 
-        match field {
-            AppointmentFormField::Patient => {
+        match field_id {
+            FIELD_PATIENT => {
                 if self.data.patient_id.is_none() {
-                    self.errors
-                        .insert(*field, "Select a patient from the picker".to_string());
+                    self.errors.insert(
+                        field_id.to_string(),
+                        "Select a patient from the picker".to_string(),
+                    );
                 }
             }
-            AppointmentFormField::Practitioner => {
+            FIELD_PRACTITIONER => {
                 if self.data.practitioner_id.is_none() {
-                    self.errors
-                        .insert(*field, "Select a practitioner from the picker".to_string());
+                    self.errors.insert(
+                        field_id.to_string(),
+                        "Select a practitioner from the picker".to_string(),
+                    );
                 }
             }
-            AppointmentFormField::Date => {
-                let v = self.date.value();
+            FIELD_DATE => {
+                let v = self.get_value_by_id(field_id);
                 if v.is_empty() {
-                    self.errors.insert(*field, "Date is required".to_string());
+                    self.errors
+                        .insert(field_id.to_string(), "Date is required".to_string());
                 } else if parse_date(&v).is_none() {
                     self.errors
-                        .insert(*field, "Use dd/mm/yyyy format".to_string());
+                        .insert(field_id.to_string(), "Use dd/mm/yyyy format".to_string());
                 }
             }
-            AppointmentFormField::StartTime => {
-                let v = self.start_time.value();
+            FIELD_START_TIME => {
+                let v = self.get_value_by_id(field_id);
                 if v.is_empty() {
                     self.errors
-                        .insert(*field, "Start time is required".to_string());
+                        .insert(field_id.to_string(), "Start time is required".to_string());
                 } else if NaiveTime::parse_from_str(&v, "%H:%M").is_err() {
-                    self.errors
-                        .insert(*field, "Use HH:MM format (24-hour)".to_string());
+                    self.errors.insert(
+                        field_id.to_string(),
+                        "Use HH:MM format (24-hour)".to_string(),
+                    );
                 }
             }
-            AppointmentFormField::Duration => {
+            FIELD_DURATION => {
                 let v = &self.data.duration;
                 if !v.is_empty() {
                     match v.parse::<u32>() {
                         Ok(mins) if mins == 0 => {
-                            self.errors
-                                .insert(*field, "Duration must be greater than 0".to_string());
+                            self.errors.insert(
+                                field_id.to_string(),
+                                "Duration must be greater than 0".to_string(),
+                            );
                         }
                         Ok(mins) if mins > 480 => {
-                            self.errors
-                                .insert(*field, "Duration cannot exceed 480 minutes".to_string());
+                            self.errors.insert(
+                                field_id.to_string(),
+                                "Duration cannot exceed 480 minutes".to_string(),
+                            );
                         }
                         Err(_) => {
-                            self.errors
-                                .insert(*field, "Duration must be a number".to_string());
+                            self.errors.insert(
+                                field_id.to_string(),
+                                "Duration must be a number".to_string(),
+                            );
                         }
                         _ => {}
                     }
                 }
             }
-            AppointmentFormField::AppointmentType => {
+            FIELD_APPOINTMENT_TYPE => {
                 let v = &self.data.appointment_type;
                 if v.is_empty() {
-                    self.errors
-                        .insert(*field, "Appointment type is required".to_string());
+                    self.errors.insert(
+                        field_id.to_string(),
+                        "Appointment type is required".to_string(),
+                    );
                 } else if v.parse::<AppointmentType>().is_err() {
                     self.errors.insert(
-                        *field,
+                        field_id.to_string(),
                         "Invalid type. Use: Standard, Long, Brief, NewPatient, etc.".to_string(),
                     );
                 }
             }
             // Optional fields — no validation required
-            AppointmentFormField::Reason | AppointmentFormField::Notes => {}
+            FIELD_REASON | FIELD_NOTES => {}
+            _ => {}
         }
     }
 
     pub fn error(&self, field: AppointmentFormField) -> Option<&String> {
-        self.errors.get(&field)
+        self.errors.get(field.id())
     }
 
     // ── Build DTO ────────────────────────────────────────────────────────────
@@ -489,15 +585,15 @@ impl AppointmentForm {
     ///
     /// Returns `None` if validation fails.
     pub fn to_new_appointment_data(&mut self) -> Option<NewAppointmentData> {
-        if !self.validate() {
+        if !FormNavigation::validate(self) {
             return None;
         }
 
         let patient_id = self.data.patient_id?;
         let practitioner_id = self.data.practitioner_id?;
 
-        let date_str = self.date.value();
-        let time_str = self.start_time.value();
+        let date_str = self.get_value_by_id(FIELD_DATE);
+        let time_str = self.get_value_by_id(FIELD_START_TIME);
         let date = parse_date(&date_str)?;
         let time = NaiveTime::parse_from_str(&time_str, "%H:%M").ok()?;
 
@@ -513,7 +609,7 @@ impl AppointmentForm {
 
         let appointment_type = self.data.appointment_type.parse::<AppointmentType>().ok()?;
 
-        let reason_str = self.reason.value();
+        let reason_str = self.get_value_by_id(FIELD_REASON);
         let reason = if reason_str.trim().is_empty() {
             None
         } else {
@@ -534,20 +630,20 @@ impl AppointmentForm {
     pub fn to_update_appointment_data(&mut self) -> Option<(Uuid, UpdateAppointmentData)> {
         let appointment_id = self.appointment_id()?;
 
-        if !self.validate() {
+        if !FormNavigation::validate(self) {
             return None;
         }
 
         let appointment_type = self.data.appointment_type.parse::<AppointmentType>().ok();
 
-        let reason_str = self.reason.value();
+        let reason_str = self.get_value_by_id(FIELD_REASON);
         let reason = if reason_str.trim().is_empty() {
             None
         } else {
             Some(reason_str)
         };
 
-        let notes_str = self.notes.value();
+        let notes_str = self.get_value_by_id(FIELD_NOTES);
         let notes = if notes_str.trim().is_empty() {
             None
         } else {
@@ -585,7 +681,7 @@ impl AppointmentForm {
             return None;
         }
 
-        if self.focused_field == AppointmentFormField::Patient && self.patient_picker.is_open() {
+        if self.focused_field == FIELD_PATIENT && self.patient_picker.is_open() {
             use crate::ui::widgets::SearchableList;
             let mut picker = SearchableList::new(
                 &mut self.patient_picker,
@@ -608,9 +704,7 @@ impl AppointmentForm {
             }
         }
 
-        if self.focused_field == AppointmentFormField::Practitioner
-            && self.practitioner_picker.is_open()
-        {
+        if self.focused_field == FIELD_PRACTITIONER && self.practitioner_picker.is_open() {
             use crate::ui::widgets::SearchableList;
             let mut picker = SearchableList::new(
                 &mut self.practitioner_picker,
@@ -633,21 +727,29 @@ impl AppointmentForm {
             }
         }
 
-        if self.focused_field == AppointmentFormField::AppointmentType {
-            if let Some(action) = self.type_dropdown.handle_key(key) {
+        if self.focused_field == FIELD_APPOINTMENT_TYPE {
+            if let Some(action) = self
+                .dropdowns
+                .get_mut(FIELD_APPOINTMENT_TYPE)
+                .and_then(|dropdown| dropdown.handle_key(key))
+            {
                 // Allow Tab/BackTab/Esc to pass through to form's navigation handler
                 match key.code {
                     KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
                     _ => match action {
                         DropdownAction::Selected(_) => {
-                            if let Some(value) = self.type_dropdown.selected_value() {
+                            if let Some(value) = self
+                                .dropdowns
+                                .get(FIELD_APPOINTMENT_TYPE)
+                                .and_then(|dropdown| dropdown.selected_value())
+                            {
                                 if let Ok(apt_type) = value.parse::<AppointmentType>() {
                                     let default_mins: i64 = apt_type.default_duration_minutes();
                                     self.data.duration = default_mins.to_string();
                                 }
                                 self.data.appointment_type = value.to_string();
                             }
-                            self.validate_field(&AppointmentFormField::AppointmentType);
+                            self.validate_field_by_id(FIELD_APPOINTMENT_TYPE);
                             return Some(AppointmentFormAction::ValueChanged);
                         }
                         DropdownAction::Opened
@@ -664,10 +766,7 @@ impl AppointmentForm {
             if let Some(action) = self.date_picker.handle_key(key) {
                 match action {
                     DatePickerAction::Selected(date) => {
-                        self.date = TextareaState::new("Date * (dd/mm/yyyy)")
-                            .with_height_mode(HeightMode::SingleLine)
-                            .with_value(format_date(date));
-                        self.validate_field(&AppointmentFormField::Date);
+                        self.set_value_by_id(FIELD_DATE, format_date(date));
                         return Some(AppointmentFormAction::ValueChanged);
                     }
                     DatePickerAction::Dismissed => {
@@ -678,10 +777,10 @@ impl AppointmentForm {
             return Some(AppointmentFormAction::FocusChanged);
         }
 
-        if self.focused_field == AppointmentFormField::Date
+        if self.focused_field == FIELD_DATE
             && matches!(key.code, KeyCode::Enter | KeyCode::Char(' '))
         {
-            let current_value = parse_date(&self.date.value());
+            let current_value = parse_date(&self.get_value_by_id(FIELD_DATE));
             self.date_picker.open(current_value);
             return Some(AppointmentFormAction::FocusChanged);
         }
@@ -691,10 +790,7 @@ impl AppointmentForm {
             if let Some(action) = self.time_picker.handle_key(key) {
                 match action {
                     TimePickerAction::Selected(time) => {
-                        self.start_time = TextareaState::new("Start Time * (HH:MM)")
-                            .with_height_mode(HeightMode::SingleLine)
-                            .with_value(time.format("%H:%M").to_string());
-                        self.validate_field(&AppointmentFormField::StartTime);
+                        self.set_value_by_id(FIELD_START_TIME, time.format("%H:%M").to_string());
                         return Some(AppointmentFormAction::ValueChanged);
                     }
                     TimePickerAction::Dismissed => {
@@ -705,13 +801,13 @@ impl AppointmentForm {
             return Some(AppointmentFormAction::FocusChanged);
         }
 
-        if self.focused_field == AppointmentFormField::StartTime
+        if self.focused_field == FIELD_START_TIME
             && matches!(key.code, KeyCode::Enter | KeyCode::Char(' '))
         {
             // Need practitioner_id, date, and duration to open time picker
             if let (Some(practitioner_id), Some(date), Ok(duration)) = (
                 self.data.practitioner_id,
-                parse_date(&self.date.value()),
+                parse_date(&self.get_value_by_id(FIELD_DATE)),
                 self.data.duration.parse::<u32>(),
             ) {
                 return Some(AppointmentFormAction::OpenTimePicker {
@@ -724,45 +820,43 @@ impl AppointmentForm {
 
         // Ctrl+S submits the form from any field
         if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
-            self.validate();
+            FormNavigation::validate(self);
             return Some(AppointmentFormAction::Submit);
         }
 
-        if self.focused_field.is_textarea() {
+        let focused_field = AppointmentFormField::from_id(&self.focused_field)
+            .unwrap_or(AppointmentFormField::Patient);
+        if focused_field.is_textarea() {
             let ratatui_key = to_ratatui_key(key);
-            let textarea = match self.focused_field {
-                AppointmentFormField::Date => &mut self.date,
-                AppointmentFormField::StartTime => &mut self.start_time,
-                AppointmentFormField::Reason => &mut self.reason,
-                AppointmentFormField::Notes => &mut self.notes,
-                _ => unreachable!(),
-            };
-            let consumed = textarea.handle_key(ratatui_key);
-            if consumed {
-                self.validate_field(&self.focused_field.clone());
-                return Some(AppointmentFormAction::ValueChanged);
+            if let Some(textarea) = self.focused_textarea_mut() {
+                let consumed = textarea.handle_key(ratatui_key);
+                if consumed {
+                    let field_id = self.focused_field.clone();
+                    self.validate_field_by_id(&field_id);
+                    return Some(AppointmentFormAction::ValueChanged);
+                }
             }
         }
 
         match key.code {
             KeyCode::Tab => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    self.prev_field();
+                    FormNavigation::prev_field(self);
                 } else {
-                    self.next_field();
+                    FormNavigation::next_field(self);
                 }
                 Some(AppointmentFormAction::FocusChanged)
             }
             KeyCode::BackTab => {
-                self.prev_field();
+                FormNavigation::prev_field(self);
                 Some(AppointmentFormAction::FocusChanged)
             }
             KeyCode::Up => {
-                self.prev_field();
+                FormNavigation::prev_field(self);
                 Some(AppointmentFormAction::FocusChanged)
             }
             KeyCode::Down => {
-                self.next_field();
+                FormNavigation::next_field(self);
                 Some(AppointmentFormAction::FocusChanged)
             }
             KeyCode::PageUp => {
@@ -774,15 +868,11 @@ impl AppointmentForm {
                 Some(AppointmentFormAction::FocusChanged)
             }
             KeyCode::Enter => {
-                if self.focused_field == AppointmentFormField::Patient
-                    && !self.patient_picker.is_open()
-                {
+                if self.focused_field == FIELD_PATIENT && !self.patient_picker.is_open() {
                     self.patient_picker.open();
                     return Some(AppointmentFormAction::FocusChanged);
                 }
-                if self.focused_field == AppointmentFormField::Practitioner
-                    && !self.practitioner_picker.is_open()
-                {
+                if self.focused_field == FIELD_PRACTITIONER && !self.practitioner_picker.is_open() {
                     self.practitioner_picker.open();
                     return Some(AppointmentFormAction::FocusChanged);
                 }
@@ -800,15 +890,17 @@ impl AppointmentForm {
                 Some(AppointmentFormAction::Cancel)
             }
             KeyCode::Char(c) => {
-                let mut value = self.get_value(self.focused_field);
+                let field_id = self.focused_field.clone();
+                let mut value = self.get_value_by_id(&field_id);
                 value.push(c);
-                self.set_value(self.focused_field, value);
+                self.set_value_by_id(&field_id, value);
                 Some(AppointmentFormAction::ValueChanged)
             }
             KeyCode::Backspace => {
-                let mut value = self.get_value(self.focused_field);
+                let field_id = self.focused_field.clone();
+                let mut value = self.get_value_by_id(&field_id);
                 value.pop();
-                self.set_value(self.focused_field, value);
+                self.set_value_by_id(&field_id, value);
                 Some(AppointmentFormAction::ValueChanged)
             }
             _ => None,
@@ -863,7 +955,7 @@ impl Widget for AppointmentForm {
         let mut open_dropdown: Option<(DropdownWidget, Rect)> = None;
 
         for field in fields {
-            let is_focused = field == self.focused_field;
+            let is_focused = field.id() == self.focused_field;
 
             // Special handling for Duration (display only, not in focus cycle)
             if field == AppointmentFormField::Duration {
@@ -925,12 +1017,9 @@ impl Widget for AppointmentForm {
             }
 
             if field.is_textarea() {
-                let textarea_state = match field {
-                    AppointmentFormField::Date => &self.date,
-                    AppointmentFormField::StartTime => &self.start_time,
-                    AppointmentFormField::Reason => &self.reason,
-                    AppointmentFormField::Notes => &self.notes,
-                    _ => unreachable!(),
+                let Some(textarea_state) = self.textarea_for(field.id()) else {
+                    y += 2;
+                    continue;
                 };
                 let field_height = textarea_state.height();
                 if y >= inner.y as i32 && y < max_y {
@@ -1057,7 +1146,10 @@ impl Widget for AppointmentForm {
                         inner.width.saturating_sub(label_width + 2),
                         3,
                     );
-                    let dropdown = self.type_dropdown.clone();
+                    let Some(dropdown) = self.dropdowns.get(FIELD_APPOINTMENT_TYPE).cloned() else {
+                        y += 4;
+                        continue;
+                    };
                     if dropdown.is_open() {
                         open_dropdown = Some((dropdown.clone(), dropdown_area));
                     }
@@ -1168,44 +1260,103 @@ impl FormFieldMeta for AppointmentFormField {
     }
 }
 
-impl FormNavigation for AppointmentForm {
-    type FormField = AppointmentFormField;
-
-    fn get_error(&self, field: Self::FormField) -> Option<&str> {
-        self.errors.get(&field).map(|s| s.as_str())
+impl DynamicFormMeta for AppointmentForm {
+    fn label(&self, field_id: &str) -> String {
+        AppointmentFormField::from_id(field_id)
+            .map(|field| field.label().to_string())
+            .unwrap_or_else(|| field_id.to_string())
     }
 
-    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
-        match error {
-            Some(msg) => {
-                self.errors.insert(field, msg);
-            }
-            None => {
-                self.errors.remove(&field);
-            }
+    fn is_required(&self, field_id: &str) -> bool {
+        AppointmentFormField::from_id(field_id)
+            .map(|field| field.is_required())
+            .unwrap_or(false)
+    }
+
+    fn field_type(&self, field_id: &str) -> FieldType {
+        match AppointmentFormField::from_id(field_id) {
+            Some(AppointmentFormField::Date) => FieldType::Date,
+            Some(AppointmentFormField::AppointmentType) => FieldType::Select(vec![]),
+            _ => FieldType::Text,
         }
+    }
+}
+
+impl DynamicForm for AppointmentForm {
+    fn field_ids(&self) -> &[String] {
+        &self.field_ids
+    }
+
+    fn current_field(&self) -> &str {
+        &self.focused_field
+    }
+
+    fn set_current_field(&mut self, field_id: &str) {
+        if self.field_ids.iter().any(|id| id == field_id) {
+            self.focused_field = field_id.to_string();
+        }
+    }
+
+    fn get_value(&self, field_id: &str) -> String {
+        self.get_value_by_id(field_id)
+    }
+
+    fn set_value(&mut self, field_id: &str, value: String) {
+        self.set_value_by_id(field_id, value);
     }
 
     fn validate(&mut self) -> bool {
         self.errors.clear();
-
-        for field in AppointmentFormField::all() {
-            self.validate_field(&field);
+        for field_id in self.field_ids.clone() {
+            self.validate_field_by_id(&field_id);
         }
-
         self.errors.is_empty()
     }
 
+    fn get_error(&self, field_id: &str) -> Option<&str> {
+        self.errors.get(field_id).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field_id: &str, error: Option<String>) {
+        match error {
+            Some(msg) => {
+                self.errors.insert(field_id.to_string(), msg);
+            }
+            None => {
+                self.errors.remove(field_id);
+            }
+        }
+    }
+}
+
+impl FormNavigation for AppointmentForm {
+    type FormField = AppointmentFormField;
+
+    fn get_error(&self, field: Self::FormField) -> Option<&str> {
+        self.errors.get(field.id()).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
+        <Self as DynamicForm>::set_error(self, field.id(), error);
+    }
+
+    fn validate(&mut self) -> bool {
+        <Self as DynamicForm>::validate(self)
+    }
+
     fn current_field(&self) -> Self::FormField {
-        self.focused_field
+        self.focused_field()
     }
 
     fn fields(&self) -> Vec<Self::FormField> {
-        AppointmentFormField::all()
+        self.field_ids
+            .iter()
+            .filter_map(|field_id| AppointmentFormField::from_id(field_id))
+            .collect()
     }
 
     fn set_current_field(&mut self, field: Self::FormField) {
-        self.focused_field = field;
+        self.focused_field = field.id().to_string();
     }
 }
 
@@ -1233,7 +1384,7 @@ mod tests {
         let fields = AppointmentFormField::all();
         // Tab through all fields and back to the first
         for _ in 0..fields.len() {
-            form.next_field();
+            FormNavigation::next_field(&mut form);
         }
         assert_eq!(form.focused_field(), AppointmentFormField::Patient);
     }
@@ -1241,35 +1392,35 @@ mod tests {
     #[test]
     fn test_shift_tab_navigation_wraps() {
         let mut form = make_form();
-        form.prev_field();
+        FormNavigation::prev_field(&mut form);
         assert_eq!(form.focused_field(), AppointmentFormField::Notes);
     }
 
     #[test]
     fn test_validation_requires_patient() {
         let mut form = make_form();
-        form.validate();
+        FormNavigation::validate(&mut form);
         assert!(form.error(AppointmentFormField::Patient).is_some());
     }
 
     #[test]
     fn test_validation_requires_practitioner() {
         let mut form = make_form();
-        form.validate();
+        FormNavigation::validate(&mut form);
         assert!(form.error(AppointmentFormField::Practitioner).is_some());
     }
 
     #[test]
     fn test_validation_requires_date() {
         let mut form = make_form();
-        form.validate();
+        FormNavigation::validate(&mut form);
         assert!(form.error(AppointmentFormField::Date).is_some());
     }
 
     #[test]
     fn test_validation_requires_start_time() {
         let mut form = make_form();
-        form.validate();
+        FormNavigation::validate(&mut form);
         assert!(form.error(AppointmentFormField::StartTime).is_some());
     }
 
@@ -1278,7 +1429,7 @@ mod tests {
         let mut form = make_form();
         // Clear the default type to trigger the error
         form.data.appointment_type = String::new();
-        form.validate();
+        FormNavigation::validate(&mut form);
         assert!(form.error(AppointmentFormField::AppointmentType).is_some());
     }
 
@@ -1318,7 +1469,7 @@ mod tests {
     #[test]
     fn test_set_patient_clears_error() {
         let mut form = make_form();
-        form.validate();
+        FormNavigation::validate(&mut form);
         assert!(form.error(AppointmentFormField::Patient).is_some());
 
         form.set_patient(Uuid::new_v4(), "Jane Doe".to_string());
