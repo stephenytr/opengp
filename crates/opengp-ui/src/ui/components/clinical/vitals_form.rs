@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use crossterm::event::{KeyEvent, KeyModifiers};
+use opengp_config::forms::{FormRule, FormRuleType, NumericRange, ValidationRules};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -15,7 +16,8 @@ use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+    DynamicForm, DynamicFormMeta, FormFieldMeta, FormNavigation, FormRuleEngine, FormValidator,
+    HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::VitalSigns;
 
@@ -58,6 +60,35 @@ impl VitalSignsFormField {
         (*self).into()
     }
 
+    pub fn id(&self) -> &'static str {
+        match self {
+            VitalSignsFormField::SystolicBp => FIELD_SYSTOLIC_BP,
+            VitalSignsFormField::DiastolicBp => FIELD_DIASTOLIC_BP,
+            VitalSignsFormField::HeartRate => FIELD_HEART_RATE,
+            VitalSignsFormField::RespiratoryRate => FIELD_RESPIRATORY_RATE,
+            VitalSignsFormField::Temperature => FIELD_TEMPERATURE,
+            VitalSignsFormField::O2Saturation => FIELD_OXYGEN_SATURATION,
+            VitalSignsFormField::Height => FIELD_HEIGHT,
+            VitalSignsFormField::Weight => FIELD_WEIGHT,
+            VitalSignsFormField::Notes => FIELD_NOTES,
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            FIELD_SYSTOLIC_BP => Some(VitalSignsFormField::SystolicBp),
+            FIELD_DIASTOLIC_BP => Some(VitalSignsFormField::DiastolicBp),
+            FIELD_HEART_RATE => Some(VitalSignsFormField::HeartRate),
+            FIELD_RESPIRATORY_RATE => Some(VitalSignsFormField::RespiratoryRate),
+            FIELD_TEMPERATURE => Some(VitalSignsFormField::Temperature),
+            FIELD_OXYGEN_SATURATION => Some(VitalSignsFormField::O2Saturation),
+            FIELD_HEIGHT => Some(VitalSignsFormField::Height),
+            FIELD_WEIGHT => Some(VitalSignsFormField::Weight),
+            FIELD_NOTES => Some(VitalSignsFormField::Notes),
+            _ => None,
+        }
+    }
+
     pub fn is_required(&self) -> bool {
         // No individual field is required - at least one measurement must be filled
         false
@@ -76,28 +107,26 @@ pub enum VitalSignsFormAction {
     Cancel,
 }
 
+const FIELD_SYSTOLIC_BP: &str = "systolic_bp";
+const FIELD_DIASTOLIC_BP: &str = "diastolic_bp";
+const FIELD_HEART_RATE: &str = "heart_rate";
+const FIELD_RESPIRATORY_RATE: &str = "respiratory_rate";
+const FIELD_TEMPERATURE: &str = "temperature";
+const FIELD_OXYGEN_SATURATION: &str = "oxygen_saturation";
+const FIELD_HEIGHT: &str = "height";
+const FIELD_WEIGHT: &str = "weight";
+const FIELD_NOTES: &str = "notes";
+
 pub struct VitalSignsForm {
     mode: FormMode,
-    pub systolic_bp: Option<u16>,
-    pub diastolic_bp: Option<u16>,
-    pub heart_rate: Option<u16>,
-    pub respiratory_rate: Option<u16>,
-    pub temperature: Option<f32>,
-    pub o2_saturation: Option<u8>,
-    pub height_cm: Option<u16>,
-    pub weight_kg: Option<f32>,
-    pub notes: TextareaState,
+    field_ids: Vec<String>,
+    textareas: HashMap<String, TextareaState>,
     pub focused_field: VitalSignsFormField,
     pub calculated_bmi: Option<f32>,
-    systolic_bp_field: TextareaState,
-    diastolic_bp_field: TextareaState,
-    heart_rate_field: TextareaState,
-    respiratory_rate_field: TextareaState,
-    temperature_field: TextareaState,
-    o2_saturation_field: TextareaState,
-    height_cm_field: TextareaState,
-    weight_kg_field: TextareaState,
-    errors: HashMap<VitalSignsFormField, String>,
+    errors: HashMap<String, String>,
+    validation_rules: HashMap<String, ValidationRules>,
+    validator: FormValidator,
+    rule_engine: FormRuleEngine,
     theme: Theme,
     scroll: ScrollableFormState,
 }
@@ -106,26 +135,14 @@ impl Clone for VitalSignsForm {
     fn clone(&self) -> Self {
         Self {
             mode: self.mode,
-            systolic_bp: self.systolic_bp,
-            diastolic_bp: self.diastolic_bp,
-            heart_rate: self.heart_rate,
-            respiratory_rate: self.respiratory_rate,
-            temperature: self.temperature,
-            o2_saturation: self.o2_saturation,
-            height_cm: self.height_cm,
-            weight_kg: self.weight_kg,
-            notes: self.notes.clone(),
+            field_ids: self.field_ids.clone(),
+            textareas: self.textareas.clone(),
             focused_field: self.focused_field,
             calculated_bmi: self.calculated_bmi,
-            systolic_bp_field: self.systolic_bp_field.clone(),
-            diastolic_bp_field: self.diastolic_bp_field.clone(),
-            heart_rate_field: self.heart_rate_field.clone(),
-            respiratory_rate_field: self.respiratory_rate_field.clone(),
-            temperature_field: self.temperature_field.clone(),
-            o2_saturation_field: self.o2_saturation_field.clone(),
-            height_cm_field: self.height_cm_field.clone(),
-            weight_kg_field: self.weight_kg_field.clone(),
             errors: self.errors.clone(),
+            validation_rules: self.validation_rules.clone(),
+            validator: FormValidator::new(&self.validation_rules),
+            rule_engine: self.rule_engine.clone(),
             theme: self.theme.clone(),
             scroll: self.scroll.clone(),
         }
@@ -134,44 +151,28 @@ impl Clone for VitalSignsForm {
 
 impl VitalSignsForm {
     pub fn new(theme: Theme) -> Self {
+        let field_ids = VitalSignsFormField::all()
+            .into_iter()
+            .map(|field| field.id().to_string())
+            .collect::<Vec<_>>();
+
+        let textareas = VitalSignsFormField::all()
+            .into_iter()
+            .map(|field| (field.id().to_string(), make_textarea_state(field, None)))
+            .collect::<HashMap<_, _>>();
+
+        let validation_rules = build_validation_rules();
+
         Self {
             mode: FormMode::Create,
-            systolic_bp: None,
-            diastolic_bp: None,
-            heart_rate: None,
-            respiratory_rate: None,
-            temperature: None,
-            o2_saturation: None,
-            height_cm: None,
-            weight_kg: None,
-            notes: TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(4)),
+            field_ids,
+            textareas,
             focused_field: VitalSignsFormField::SystolicBp,
             calculated_bmi: None,
-            systolic_bp_field: TextareaState::new("Systolic BP (mmHg)")
-                .with_height_mode(HeightMode::SingleLine)
-                .max_length(3),
-            diastolic_bp_field: TextareaState::new("Diastolic BP (mmHg)")
-                .with_height_mode(HeightMode::SingleLine)
-                .max_length(3),
-            heart_rate_field: TextareaState::new("Heart Rate (bpm)")
-                .with_height_mode(HeightMode::SingleLine)
-                .max_length(3),
-            respiratory_rate_field: TextareaState::new("Respiratory Rate")
-                .with_height_mode(HeightMode::SingleLine)
-                .max_length(2),
-            temperature_field: TextareaState::new("Temperature (C)")
-                .with_height_mode(HeightMode::SingleLine)
-                .max_length(5),
-            o2_saturation_field: TextareaState::new("O2 Saturation (%)")
-                .with_height_mode(HeightMode::SingleLine)
-                .max_length(3),
-            height_cm_field: TextareaState::new("Height (cm)")
-                .with_height_mode(HeightMode::SingleLine)
-                .max_length(3),
-            weight_kg_field: TextareaState::new("Weight (kg)")
-                .with_height_mode(HeightMode::SingleLine)
-                .max_length(6),
             errors: HashMap::new(),
+            validator: FormValidator::new(&validation_rules),
+            rule_engine: build_rule_engine(),
+            validation_rules,
             theme,
             scroll: ScrollableFormState::new(),
         }
@@ -239,89 +240,32 @@ impl VitalSignsForm {
     }
 
     pub fn get_value(&self, field: VitalSignsFormField) -> String {
-        match field {
-            VitalSignsFormField::SystolicBp => self.systolic_bp_field.value(),
-            VitalSignsFormField::DiastolicBp => self.diastolic_bp_field.value(),
-            VitalSignsFormField::HeartRate => self.heart_rate_field.value(),
-            VitalSignsFormField::RespiratoryRate => self.respiratory_rate_field.value(),
-            VitalSignsFormField::Temperature => self.temperature_field.value(),
-            VitalSignsFormField::O2Saturation => self.o2_saturation_field.value(),
-            VitalSignsFormField::Height => self.height_cm_field.value(),
-            VitalSignsFormField::Weight => self.weight_kg_field.value(),
-            VitalSignsFormField::Notes => self.notes.value(),
-        }
+        self.get_value_by_id(field.id())
     }
 
     pub fn set_value(&mut self, field: VitalSignsFormField, value: String) {
-        match field {
-            VitalSignsFormField::SystolicBp => {
-                self.systolic_bp_field = TextareaState::new("Systolic BP (mmHg)")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .max_length(3)
-                    .with_value(value.clone());
-                self.systolic_bp = value.parse().ok();
-            }
-            VitalSignsFormField::DiastolicBp => {
-                self.diastolic_bp_field = TextareaState::new("Diastolic BP (mmHg)")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .max_length(3)
-                    .with_value(value.clone());
-                self.diastolic_bp = value.parse().ok();
-            }
-            VitalSignsFormField::HeartRate => {
-                self.heart_rate_field = TextareaState::new("Heart Rate (bpm)")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .max_length(3)
-                    .with_value(value.clone());
-                self.heart_rate = value.parse().ok();
-            }
-            VitalSignsFormField::RespiratoryRate => {
-                self.respiratory_rate_field = TextareaState::new("Respiratory Rate")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .max_length(2)
-                    .with_value(value.clone());
-                self.respiratory_rate = value.parse().ok();
-            }
-            VitalSignsFormField::Temperature => {
-                self.temperature_field = TextareaState::new("Temperature (C)")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .max_length(5)
-                    .with_value(value.clone());
-                self.temperature = value.parse().ok();
-            }
-            VitalSignsFormField::O2Saturation => {
-                self.o2_saturation_field = TextareaState::new("O2 Saturation (%)")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .max_length(3)
-                    .with_value(value.clone());
-                self.o2_saturation = value.parse().ok();
-            }
-            VitalSignsFormField::Height => {
-                self.height_cm_field = TextareaState::new("Height (cm)")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .max_length(3)
-                    .with_value(value.clone());
-                self.height_cm = value.parse().ok();
-            }
-            VitalSignsFormField::Weight => {
-                self.weight_kg_field = TextareaState::new("Weight (kg)")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .max_length(6)
-                    .with_value(value.clone());
-                self.weight_kg = value.parse().ok();
-            }
-            VitalSignsFormField::Notes => {
-                self.notes = TextareaState::new("Notes")
-                    .with_height_mode(HeightMode::FixedLines(4))
-                    .with_value(value);
-            }
+        self.set_value_by_id(field.id(), value);
+    }
+
+    fn get_value_by_id(&self, field_id: &str) -> String {
+        self.textareas
+            .get(field_id)
+            .map(TextareaState::value)
+            .unwrap_or_default()
+    }
+
+    fn set_value_by_id(&mut self, field_id: &str, value: String) {
+        if let Some(field) = VitalSignsFormField::from_id(field_id) {
+            let mut state = make_textarea_state(field, Some(value));
+            state = state.focused(field == self.focused_field);
+            self.textareas.insert(field_id.to_string(), state);
         }
         self.calculate_bmi();
-        self.validate_field(&field);
+        self.validate_field_by_id(field_id);
     }
 
     pub fn calculate_bmi(&mut self) {
-        if let (Some(height), Some(weight)) = (self.height_cm, self.weight_kg) {
+        if let (Some(height), Some(weight)) = (self.height_cm(), self.weight_kg()) {
             if height > 0 {
                 let height_m = height as f32 / 100.0;
                 self.calculated_bmi = Some(weight / (height_m * height_m));
@@ -331,150 +275,83 @@ impl VitalSignsForm {
         }
     }
 
-    fn validate_field(&mut self, field: &VitalSignsFormField) {
-        self.errors.remove(field);
+    fn validate_field_by_id(&mut self, field_id: &str) {
+        self.errors.remove(field_id);
 
-        let value = self.get_value(*field);
+        let value = self.get_value_by_id(field_id);
+        let validator_errors = self.validator.validate(field_id, &value);
+        let error = validator_errors
+            .into_iter()
+            .next()
+            .map(|msg| map_validation_error(field_id, msg));
 
-        match field {
-            VitalSignsFormField::SystolicBp => {
-                if !value.is_empty() {
-                    match value.parse::<u16>() {
-                        Ok(v) if !(50..=300).contains(&v) => {
-                            self.errors
-                                .insert(*field, "Systolic BP must be 50-300 mmHg".to_string());
-                        }
-                        Err(_) => {
-                            self.errors
-                                .insert(*field, "Must be a whole number".to_string());
-                        }
-                        _ => {}
-                    }
+        match error {
+            Some(err) => {
+                self.errors.insert(field_id.to_string(), err.clone());
+                if let Some(textarea) = self.textareas.get_mut(field_id) {
+                    textarea.set_error(Some(err));
                 }
             }
-            VitalSignsFormField::DiastolicBp => {
-                if !value.is_empty() {
-                    match value.parse::<u16>() {
-                        Ok(v) if !(20..=200).contains(&v) => {
-                            self.errors
-                                .insert(*field, "Diastolic BP must be 20-200 mmHg".to_string());
-                        }
-                        Err(_) => {
-                            self.errors
-                                .insert(*field, "Must be a whole number".to_string());
-                        }
-                        _ => {}
-                    }
+            None => {
+                if let Some(textarea) = self.textareas.get_mut(field_id) {
+                    textarea.set_error(None);
                 }
             }
-            VitalSignsFormField::HeartRate => {
-                if !value.is_empty() {
-                    match value.parse::<u16>() {
-                        Ok(v) if !(20..=300).contains(&v) => {
-                            self.errors
-                                .insert(*field, "Heart rate must be 20-300 bpm".to_string());
-                        }
-                        Err(_) => {
-                            self.errors
-                                .insert(*field, "Must be a whole number".to_string());
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            VitalSignsFormField::RespiratoryRate => {
-                if !value.is_empty() {
-                    match value.parse::<u16>() {
-                        Ok(v) if !(4..=60).contains(&v) => {
-                            self.errors
-                                .insert(*field, "Respiratory rate must be 4-60 /min".to_string());
-                        }
-                        Err(_) => {
-                            self.errors
-                                .insert(*field, "Must be a whole number".to_string());
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            VitalSignsFormField::Temperature => {
-                if !value.is_empty() {
-                    match value.parse::<f32>() {
-                        Ok(v) if !(30.0..=45.0).contains(&v) => {
-                            self.errors
-                                .insert(*field, "Temperature must be 30-45 C".to_string());
-                        }
-                        Err(_) => {
-                            self.errors
-                                .insert(*field, "Must be a number (e.g. 37.2)".to_string());
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            VitalSignsFormField::O2Saturation => {
-                if !value.is_empty() {
-                    match value.parse::<u8>() {
-                        Ok(v) if !(50..=100).contains(&v) => {
-                            self.errors
-                                .insert(*field, "O2 saturation must be 50-100%".to_string());
-                        }
-                        Err(_) => {
-                            self.errors
-                                .insert(*field, "Must be a whole number".to_string());
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            VitalSignsFormField::Height => {
-                if !value.is_empty() {
-                    match value.parse::<u16>() {
-                        Ok(v) if !(30..=300).contains(&v) => {
-                            self.errors
-                                .insert(*field, "Height must be 30-300 cm".to_string());
-                        }
-                        Err(_) => {
-                            self.errors
-                                .insert(*field, "Must be a whole number".to_string());
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            VitalSignsFormField::Weight => {
-                if !value.is_empty() {
-                    match value.parse::<f32>() {
-                        Ok(v) if !(0.5..=700.0).contains(&v) => {
-                            self.errors
-                                .insert(*field, "Weight must be 0.5-700 kg".to_string());
-                        }
-                        Err(_) => {
-                            self.errors
-                                .insert(*field, "Must be a number (e.g. 72.5)".to_string());
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            VitalSignsFormField::Notes => {}
         }
+    }
+
+    fn systolic_bp(&self) -> Option<u16> {
+        self.get_value_by_id(FIELD_SYSTOLIC_BP).trim().parse().ok()
+    }
+
+    fn diastolic_bp(&self) -> Option<u16> {
+        self.get_value_by_id(FIELD_DIASTOLIC_BP).trim().parse().ok()
+    }
+
+    fn heart_rate(&self) -> Option<u16> {
+        self.get_value_by_id(FIELD_HEART_RATE).trim().parse().ok()
+    }
+
+    fn respiratory_rate(&self) -> Option<u16> {
+        self.get_value_by_id(FIELD_RESPIRATORY_RATE)
+            .trim()
+            .parse()
+            .ok()
+    }
+
+    fn temperature(&self) -> Option<f32> {
+        self.get_value_by_id(FIELD_TEMPERATURE).trim().parse().ok()
+    }
+
+    fn oxygen_saturation(&self) -> Option<u8> {
+        self.get_value_by_id(FIELD_OXYGEN_SATURATION)
+            .trim()
+            .parse()
+            .ok()
+    }
+
+    fn height_cm(&self) -> Option<u16> {
+        self.get_value_by_id(FIELD_HEIGHT).trim().parse().ok()
+    }
+
+    fn weight_kg(&self) -> Option<f32> {
+        self.get_value_by_id(FIELD_WEIGHT).trim().parse().ok()
     }
 
     /// Returns true if at least one numeric measurement field has a value.
     pub fn has_any_measurement(&self) -> bool {
-        self.systolic_bp.is_some()
-            || self.diastolic_bp.is_some()
-            || self.heart_rate.is_some()
-            || self.respiratory_rate.is_some()
-            || self.temperature.is_some()
-            || self.o2_saturation.is_some()
-            || self.height_cm.is_some()
-            || self.weight_kg.is_some()
+        self.systolic_bp().is_some()
+            || self.diastolic_bp().is_some()
+            || self.heart_rate().is_some()
+            || self.respiratory_rate().is_some()
+            || self.temperature().is_some()
+            || self.oxygen_saturation().is_some()
+            || self.height_cm().is_some()
+            || self.weight_kg().is_some()
     }
 
     pub fn error(&self, field: VitalSignsFormField) -> Option<&String> {
-        self.errors.get(&field)
+        self.errors.get(field.id())
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<VitalSignsFormAction> {
@@ -486,106 +363,43 @@ impl VitalSignsForm {
 
         // Ctrl+S submits the form from any field
         if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
-            self.validate();
+            FormNavigation::validate(self);
             return Some(VitalSignsFormAction::Submit);
         }
 
-        let field = self.focused_field;
+        let field_id = self.focused_field.id().to_string();
         let ratatui_key = to_ratatui_key(key);
-        let consumed = match field {
-            VitalSignsFormField::SystolicBp => self.systolic_bp_field.handle_key(ratatui_key),
-            VitalSignsFormField::DiastolicBp => self.diastolic_bp_field.handle_key(ratatui_key),
-            VitalSignsFormField::HeartRate => self.heart_rate_field.handle_key(ratatui_key),
-            VitalSignsFormField::RespiratoryRate => {
-                self.respiratory_rate_field.handle_key(ratatui_key)
-            }
-            VitalSignsFormField::Temperature => self.temperature_field.handle_key(ratatui_key),
-            VitalSignsFormField::O2Saturation => self.o2_saturation_field.handle_key(ratatui_key),
-            VitalSignsFormField::Height => self.height_cm_field.handle_key(ratatui_key),
-            VitalSignsFormField::Weight => self.weight_kg_field.handle_key(ratatui_key),
-            VitalSignsFormField::Notes => self.notes.handle_key(ratatui_key),
-        };
+        let consumed = self
+            .textareas
+            .get_mut(&field_id)
+            .map(|textarea| textarea.handle_key(ratatui_key))
+            .unwrap_or(false);
 
         if consumed {
-            let value = self.get_value(field);
-            match field {
-                VitalSignsFormField::SystolicBp => self.systolic_bp = value.parse().ok(),
-                VitalSignsFormField::DiastolicBp => self.diastolic_bp = value.parse().ok(),
-                VitalSignsFormField::HeartRate => self.heart_rate = value.parse().ok(),
-                VitalSignsFormField::RespiratoryRate => self.respiratory_rate = value.parse().ok(),
-                VitalSignsFormField::Temperature => self.temperature = value.parse().ok(),
-                VitalSignsFormField::O2Saturation => self.o2_saturation = value.parse().ok(),
-                VitalSignsFormField::Height => self.height_cm = value.parse().ok(),
-                VitalSignsFormField::Weight => self.weight_kg = value.parse().ok(),
-                VitalSignsFormField::Notes => {}
-            }
             self.calculate_bmi();
-            self.validate_field(&field);
+            self.validate_field_by_id(&field_id);
             return Some(VitalSignsFormAction::ValueChanged);
-        }
-
-        // For textarea fields (all 9 fields now use TextareaState), delegate to TextareaState.
-        let field = self.focused_field;
-        if field.is_textarea() || !field.is_textarea() {
-            // All fields are now TextareaState, delegate key handling
-            let ratatui_key = to_ratatui_key(key);
-            let consumed = match field {
-                VitalSignsFormField::SystolicBp => self.systolic_bp_field.handle_key(ratatui_key),
-                VitalSignsFormField::DiastolicBp => self.diastolic_bp_field.handle_key(ratatui_key),
-                VitalSignsFormField::HeartRate => self.heart_rate_field.handle_key(ratatui_key),
-                VitalSignsFormField::RespiratoryRate => {
-                    self.respiratory_rate_field.handle_key(ratatui_key)
-                }
-                VitalSignsFormField::Temperature => self.temperature_field.handle_key(ratatui_key),
-                VitalSignsFormField::O2Saturation => {
-                    self.o2_saturation_field.handle_key(ratatui_key)
-                }
-                VitalSignsFormField::Height => self.height_cm_field.handle_key(ratatui_key),
-                VitalSignsFormField::Weight => self.weight_kg_field.handle_key(ratatui_key),
-                VitalSignsFormField::Notes => self.notes.handle_key(ratatui_key),
-            };
-
-            if consumed {
-                // Update the parsed value from textarea
-                let value = self.get_value(field);
-                match field {
-                    VitalSignsFormField::SystolicBp => self.systolic_bp = value.parse().ok(),
-                    VitalSignsFormField::DiastolicBp => self.diastolic_bp = value.parse().ok(),
-                    VitalSignsFormField::HeartRate => self.heart_rate = value.parse().ok(),
-                    VitalSignsFormField::RespiratoryRate => {
-                        self.respiratory_rate = value.parse().ok()
-                    }
-                    VitalSignsFormField::Temperature => self.temperature = value.parse().ok(),
-                    VitalSignsFormField::O2Saturation => self.o2_saturation = value.parse().ok(),
-                    VitalSignsFormField::Height => self.height_cm = value.parse().ok(),
-                    VitalSignsFormField::Weight => self.weight_kg = value.parse().ok(),
-                    VitalSignsFormField::Notes => {}
-                }
-                self.calculate_bmi();
-                self.validate_field(&field);
-                return Some(VitalSignsFormAction::ValueChanged);
-            }
         }
 
         match key.code {
             KeyCode::Tab => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    self.prev_field();
+                    FormNavigation::prev_field(self);
                 } else {
-                    self.next_field();
+                    FormNavigation::next_field(self);
                 }
                 Some(VitalSignsFormAction::FocusChanged)
             }
             KeyCode::BackTab => {
-                self.prev_field();
+                FormNavigation::prev_field(self);
                 Some(VitalSignsFormAction::FocusChanged)
             }
             KeyCode::Up => {
-                self.prev_field();
+                FormNavigation::prev_field(self);
                 Some(VitalSignsFormAction::FocusChanged)
             }
             KeyCode::Down => {
-                self.next_field();
+                FormNavigation::next_field(self);
                 Some(VitalSignsFormAction::FocusChanged)
             }
             KeyCode::PageUp => {
@@ -608,18 +422,93 @@ impl VitalSignsForm {
             patient_id,
             consultation_id: None,
             measured_at: chrono::Utc::now(),
-            systolic_bp: self.systolic_bp,
-            diastolic_bp: self.diastolic_bp,
-            heart_rate: self.heart_rate,
-            respiratory_rate: self.respiratory_rate,
-            temperature: self.temperature,
-            oxygen_saturation: self.o2_saturation,
-            height_cm: self.height_cm,
-            weight_kg: self.weight_kg,
+            systolic_bp: self.systolic_bp(),
+            diastolic_bp: self.diastolic_bp(),
+            heart_rate: self.heart_rate(),
+            respiratory_rate: self.respiratory_rate(),
+            temperature: self.temperature(),
+            oxygen_saturation: self.oxygen_saturation(),
+            height_cm: self.height_cm(),
+            weight_kg: self.weight_kg(),
             bmi: self.calculated_bmi,
-            notes: Some(self.notes.value()).filter(|s: &String| !s.is_empty()),
+            notes: Some(self.get_value_by_id(FIELD_NOTES)).filter(|s: &String| !s.is_empty()),
             created_at: chrono::Utc::now(),
             created_by,
+        }
+    }
+}
+
+impl DynamicFormMeta for VitalSignsForm {
+    fn label(&self, field_id: &str) -> String {
+        VitalSignsFormField::from_id(field_id)
+            .map(|field| field.label().to_string())
+            .unwrap_or_else(|| field_id.to_string())
+    }
+
+    fn is_required(&self, _field_id: &str) -> bool {
+        false
+    }
+
+    fn field_type(&self, _field_id: &str) -> crate::ui::widgets::FieldType {
+        crate::ui::widgets::FieldType::Text
+    }
+}
+
+impl DynamicForm for VitalSignsForm {
+    fn field_ids(&self) -> &[String] {
+        &self.field_ids
+    }
+
+    fn current_field(&self) -> &str {
+        self.focused_field.id()
+    }
+
+    fn set_current_field(&mut self, field_id: &str) {
+        if let Some(field) = VitalSignsFormField::from_id(field_id) {
+            self.focused_field = field;
+        }
+    }
+
+    fn get_value(&self, field_id: &str) -> String {
+        self.get_value_by_id(field_id)
+    }
+
+    fn set_value(&mut self, field_id: &str, value: String) {
+        self.set_value_by_id(field_id, value);
+    }
+
+    fn validate(&mut self) -> bool {
+        self.errors.clear();
+
+        for field_id in self.field_ids.clone() {
+            self.validate_field_by_id(&field_id);
+        }
+
+        if self.errors.is_empty() {
+            let form_errors = self
+                .rule_engine
+                .evaluate(|field_id| self.get_value_by_id(field_id));
+            if let Some(first_error) = form_errors.into_iter().next() {
+                self.errors
+                    .insert(FIELD_SYSTOLIC_BP.to_string(), first_error);
+            }
+        }
+
+        self.errors.is_empty()
+    }
+
+    fn get_error(&self, field_id: &str) -> Option<&str> {
+        self.errors.get(field_id).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field_id: &str, error: Option<String>) {
+        match error {
+            Some(msg) => {
+                self.errors.insert(field_id.to_string(), msg);
+            }
+            None => {
+                self.errors.remove(field_id);
+            }
         }
     }
 }
@@ -638,35 +527,15 @@ impl FormNavigation for VitalSignsForm {
     type FormField = VitalSignsFormField;
 
     fn get_error(&self, field: Self::FormField) -> Option<&str> {
-        self.errors.get(&field).map(|s| s.as_str())
+        self.errors.get(field.id()).map(|s| s.as_str())
     }
 
     fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
-        match error {
-            Some(msg) => {
-                self.errors.insert(field, msg);
-            }
-            None => {
-                self.errors.remove(&field);
-            }
-        }
+        <Self as DynamicForm>::set_error(self, field.id(), error);
     }
 
     fn validate(&mut self) -> bool {
-        self.errors.clear();
-
-        for field in VitalSignsFormField::all() {
-            self.validate_field(&field);
-        }
-
-        if self.errors.is_empty() && !self.has_any_measurement() {
-            self.errors.insert(
-                VitalSignsFormField::SystolicBp,
-                "At least one measurement is required".to_string(),
-            );
-        }
-
-        self.errors.is_empty()
+        <Self as DynamicForm>::validate(self)
     }
 
     fn current_field(&self) -> Self::FormField {
@@ -709,116 +578,31 @@ impl Widget for VitalSignsForm {
         let label_width = LABEL_WIDTH;
         let field_start = inner.x + label_width + 2;
 
-        let fields = VitalSignsFormField::all();
+        let fields = self.field_ids.clone();
 
         let mut y = inner.y + 1;
         let max_y = inner.y + inner.height - 2;
 
-        for field in fields {
+        for field_id in fields {
             if y > max_y {
                 break;
             }
 
-            let is_focused = field == self.focused_field;
-            let field_height = match field {
-                VitalSignsFormField::Notes => self.notes.height(),
-                _ => {
-                    let textarea_state = match field {
-                        VitalSignsFormField::SystolicBp => &self.systolic_bp_field,
-                        VitalSignsFormField::DiastolicBp => &self.diastolic_bp_field,
-                        VitalSignsFormField::HeartRate => &self.heart_rate_field,
-                        VitalSignsFormField::RespiratoryRate => &self.respiratory_rate_field,
-                        VitalSignsFormField::Temperature => &self.temperature_field,
-                        VitalSignsFormField::O2Saturation => &self.o2_saturation_field,
-                        VitalSignsFormField::Height => &self.height_cm_field,
-                        VitalSignsFormField::Weight => &self.weight_kg_field,
-                        VitalSignsFormField::Notes => unreachable!(),
-                    };
-                    textarea_state.height()
-                }
+            let is_focused = field_id == self.focused_field.id();
+            let Some(textarea) = self.textareas.get(&field_id) else {
+                continue;
             };
+            let field_height = textarea.height();
 
             let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
 
-            match field {
-                VitalSignsFormField::Notes => {
-                    TextareaWidget::new(&self.notes, self.theme.clone())
-                        .focused(is_focused)
-                        .render(field_area, buf);
-                }
-                VitalSignsFormField::SystolicBp => {
-                    let mut state = self.systolic_bp_field.clone();
-                    if let Some(err) = self.error(field) {
-                        state.set_error(Some(err.clone()));
-                    }
-                    TextareaWidget::new(&state, self.theme.clone())
-                        .focused(is_focused)
-                        .render(field_area, buf);
-                }
-                VitalSignsFormField::DiastolicBp => {
-                    let mut state = self.diastolic_bp_field.clone();
-                    if let Some(err) = self.error(field) {
-                        state.set_error(Some(err.clone()));
-                    }
-                    TextareaWidget::new(&state, self.theme.clone())
-                        .focused(is_focused)
-                        .render(field_area, buf);
-                }
-                VitalSignsFormField::HeartRate => {
-                    let mut state = self.heart_rate_field.clone();
-                    if let Some(err) = self.error(field) {
-                        state.set_error(Some(err.clone()));
-                    }
-                    TextareaWidget::new(&state, self.theme.clone())
-                        .focused(is_focused)
-                        .render(field_area, buf);
-                }
-                VitalSignsFormField::RespiratoryRate => {
-                    let mut state = self.respiratory_rate_field.clone();
-                    if let Some(err) = self.error(field) {
-                        state.set_error(Some(err.clone()));
-                    }
-                    TextareaWidget::new(&state, self.theme.clone())
-                        .focused(is_focused)
-                        .render(field_area, buf);
-                }
-                VitalSignsFormField::Temperature => {
-                    let mut state = self.temperature_field.clone();
-                    if let Some(err) = self.error(field) {
-                        state.set_error(Some(err.clone()));
-                    }
-                    TextareaWidget::new(&state, self.theme.clone())
-                        .focused(is_focused)
-                        .render(field_area, buf);
-                }
-                VitalSignsFormField::O2Saturation => {
-                    let mut state = self.o2_saturation_field.clone();
-                    if let Some(err) = self.error(field) {
-                        state.set_error(Some(err.clone()));
-                    }
-                    TextareaWidget::new(&state, self.theme.clone())
-                        .focused(is_focused)
-                        .render(field_area, buf);
-                }
-                VitalSignsFormField::Height => {
-                    let mut state = self.height_cm_field.clone();
-                    if let Some(err) = self.error(field) {
-                        state.set_error(Some(err.clone()));
-                    }
-                    TextareaWidget::new(&state, self.theme.clone())
-                        .focused(is_focused)
-                        .render(field_area, buf);
-                }
-                VitalSignsFormField::Weight => {
-                    let mut state = self.weight_kg_field.clone();
-                    if let Some(err) = self.error(field) {
-                        state.set_error(Some(err.clone()));
-                    }
-                    TextareaWidget::new(&state, self.theme.clone())
-                        .focused(is_focused)
-                        .render(field_area, buf);
-                }
+            let mut state = textarea.clone();
+            if let Some(err) = self.errors.get(&field_id) {
+                state.set_error(Some(err.clone()));
             }
+            TextareaWidget::new(&state, self.theme.clone())
+                .focused(is_focused)
+                .render(field_area, buf);
 
             y += field_height;
         }
@@ -848,6 +632,212 @@ impl Widget for VitalSignsForm {
     }
 }
 
+fn make_textarea_state(field: VitalSignsFormField, value: Option<String>) -> TextareaState {
+    let mut state = match field {
+        VitalSignsFormField::SystolicBp => TextareaState::new(field.label())
+            .with_height_mode(HeightMode::SingleLine)
+            .max_length(3),
+        VitalSignsFormField::DiastolicBp => TextareaState::new(field.label())
+            .with_height_mode(HeightMode::SingleLine)
+            .max_length(3),
+        VitalSignsFormField::HeartRate => TextareaState::new(field.label())
+            .with_height_mode(HeightMode::SingleLine)
+            .max_length(3),
+        VitalSignsFormField::RespiratoryRate => TextareaState::new(field.label())
+            .with_height_mode(HeightMode::SingleLine)
+            .max_length(2),
+        VitalSignsFormField::Temperature => TextareaState::new(field.label())
+            .with_height_mode(HeightMode::SingleLine)
+            .max_length(5),
+        VitalSignsFormField::O2Saturation => TextareaState::new(field.label())
+            .with_height_mode(HeightMode::SingleLine)
+            .max_length(3),
+        VitalSignsFormField::Height => TextareaState::new(field.label())
+            .with_height_mode(HeightMode::SingleLine)
+            .max_length(3),
+        VitalSignsFormField::Weight => TextareaState::new(field.label())
+            .with_height_mode(HeightMode::SingleLine)
+            .max_length(6),
+        VitalSignsFormField::Notes => {
+            TextareaState::new(field.label()).with_height_mode(HeightMode::FixedLines(4))
+        }
+    };
+
+    if let Some(value) = value {
+        state = state.with_value(value);
+    }
+
+    state
+}
+
+fn build_validation_rules() -> HashMap<String, ValidationRules> {
+    let mut rules = HashMap::new();
+
+    rules.insert(
+        FIELD_SYSTOLIC_BP.to_string(),
+        ValidationRules {
+            numeric_range: Some(NumericRange {
+                min: 50.0,
+                max: 300.0,
+            }),
+            regex: Some(r"^\d+$".to_string()),
+            ..ValidationRules::default()
+        },
+    );
+
+    rules.insert(
+        FIELD_DIASTOLIC_BP.to_string(),
+        ValidationRules {
+            numeric_range: Some(NumericRange {
+                min: 20.0,
+                max: 200.0,
+            }),
+            regex: Some(r"^\d+$".to_string()),
+            ..ValidationRules::default()
+        },
+    );
+
+    rules.insert(
+        FIELD_HEART_RATE.to_string(),
+        ValidationRules {
+            numeric_range: Some(NumericRange {
+                min: 20.0,
+                max: 300.0,
+            }),
+            regex: Some(r"^\d+$".to_string()),
+            ..ValidationRules::default()
+        },
+    );
+
+    rules.insert(
+        FIELD_RESPIRATORY_RATE.to_string(),
+        ValidationRules {
+            numeric_range: Some(NumericRange {
+                min: 4.0,
+                max: 60.0,
+            }),
+            regex: Some(r"^\d+$".to_string()),
+            ..ValidationRules::default()
+        },
+    );
+
+    rules.insert(
+        FIELD_TEMPERATURE.to_string(),
+        ValidationRules {
+            numeric_range: Some(NumericRange {
+                min: 30.0,
+                max: 45.0,
+            }),
+            ..ValidationRules::default()
+        },
+    );
+
+    rules.insert(
+        FIELD_OXYGEN_SATURATION.to_string(),
+        ValidationRules {
+            numeric_range: Some(NumericRange {
+                min: 50.0,
+                max: 100.0,
+            }),
+            regex: Some(r"^\d+$".to_string()),
+            ..ValidationRules::default()
+        },
+    );
+
+    rules.insert(
+        FIELD_HEIGHT.to_string(),
+        ValidationRules {
+            numeric_range: Some(NumericRange {
+                min: 30.0,
+                max: 300.0,
+            }),
+            regex: Some(r"^\d+$".to_string()),
+            ..ValidationRules::default()
+        },
+    );
+
+    rules.insert(
+        FIELD_WEIGHT.to_string(),
+        ValidationRules {
+            numeric_range: Some(NumericRange {
+                min: 0.5,
+                max: 700.0,
+            }),
+            ..ValidationRules::default()
+        },
+    );
+
+    rules.insert(FIELD_NOTES.to_string(), ValidationRules::default());
+
+    rules
+}
+
+fn build_rule_engine() -> FormRuleEngine {
+    FormRuleEngine::new(vec![FormRule {
+        rule_type: FormRuleType::AnyNotEmpty,
+        fields: vec![
+            FIELD_SYSTOLIC_BP.to_string(),
+            FIELD_DIASTOLIC_BP.to_string(),
+            FIELD_HEART_RATE.to_string(),
+            FIELD_RESPIRATORY_RATE.to_string(),
+            FIELD_TEMPERATURE.to_string(),
+            FIELD_OXYGEN_SATURATION.to_string(),
+            FIELD_HEIGHT.to_string(),
+            FIELD_WEIGHT.to_string(),
+        ],
+        message: "At least one measurement is required".to_string(),
+    }])
+}
+
+fn map_validation_error(field_id: &str, message: String) -> String {
+    match message.as_str() {
+        "Invalid number" => invalid_number_message(field_id).to_string(),
+        "Invalid format" => {
+            if is_integer_field(field_id) {
+                "Must be a whole number".to_string()
+            } else {
+                message
+            }
+        }
+        m if m.starts_with("Value must be between") => range_error_message(field_id).to_string(),
+        _ => message,
+    }
+}
+
+fn is_integer_field(field_id: &str) -> bool {
+    matches!(
+        field_id,
+        FIELD_SYSTOLIC_BP
+            | FIELD_DIASTOLIC_BP
+            | FIELD_HEART_RATE
+            | FIELD_RESPIRATORY_RATE
+            | FIELD_OXYGEN_SATURATION
+            | FIELD_HEIGHT
+    )
+}
+
+fn invalid_number_message(field_id: &str) -> &'static str {
+    match field_id {
+        FIELD_TEMPERATURE => "Must be a number (e.g. 37.2)",
+        FIELD_WEIGHT => "Must be a number (e.g. 72.5)",
+        _ => "Must be a whole number",
+    }
+}
+
+fn range_error_message(field_id: &str) -> &'static str {
+    match field_id {
+        FIELD_SYSTOLIC_BP => "Systolic BP must be 50-300 mmHg",
+        FIELD_DIASTOLIC_BP => "Diastolic BP must be 20-200 mmHg",
+        FIELD_HEART_RATE => "Heart rate must be 20-300 bpm",
+        FIELD_RESPIRATORY_RATE => "Respiratory rate must be 4-60 /min",
+        FIELD_TEMPERATURE => "Temperature must be 30-45 C",
+        FIELD_OXYGEN_SATURATION => "O2 saturation must be 50-100%",
+        FIELD_HEIGHT => "Height must be 30-300 cm",
+        FIELD_WEIGHT => "Weight must be 0.5-700 kg",
+        _ => "Invalid value",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -868,11 +858,11 @@ mod tests {
         let mut form = VitalSignsForm::new(theme);
 
         assert_eq!(form.focused_field(), VitalSignsFormField::SystolicBp);
-        form.next_field();
+        FormNavigation::next_field(&mut form);
         assert_eq!(form.focused_field(), VitalSignsFormField::DiastolicBp);
-        form.next_field();
+        FormNavigation::next_field(&mut form);
         assert_eq!(form.focused_field(), VitalSignsFormField::HeartRate);
-        form.prev_field();
+        FormNavigation::prev_field(&mut form);
         assert_eq!(form.focused_field(), VitalSignsFormField::DiastolicBp);
     }
 
@@ -881,11 +871,11 @@ mod tests {
         let theme = Theme::dark();
         let mut form = VitalSignsForm::new(theme);
 
-        form.prev_field();
+        FormNavigation::prev_field(&mut form);
         assert_eq!(form.focused_field(), VitalSignsFormField::Notes);
 
         form.focused_field = VitalSignsFormField::Notes;
-        form.next_field();
+        FormNavigation::next_field(&mut form);
         assert_eq!(form.focused_field(), VitalSignsFormField::SystolicBp);
     }
 
@@ -894,7 +884,7 @@ mod tests {
         let theme = Theme::dark();
         let mut form = VitalSignsForm::new(theme);
 
-        let valid = form.validate();
+        let valid = FormNavigation::validate(&mut form);
         assert!(!valid);
         assert!(form.error(VitalSignsFormField::SystolicBp).is_some());
     }
@@ -905,7 +895,7 @@ mod tests {
         let mut form = VitalSignsForm::new(theme);
 
         form.set_value(VitalSignsFormField::HeartRate, "72".to_string());
-        let valid = form.validate();
+        let valid = FormNavigation::validate(&mut form);
         assert!(valid);
         assert!(!form.has_errors());
     }
