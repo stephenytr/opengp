@@ -6,6 +6,8 @@ use std::collections::HashMap;
 
 use chrono::NaiveDate;
 use crossterm::event::{KeyEvent, KeyModifiers};
+use opengp_config::forms::ValidationRules;
+use opengp_domain::domain::clinical::{Allergy, AllergyType, Severity};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -16,10 +18,17 @@ use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    parse_date, DatePickerAction, DatePickerPopup, DropdownOption, DropdownWidget, FormFieldMeta,
-    FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+    format_date, parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption,
+    DropdownWidget, DynamicForm, DynamicFormMeta, FormFieldMeta, FormNavigation, FormValidator,
+    HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
 };
-use opengp_domain::domain::clinical::{Allergy, AllergyType, Severity};
+
+const FIELD_ALLERGEN: &str = "allergen";
+const FIELD_ALLERGY_TYPE: &str = "allergy_type";
+const FIELD_SEVERITY: &str = "severity";
+const FIELD_REACTION: &str = "reaction";
+const FIELD_ONSET_DATE: &str = "onset_date";
+const FIELD_NOTES: &str = "notes";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormMode {
@@ -54,6 +63,29 @@ impl AllergyFormField {
         (*self).into()
     }
 
+    pub fn id(&self) -> &'static str {
+        match self {
+            AllergyFormField::Allergen => FIELD_ALLERGEN,
+            AllergyFormField::AllergyType => FIELD_ALLERGY_TYPE,
+            AllergyFormField::Severity => FIELD_SEVERITY,
+            AllergyFormField::Reaction => FIELD_REACTION,
+            AllergyFormField::OnsetDate => FIELD_ONSET_DATE,
+            AllergyFormField::Notes => FIELD_NOTES,
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            FIELD_ALLERGEN => Some(AllergyFormField::Allergen),
+            FIELD_ALLERGY_TYPE => Some(AllergyFormField::AllergyType),
+            FIELD_SEVERITY => Some(AllergyFormField::Severity),
+            FIELD_REACTION => Some(AllergyFormField::Reaction),
+            FIELD_ONSET_DATE => Some(AllergyFormField::OnsetDate),
+            FIELD_NOTES => Some(AllergyFormField::Notes),
+            _ => None,
+        }
+    }
+
     pub fn is_required(&self) -> bool {
         matches!(
             self,
@@ -61,7 +93,6 @@ impl AllergyFormField {
         )
     }
 
-    /// Returns true if this field uses TextareaWidget.
     pub fn is_textarea(&self) -> bool {
         matches!(
             self,
@@ -87,19 +118,18 @@ pub enum AllergyFormAction {
 
 pub struct AllergyForm {
     mode: FormMode,
-    allergen: TextareaState,
+    errors: HashMap<String, String>,
+    focused_field: String,
+    field_ids: Vec<String>,
+    textareas: HashMap<String, TextareaState>,
+    dropdowns: HashMap<String, DropdownWidget>,
     allergy_type: Option<AllergyType>,
     severity: Option<Severity>,
-    reaction: TextareaState,
     onset_date: Option<NaiveDate>,
-    notes: TextareaState,
-    focused_field: AllergyFormField,
     is_valid: bool,
-    errors: HashMap<AllergyFormField, String>,
+    validator: FormValidator,
     theme: Theme,
     scroll: ScrollableFormState,
-    allergy_type_dropdown: DropdownWidget,
-    severity_dropdown: DropdownWidget,
     date_picker: DatePickerPopup,
 }
 
@@ -107,19 +137,18 @@ impl Clone for AllergyForm {
     fn clone(&self) -> Self {
         Self {
             mode: self.mode,
-            allergen: self.allergen.clone(),
+            errors: self.errors.clone(),
+            focused_field: self.focused_field.clone(),
+            field_ids: self.field_ids.clone(),
+            textareas: self.textareas.clone(),
+            dropdowns: self.dropdowns.clone(),
             allergy_type: self.allergy_type,
             severity: self.severity,
-            reaction: self.reaction.clone(),
             onset_date: self.onset_date,
-            notes: self.notes.clone(),
-            focused_field: self.focused_field,
             is_valid: self.is_valid,
-            errors: self.errors.clone(),
+            validator: build_validator(),
             theme: self.theme.clone(),
             scroll: self.scroll.clone(),
-            allergy_type_dropdown: self.allergy_type_dropdown.clone(),
-            severity_dropdown: self.severity_dropdown.clone(),
             date_picker: self.date_picker.clone(),
         }
     }
@@ -139,57 +168,71 @@ impl AllergyForm {
             DropdownOption::new("Severe", "Severe"),
         ];
 
-        Self {
+        let mut form = Self {
             mode: FormMode::Create,
-            allergen: TextareaState::new("Allergen *").with_height_mode(HeightMode::SingleLine),
+            errors: HashMap::new(),
+            focused_field: FIELD_ALLERGEN.to_string(),
+            field_ids: AllergyFormField::all()
+                .into_iter()
+                .map(|field| field.id().to_string())
+                .collect(),
+            textareas: HashMap::new(),
+            dropdowns: HashMap::new(),
             allergy_type: None,
             severity: None,
-            reaction: TextareaState::new("Reaction").with_height_mode(HeightMode::SingleLine),
             onset_date: None,
-            notes: TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(3)),
-            focused_field: AllergyFormField::Allergen,
             is_valid: false,
-            errors: HashMap::new(),
+            validator: FormValidator::new(&HashMap::new()),
             theme: theme.clone(),
             scroll: ScrollableFormState::new(),
-            allergy_type_dropdown: DropdownWidget::new(
-                "Allergy Type *",
-                allergy_type_options,
-                theme.clone(),
-            ),
-            severity_dropdown: DropdownWidget::new("Severity *", severity_options, theme),
             date_picker: DatePickerPopup::new(),
-        }
+        };
+
+        form.textareas.insert(
+            FIELD_ALLERGEN.to_string(),
+            TextareaState::new("Allergen *").with_height_mode(HeightMode::SingleLine),
+        );
+        form.textareas.insert(
+            FIELD_REACTION.to_string(),
+            TextareaState::new("Reaction").with_height_mode(HeightMode::SingleLine),
+        );
+        form.textareas.insert(
+            FIELD_NOTES.to_string(),
+            TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(3)),
+        );
+
+        form.dropdowns.insert(
+            FIELD_ALLERGY_TYPE.to_string(),
+            DropdownWidget::new("Allergy Type *", allergy_type_options, theme.clone()),
+        );
+        form.dropdowns.insert(
+            FIELD_SEVERITY.to_string(),
+            DropdownWidget::new("Severity *", severity_options, theme),
+        );
+
+        form.validator = build_validator();
+        form
     }
 
     pub fn from_allergy(allergy: Allergy, theme: Theme) -> Self {
         let mut form = Self::new(theme);
         form.mode = FormMode::Edit(allergy.id);
 
-        form.allergen = TextareaState::new("Allergen *")
-            .with_height_mode(HeightMode::SingleLine)
-            .with_value(allergy.allergen);
-
-        form.allergy_type = Some(allergy.allergy_type);
-        form.allergy_type_dropdown
-            .set_value(&allergy.allergy_type.to_string());
-
-        form.severity = Some(allergy.severity);
-        form.severity_dropdown
-            .set_value(&allergy.severity.to_string());
+        form.set_value(AllergyFormField::Allergen, allergy.allergen);
+        form.set_value(
+            AllergyFormField::AllergyType,
+            allergy.allergy_type.to_string(),
+        );
+        form.set_value(AllergyFormField::Severity, allergy.severity.to_string());
 
         if let Some(reaction) = allergy.reaction {
-            form.reaction = TextareaState::new("Reaction")
-                .with_height_mode(HeightMode::SingleLine)
-                .with_value(reaction);
+            form.set_value(AllergyFormField::Reaction, reaction);
         }
 
         form.onset_date = allergy.onset_date;
 
         if let Some(notes) = allergy.notes {
-            form.notes = TextareaState::new("Notes")
-                .with_height_mode(HeightMode::FixedLines(3))
-                .with_value(notes);
+            form.set_value(AllergyFormField::Notes, notes);
         }
 
         form
@@ -207,115 +250,196 @@ impl AllergyForm {
     }
 
     pub fn focused_field(&self) -> AllergyFormField {
-        self.focused_field
+        AllergyFormField::from_id(&self.focused_field).unwrap_or(AllergyFormField::Allergen)
     }
 
     pub fn get_value(&self, field: AllergyFormField) -> String {
-        match field {
-            AllergyFormField::Allergen => self.allergen.value(),
-            AllergyFormField::AllergyType => self
-                .allergy_type_dropdown
-                .selected_value()
-                .map(|s: &str| s.to_string())
-                .unwrap_or_default(),
-            AllergyFormField::Severity => self
-                .severity_dropdown
-                .selected_value()
-                .map(|s: &str| s.to_string())
-                .unwrap_or_default(),
-            AllergyFormField::Reaction => self.reaction.value(),
-            AllergyFormField::OnsetDate => self
-                .onset_date
-                .map(|d| d.format("%d/%m/%Y").to_string())
-                .unwrap_or_default(),
-            AllergyFormField::Notes => self.notes.value(),
-        }
+        self.get_value_by_id(field.id())
     }
 
     pub fn set_value(&mut self, field: AllergyFormField, value: String) {
-        match field {
-            AllergyFormField::Allergen => {
-                self.allergen = TextareaState::new("Allergen *")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .with_value(value);
-            }
-            AllergyFormField::AllergyType => {
-                self.allergy_type_dropdown.set_value(&value);
-                self.allergy_type = value.parse().ok();
-            }
-            AllergyFormField::Severity => {
-                self.severity_dropdown.set_value(&value);
-                self.severity = value.parse().ok();
-            }
-            AllergyFormField::Reaction => {
-                self.reaction = TextareaState::new("Reaction")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .with_value(value);
-            }
-            AllergyFormField::OnsetDate => {
-                let parsed = if value.is_empty() {
-                    None
-                } else {
-                    parse_date(&value)
-                };
-                self.onset_date = parsed;
-                if !value.is_empty() && parsed.is_none() {
-                    self.errors.insert(
-                        AllergyFormField::OnsetDate,
-                        "Use dd/mm/yyyy format".to_string(),
-                    );
-                    return;
-                }
-            }
-            AllergyFormField::Notes => {
-                self.notes = TextareaState::new("Notes")
-                    .with_height_mode(HeightMode::FixedLines(3))
-                    .with_value(value);
-            }
-        }
-        self.validate_field(&field);
+        self.set_value_by_id(field.id(), value)
     }
 
-    fn validate_field(&mut self, field: &AllergyFormField) {
-        self.errors.remove(field);
+    fn get_value_by_id(&self, field_id: &str) -> String {
+        if let Some(textarea) = self.textareas.get(field_id) {
+            return textarea.value();
+        }
 
-        let value = self.get_value(*field);
+        if let Some(dropdown) = self.dropdowns.get(field_id) {
+            return dropdown.selected_value().unwrap_or("").to_string();
+        }
 
-        match field {
-            AllergyFormField::Allergen => {
-                if value.trim().is_empty() {
-                    self.errors
-                        .insert(*field, "Allergen is required".to_string());
-                }
+        if field_id == FIELD_ONSET_DATE {
+            return self.onset_date.map(format_date).unwrap_or_default();
+        }
+
+        String::new()
+    }
+
+    fn set_value_by_id(&mut self, field_id: &str, value: String) {
+        if let Some(textarea) = self.textareas.get_mut(field_id) {
+            let label = textarea.label.clone();
+            let height_mode = textarea.height_mode.clone();
+            let max_length = textarea.max_length;
+            let focused = textarea.focused;
+
+            let mut updated = TextareaState::new(label)
+                .with_height_mode(height_mode)
+                .with_value(value.clone())
+                .focused(focused);
+            if let Some(limit) = max_length {
+                updated = updated.max_length(limit);
             }
-            AllergyFormField::AllergyType => {
-                if value.is_empty() {
-                    self.errors.insert(
-                        *field,
-                        "Allergy type is required (Drug/Food/Environmental/Other)".to_string(),
-                    );
-                }
+            *textarea = updated;
+        } else if let Some(dropdown) = self.dropdowns.get_mut(field_id) {
+            dropdown.set_value(&value);
+        } else if field_id == FIELD_ONSET_DATE {
+            let parsed = if value.trim().is_empty() {
+                None
+            } else {
+                parse_date(&value)
+            };
+            self.onset_date = parsed;
+            if !value.trim().is_empty() && parsed.is_none() {
+                self.set_error_by_id(FIELD_ONSET_DATE, Some("Use dd/mm/yyyy format".to_string()));
+                self.is_valid = false;
+                return;
             }
-            AllergyFormField::Severity => {
-                if value.is_empty() {
-                    self.errors.insert(
-                        *field,
-                        "Severity is required (Mild/Moderate/Severe)".to_string(),
-                    );
-                }
-            }
-            AllergyFormField::OnsetDate => {
-                if !value.is_empty() && parse_date(&value).is_none() {
-                    self.errors
-                        .insert(*field, "Use dd/mm/yyyy format".to_string());
-                }
-            }
+        }
+
+        self.sync_domain_enum_fields(field_id, &value);
+        self.validate_field_by_id(field_id);
+    }
+
+    fn sync_domain_enum_fields(&mut self, field_id: &str, value: &str) {
+        match field_id {
+            FIELD_ALLERGY_TYPE => self.allergy_type = value.parse::<AllergyType>().ok(),
+            FIELD_SEVERITY => self.severity = value.parse::<Severity>().ok(),
             _ => {}
         }
     }
 
+    fn validate_field_by_id(&mut self, field_id: &str) {
+        self.errors.remove(field_id);
+
+        let value = self.get_value_by_id(field_id);
+        let mut errors = self.validator.validate(field_id, &value);
+
+        if field_id == FIELD_ALLERGEN
+            && errors.iter().any(|error| error == "This field is required")
+        {
+            errors = vec!["Allergen is required".to_string()];
+        }
+
+        if field_id == FIELD_ALLERGY_TYPE
+            && errors.iter().any(|error| error == "This field is required")
+        {
+            errors = vec!["Allergy type is required (Drug/Food/Environmental/Other)".to_string()];
+        }
+
+        if field_id == FIELD_SEVERITY
+            && errors.iter().any(|error| error == "This field is required")
+        {
+            errors = vec!["Severity is required (Mild/Moderate/Severe)".to_string()];
+        }
+
+        if field_id == FIELD_ONSET_DATE && !value.trim().is_empty() && parse_date(&value).is_none()
+        {
+            errors = vec!["Use dd/mm/yyyy format".to_string()];
+        }
+
+        let error_msg = errors.into_iter().next();
+        self.set_error_by_id(field_id, error_msg.clone());
+        if let Some(textarea) = self.textareas.get_mut(field_id) {
+            textarea.set_error(error_msg);
+        }
+
+        self.is_valid = self.errors.is_empty();
+    }
+
+    fn set_error_by_id(&mut self, field_id: &str, error: Option<String>) {
+        match error {
+            Some(msg) => {
+                self.errors.insert(field_id.to_string(), msg);
+            }
+            None => {
+                self.errors.remove(field_id);
+            }
+        }
+    }
+
+    fn focused_textarea_mut(&mut self) -> Option<&mut TextareaState> {
+        self.textareas.get_mut(&self.focused_field)
+    }
+
+    fn textarea_for(&self, field: AllergyFormField) -> Option<&TextareaState> {
+        self.textareas.get(field.id())
+    }
+
+    fn dropdown_for(&self, field: AllergyFormField) -> Option<&DropdownWidget> {
+        self.dropdowns.get(field.id())
+    }
+
+    fn handle_dropdown_key(&mut self, key: KeyEvent) -> Option<Option<AllergyFormAction>> {
+        let field_id = self.focused_field.clone();
+        if !self.dropdowns.contains_key(&field_id) {
+            return None;
+        }
+
+        let mut selected_value: Option<String> = None;
+        let action = {
+            let dropdown = self.dropdowns.get_mut(&field_id)?;
+            dropdown.handle_key(key)
+        };
+
+        if let Some(action) = action {
+            match key.code {
+                crossterm::event::KeyCode::Tab
+                | crossterm::event::KeyCode::BackTab
+                | crossterm::event::KeyCode::Esc => return None,
+                _ => match action {
+                    DropdownAction::Selected(_) | DropdownAction::Closed => {
+                        selected_value = self
+                            .dropdowns
+                            .get(&field_id)
+                            .and_then(|dropdown| dropdown.selected_value().map(|v| v.to_string()));
+                    }
+                    DropdownAction::Opened | DropdownAction::FocusChanged => {
+                        return Some(Some(AllergyFormAction::ValueChanged));
+                    }
+                },
+            }
+        } else {
+            match key.code {
+                crossterm::event::KeyCode::Tab
+                | crossterm::event::KeyCode::BackTab
+                | crossterm::event::KeyCode::Esc => return None,
+                _ => return Some(None),
+            }
+        }
+
+        if let Some(value) = selected_value {
+            self.set_value_by_id(&field_id, value);
+        }
+
+        Some(Some(AllergyFormAction::ValueChanged))
+    }
+
     pub fn error(&self, field: AllergyFormField) -> Option<&String> {
-        self.errors.get(&field)
+        self.errors.get(field.id())
+    }
+
+    pub fn validate(&mut self) -> bool {
+        FormNavigation::validate(self)
+    }
+
+    pub fn next_field(&mut self) {
+        FormNavigation::next_field(self);
+    }
+
+    pub fn prev_field(&mut self) {
+        FormNavigation::prev_field(self);
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<AllergyFormAction> {
@@ -325,13 +449,11 @@ impl AllergyForm {
             return None;
         }
 
-        // Ctrl+S submits the form from any field
         if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
-            self.validate();
+            FormNavigation::validate(self);
             return Some(AllergyFormAction::Submit);
         }
 
-        // Esc cancels the form
         if key.code == KeyCode::Esc {
             return Some(AllergyFormAction::Cancel);
         }
@@ -340,8 +462,7 @@ impl AllergyForm {
             if let Some(action) = self.date_picker.handle_key(key) {
                 match action {
                     DatePickerAction::Selected(date) => {
-                        self.onset_date = Some(date);
-                        self.validate_field(&AllergyFormField::OnsetDate);
+                        self.set_value_by_id(FIELD_ONSET_DATE, format_date(date));
                         return Some(AllergyFormAction::ValueChanged);
                     }
                     DatePickerAction::Dismissed => {
@@ -352,96 +473,48 @@ impl AllergyForm {
             return Some(AllergyFormAction::FocusChanged);
         }
 
-        if self.focused_field == AllergyFormField::OnsetDate
+        if self.focused_field == FIELD_ONSET_DATE
             && matches!(key.code, KeyCode::Enter | KeyCode::Char(' '))
         {
-            let current_value = self.onset_date;
-            self.date_picker.open(current_value);
+            self.date_picker.open(self.onset_date);
             return Some(AllergyFormAction::FocusChanged);
         }
 
-        match self.focused_field {
-            AllergyFormField::AllergyType => {
-                if let Some(_action) = self.allergy_type_dropdown.handle_key(key) {
-                    // Allow Tab/BackTab/Esc to pass through to form's navigation handler
-                    match key.code {
-                        KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {
-                            // Return None so caller handles Tab for field navigation
-                            return None;
-                        }
-                        _ => {
-                            if let Some(value) = self.allergy_type_dropdown.selected_value() {
-                                self.allergy_type = value.parse::<AllergyType>().ok();
-                                self.validate_field(&AllergyFormField::AllergyType);
-                            }
-                            return Some(AllergyFormAction::ValueChanged);
-                        }
-                    }
-                }
-            }
-            AllergyFormField::Severity => {
-                if let Some(_action) = self.severity_dropdown.handle_key(key) {
-                    // Allow Tab/BackTab/Esc to pass through to form's navigation handler
-                    match key.code {
-                        KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {
-                            // Return None so caller handles Tab for field navigation
-                            return None;
-                        }
-                        _ => {
-                            if let Some(value) = self.severity_dropdown.selected_value() {
-                                self.severity = value.parse::<Severity>().ok();
-                                self.validate_field(&AllergyFormField::Severity);
-                            }
-                            return Some(AllergyFormAction::ValueChanged);
-                        }
-                    }
-                }
-            }
-            // Textarea fields: delegate key handling to TextareaState.
-            AllergyFormField::Allergen => {
-                let ratatui_key = to_ratatui_key(key);
-                let consumed = self.allergen.handle_key(ratatui_key);
+        if let Some(dropdown_action) = self.handle_dropdown_key(key) {
+            return dropdown_action;
+        }
+
+        if !self.dropdowns.contains_key(&self.focused_field) {
+            let ratatui_key = to_ratatui_key(key);
+            if let Some(textarea) = self.focused_textarea_mut() {
+                let consumed = textarea.handle_key(ratatui_key);
                 if consumed {
-                    self.validate_field(&AllergyFormField::Allergen);
+                    let field_id = self.focused_field.clone();
+                    self.validate_field_by_id(&field_id);
                     return Some(AllergyFormAction::ValueChanged);
                 }
             }
-            AllergyFormField::Reaction => {
-                let ratatui_key = to_ratatui_key(key);
-                let consumed = self.reaction.handle_key(ratatui_key);
-                if consumed {
-                    return Some(AllergyFormAction::ValueChanged);
-                }
-            }
-            AllergyFormField::Notes => {
-                let ratatui_key = to_ratatui_key(key);
-                let consumed = self.notes.handle_key(ratatui_key);
-                if consumed {
-                    return Some(AllergyFormAction::ValueChanged);
-                }
-            }
-            _ => {}
         }
 
         match key.code {
             KeyCode::Tab => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    self.prev_field();
+                    FormNavigation::prev_field(self);
                 } else {
-                    self.next_field();
+                    FormNavigation::next_field(self);
                 }
                 Some(AllergyFormAction::FocusChanged)
             }
             KeyCode::BackTab => {
-                self.prev_field();
+                FormNavigation::prev_field(self);
                 Some(AllergyFormAction::FocusChanged)
             }
             KeyCode::Up => {
-                self.prev_field();
+                FormNavigation::prev_field(self);
                 Some(AllergyFormAction::FocusChanged)
             }
             KeyCode::Down => {
-                self.next_field();
+                FormNavigation::next_field(self);
                 Some(AllergyFormAction::FocusChanged)
             }
             KeyCode::PageUp => {
@@ -462,12 +535,12 @@ impl AllergyForm {
         Allergy {
             id: uuid::Uuid::new_v4(),
             patient_id,
-            allergen: self.allergen.value(),
+            allergen: self.get_value(AllergyFormField::Allergen),
             allergy_type: self.allergy_type.unwrap_or(AllergyType::Other),
             severity: self.severity.unwrap_or(Severity::Moderate),
-            reaction: Some(self.reaction.value()).filter(|s| !s.is_empty()),
+            reaction: Some(self.get_value(AllergyFormField::Reaction)).filter(|s| !s.is_empty()),
             onset_date: self.onset_date,
-            notes: Some(self.notes.value()).filter(|s| !s.is_empty()),
+            notes: Some(self.get_value(AllergyFormField::Notes)).filter(|s| !s.is_empty()),
             is_active: true,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -487,45 +560,99 @@ impl FormFieldMeta for AllergyFormField {
     }
 }
 
-impl FormNavigation for AllergyForm {
-    type FormField = AllergyFormField;
-
-    fn get_error(&self, field: Self::FormField) -> Option<&str> {
-        self.errors.get(&field).map(|s| s.as_str())
+impl DynamicFormMeta for AllergyForm {
+    fn label(&self, field_id: &str) -> String {
+        AllergyFormField::from_id(field_id)
+            .map(|field| field.label().to_string())
+            .unwrap_or_else(|| field_id.to_string())
     }
 
-    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
-        match error {
-            Some(msg) => {
-                self.errors.insert(field, msg);
+    fn is_required(&self, field_id: &str) -> bool {
+        AllergyFormField::from_id(field_id)
+            .map(|field| field.is_required())
+            .unwrap_or(false)
+    }
+
+    fn field_type(&self, field_id: &str) -> crate::ui::widgets::FieldType {
+        match AllergyFormField::from_id(field_id) {
+            Some(AllergyFormField::AllergyType | AllergyFormField::Severity) => {
+                crate::ui::widgets::FieldType::Select(vec![])
             }
-            None => {
-                self.errors.remove(&field);
-            }
+            Some(AllergyFormField::OnsetDate) => crate::ui::widgets::FieldType::Date,
+            _ => crate::ui::widgets::FieldType::Text,
         }
+    }
+}
+
+impl DynamicForm for AllergyForm {
+    fn field_ids(&self) -> &[String] {
+        &self.field_ids
+    }
+
+    fn current_field(&self) -> &str {
+        &self.focused_field
+    }
+
+    fn set_current_field(&mut self, field_id: &str) {
+        if self.field_ids.iter().any(|id| id == field_id) {
+            self.focused_field = field_id.to_string();
+        }
+    }
+
+    fn get_value(&self, field_id: &str) -> String {
+        self.get_value_by_id(field_id)
+    }
+
+    fn set_value(&mut self, field_id: &str, value: String) {
+        self.set_value_by_id(field_id, value)
     }
 
     fn validate(&mut self) -> bool {
         self.errors.clear();
-
-        for field in AllergyFormField::all() {
-            self.validate_field(&field);
+        for field_id in self.field_ids.clone() {
+            self.validate_field_by_id(&field_id);
         }
-
         self.is_valid = self.errors.is_empty();
         self.is_valid
     }
 
+    fn get_error(&self, field_id: &str) -> Option<&str> {
+        self.errors.get(field_id).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field_id: &str, error: Option<String>) {
+        self.set_error_by_id(field_id, error);
+    }
+}
+
+impl FormNavigation for AllergyForm {
+    type FormField = AllergyFormField;
+
+    fn get_error(&self, field: Self::FormField) -> Option<&str> {
+        self.errors.get(field.id()).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
+        self.set_error_by_id(field.id(), error);
+    }
+
+    fn validate(&mut self) -> bool {
+        <Self as DynamicForm>::validate(self)
+    }
+
     fn current_field(&self) -> Self::FormField {
-        self.focused_field
+        self.focused_field()
     }
 
     fn fields(&self) -> Vec<Self::FormField> {
-        AllergyFormField::all()
+        self.field_ids
+            .iter()
+            .filter_map(|field_id| AllergyFormField::from_id(field_id))
+            .collect()
     }
 
     fn set_current_field(&mut self, field: Self::FormField) {
-        self.focused_field = field;
+        self.focused_field = field.id().to_string();
     }
 }
 
@@ -555,7 +682,10 @@ impl Widget for AllergyForm {
         let mut total_height: u16 = 0;
         for field in &fields {
             if field.is_textarea() {
-                total_height += 2;
+                total_height += self
+                    .textarea_for(*field)
+                    .map(|state| state.height())
+                    .unwrap_or(2);
             } else if field.is_dropdown() {
                 total_height += 4;
             } else {
@@ -572,11 +702,13 @@ impl Widget for AllergyForm {
 
         for field in fields {
             let field_height = if field.is_textarea() {
-                2i32
+                self.textarea_for(field)
+                    .map(|state| state.height())
+                    .unwrap_or(2) as i32
             } else if field.is_dropdown() {
-                4i32
+                4
             } else {
-                2i32
+                2
             };
 
             if y + field_height <= inner.y as i32 || y >= max_y {
@@ -584,36 +716,35 @@ impl Widget for AllergyForm {
                 continue;
             }
 
-            let is_focused = field == self.focused_field;
+            let is_focused = field.id() == self.focused_field;
 
             if field.is_textarea() {
-                let textarea_state = match field {
-                    AllergyFormField::Allergen => &self.allergen,
-                    AllergyFormField::Reaction => &self.reaction,
-                    AllergyFormField::Notes => &self.notes,
-                    _ => unreachable!(),
+                let Some(textarea_state) = self.textarea_for(field) else {
+                    y += field_height;
+                    continue;
                 };
-                let field_height = textarea_state.height();
+
+                let textarea_height = textarea_state.height();
                 if y >= inner.y as i32 && y < max_y {
                     let field_area =
-                        Rect::new(inner.x + 1, y as u16, inner.width - 2, field_height);
+                        Rect::new(inner.x + 1, y as u16, inner.width - 2, textarea_height);
                     TextareaWidget::new(textarea_state, self.theme.clone())
                         .focused(is_focused)
                         .render(field_area, buf);
 
                     if let Some(error_msg) = self.error(field) {
-                        if (y as u16) + field_height <= inner.y + inner.height - 2 {
+                        if (y as u16) + textarea_height <= inner.y + inner.height - 2 {
                             let error_style = Style::default().fg(self.theme.colors.error);
                             buf.set_string(
                                 inner.x + 1,
-                                (y as u16) + field_height,
+                                (y as u16) + textarea_height,
                                 format!("  {}", error_msg),
                                 error_style,
                             );
                         }
                     }
                 }
-                y += field_height as i32;
+                y += textarea_height as i32;
                 continue;
             }
 
@@ -643,28 +774,12 @@ impl Widget for AllergyForm {
             let max_value_width = inner.width.saturating_sub(label_width + 4);
 
             match field {
-                AllergyFormField::AllergyType => {
-                    let dropdown = self.allergy_type_dropdown.clone();
-                    if y >= inner.y as i32 && y < max_y {
-                        let dropdown_area = Rect::new(field_start, y as u16, max_value_width, 3);
-                        if dropdown.is_open() {
-                            open_dropdown = Some((dropdown.clone(), dropdown_area));
-                        }
-                        dropdown.focused(is_focused).render(dropdown_area, buf);
-                        if let Some(error_msg) = self.error(field) {
-                            let error_style = Style::default().fg(self.theme.colors.error);
-                            buf.set_string(
-                                field_start,
-                                (y as u16) + 3,
-                                format!("  {}", error_msg),
-                                error_style,
-                            );
-                        }
-                    }
-                    y += 4;
-                }
-                AllergyFormField::Severity => {
-                    let dropdown = self.severity_dropdown.clone();
+                AllergyFormField::AllergyType | AllergyFormField::Severity => {
+                    let Some(dropdown) = self.dropdown_for(field).cloned() else {
+                        y += 4;
+                        continue;
+                    };
+
                     if y >= inner.y as i32 && y < max_y {
                         let dropdown_area = Rect::new(field_start, y as u16, max_value_width, 3);
                         if dropdown.is_open() {
@@ -736,6 +851,40 @@ impl Widget for AllergyForm {
             self.date_picker.render(area, buf);
         }
     }
+}
+
+fn build_validator() -> FormValidator {
+    let mut rules: HashMap<String, ValidationRules> = HashMap::new();
+    rules.insert(
+        FIELD_ALLERGEN.to_string(),
+        ValidationRules {
+            required: true,
+            ..ValidationRules::default()
+        },
+    );
+    rules.insert(
+        FIELD_ALLERGY_TYPE.to_string(),
+        ValidationRules {
+            required: true,
+            ..ValidationRules::default()
+        },
+    );
+    rules.insert(
+        FIELD_SEVERITY.to_string(),
+        ValidationRules {
+            required: true,
+            ..ValidationRules::default()
+        },
+    );
+    rules.insert(
+        FIELD_ONSET_DATE.to_string(),
+        ValidationRules {
+            date_format: Some("dd/mm/yyyy".to_string()),
+            ..ValidationRules::default()
+        },
+    );
+
+    FormValidator::new(&rules)
 }
 
 #[cfg(test)]

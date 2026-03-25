@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use opengp_config::forms::ValidationRules;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -15,10 +16,17 @@ use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    parse_date, DropdownAction, DropdownOption, DropdownWidget, FormFieldMeta, FormNavigation,
-    HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+    parse_date, DropdownAction, DropdownOption, DropdownWidget, DynamicForm, DynamicFormMeta,
+    FieldType, FormFieldMeta, FormNavigation, FormValidator, HeightMode, ScrollableFormState,
+    TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::{ConditionStatus, MedicalHistory, Severity};
+
+const FIELD_CONDITION: &str = "condition";
+const FIELD_DIAGNOSIS_DATE: &str = "diagnosis_date";
+const FIELD_STATUS: &str = "status";
+const FIELD_SEVERITY: &str = "severity";
+const FIELD_NOTES: &str = "notes";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormMode {
@@ -51,6 +59,27 @@ impl MedicalHistoryFormField {
         (*self).into()
     }
 
+    pub fn id(&self) -> &'static str {
+        match self {
+            MedicalHistoryFormField::Condition => FIELD_CONDITION,
+            MedicalHistoryFormField::DiagnosisDate => FIELD_DIAGNOSIS_DATE,
+            MedicalHistoryFormField::Status => FIELD_STATUS,
+            MedicalHistoryFormField::Severity => FIELD_SEVERITY,
+            MedicalHistoryFormField::Notes => FIELD_NOTES,
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            FIELD_CONDITION => Some(MedicalHistoryFormField::Condition),
+            FIELD_DIAGNOSIS_DATE => Some(MedicalHistoryFormField::DiagnosisDate),
+            FIELD_STATUS => Some(MedicalHistoryFormField::Status),
+            FIELD_SEVERITY => Some(MedicalHistoryFormField::Severity),
+            FIELD_NOTES => Some(MedicalHistoryFormField::Notes),
+            _ => None,
+        }
+    }
+
     pub fn is_required(&self) -> bool {
         matches!(
             self,
@@ -68,13 +97,12 @@ impl MedicalHistoryFormField {
 
 pub struct MedicalHistoryForm {
     mode: FormMode,
-    pub condition: TextareaState,
-    pub diagnosis_date: TextareaState,
-    pub status_dropdown: DropdownWidget,
-    pub severity_dropdown: DropdownWidget,
-    pub notes: TextareaState,
+    textareas: HashMap<String, TextareaState>,
+    dropdowns: HashMap<String, DropdownWidget>,
+    field_ids: Vec<String>,
     pub focused_field: MedicalHistoryFormField,
-    errors: HashMap<MedicalHistoryFormField, String>,
+    errors: HashMap<String, String>,
+    validator: FormValidator,
     theme: Theme,
     scroll: ScrollableFormState,
 }
@@ -83,13 +111,12 @@ impl Clone for MedicalHistoryForm {
     fn clone(&self) -> Self {
         Self {
             mode: self.mode,
-            condition: self.condition.clone(),
-            diagnosis_date: self.diagnosis_date.clone(),
-            status_dropdown: self.status_dropdown.clone(),
-            severity_dropdown: self.severity_dropdown.clone(),
-            notes: self.notes.clone(),
+            textareas: self.textareas.clone(),
+            dropdowns: self.dropdowns.clone(),
+            field_ids: self.field_ids.clone(),
             focused_field: self.focused_field,
             errors: self.errors.clone(),
+            validator: build_validator(),
             theme: self.theme.clone(),
             scroll: self.scroll.clone(),
         }
@@ -104,8 +131,136 @@ pub enum MedicalHistoryFormAction {
     Cancel,
 }
 
+impl FormFieldMeta for MedicalHistoryFormField {
+    fn label(&self) -> &'static str {
+        MedicalHistoryFormField::label(self)
+    }
+
+    fn is_required(&self) -> bool {
+        MedicalHistoryFormField::is_required(self)
+    }
+}
+
+impl DynamicFormMeta for MedicalHistoryForm {
+    fn label(&self, field_id: &str) -> String {
+        MedicalHistoryFormField::from_id(field_id)
+            .map(|field| field.label().to_string())
+            .unwrap_or_else(|| field_id.to_string())
+    }
+
+    fn is_required(&self, field_id: &str) -> bool {
+        MedicalHistoryFormField::from_id(field_id)
+            .map(|field| field.is_required())
+            .unwrap_or(false)
+    }
+
+    fn field_type(&self, field_id: &str) -> FieldType {
+        match MedicalHistoryFormField::from_id(field_id) {
+            Some(MedicalHistoryFormField::DiagnosisDate) => FieldType::Date,
+            Some(MedicalHistoryFormField::Status | MedicalHistoryFormField::Severity) => {
+                FieldType::Select(vec![])
+            }
+            _ => FieldType::Text,
+        }
+    }
+}
+
+impl DynamicForm for MedicalHistoryForm {
+    fn field_ids(&self) -> &[String] {
+        &self.field_ids
+    }
+
+    fn current_field(&self) -> &str {
+        self.focused_field.id()
+    }
+
+    fn set_current_field(&mut self, field_id: &str) {
+        if !self.field_ids.iter().any(|id| id == field_id) {
+            return;
+        }
+
+        if let Some(field) = MedicalHistoryFormField::from_id(field_id) {
+            self.focused_field = field;
+        }
+    }
+
+    fn get_value(&self, field_id: &str) -> String {
+        self.get_value_by_id(field_id)
+    }
+
+    fn set_value(&mut self, field_id: &str, value: String) {
+        self.set_value_by_id(field_id, value)
+    }
+
+    fn validate(&mut self) -> bool {
+        self.errors.clear();
+        for field_id in self.field_ids.clone() {
+            self.validate_field_by_id(&field_id);
+        }
+        self.errors.is_empty()
+    }
+
+    fn get_error(&self, field_id: &str) -> Option<&str> {
+        self.errors.get(field_id).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field_id: &str, error: Option<String>) {
+        self.set_error_by_id(field_id, error);
+    }
+}
+
+impl FormNavigation for MedicalHistoryForm {
+    type FormField = MedicalHistoryFormField;
+
+    fn get_error(&self, field: Self::FormField) -> Option<&str> {
+        self.errors.get(field.id()).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
+        self.set_error_by_id(field.id(), error);
+    }
+
+    fn validate(&mut self) -> bool {
+        <Self as DynamicForm>::validate(self)
+    }
+
+    fn current_field(&self) -> Self::FormField {
+        self.focused_field
+    }
+
+    fn fields(&self) -> Vec<Self::FormField> {
+        self.field_ids
+            .iter()
+            .filter_map(|field_id| MedicalHistoryFormField::from_id(field_id))
+            .collect()
+    }
+
+    fn set_current_field(&mut self, field: Self::FormField) {
+        self.focused_field = field;
+    }
+}
+
 impl MedicalHistoryForm {
     pub fn new(theme: Theme) -> Self {
+        let field_ids = MedicalHistoryFormField::all()
+            .into_iter()
+            .map(|field| field.id().to_string())
+            .collect::<Vec<_>>();
+
+        let mut textareas = HashMap::new();
+        textareas.insert(
+            FIELD_CONDITION.to_string(),
+            make_textarea_state(MedicalHistoryFormField::Condition, None),
+        );
+        textareas.insert(
+            FIELD_DIAGNOSIS_DATE.to_string(),
+            make_textarea_state(MedicalHistoryFormField::DiagnosisDate, None),
+        );
+        textareas.insert(
+            FIELD_NOTES.to_string(),
+            make_textarea_state(MedicalHistoryFormField::Notes, None),
+        );
+
         let status_options = vec![
             DropdownOption::new("Active", "Active"),
             DropdownOption::new("Resolved", "Resolved"),
@@ -119,16 +274,24 @@ impl MedicalHistoryForm {
             DropdownOption::new("Severe", "Severe"),
         ];
 
+        let mut dropdowns = HashMap::new();
+        dropdowns.insert(
+            FIELD_STATUS.to_string(),
+            DropdownWidget::new("Status *", status_options, theme.clone()),
+        );
+        dropdowns.insert(
+            FIELD_SEVERITY.to_string(),
+            DropdownWidget::new("Severity", severity_options, theme.clone()),
+        );
+
         Self {
             mode: FormMode::Create,
-            condition: TextareaState::new("Condition").with_height_mode(HeightMode::SingleLine),
-            diagnosis_date: TextareaState::new("DiagnosisDate")
-                .with_height_mode(HeightMode::SingleLine),
-            status_dropdown: DropdownWidget::new("Status *", status_options, theme.clone()),
-            severity_dropdown: DropdownWidget::new("Severity", severity_options, theme.clone()),
-            notes: TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(4)),
+            textareas,
+            dropdowns,
+            field_ids,
             focused_field: MedicalHistoryFormField::Condition,
             errors: HashMap::new(),
+            validator: build_validator(),
             theme,
             scroll: ScrollableFormState::new(),
         }
@@ -186,87 +349,93 @@ impl MedicalHistoryForm {
     }
 
     pub fn get_value(&self, field: MedicalHistoryFormField) -> String {
-        match field {
-            MedicalHistoryFormField::Condition => self.condition.value(),
-            MedicalHistoryFormField::DiagnosisDate => self.diagnosis_date.value(),
-            MedicalHistoryFormField::Status => self
-                .status_dropdown
-                .selected_value()
-                .map(String::from)
-                .unwrap_or_default(),
-            MedicalHistoryFormField::Severity => self
-                .severity_dropdown
-                .selected_value()
-                .map(String::from)
-                .unwrap_or_default(),
-            MedicalHistoryFormField::Notes => self.notes.value(),
-        }
+        self.get_value_by_id(field.id())
     }
 
     pub fn set_value(&mut self, field: MedicalHistoryFormField, value: String) {
-        match field {
-            MedicalHistoryFormField::Condition => {
-                self.condition = TextareaState::new("Condition")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .with_value(value)
+        self.set_value_by_id(field.id(), value);
+    }
+
+    fn get_value_by_id(&self, field_id: &str) -> String {
+        if let Some(textarea) = self.textareas.get(field_id) {
+            return textarea.value();
+        }
+
+        if let Some(dropdown) = self.dropdowns.get(field_id) {
+            return dropdown.selected_value().unwrap_or("").to_string();
+        }
+
+        String::new()
+    }
+
+    fn set_value_by_id(&mut self, field_id: &str, value: String) {
+        if let Some(field) = MedicalHistoryFormField::from_id(field_id) {
+            if let Some(textarea) = self.textareas.get_mut(field_id) {
+                let focused = textarea.focused;
+                *textarea = make_textarea_state(field, Some(value.clone())).focused(focused);
+            } else if let Some(dropdown) = self.dropdowns.get_mut(field_id) {
+                dropdown.set_value(&value);
             }
-            MedicalHistoryFormField::DiagnosisDate => {
-                self.diagnosis_date = TextareaState::new("DiagnosisDate")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .with_value(value)
+            self.validate_field_by_id(field_id);
+        }
+    }
+
+    fn set_error_by_id(&mut self, field_id: &str, error: Option<String>) {
+        match error {
+            Some(message) => {
+                self.errors.insert(field_id.to_string(), message);
             }
-            MedicalHistoryFormField::Status => self.status_dropdown.set_value(&value),
-            MedicalHistoryFormField::Severity => self.severity_dropdown.set_value(&value),
-            MedicalHistoryFormField::Notes => {
-                self.notes = TextareaState::new("Notes")
-                    .with_height_mode(HeightMode::FixedLines(4))
-                    .with_value(value)
+            None => {
+                self.errors.remove(field_id);
             }
         }
-        self.validate_field(&field);
+    }
+
+    fn validate_field_by_id(&mut self, field_id: &str) {
+        self.errors.remove(field_id);
+        let value = self.get_value_by_id(field_id);
+
+        let mut errors = self.validator.validate(field_id, &value);
+
+        match field_id {
+            FIELD_CONDITION => {
+                if value.trim().is_empty() {
+                    errors = vec!["Condition is required".to_string()];
+                }
+            }
+            FIELD_STATUS => {
+                if value.trim().is_empty() {
+                    errors = vec!["Status is required".to_string()];
+                } else if value.parse::<ConditionStatus>().is_err() {
+                    errors = vec![
+                        "Valid values: Active, Resolved, Chronic, Recurring, InRemission"
+                            .to_string(),
+                    ];
+                }
+            }
+            FIELD_DIAGNOSIS_DATE => {
+                if !value.is_empty() && parse_date(&value).is_none() {
+                    errors = vec!["Use dd/mm/yyyy format".to_string()];
+                }
+            }
+            FIELD_SEVERITY => {
+                if !value.is_empty() && value.parse::<Severity>().is_err() {
+                    errors = vec!["Valid values: Mild, Moderate, Severe".to_string()];
+                }
+            }
+            FIELD_NOTES => {}
+            _ => {}
+        }
+
+        self.set_error_by_id(field_id, errors.into_iter().next());
     }
 
     fn validate_field(&mut self, field: &MedicalHistoryFormField) {
-        self.errors.remove(field);
-
-        let value = self.get_value(*field);
-
-        match field {
-            MedicalHistoryFormField::Condition => {
-                if value.trim().is_empty() {
-                    self.errors
-                        .insert(*field, "Condition is required".to_string());
-                }
-            }
-            MedicalHistoryFormField::Status => {
-                if value.trim().is_empty() {
-                    self.errors.insert(*field, "Status is required".to_string());
-                } else if value.parse::<ConditionStatus>().is_err() {
-                    self.errors.insert(
-                        *field,
-                        "Valid values: Active, Resolved, Chronic, Recurring, InRemission"
-                            .to_string(),
-                    );
-                }
-            }
-            MedicalHistoryFormField::DiagnosisDate => {
-                if !value.is_empty() && parse_date(&value).is_none() {
-                    self.errors
-                        .insert(*field, "Use dd/mm/yyyy format".to_string());
-                }
-            }
-            MedicalHistoryFormField::Severity => {
-                if !value.is_empty() && value.parse::<Severity>().is_err() {
-                    self.errors
-                        .insert(*field, "Valid values: Mild, Moderate, Severe".to_string());
-                }
-            }
-            MedicalHistoryFormField::Notes => {}
-        }
+        self.validate_field_by_id(field.id());
     }
 
     pub fn error(&self, field: MedicalHistoryFormField) -> Option<&String> {
-        self.errors.get(&field)
+        self.errors.get(field.id())
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<MedicalHistoryFormAction> {
@@ -276,83 +445,55 @@ impl MedicalHistoryForm {
             return None;
         }
 
-        // Ctrl+S submits the form from any field
         if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
-            self.validate();
+            FormNavigation::validate(self);
             return Some(MedicalHistoryFormAction::Submit);
         }
 
-        // Delegate to dropdown when focused on Status or Severity
-        match self.focused_field {
-            MedicalHistoryFormField::Status => {
-                if let Some(action) = self.status_dropdown.handle_key(key) {
-                    // Allow Tab/BackTab/Esc to pass through to form's navigation handler
-                    match key.code {
-                        KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
-                        _ => match action {
-                            DropdownAction::Selected(_) => {
-                                let field = self.focused_field;
-                                self.validate_field(&field);
-                                return Some(MedicalHistoryFormAction::ValueChanged);
-                            }
-                            DropdownAction::Opened
-                            | DropdownAction::Closed
-                            | DropdownAction::FocusChanged => {
-                                return Some(MedicalHistoryFormAction::FocusChanged);
-                            }
-                        },
-                    }
+        if matches!(
+            self.focused_field,
+            MedicalHistoryFormField::Status | MedicalHistoryFormField::Severity
+        ) {
+            let field_id = self.focused_field.id().to_string();
+            let action = {
+                let Some(dropdown) = self.dropdowns.get_mut(&field_id) else {
+                    return None;
+                };
+                dropdown.handle_key(key)
+            };
+
+            if let Some(action) = action {
+                match key.code {
+                    KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
+                    _ => match action {
+                        DropdownAction::Selected(_) => {
+                            self.validate_field_by_id(&field_id);
+                            return Some(MedicalHistoryFormAction::ValueChanged);
+                        }
+                        DropdownAction::Opened
+                        | DropdownAction::Closed
+                        | DropdownAction::FocusChanged => {
+                            return Some(MedicalHistoryFormAction::FocusChanged);
+                        }
+                    },
                 }
-                // Fall through to Tab/BackTab handling if dropdown didn't consume the key
             }
-            MedicalHistoryFormField::Severity => {
-                if let Some(action) = self.severity_dropdown.handle_key(key) {
-                    // Allow Tab/BackTab/Esc to pass through to form's navigation handler
-                    match key.code {
-                        KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
-                        _ => match action {
-                            DropdownAction::Selected(_) => {
-                                let field = self.focused_field;
-                                self.validate_field(&field);
-                                return Some(MedicalHistoryFormAction::ValueChanged);
-                            }
-                            DropdownAction::Opened
-                            | DropdownAction::Closed
-                            | DropdownAction::FocusChanged => {
-                                return Some(MedicalHistoryFormAction::FocusChanged);
-                            }
-                        },
-                    }
-                }
-                // Fall through to Tab/BackTab handling if dropdown didn't consume the key
-            }
-            _ => {}
         }
 
-        // For text fields (Condition, DiagnosisDate, Notes), delegate to TextareaState.
-        match self.focused_field {
-            MedicalHistoryFormField::Condition => {
-                let ratatui_key = to_ratatui_key(key);
-                let consumed = self.condition.handle_key(ratatui_key);
+        if matches!(
+            self.focused_field,
+            MedicalHistoryFormField::Condition
+                | MedicalHistoryFormField::DiagnosisDate
+                | MedicalHistoryFormField::Notes
+        ) {
+            let field_id = self.focused_field.id().to_string();
+            if let Some(textarea) = self.textareas.get_mut(&field_id) {
+                let consumed = textarea.handle_key(to_ratatui_key(key));
                 if consumed {
+                    self.validate_field_by_id(&field_id);
                     return Some(MedicalHistoryFormAction::ValueChanged);
                 }
             }
-            MedicalHistoryFormField::DiagnosisDate => {
-                let ratatui_key = to_ratatui_key(key);
-                let consumed = self.diagnosis_date.handle_key(ratatui_key);
-                if consumed {
-                    return Some(MedicalHistoryFormAction::ValueChanged);
-                }
-            }
-            MedicalHistoryFormField::Notes => {
-                let ratatui_key = to_ratatui_key(key);
-                let consumed = self.notes.handle_key(ratatui_key);
-                if consumed {
-                    return Some(MedicalHistoryFormAction::ValueChanged);
-                }
-            }
-            _ => {}
         }
 
         match key.code {
@@ -361,22 +502,22 @@ impl MedicalHistoryForm {
                     .modifiers
                     .contains(crossterm::event::KeyModifiers::SHIFT)
                 {
-                    self.prev_field();
+                    FormNavigation::prev_field(self);
                 } else {
-                    self.next_field();
+                    FormNavigation::next_field(self);
                 }
                 Some(MedicalHistoryFormAction::FocusChanged)
             }
             KeyCode::BackTab => {
-                self.prev_field();
+                FormNavigation::prev_field(self);
                 Some(MedicalHistoryFormAction::FocusChanged)
             }
             KeyCode::Up => {
-                self.prev_field();
+                FormNavigation::prev_field(self);
                 Some(MedicalHistoryFormAction::FocusChanged)
             }
             KeyCode::Down => {
-                self.next_field();
+                FormNavigation::next_field(self);
                 Some(MedicalHistoryFormAction::FocusChanged)
             }
             KeyCode::PageUp => {
@@ -392,66 +533,13 @@ impl MedicalHistoryForm {
             _ => None,
         }
     }
-}
 
-impl FormFieldMeta for MedicalHistoryFormField {
-    fn label(&self) -> &'static str {
-        MedicalHistoryFormField::label(self)
-    }
-
-    fn is_required(&self) -> bool {
-        MedicalHistoryFormField::is_required(self)
-    }
-}
-
-impl FormNavigation for MedicalHistoryForm {
-    type FormField = MedicalHistoryFormField;
-
-    fn get_error(&self, field: Self::FormField) -> Option<&str> {
-        self.errors.get(&field).map(|s| s.as_str())
-    }
-
-    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
-        match error {
-            Some(msg) => {
-                self.errors.insert(field, msg);
-            }
-            None => {
-                self.errors.remove(&field);
-            }
-        }
-    }
-
-    fn validate(&mut self) -> bool {
-        self.errors.clear();
-
-        for field in MedicalHistoryFormField::all() {
-            self.validate_field(&field);
-        }
-
-        self.errors.is_empty()
-    }
-
-    fn current_field(&self) -> Self::FormField {
-        self.focused_field
-    }
-
-    fn fields(&self) -> Vec<Self::FormField> {
-        MedicalHistoryFormField::all()
-    }
-
-    fn set_current_field(&mut self, field: Self::FormField) {
-        self.focused_field = field;
-    }
-}
-
-impl MedicalHistoryForm {
     pub fn to_medical_history(
         &mut self,
         patient_id: uuid::Uuid,
         created_by: uuid::Uuid,
     ) -> Option<MedicalHistory> {
-        if !self.validate() {
+        if !FormNavigation::validate(self) {
             return None;
         }
 
@@ -463,16 +551,17 @@ impl MedicalHistoryForm {
             .get_value(MedicalHistoryFormField::Severity)
             .parse::<Severity>()
             .ok();
-        let diagnosis_date = parse_date(&self.diagnosis_date.value());
+        let diagnosis_date = parse_date(&self.get_value(MedicalHistoryFormField::DiagnosisDate));
 
         Some(MedicalHistory {
             id: uuid::Uuid::new_v4(),
             patient_id,
-            condition: self.condition.value(),
+            condition: self.get_value(MedicalHistoryFormField::Condition),
             diagnosis_date,
             status,
             severity,
-            notes: Some(self.notes.value()).filter(|s: &String| !s.is_empty()),
+            notes: Some(self.get_value(MedicalHistoryFormField::Notes))
+                .filter(|s: &String| !s.is_empty()),
             is_active: true,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -480,6 +569,56 @@ impl MedicalHistoryForm {
             updated_by: None,
         })
     }
+}
+
+fn make_textarea_state(field: MedicalHistoryFormField, value: Option<String>) -> TextareaState {
+    let mut state = match field {
+        MedicalHistoryFormField::Condition => {
+            TextareaState::new("Condition").with_height_mode(HeightMode::SingleLine)
+        }
+        MedicalHistoryFormField::DiagnosisDate => {
+            TextareaState::new("DiagnosisDate").with_height_mode(HeightMode::SingleLine)
+        }
+        MedicalHistoryFormField::Notes => {
+            TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(4))
+        }
+        _ => TextareaState::new("Field").with_height_mode(HeightMode::SingleLine),
+    };
+
+    if let Some(value) = value {
+        state = state.with_value(value);
+    }
+
+    state
+}
+
+fn build_validator() -> FormValidator {
+    let mut rules = HashMap::new();
+    rules.insert(
+        FIELD_CONDITION.to_string(),
+        ValidationRules {
+            required: true,
+            ..ValidationRules::default()
+        },
+    );
+    rules.insert(
+        FIELD_DIAGNOSIS_DATE.to_string(),
+        ValidationRules {
+            date_format: Some("dd/mm/yyyy".to_string()),
+            ..ValidationRules::default()
+        },
+    );
+    rules.insert(
+        FIELD_STATUS.to_string(),
+        ValidationRules {
+            required: true,
+            ..ValidationRules::default()
+        },
+    );
+    rules.insert(FIELD_SEVERITY.to_string(), ValidationRules::default());
+    rules.insert(FIELD_NOTES.to_string(), ValidationRules::default());
+
+    FormValidator::new(&rules)
 }
 
 impl Widget for MedicalHistoryForm {
@@ -564,20 +703,13 @@ impl Widget for MedicalHistoryForm {
             }
 
             match field {
-                MedicalHistoryFormField::Status => {
-                    let dropdown = self.status_dropdown.clone();
-                    let dropdown_width = inner.width.saturating_sub(label_width + 4);
-                    if y >= inner.y as i32 && y < max_y {
-                        let dropdown_area = Rect::new(field_start, y as u16, dropdown_width, 3);
-                        if dropdown.is_open() {
-                            open_dropdown = Some((dropdown.clone(), dropdown_area));
-                        }
-                        dropdown.focused(is_focused).render(dropdown_area, buf);
-                    }
-                    y += 4;
-                }
-                MedicalHistoryFormField::Severity => {
-                    let dropdown = self.severity_dropdown.clone();
+                MedicalHistoryFormField::Status | MedicalHistoryFormField::Severity => {
+                    let field_id = field.id();
+                    let Some(dropdown) = self.dropdowns.get(field_id).cloned() else {
+                        y += 4;
+                        continue;
+                    };
+
                     let dropdown_width = inner.width.saturating_sub(label_width + 4);
                     if y >= inner.y as i32 && y < max_y {
                         let dropdown_area = Rect::new(field_start, y as u16, dropdown_width, 3);
@@ -589,26 +721,12 @@ impl Widget for MedicalHistoryForm {
                     y += 4;
                 }
                 _ => {
-                    let textarea_state: &TextareaState;
-                    let height: u16;
-                    match field {
-                        MedicalHistoryFormField::Condition => {
-                            textarea_state = &self.condition;
-                            height = 3;
-                        }
-                        MedicalHistoryFormField::DiagnosisDate => {
-                            textarea_state = &self.diagnosis_date;
-                            height = 3;
-                        }
-                        MedicalHistoryFormField::Notes => {
-                            textarea_state = &self.notes;
-                            height = 6;
-                        }
-                        _ => {
-                            y += 4;
-                            continue;
-                        }
+                    let Some(textarea_state) = self.textareas.get(field.id()) else {
+                        y += 4;
+                        continue;
                     };
+
+                    let height = textarea_state.height();
 
                     if y >= inner.y as i32 && y < max_y {
                         let textarea_width = inner.width.saturating_sub(label_width + 4);
@@ -669,7 +787,7 @@ mod tests {
         let theme = Theme::dark();
         let mut form = MedicalHistoryForm::new(theme);
 
-        form.validate();
+        FormNavigation::validate(&mut form);
         assert!(form.has_errors());
         assert!(form.error(MedicalHistoryFormField::Condition).is_some());
         assert!(form.error(MedicalHistoryFormField::Status).is_some());
@@ -686,7 +804,7 @@ mod tests {
         );
         form.set_value(MedicalHistoryFormField::Status, "Active".to_string());
 
-        assert!(form.validate());
+        assert!(FormNavigation::validate(&mut form));
         assert!(!form.has_errors());
     }
 
@@ -696,9 +814,9 @@ mod tests {
         let mut form = MedicalHistoryForm::new(theme);
 
         assert_eq!(form.focused_field(), MedicalHistoryFormField::Condition);
-        form.next_field();
+        FormNavigation::next_field(&mut form);
         assert_eq!(form.focused_field(), MedicalHistoryFormField::DiagnosisDate);
-        form.prev_field();
+        FormNavigation::prev_field(&mut form);
         assert_eq!(form.focused_field(), MedicalHistoryFormField::Condition);
     }
 
@@ -732,5 +850,22 @@ mod tests {
             "not-a-date".to_string(),
         );
         assert!(form.error(MedicalHistoryFormField::DiagnosisDate).is_some());
+    }
+
+    #[test]
+    fn test_dynamic_form_string_access_matches_enum_access() {
+        let theme = Theme::dark();
+        let mut form = MedicalHistoryForm::new(theme);
+
+        <MedicalHistoryForm as DynamicForm>::set_value(
+            &mut form,
+            FIELD_CONDITION,
+            "Asthma".to_string(),
+        );
+
+        let by_string = <MedicalHistoryForm as DynamicForm>::get_value(&form, FIELD_CONDITION);
+        let by_enum = form.get_value(MedicalHistoryFormField::Condition);
+
+        assert_eq!(by_string, by_enum);
     }
 }

@@ -7,16 +7,19 @@ use std::collections::HashMap;
 use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::ui::input::to_ratatui_key;
-use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+    FieldType, FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, TextareaState,
+    TextareaWidget,
 };
 use opengp_domain::domain::clinical::Consultation;
+
+const FIELD_REASON: &str = "reason";
+const FIELD_CLINICAL_NOTES: &str = "clinical_notes";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumIter, strum::IntoStaticStr)]
 pub enum ConsultationFormField {
@@ -34,6 +37,21 @@ impl ConsultationFormField {
 
     pub fn label(&self) -> &'static str {
         (*self).into()
+    }
+
+    pub fn id(&self) -> &'static str {
+        match self {
+            ConsultationFormField::Reason => FIELD_REASON,
+            ConsultationFormField::ClinicalNotes => FIELD_CLINICAL_NOTES,
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            FIELD_REASON => Some(ConsultationFormField::Reason),
+            FIELD_CLINICAL_NOTES => Some(ConsultationFormField::ClinicalNotes),
+            _ => None,
+        }
     }
 
     pub fn is_required(&self) -> bool {
@@ -54,13 +72,13 @@ pub enum ConsultationFormAction {
 }
 
 pub struct ConsultationForm {
-    pub reason: TextareaState,
-    pub clinical_notes: TextareaState,
-    pub focused_field: ConsultationFormField,
+    textareas: HashMap<String, TextareaState>,
+    focused_field: String,
+    field_ids: Vec<String>,
     pub is_valid: bool,
     pub is_edit_mode: bool,
     pub consultation_id: Option<uuid::Uuid>,
-    errors: HashMap<ConsultationFormField, String>,
+    errors: HashMap<String, String>,
     theme: Theme,
     scroll: ScrollableFormState,
 }
@@ -68,9 +86,9 @@ pub struct ConsultationForm {
 impl Clone for ConsultationForm {
     fn clone(&self) -> Self {
         Self {
-            reason: self.reason.clone(),
-            clinical_notes: self.clinical_notes.clone(),
-            focused_field: self.focused_field,
+            textareas: self.textareas.clone(),
+            focused_field: self.focused_field.clone(),
+            field_ids: self.field_ids.clone(),
             is_valid: self.is_valid,
             is_edit_mode: self.is_edit_mode,
             consultation_id: self.consultation_id,
@@ -89,12 +107,35 @@ fn clinical_textarea() -> TextareaState {
     TextareaState::new("Clinical Notes").with_height_mode(HeightMode::AutoGrow { min: 10, max: 20 })
 }
 
+fn textarea_for_field(field: ConsultationFormField, value: Option<String>) -> TextareaState {
+    let mut textarea = match field {
+        ConsultationFormField::Reason => reason_textarea(),
+        ConsultationFormField::ClinicalNotes => clinical_textarea(),
+    };
+
+    if let Some(value) = value {
+        textarea = textarea.with_value(value);
+    }
+
+    textarea
+}
+
 impl ConsultationForm {
     pub fn new(theme: Theme) -> Self {
+        let field_ids = ConsultationFormField::all()
+            .into_iter()
+            .map(|field| field.id().to_string())
+            .collect::<Vec<_>>();
+
+        let mut textareas = HashMap::new();
+        for field in ConsultationFormField::all() {
+            textareas.insert(field.id().to_string(), textarea_for_field(field, None));
+        }
+
         Self {
-            reason: reason_textarea(),
-            clinical_notes: clinical_textarea(),
-            focused_field: ConsultationFormField::Reason,
+            textareas,
+            focused_field: FIELD_REASON.to_string(),
+            field_ids,
             is_valid: true,
             is_edit_mode: false,
             consultation_id: None,
@@ -105,68 +146,125 @@ impl ConsultationForm {
     }
 
     pub fn from_consultation(theme: Theme, consultation: &Consultation) -> Self {
-        let reason = reason_textarea().with_value(consultation.reason.clone().unwrap_or_default());
-        let clinical_notes =
-            clinical_textarea().with_value(consultation.clinical_notes.clone().unwrap_or_default());
+        let mut form = Self::new(theme);
+        form.is_edit_mode = true;
+        form.consultation_id = Some(consultation.id);
+        form.set_value(
+            ConsultationFormField::Reason,
+            consultation.reason.clone().unwrap_or_default(),
+        );
+        form.set_value(
+            ConsultationFormField::ClinicalNotes,
+            consultation.clinical_notes.clone().unwrap_or_default(),
+        );
+        form.errors.clear();
+        form
+    }
 
-        Self {
-            reason,
-            clinical_notes,
-            focused_field: ConsultationFormField::Reason,
-            is_valid: true,
-            is_edit_mode: true,
-            consultation_id: Some(consultation.id),
-            errors: HashMap::new(),
-            theme,
-            scroll: ScrollableFormState::new(),
+    fn focused_textarea_mut(&mut self) -> Option<&mut TextareaState> {
+        self.textareas.get_mut(&self.focused_field)
+    }
+
+    fn textarea_for(&self, field_id: &str) -> Option<&TextareaState> {
+        self.textareas.get(field_id)
+    }
+
+    fn get_value_by_id(&self, field_id: &str) -> String {
+        self.textareas
+            .get(field_id)
+            .map(|textarea| textarea.value())
+            .unwrap_or_default()
+    }
+
+    fn set_value_by_id(&mut self, field_id: &str, value: String) {
+        if let Some(textarea) = self.textareas.get_mut(field_id) {
+            let label = textarea.label.clone();
+            let height_mode = textarea.height_mode.clone();
+            let max_length = textarea.max_length;
+            let focused = textarea.focused;
+
+            let mut updated = TextareaState::new(label)
+                .with_height_mode(height_mode)
+                .with_value(value)
+                .focused(focused);
+
+            if let Some(limit) = max_length {
+                updated = updated.max_length(limit);
+            }
+
+            *textarea = updated;
         }
+    }
+
+    fn set_error_by_id(&mut self, field_id: &str, error: Option<String>) {
+        if let Some(textarea) = self.textareas.get_mut(field_id) {
+            textarea.set_error(error.clone());
+        }
+
+        match error {
+            Some(msg) => {
+                self.errors.insert(field_id.to_string(), msg);
+            }
+            None => {
+                self.errors.remove(field_id);
+            }
+        }
+    }
+
+    fn validate_field_by_id(&mut self, field_id: &str) {
+        self.errors.remove(field_id);
+
+        let value = self.get_value_by_id(field_id);
+        let error = match field_id {
+            FIELD_REASON if value.trim().is_empty() => Some("Reason is required".to_string()),
+            FIELD_CLINICAL_NOTES if value.trim().is_empty() => {
+                Some("Clinical notes are required".to_string())
+            }
+            _ => None,
+        };
+
+        self.set_error_by_id(field_id, error);
+    }
+
+    fn get_field_height(&self, field_id: &str) -> u16 {
+        self.textareas
+            .get(field_id)
+            .map(|textarea| textarea.height())
+            .unwrap_or(1)
+    }
+
+    fn get_field_position(&self, field_id: &str) -> (u16, u16) {
+        let mut y = 0;
+
+        for id in &self.field_ids {
+            if id == field_id {
+                return (y, self.get_field_height(id));
+            }
+            y += self.get_field_height(id) + 1;
+        }
+
+        (0, 0)
     }
 
     pub fn focused_field(&self) -> ConsultationFormField {
-        self.focused_field
+        ConsultationFormField::from_id(&self.focused_field).unwrap_or(ConsultationFormField::Reason)
     }
 
     pub fn get_value(&self, field: ConsultationFormField) -> String {
-        match field {
-            ConsultationFormField::Reason => self.reason.value(),
-            ConsultationFormField::ClinicalNotes => self.clinical_notes.value(),
-        }
+        self.get_value_by_id(field.id())
     }
 
     pub fn set_value(&mut self, field: ConsultationFormField, value: String) {
-        match field {
-            ConsultationFormField::Reason => {
-                self.reason = reason_textarea().with_value(value);
-            }
-            ConsultationFormField::ClinicalNotes => {
-                self.clinical_notes = clinical_textarea().with_value(value);
-            }
-        }
+        self.set_value_by_id(field.id(), value);
         self.validate_field(&field);
     }
 
     fn validate_field(&mut self, field: &ConsultationFormField) {
-        self.errors.remove(field);
-
-        let value = self.get_value(*field);
-
-        match field {
-            ConsultationFormField::Reason => {
-                if value.trim().is_empty() {
-                    self.errors.insert(*field, "Reason is required".to_string());
-                }
-            }
-            ConsultationFormField::ClinicalNotes => {
-                if value.trim().is_empty() {
-                    self.errors
-                        .insert(*field, "Clinical notes are required".to_string());
-                }
-            }
-        }
+        self.validate_field_by_id(field.id());
     }
 
     pub fn error(&self, field: ConsultationFormField) -> Option<&String> {
-        self.errors.get(&field)
+        self.errors.get(field.id())
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ConsultationFormAction> {
@@ -178,18 +276,19 @@ impl ConsultationForm {
 
         // Ctrl+S submits the form from any field
         if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
-            self.validate();
+            FormNavigation::validate(self);
             return Some(ConsultationFormAction::Submit);
         }
 
-        if self.focused_field.is_textarea() {
+        if self.focused_field().is_textarea() {
             let ratatui_key = to_ratatui_key(key);
-            let consumed = match self.focused_field {
-                ConsultationFormField::Reason => self.reason.handle_key(ratatui_key),
-                ConsultationFormField::ClinicalNotes => self.clinical_notes.handle_key(ratatui_key),
-            };
-            if consumed {
-                return Some(ConsultationFormAction::ValueChanged);
+            if let Some(textarea) = self.focused_textarea_mut() {
+                let consumed = textarea.handle_key(ratatui_key);
+                if consumed {
+                    let focused_field = self.focused_field.clone();
+                    self.validate_field_by_id(&focused_field);
+                    return Some(ConsultationFormAction::ValueChanged);
+                }
             }
         }
 
@@ -243,8 +342,9 @@ impl ConsultationForm {
             practitioner_id,
             appointment_id: None,
             consultation_date: chrono::Utc::now(),
-            reason: Some(self.reason.value()).filter(|s| !s.is_empty()),
-            clinical_notes: Some(self.clinical_notes.value()).filter(|s| !s.is_empty()),
+            reason: Some(self.get_value(ConsultationFormField::Reason)).filter(|s| !s.is_empty()),
+            clinical_notes: Some(self.get_value(ConsultationFormField::ClinicalNotes))
+                .filter(|s| !s.is_empty()),
             is_signed: false,
             signed_at: None,
             signed_by: None,
@@ -254,6 +354,65 @@ impl ConsultationForm {
             created_by,
             updated_by: None,
         }
+    }
+}
+
+impl crate::ui::widgets::DynamicFormMeta for ConsultationForm {
+    fn label(&self, field_id: &str) -> String {
+        ConsultationFormField::from_id(field_id)
+            .map(|field| field.label().to_string())
+            .unwrap_or_else(|| field_id.to_string())
+    }
+
+    fn is_required(&self, field_id: &str) -> bool {
+        ConsultationFormField::from_id(field_id)
+            .map(|field| field.is_required())
+            .unwrap_or(false)
+    }
+
+    fn field_type(&self, _field_id: &str) -> FieldType {
+        FieldType::Text
+    }
+}
+
+impl crate::ui::widgets::DynamicForm for ConsultationForm {
+    fn field_ids(&self) -> &[String] {
+        &self.field_ids
+    }
+
+    fn current_field(&self) -> &str {
+        &self.focused_field
+    }
+
+    fn set_current_field(&mut self, field_id: &str) {
+        if self.field_ids.iter().any(|id| id == field_id) {
+            self.focused_field = field_id.to_string();
+        }
+    }
+
+    fn get_value(&self, field_id: &str) -> String {
+        self.get_value_by_id(field_id)
+    }
+
+    fn set_value(&mut self, field_id: &str, value: String) {
+        self.set_value_by_id(field_id, value);
+    }
+
+    fn validate(&mut self) -> bool {
+        for field_id in self.field_ids.clone() {
+            self.set_error_by_id(&field_id, None);
+        }
+        self.errors.clear();
+        self.is_valid = true;
+        self.is_valid
+    }
+
+    fn get_error(&self, field_id: &str) -> Option<&str> {
+        self.errors.get(field_id).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field_id: &str, error: Option<String>) {
+        self.set_error_by_id(field_id, error);
     }
 }
 
@@ -271,36 +430,30 @@ impl FormNavigation for ConsultationForm {
     type FormField = ConsultationFormField;
 
     fn get_error(&self, field: Self::FormField) -> Option<&str> {
-        self.errors.get(&field).map(|s| s.as_str())
+        self.errors.get(field.id()).map(|s| s.as_str())
     }
 
     fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
-        match error {
-            Some(msg) => {
-                self.errors.insert(field, msg);
-            }
-            None => {
-                self.errors.remove(&field);
-            }
-        }
+        self.set_error_by_id(field.id(), error);
     }
 
     fn validate(&mut self) -> bool {
-        self.errors.clear();
-        self.is_valid = self.errors.is_empty();
-        self.is_valid
+        <Self as crate::ui::widgets::DynamicForm>::validate(self)
     }
 
     fn current_field(&self) -> Self::FormField {
-        self.focused_field
+        ConsultationFormField::from_id(&self.focused_field).unwrap_or(ConsultationFormField::Reason)
     }
 
     fn fields(&self) -> Vec<Self::FormField> {
-        ConsultationFormField::all()
+        self.field_ids
+            .iter()
+            .filter_map(|field_id| ConsultationFormField::from_id(field_id))
+            .collect()
     }
 
     fn set_current_field(&mut self, field: Self::FormField) {
-        self.focused_field = field;
+        self.focused_field = field.id().to_string();
     }
 }
 
@@ -328,101 +481,43 @@ impl Widget for ConsultationForm {
             return;
         }
 
-        let label_width = LABEL_WIDTH;
-        let field_start = inner.x + label_width + 2;
-
-        let fields = ConsultationFormField::all();
+        let fields = self.field_ids.clone();
 
         let mut total_height: u16 = 0;
-        for _field in &fields {
-            total_height += 4;
+        for field_id in &fields {
+            total_height += self.get_field_height(field_id) + 1;
         }
         self.scroll.set_total_height(total_height);
         self.scroll.clamp_offset(inner.height.saturating_sub(2));
 
+        let (focused_y, focused_height) = self.get_field_position(&self.focused_field);
+        self.scroll
+            .scroll_to_field(focused_y, focused_height, inner.height.saturating_sub(2));
+
         let mut y: i32 = (inner.y as i32) + 1 - (self.scroll.scroll_offset as i32);
         let max_y = inner.y as i32 + inner.height as i32 - 2;
 
-        for field in fields {
-            if y + 2 <= inner.y as i32 || y >= max_y {
-                y += 4;
+        for field_id in fields {
+            let field_height = self.get_field_height(&field_id) as i32;
+
+            if y + field_height <= inner.y as i32 || y >= max_y {
+                y += field_height + 1;
                 continue;
             }
 
-            let is_focused = field == self.focused_field;
+            let is_focused = field_id == self.focused_field;
 
-            if field.is_textarea() {
-                let textarea = match field {
-                    ConsultationFormField::Reason => &self.reason,
-                    ConsultationFormField::ClinicalNotes => &self.clinical_notes,
-                };
-                let field_height = textarea.height();
+            if let Some(textarea) = self.textarea_for(&field_id) {
+                let textarea_height = textarea.height();
                 if y >= inner.y as i32 && y < max_y {
                     let field_area =
-                        Rect::new(inner.x + 1, y as u16, inner.width - 2, field_height);
+                        Rect::new(inner.x + 1, y as u16, inner.width - 2, textarea_height);
                     TextareaWidget::new(textarea, self.theme.clone())
                         .focused(is_focused)
                         .render(field_area, buf);
                 }
-                y += field_height as i32;
-                continue;
+                y += textarea_height as i32 + 1;
             }
-
-            let has_error = self.error(field).is_some();
-
-            if y >= inner.y as i32 && y < max_y {
-                let label_style = if is_focused {
-                    Style::default()
-                        .fg(self.theme.colors.primary)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(self.theme.colors.foreground)
-                };
-
-                buf.set_string(inner.x + 1, y as u16, field.label(), label_style);
-
-                if is_focused {
-                    buf.set_string(
-                        field_start - 1,
-                        y as u16,
-                        ">",
-                        Style::default().fg(self.theme.colors.primary),
-                    );
-                }
-            }
-
-            let max_value_width = inner.width.saturating_sub(label_width + 4);
-
-            if y >= inner.y as i32 && y < max_y {
-                let value = self.get_value(field);
-                let value_style = if has_error {
-                    Style::default().fg(self.theme.colors.error)
-                } else {
-                    Style::default().fg(self.theme.colors.foreground)
-                };
-
-                let display_value = if value.len() > max_value_width as usize {
-                    &value[value.len() - max_value_width as usize..]
-                } else {
-                    &value
-                };
-
-                buf.set_string(field_start, y as u16, display_value, value_style);
-            }
-
-            if y >= inner.y as i32 && y < max_y {
-                if let Some(error_msg) = self.error(field) {
-                    let error_style = Style::default().fg(self.theme.colors.error);
-                    buf.set_string(
-                        field_start,
-                        (y as u16) + 1,
-                        format!("  {}", error_msg),
-                        error_style,
-                    );
-                }
-            }
-
-            y += 2;
         }
 
         self.scroll.render_scrollbar(inner, buf);

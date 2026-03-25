@@ -1,10 +1,8 @@
-//! Family History Form Component
-//!
-//! Form for creating or editing patient family history entries.
-
 use std::collections::HashMap;
 
 use crossterm::event::{KeyEvent, KeyModifiers};
+use opengp_config::forms::ValidationRules;
+use opengp_domain::domain::clinical::FamilyHistory;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -14,9 +12,14 @@ use uuid::Uuid;
 use crate::ui::input::to_ratatui_key;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+    FormFieldMeta, FormNavigation, FormValidator, HeightMode, ScrollableFormState, TextareaState,
+    TextareaWidget,
 };
-use opengp_domain::domain::clinical::FamilyHistory;
+
+const FIELD_RELATIONSHIP: &str = "relationship";
+const FIELD_CONDITION: &str = "condition";
+const FIELD_AGE_AT_DIAGNOSIS: &str = "age_at_diagnosis";
+const FIELD_NOTES: &str = "notes";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormMode {
@@ -57,6 +60,25 @@ impl FamilyHistoryFormField {
     pub fn is_textarea(&self) -> bool {
         true
     }
+
+    pub fn id(&self) -> &'static str {
+        match self {
+            FamilyHistoryFormField::Relationship => FIELD_RELATIONSHIP,
+            FamilyHistoryFormField::Condition => FIELD_CONDITION,
+            FamilyHistoryFormField::AgeAtDiagnosis => FIELD_AGE_AT_DIAGNOSIS,
+            FamilyHistoryFormField::Notes => FIELD_NOTES,
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            FIELD_RELATIONSHIP => Some(FamilyHistoryFormField::Relationship),
+            FIELD_CONDITION => Some(FamilyHistoryFormField::Condition),
+            FIELD_AGE_AT_DIAGNOSIS => Some(FamilyHistoryFormField::AgeAtDiagnosis),
+            FIELD_NOTES => Some(FamilyHistoryFormField::Notes),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -69,13 +91,12 @@ pub enum FamilyHistoryFormAction {
 
 pub struct FamilyHistoryForm {
     mode: FormMode,
-    pub relationship: TextareaState,
-    pub condition: TextareaState,
-    pub age_at_diagnosis: TextareaState,
-    pub notes: TextareaState,
-    pub focused_field: FamilyHistoryFormField,
+    textareas: HashMap<String, TextareaState>,
+    focused_field: String,
+    field_ids: Vec<String>,
     pub is_valid: bool,
-    errors: HashMap<FamilyHistoryFormField, String>,
+    errors: HashMap<String, String>,
+    validator: FormValidator,
     theme: Theme,
     scroll: ScrollableFormState,
 }
@@ -84,13 +105,12 @@ impl Clone for FamilyHistoryForm {
     fn clone(&self) -> Self {
         Self {
             mode: self.mode,
-            relationship: self.relationship.clone(),
-            condition: self.condition.clone(),
-            age_at_diagnosis: self.age_at_diagnosis.clone(),
-            notes: self.notes.clone(),
-            focused_field: self.focused_field,
+            textareas: self.textareas.clone(),
+            focused_field: self.focused_field.clone(),
+            field_ids: self.field_ids.clone(),
             is_valid: self.is_valid,
             errors: self.errors.clone(),
+            validator: build_validator(),
             theme: self.theme.clone(),
             scroll: self.scroll.clone(),
         }
@@ -111,57 +131,116 @@ impl FormNavigation for FamilyHistoryForm {
     type FormField = FamilyHistoryFormField;
 
     fn get_error(&self, field: Self::FormField) -> Option<&str> {
-        self.errors.get(&field).map(|s| s.as_str())
+        self.errors.get(field.id()).map(|s| s.as_str())
     }
 
     fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
-        match error {
-            Some(msg) => {
-                self.errors.insert(field, msg);
-            }
-            None => {
-                self.errors.remove(&field);
-            }
+        self.set_error_by_id(field.id(), error);
+    }
+
+    fn validate(&mut self) -> bool {
+        <Self as crate::ui::widgets::DynamicForm>::validate(self)
+    }
+
+    fn current_field(&self) -> Self::FormField {
+        FamilyHistoryFormField::from_id(&self.focused_field)
+            .unwrap_or(FamilyHistoryFormField::Relationship)
+    }
+
+    fn fields(&self) -> Vec<Self::FormField> {
+        self.field_ids
+            .iter()
+            .filter_map(|field_id| FamilyHistoryFormField::from_id(field_id))
+            .collect()
+    }
+
+    fn set_current_field(&mut self, field: Self::FormField) {
+        self.focused_field = field.id().to_string();
+    }
+}
+
+impl crate::ui::widgets::DynamicFormMeta for FamilyHistoryForm {
+    fn label(&self, field_id: &str) -> String {
+        FamilyHistoryFormField::from_id(field_id)
+            .map(|field| field.label().to_string())
+            .unwrap_or_else(|| field_id.to_string())
+    }
+
+    fn is_required(&self, field_id: &str) -> bool {
+        FamilyHistoryFormField::from_id(field_id)
+            .map(|field| field.is_required())
+            .unwrap_or(false)
+    }
+
+    fn field_type(&self, _field_id: &str) -> crate::ui::widgets::FieldType {
+        crate::ui::widgets::FieldType::Text
+    }
+}
+
+impl crate::ui::widgets::DynamicForm for FamilyHistoryForm {
+    fn field_ids(&self) -> &[String] {
+        &self.field_ids
+    }
+
+    fn current_field(&self) -> &str {
+        &self.focused_field
+    }
+
+    fn set_current_field(&mut self, field_id: &str) {
+        if self.field_ids.iter().any(|id| id == field_id) {
+            self.focused_field = field_id.to_string();
         }
+    }
+
+    fn get_value(&self, field_id: &str) -> String {
+        self.get_value_by_id(field_id)
+    }
+
+    fn set_value(&mut self, field_id: &str, value: String) {
+        self.set_value_by_id(field_id, value)
     }
 
     fn validate(&mut self) -> bool {
         self.errors.clear();
 
-        for field in FamilyHistoryFormField::all() {
-            self.validate_field(&field);
+        for field_id in self.field_ids.clone() {
+            self.validate_field_by_id(&field_id);
         }
 
         self.is_valid = self.errors.is_empty();
         self.is_valid
     }
 
-    fn current_field(&self) -> Self::FormField {
-        self.focused_field
+    fn get_error(&self, field_id: &str) -> Option<&str> {
+        self.errors.get(field_id).map(|s| s.as_str())
     }
 
-    fn fields(&self) -> Vec<Self::FormField> {
-        FamilyHistoryFormField::all()
-    }
-
-    fn set_current_field(&mut self, field: Self::FormField) {
-        self.focused_field = field;
+    fn set_error(&mut self, field_id: &str, error: Option<String>) {
+        self.set_error_by_id(field_id, error);
     }
 }
 
 impl FamilyHistoryForm {
     pub fn new(theme: Theme) -> Self {
+        let fields = FamilyHistoryFormField::all();
+        let field_ids = fields
+            .iter()
+            .map(|field| field.id().to_string())
+            .collect::<Vec<_>>();
+
+        let mut textareas = HashMap::new();
+        for field in fields {
+            textareas.insert(field.id().to_string(), make_textarea_state(field, None));
+        }
+
         Self {
             mode: FormMode::Create,
-            relationship: TextareaState::new("Relationship *")
-                .with_height_mode(HeightMode::SingleLine),
-            condition: TextareaState::new("Condition *").with_height_mode(HeightMode::SingleLine),
-            age_at_diagnosis: TextareaState::new("Age at Diagnosis")
-                .with_height_mode(HeightMode::SingleLine),
-            notes: TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(3)),
-            focused_field: FamilyHistoryFormField::Relationship,
+            textareas,
+            focused_field: FIELD_RELATIONSHIP.to_string(),
+            field_ids,
             is_valid: false,
             errors: HashMap::new(),
+            validator: build_validator(),
             theme,
             scroll: ScrollableFormState::new(),
         }
@@ -201,83 +280,86 @@ impl FamilyHistoryForm {
     }
 
     pub fn focused_field(&self) -> FamilyHistoryFormField {
-        self.focused_field
+        FamilyHistoryFormField::from_id(&self.focused_field)
+            .unwrap_or(FamilyHistoryFormField::Relationship)
     }
 
     pub fn get_value(&self, field: FamilyHistoryFormField) -> String {
-        match field {
-            FamilyHistoryFormField::Relationship => self.relationship.value(),
-            FamilyHistoryFormField::Condition => self.condition.value(),
-            FamilyHistoryFormField::AgeAtDiagnosis => self.age_at_diagnosis.value(),
-            FamilyHistoryFormField::Notes => self.notes.value(),
-        }
+        self.get_value_by_id(field.id())
     }
 
     pub fn set_value(&mut self, field: FamilyHistoryFormField, value: String) {
-        match field {
-            FamilyHistoryFormField::Relationship => {
-                self.relationship = TextareaState::new("Relationship *")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .with_value(value);
-            }
-            FamilyHistoryFormField::Condition => {
-                self.condition = TextareaState::new("Condition *")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .with_value(value);
-            }
-            FamilyHistoryFormField::AgeAtDiagnosis => {
-                self.age_at_diagnosis = TextareaState::new("Age at Diagnosis")
-                    .with_height_mode(HeightMode::SingleLine)
-                    .with_value(value);
-            }
-            FamilyHistoryFormField::Notes => {
-                self.notes = TextareaState::new("Notes")
-                    .with_height_mode(HeightMode::FixedLines(3))
-                    .with_value(value);
-            }
-        }
-        self.validate_field(&field);
+        self.set_value_by_id(field.id(), value);
     }
 
-    fn focused_textarea_mut(&mut self) -> &mut TextareaState {
-        match self.focused_field {
-            FamilyHistoryFormField::Relationship => &mut self.relationship,
-            FamilyHistoryFormField::Condition => &mut self.condition,
-            FamilyHistoryFormField::AgeAtDiagnosis => &mut self.age_at_diagnosis,
-            FamilyHistoryFormField::Notes => &mut self.notes,
+    fn get_value_by_id(&self, field_id: &str) -> String {
+        self.textareas
+            .get(field_id)
+            .map(|textarea| textarea.value())
+            .unwrap_or_default()
+    }
+
+    fn set_value_by_id(&mut self, field_id: &str, value: String) {
+        if let Some(textarea) = self.textareas.get_mut(field_id) {
+            let label = textarea.label.clone();
+            let height_mode = textarea.height_mode.clone();
+            let max_length = textarea.max_length;
+            let focused = textarea.focused;
+
+            let mut updated = TextareaState::new(label)
+                .with_height_mode(height_mode)
+                .with_value(value);
+            if let Some(limit) = max_length {
+                updated = updated.max_length(limit);
+            }
+            *textarea = updated.focused(focused);
         }
+
+        self.validate_field_by_id(field_id);
+    }
+
+    fn focused_textarea_mut(&mut self) -> Option<&mut TextareaState> {
+        self.textareas.get_mut(&self.focused_field)
+    }
+
+    fn textarea_for(&self, field_id: &str) -> Option<&TextareaState> {
+        self.textareas.get(field_id)
     }
 
     fn validate_field(&mut self, field: &FamilyHistoryFormField) {
-        self.errors.remove(field);
+        self.validate_field_by_id(field.id());
+    }
 
-        let value = self.get_value(*field);
+    fn validate_field_by_id(&mut self, field_id: &str) {
+        self.errors.remove(field_id);
 
-        match field {
-            FamilyHistoryFormField::Relationship => {
-                if value.trim().is_empty() {
-                    self.errors
-                        .insert(*field, "Relationship is required".to_string());
-                }
+        let value = self.get_value_by_id(field_id);
+        let mut errors = self.validator.validate(field_id, &value);
+
+        if field_id == FIELD_AGE_AT_DIAGNOSIS && !value.is_empty() && value.parse::<u8>().is_err() {
+            errors = vec!["Age must be a number (0-255)".to_string()];
+        }
+
+        let error_msg = errors.into_iter().next();
+        self.set_error_by_id(field_id, error_msg.clone());
+        if let Some(textarea) = self.textareas.get_mut(field_id) {
+            textarea.set_error(error_msg);
+        }
+    }
+
+    fn set_error_by_id(&mut self, field_id: &str, error: Option<String>) {
+        match error {
+            Some(msg) => {
+                self.errors.insert(field_id.to_string(), msg);
             }
-            FamilyHistoryFormField::Condition => {
-                if value.trim().is_empty() {
-                    self.errors
-                        .insert(*field, "Condition is required".to_string());
-                }
+            None => {
+                self.errors.remove(field_id);
             }
-            FamilyHistoryFormField::AgeAtDiagnosis => {
-                if !value.is_empty() && value.parse::<u8>().is_err() {
-                    self.errors
-                        .insert(*field, "Age must be a number (0-255)".to_string());
-                }
-            }
-            _ => {}
         }
     }
 
     pub fn error(&self, field: FamilyHistoryFormField) -> Option<&String> {
-        self.errors.get(&field)
+        self.errors.get(field.id())
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<FamilyHistoryFormAction> {
@@ -287,13 +369,11 @@ impl FamilyHistoryForm {
             return None;
         }
 
-        // Ctrl+S submits the form from any field
         if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
-            self.validate();
+            FormNavigation::validate(self);
             return Some(FamilyHistoryFormAction::Submit);
         }
 
-        // Ctrl+Tab exits the form from any field.
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Tab {
             return Some(FamilyHistoryFormAction::Cancel);
         }
@@ -301,14 +381,14 @@ impl FamilyHistoryForm {
         match key.code {
             KeyCode::Tab => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    self.prev_field();
+                    FormNavigation::prev_field(self);
                 } else {
-                    self.next_field();
+                    FormNavigation::next_field(self);
                 }
                 return Some(FamilyHistoryFormAction::FocusChanged);
             }
             KeyCode::BackTab => {
-                self.prev_field();
+                FormNavigation::prev_field(self);
                 return Some(FamilyHistoryFormAction::FocusChanged);
             }
             KeyCode::PageUp => {
@@ -324,11 +404,13 @@ impl FamilyHistoryForm {
         }
 
         let ratatui_key = to_ratatui_key(key);
-        let consumed = self.focused_textarea_mut().handle_key(ratatui_key);
-        if consumed {
-            let field = self.focused_field;
-            self.validate_field(&field);
-            return Some(FamilyHistoryFormAction::ValueChanged);
+        if let Some(textarea) = self.focused_textarea_mut() {
+            let consumed = textarea.handle_key(ratatui_key);
+            if consumed {
+                let field_id = self.focused_field.clone();
+                self.validate_field_by_id(&field_id);
+                return Some(FamilyHistoryFormAction::ValueChanged);
+            }
         }
 
         None
@@ -342,14 +424,65 @@ impl FamilyHistoryForm {
         FamilyHistory {
             id: self.family_history_id().unwrap_or_else(uuid::Uuid::new_v4),
             patient_id,
-            relative_relationship: self.relationship.value(),
-            condition: self.condition.value(),
-            age_at_diagnosis: self.age_at_diagnosis.value().parse().ok(),
-            notes: Some(self.notes.value()).filter(|s| !s.is_empty()),
+            relative_relationship: self.get_value(FamilyHistoryFormField::Relationship),
+            condition: self.get_value(FamilyHistoryFormField::Condition),
+            age_at_diagnosis: self
+                .get_value(FamilyHistoryFormField::AgeAtDiagnosis)
+                .parse()
+                .ok(),
+            notes: Some(self.get_value(FamilyHistoryFormField::Notes)).filter(|s| !s.is_empty()),
             created_at: chrono::Utc::now(),
             created_by,
         }
     }
+}
+
+fn make_textarea_state(field: FamilyHistoryFormField, value: Option<String>) -> TextareaState {
+    let mut state = match field {
+        FamilyHistoryFormField::Relationship => {
+            TextareaState::new("Relationship *").with_height_mode(HeightMode::SingleLine)
+        }
+        FamilyHistoryFormField::Condition => {
+            TextareaState::new("Condition *").with_height_mode(HeightMode::SingleLine)
+        }
+        FamilyHistoryFormField::AgeAtDiagnosis => {
+            TextareaState::new("Age at Diagnosis").with_height_mode(HeightMode::SingleLine)
+        }
+        FamilyHistoryFormField::Notes => {
+            TextareaState::new("Notes").with_height_mode(HeightMode::FixedLines(3))
+        }
+    };
+
+    if let Some(value) = value {
+        state = state.with_value(value);
+    }
+
+    state
+}
+
+fn build_validator() -> FormValidator {
+    let mut rules = HashMap::new();
+    rules.insert(
+        FIELD_RELATIONSHIP.to_string(),
+        ValidationRules {
+            required: true,
+            ..ValidationRules::default()
+        },
+    );
+    rules.insert(
+        FIELD_CONDITION.to_string(),
+        ValidationRules {
+            required: true,
+            ..ValidationRules::default()
+        },
+    );
+    rules.insert(
+        FIELD_AGE_AT_DIAGNOSIS.to_string(),
+        ValidationRules::default(),
+    );
+    rules.insert(FIELD_NOTES.to_string(), ValidationRules::default());
+
+    FormValidator::new(&rules)
 }
 
 impl Widget for FamilyHistoryForm {
@@ -376,26 +509,23 @@ impl Widget for FamilyHistoryForm {
             return;
         }
 
-        let fields = FamilyHistoryFormField::all();
+        let fields = self.field_ids.clone();
 
         let mut y = inner.y + 1;
         let max_y = inner.y + inner.height - 2;
 
-        for field in fields {
+        for field_id in fields {
             if y > max_y {
                 break;
             }
 
-            let textarea = match field {
-                FamilyHistoryFormField::Relationship => &self.relationship,
-                FamilyHistoryFormField::Condition => &self.condition,
-                FamilyHistoryFormField::AgeAtDiagnosis => &self.age_at_diagnosis,
-                FamilyHistoryFormField::Notes => &self.notes,
+            let Some(textarea) = self.textarea_for(&field_id) else {
+                continue;
             };
 
             let field_height = textarea.height();
             let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
-            let is_focused = field == self.focused_field;
+            let is_focused = field_id == self.focused_field;
 
             TextareaWidget::new(textarea, self.theme.clone())
                 .focused(is_focused)
@@ -403,7 +533,7 @@ impl Widget for FamilyHistoryForm {
 
             y += field_height;
 
-            if let Some(error_msg) = self.error(field) {
+            if let Some(error_msg) = self.errors.get(&field_id) {
                 if y <= max_y {
                     let error_style = Style::default().fg(self.theme.colors.error);
                     buf.set_string(inner.x + 2, y, error_msg.as_str(), error_style);
@@ -566,5 +696,24 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
         let action = form.handle_key(key);
         assert!(matches!(action, Some(FamilyHistoryFormAction::Submit)));
+    }
+
+    #[test]
+    fn test_dynamic_form_string_access() {
+        let theme = Theme::dark();
+        let mut form = FamilyHistoryForm::new(theme);
+
+        <FamilyHistoryForm as crate::ui::widgets::DynamicForm>::set_value(
+            &mut form,
+            FIELD_RELATIONSHIP,
+            "Sibling".to_string(),
+        );
+
+        let by_string = <FamilyHistoryForm as crate::ui::widgets::DynamicForm>::get_value(
+            &form,
+            FIELD_RELATIONSHIP,
+        );
+        let by_enum = form.get_value(FamilyHistoryFormField::Relationship);
+        assert_eq!(by_string, by_enum);
     }
 }
