@@ -5,6 +5,10 @@
 use std::collections::HashMap;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
+use opengp_config::forms::{
+    FieldDefinition, FieldType as ConfigFieldType, FormConfig, ValidationRules,
+};
+use opengp_domain::domain::patient::{Address, EmergencyContact, NewPatientData, Patient};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::Style;
@@ -17,10 +21,38 @@ use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
 use crate::ui::widgets::{
     format_date, parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption,
-    DropdownWidget, FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, TextareaState,
-    TextareaWidget,
+    DropdownWidget, FormFieldMeta, FormNavigation, FormValidator, HeightMode, ScrollableFormState,
+    TextareaState, TextareaWidget,
 };
-use opengp_domain::domain::patient::{Address, EmergencyContact, NewPatientData, Patient};
+
+const FIELD_TITLE: &str = "title";
+const FIELD_FIRST_NAME: &str = "first_name";
+const FIELD_MIDDLE_NAME: &str = "middle_name";
+const FIELD_LAST_NAME: &str = "last_name";
+const FIELD_PREFERRED_NAME: &str = "preferred_name";
+const FIELD_DATE_OF_BIRTH: &str = "date_of_birth";
+const FIELD_GENDER: &str = "gender";
+const FIELD_ADDRESS_LINE1: &str = "address_line1";
+const FIELD_ADDRESS_LINE2: &str = "address_line2";
+const FIELD_SUBURB: &str = "suburb";
+const FIELD_STATE: &str = "state";
+const FIELD_POSTCODE: &str = "postcode";
+const FIELD_COUNTRY: &str = "country";
+const FIELD_PHONE_HOME: &str = "phone_home";
+const FIELD_PHONE_MOBILE: &str = "phone_mobile";
+const FIELD_EMAIL: &str = "email";
+const FIELD_MEDICARE_NUMBER: &str = "medicare_number";
+const FIELD_MEDICARE_IRN: &str = "medicare_irn";
+const FIELD_MEDICARE_EXPIRY: &str = "medicare_expiry";
+const FIELD_IHI: &str = "ihi";
+const FIELD_EMERGENCY_NAME: &str = "emergency_name";
+const FIELD_EMERGENCY_PHONE: &str = "emergency_phone";
+const FIELD_EMERGENCY_RELATIONSHIP: &str = "emergency_relationship";
+const FIELD_CONCESSION_TYPE: &str = "concession_type";
+const FIELD_CONCESSION_NUMBER: &str = "concession_number";
+const FIELD_PREFERRED_LANGUAGE: &str = "preferred_language";
+const FIELD_INTERPRETER_REQUIRED: &str = "interpreter_required";
+const FIELD_ATSI_STATUS: &str = "atsi_status";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormMode {
@@ -99,6 +131,73 @@ impl FormField {
         (*self).into()
     }
 
+    pub fn id(&self) -> &'static str {
+        match self {
+            FormField::Title => FIELD_TITLE,
+            FormField::FirstName => FIELD_FIRST_NAME,
+            FormField::MiddleName => FIELD_MIDDLE_NAME,
+            FormField::LastName => FIELD_LAST_NAME,
+            FormField::PreferredName => FIELD_PREFERRED_NAME,
+            FormField::DateOfBirth => FIELD_DATE_OF_BIRTH,
+            FormField::Gender => FIELD_GENDER,
+            FormField::AddressLine1 => FIELD_ADDRESS_LINE1,
+            FormField::AddressLine2 => FIELD_ADDRESS_LINE2,
+            FormField::Suburb => FIELD_SUBURB,
+            FormField::State => FIELD_STATE,
+            FormField::Postcode => FIELD_POSTCODE,
+            FormField::Country => FIELD_COUNTRY,
+            FormField::PhoneHome => FIELD_PHONE_HOME,
+            FormField::PhoneMobile => FIELD_PHONE_MOBILE,
+            FormField::Email => FIELD_EMAIL,
+            FormField::MedicareNumber => FIELD_MEDICARE_NUMBER,
+            FormField::MedicareIrn => FIELD_MEDICARE_IRN,
+            FormField::MedicareExpiry => FIELD_MEDICARE_EXPIRY,
+            FormField::Ihi => FIELD_IHI,
+            FormField::EmergencyName => FIELD_EMERGENCY_NAME,
+            FormField::EmergencyPhone => FIELD_EMERGENCY_PHONE,
+            FormField::EmergencyRelationship => FIELD_EMERGENCY_RELATIONSHIP,
+            FormField::ConcessionType => FIELD_CONCESSION_TYPE,
+            FormField::ConcessionNumber => FIELD_CONCESSION_NUMBER,
+            FormField::PreferredLanguage => FIELD_PREFERRED_LANGUAGE,
+            FormField::InterpreterRequired => FIELD_INTERPRETER_REQUIRED,
+            FormField::AtsiStatus => FIELD_ATSI_STATUS,
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            FIELD_TITLE => Some(FormField::Title),
+            FIELD_FIRST_NAME => Some(FormField::FirstName),
+            FIELD_MIDDLE_NAME => Some(FormField::MiddleName),
+            FIELD_LAST_NAME => Some(FormField::LastName),
+            FIELD_PREFERRED_NAME => Some(FormField::PreferredName),
+            FIELD_DATE_OF_BIRTH => Some(FormField::DateOfBirth),
+            FIELD_GENDER => Some(FormField::Gender),
+            FIELD_ADDRESS_LINE1 => Some(FormField::AddressLine1),
+            FIELD_ADDRESS_LINE2 => Some(FormField::AddressLine2),
+            FIELD_SUBURB => Some(FormField::Suburb),
+            FIELD_STATE => Some(FormField::State),
+            FIELD_POSTCODE => Some(FormField::Postcode),
+            FIELD_COUNTRY => Some(FormField::Country),
+            FIELD_PHONE_HOME => Some(FormField::PhoneHome),
+            FIELD_PHONE_MOBILE => Some(FormField::PhoneMobile),
+            FIELD_EMAIL => Some(FormField::Email),
+            FIELD_MEDICARE_NUMBER => Some(FormField::MedicareNumber),
+            FIELD_MEDICARE_IRN => Some(FormField::MedicareIrn),
+            FIELD_MEDICARE_EXPIRY => Some(FormField::MedicareExpiry),
+            FIELD_IHI => Some(FormField::Ihi),
+            FIELD_EMERGENCY_NAME => Some(FormField::EmergencyName),
+            FIELD_EMERGENCY_PHONE => Some(FormField::EmergencyPhone),
+            FIELD_EMERGENCY_RELATIONSHIP => Some(FormField::EmergencyRelationship),
+            FIELD_CONCESSION_TYPE => Some(FormField::ConcessionType),
+            FIELD_CONCESSION_NUMBER => Some(FormField::ConcessionNumber),
+            FIELD_PREFERRED_LANGUAGE => Some(FormField::PreferredLanguage),
+            FIELD_INTERPRETER_REQUIRED => Some(FormField::InterpreterRequired),
+            FIELD_ATSI_STATUS => Some(FormField::AtsiStatus),
+            _ => None,
+        }
+    }
+
     pub fn is_required(&self) -> bool {
         matches!(
             self,
@@ -120,39 +219,16 @@ impl FormField {
 pub struct PatientForm {
     mode: FormMode,
     data: PatientFormData,
-    errors: HashMap<FormField, String>,
-    focused_field: FormField,
+    errors: HashMap<String, String>,
+    focused_field: String,
+    field_ids: Vec<String>,
+    field_configs: HashMap<String, FieldDefinition>,
     saving: bool,
     theme: Theme,
     scroll: ScrollableFormState,
-    gender_dropdown: DropdownWidget,
-    concession_type_dropdown: DropdownWidget,
-    atsi_status_dropdown: DropdownWidget,
-    interpreter_required_dropdown: DropdownWidget,
-    title: TextareaState,
-    first_name: TextareaState,
-    middle_name: TextareaState,
-    last_name: TextareaState,
-    preferred_name: TextareaState,
-    date_of_birth: TextareaState,
-    address_line1: TextareaState,
-    address_line2: TextareaState,
-    suburb: TextareaState,
-    state: TextareaState,
-    postcode: TextareaState,
-    country: TextareaState,
-    phone_home: TextareaState,
-    phone_mobile: TextareaState,
-    email: TextareaState,
-    medicare_number: TextareaState,
-    medicare_irn: TextareaState,
-    medicare_expiry: TextareaState,
-    ihi: TextareaState,
-    emergency_name: TextareaState,
-    emergency_phone: TextareaState,
-    emergency_relationship: TextareaState,
-    concession_number: TextareaState,
-    preferred_language: TextareaState,
+    textareas: HashMap<String, TextareaState>,
+    dropdowns: HashMap<String, DropdownWidget>,
+    validator: FormValidator,
     date_picker: DatePickerPopup,
 }
 
@@ -162,38 +238,15 @@ impl Clone for PatientForm {
             mode: self.mode,
             data: self.data.clone(),
             errors: self.errors.clone(),
-            focused_field: self.focused_field,
+            focused_field: self.focused_field.clone(),
+            field_ids: self.field_ids.clone(),
+            field_configs: self.field_configs.clone(),
             saving: self.saving,
             theme: self.theme.clone(),
             scroll: self.scroll.clone(),
-            gender_dropdown: self.gender_dropdown.clone(),
-            concession_type_dropdown: self.concession_type_dropdown.clone(),
-            atsi_status_dropdown: self.atsi_status_dropdown.clone(),
-            interpreter_required_dropdown: self.interpreter_required_dropdown.clone(),
-            title: self.title.clone(),
-            first_name: self.first_name.clone(),
-            middle_name: self.middle_name.clone(),
-            last_name: self.last_name.clone(),
-            preferred_name: self.preferred_name.clone(),
-            date_of_birth: self.date_of_birth.clone(),
-            address_line1: self.address_line1.clone(),
-            address_line2: self.address_line2.clone(),
-            suburb: self.suburb.clone(),
-            state: self.state.clone(),
-            postcode: self.postcode.clone(),
-            country: self.country.clone(),
-            phone_home: self.phone_home.clone(),
-            phone_mobile: self.phone_mobile.clone(),
-            email: self.email.clone(),
-            medicare_number: self.medicare_number.clone(),
-            medicare_irn: self.medicare_irn.clone(),
-            medicare_expiry: self.medicare_expiry.clone(),
-            ihi: self.ihi.clone(),
-            emergency_name: self.emergency_name.clone(),
-            emergency_phone: self.emergency_phone.clone(),
-            emergency_relationship: self.emergency_relationship.clone(),
-            concession_number: self.concession_number.clone(),
-            preferred_language: self.preferred_language.clone(),
+            textareas: self.textareas.clone(),
+            dropdowns: self.dropdowns.clone(),
+            validator: build_validator(&self.field_configs),
             date_picker: self.date_picker.clone(),
         }
     }
@@ -213,132 +266,162 @@ impl FormNavigation for PatientForm {
     type FormField = FormField;
 
     fn get_error(&self, field: Self::FormField) -> Option<&str> {
-        self.errors.get(&field).map(|s| s.as_str())
+        self.errors.get(field.id()).map(|s| s.as_str())
     }
 
     fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
-        match error {
-            Some(msg) => {
-                self.errors.insert(field, msg);
-            }
-            None => {
-                self.errors.remove(&field);
-            }
+        self.set_error_by_id(field.id(), error);
+    }
+
+    fn validate(&mut self) -> bool {
+        <Self as crate::ui::widgets::DynamicForm>::validate(self)
+    }
+
+    fn current_field(&self) -> Self::FormField {
+        FormField::from_id(&self.focused_field).unwrap_or(FormField::FirstName)
+    }
+
+    fn fields(&self) -> Vec<Self::FormField> {
+        self.field_ids
+            .iter()
+            .filter_map(|field_id| FormField::from_id(field_id))
+            .collect()
+    }
+
+    fn set_current_field(&mut self, field: Self::FormField) {
+        self.focused_field = field.id().to_string();
+    }
+}
+
+impl crate::ui::widgets::DynamicFormMeta for PatientForm {
+    fn label(&self, field_id: &str) -> String {
+        self.field_configs
+            .get(field_id)
+            .map(|field| field.label.clone())
+            .unwrap_or_else(|| field_id.to_string())
+    }
+
+    fn is_required(&self, field_id: &str) -> bool {
+        self.field_configs
+            .get(field_id)
+            .map(|field| field.required)
+            .unwrap_or(false)
+    }
+
+    fn field_type(&self, field_id: &str) -> crate::ui::widgets::FieldType {
+        match self
+            .field_configs
+            .get(field_id)
+            .map(|field| &field.field_type)
+        {
+            Some(ConfigFieldType::Date) => crate::ui::widgets::FieldType::Date,
+            Some(ConfigFieldType::Select) => crate::ui::widgets::FieldType::Select(vec![]),
+            _ => crate::ui::widgets::FieldType::Text,
         }
+    }
+}
+
+impl crate::ui::widgets::DynamicForm for PatientForm {
+    fn field_ids(&self) -> &[String] {
+        &self.field_ids
+    }
+
+    fn current_field(&self) -> &str {
+        &self.focused_field
+    }
+
+    fn set_current_field(&mut self, field_id: &str) {
+        if self.field_ids.iter().any(|id| id == field_id) {
+            self.focused_field = field_id.to_string();
+        }
+    }
+
+    fn get_value(&self, field_id: &str) -> String {
+        self.get_value_by_id(field_id)
+    }
+
+    fn set_value(&mut self, field_id: &str, value: String) {
+        self.set_value_by_id(field_id, value)
     }
 
     fn validate(&mut self) -> bool {
         self.errors.clear();
-
-        for field in FormField::all() {
-            self.validate_field(&field);
+        for field_id in self.field_ids.clone() {
+            self.validate_field_by_id(&field_id);
         }
-
         self.errors.is_empty()
     }
 
-    fn current_field(&self) -> Self::FormField {
-        self.focused_field
+    fn get_error(&self, field_id: &str) -> Option<&str> {
+        self.errors.get(field_id).map(|s| s.as_str())
     }
 
-    fn fields(&self) -> Vec<Self::FormField> {
-        FormField::all()
+    fn set_error(&mut self, field_id: &str, error: Option<String>) {
+        self.set_error_by_id(field_id, error);
     }
-
-    fn set_current_field(&mut self, field: Self::FormField) {
-        self.focused_field = field;
-    }
-}
-
-fn single_line(label: &'static str) -> TextareaState {
-    TextareaState::new(label).with_height_mode(HeightMode::SingleLine)
 }
 
 impl PatientForm {
     pub fn new(theme: Theme) -> Self {
-        let gender_options = vec![
-            DropdownOption::new("Male", "Male"),
-            DropdownOption::new("Female", "Female"),
-            DropdownOption::new("Other", "Other"),
-            DropdownOption::new("PreferNotToSay", "Prefer not to say"),
-        ];
-        let gender_dropdown = DropdownWidget::new("Gender", gender_options, theme.clone());
+        let field_definitions = load_patient_field_definitions();
+        let field_ids: Vec<String> = field_definitions
+            .iter()
+            .filter(|field| field.visible && field.navigable)
+            .map(|field| field.id.clone())
+            .collect();
+        let field_configs: HashMap<String, FieldDefinition> = field_definitions
+            .into_iter()
+            .map(|field| (field.id.clone(), field))
+            .collect();
 
-        let concession_options = vec![
-            DropdownOption::new("DVA", "DVA"),
-            DropdownOption::new("Pensioner", "Pensioner"),
-            DropdownOption::new("HealthcareCard", "Healthcare Card"),
-            DropdownOption::new("SafetyNetCard", "Safety Net Card"),
-        ];
-        let concession_type_dropdown =
-            DropdownWidget::new("Concession Type", concession_options, theme.clone());
+        let mut textareas = HashMap::new();
+        let mut dropdowns = HashMap::new();
 
-        let atsi_options = vec![
-            DropdownOption::new(
-                "AboriginalNotTorresStrait",
-                "Aboriginal (not Torres Strait)",
-            ),
-            DropdownOption::new(
-                "TorresStraitNotAboriginal",
-                "Torres Strait (not Aboriginal)",
-            ),
-            DropdownOption::new(
-                "BothAboriginalAndTorresStrait",
-                "Both Aboriginal and Torres Strait",
-            ),
-            DropdownOption::new(
-                "NeitherAboriginalNorTorresStrait",
-                "Neither Aboriginal nor Torres Strait",
-            ),
-            DropdownOption::new("NotStated", "Not stated"),
-        ];
-        let atsi_status_dropdown = DropdownWidget::new("ATSI Status", atsi_options, theme.clone());
+        for field_id in &field_ids {
+            if let Some(field) = field_configs.get(field_id) {
+                match field.field_type {
+                    ConfigFieldType::Select => {
+                        let options = field
+                            .options
+                            .iter()
+                            .map(|option| {
+                                DropdownOption::new(option.value.as_str(), option.label.as_str())
+                            })
+                            .collect();
+                        dropdowns.insert(
+                            field.id.clone(),
+                            DropdownWidget::new(field.label.as_str(), options, theme.clone()),
+                        );
+                    }
+                    _ => {
+                        textareas.insert(field.id.clone(), make_textarea_state(field, None));
+                    }
+                }
+            }
+        }
 
-        let interpreter_options = vec![
-            DropdownOption::new("Yes", "Yes"),
-            DropdownOption::new("No", "No"),
-        ];
-        let interpreter_required_dropdown =
-            DropdownWidget::new("Interpreter Required", interpreter_options, theme.clone());
-
-        Self {
+        let mut form = Self {
             mode: FormMode::Create,
             data: PatientFormData::empty(),
             errors: HashMap::new(),
-            focused_field: FormField::FirstName,
+            focused_field: if field_ids.iter().any(|id| id == FIELD_FIRST_NAME) {
+                FIELD_FIRST_NAME.to_string()
+            } else {
+                field_ids.first().cloned().unwrap_or_default()
+            },
+            field_ids,
+            field_configs,
             saving: false,
             theme,
             scroll: ScrollableFormState::new(),
-            gender_dropdown,
-            concession_type_dropdown,
-            atsi_status_dropdown,
-            interpreter_required_dropdown,
-            title: single_line("Title"),
-            first_name: single_line("First Name"),
-            middle_name: single_line("Middle Name"),
-            last_name: single_line("Last Name"),
-            preferred_name: single_line("Preferred Name"),
-            date_of_birth: single_line("Date of Birth"),
-            address_line1: single_line("Address Line 1"),
-            address_line2: single_line("Address Line 2"),
-            suburb: single_line("Suburb"),
-            state: single_line("State"),
-            postcode: single_line("Postcode"),
-            country: single_line("Country"),
-            phone_home: single_line("Phone (Home)"),
-            phone_mobile: single_line("Phone (Mobile)"),
-            email: single_line("Email"),
-            medicare_number: single_line("Medicare Number").max_length(10),
-            medicare_irn: single_line("Medicare IRN").max_length(1),
-            medicare_expiry: single_line("Medicare Expiry"),
-            ihi: single_line("IHI"),
-            emergency_name: single_line("Emergency Contact Name"),
-            emergency_phone: single_line("Emergency Contact Phone"),
-            emergency_relationship: single_line("Emergency Contact Relationship"),
-            concession_number: single_line("Concession Number"),
-            preferred_language: single_line("Preferred Language"),
+            textareas,
+            dropdowns,
+            validator: FormValidator::new(&HashMap::new()),
             date_picker: DatePickerPopup::new(),
-        }
+        };
+
+        form.validator = build_validator(&form.field_configs);
+        form
     }
 
     pub fn from_patient(patient: Patient, theme: Theme) -> Self {
@@ -350,85 +433,88 @@ impl PatientForm {
         let mut form = Self::new(theme);
         form.mode = FormMode::Edit(patient.id);
 
-        if let Some(ref t) = patient.title {
-            form.title = single_line("Title").with_value(t.clone());
+        if let Some(ref title) = patient.title {
+            form.set_value(FormField::Title, title.clone());
         }
-        form.first_name = single_line("First Name").with_value(patient.first_name.clone());
-        if let Some(ref mn) = patient.middle_name {
-            form.middle_name = single_line("Middle Name").with_value(mn.clone());
+        form.set_value(FormField::FirstName, patient.first_name.clone());
+        if let Some(ref middle_name) = patient.middle_name {
+            form.set_value(FormField::MiddleName, middle_name.clone());
         }
-        form.last_name = single_line("Last Name").with_value(patient.last_name.clone());
-        if let Some(ref pn) = patient.preferred_name {
-            form.preferred_name = single_line("Preferred Name").with_value(pn.clone());
+        form.set_value(FormField::LastName, patient.last_name.clone());
+        if let Some(ref preferred_name) = patient.preferred_name {
+            form.set_value(FormField::PreferredName, preferred_name.clone());
         }
-        form.date_of_birth =
-            single_line("Date of Birth").with_value(format_date(patient.date_of_birth));
-        if let Some(ref l1) = patient.address.line1 {
-            form.address_line1 = single_line("Address Line 1").with_value(l1.clone());
+        form.set_value(FormField::DateOfBirth, format_date(patient.date_of_birth));
+        if let Some(ref line1) = patient.address.line1 {
+            form.set_value(FormField::AddressLine1, line1.clone());
         }
-        if let Some(ref l2) = patient.address.line2 {
-            form.address_line2 = single_line("Address Line 2").with_value(l2.clone());
+        if let Some(ref line2) = patient.address.line2 {
+            form.set_value(FormField::AddressLine2, line2.clone());
         }
-        if let Some(ref s) = patient.address.suburb {
-            form.suburb = single_line("Suburb").with_value(s.clone());
+        if let Some(ref suburb) = patient.address.suburb {
+            form.set_value(FormField::Suburb, suburb.clone());
         }
-        if let Some(ref st) = patient.address.state {
-            form.state = single_line("State").with_value(st.clone());
+        if let Some(ref state) = patient.address.state {
+            form.set_value(FormField::State, state.clone());
         }
-        if let Some(ref pc) = patient.address.postcode {
-            form.postcode = single_line("Postcode").with_value(pc.clone());
+        if let Some(ref postcode) = patient.address.postcode {
+            form.set_value(FormField::Postcode, postcode.clone());
         }
-        form.country = single_line("Country").with_value(patient.address.country.clone());
-        if let Some(ref ph) = patient.phone_home {
-            form.phone_home = single_line("Phone (Home)").with_value(ph.clone());
+        form.set_value(FormField::Country, patient.address.country.clone());
+        if let Some(ref phone_home) = patient.phone_home {
+            form.set_value(FormField::PhoneHome, phone_home.clone());
         }
-        if let Some(ref pm) = patient.phone_mobile {
-            form.phone_mobile = single_line("Phone (Mobile)").with_value(pm.clone());
+        if let Some(ref phone_mobile) = patient.phone_mobile {
+            form.set_value(FormField::PhoneMobile, phone_mobile.clone());
         }
-        if let Some(ref em) = patient.email {
-            form.email = single_line("Email").with_value(em.clone());
+        if let Some(ref email) = patient.email {
+            form.set_value(FormField::Email, email.clone());
         }
-        if let Some(ref mn) = patient.medicare_number {
-            form.medicare_number = single_line("Medicare Number")
-                .max_length(10)
-                .with_value(mn.clone());
+        if let Some(ref medicare_number) = patient.medicare_number {
+            form.set_value(FormField::MedicareNumber, medicare_number.clone());
         }
-        if let Some(irn) = patient.medicare_irn {
-            form.medicare_irn = single_line("Medicare IRN")
-                .max_length(1)
-                .with_value(irn.to_string());
+        if let Some(medicare_irn) = patient.medicare_irn {
+            form.set_value(FormField::MedicareIrn, medicare_irn.to_string());
         }
-        if let Some(exp) = patient.medicare_expiry {
-            form.medicare_expiry = single_line("Medicare Expiry").with_value(format_date(exp));
+        if let Some(medicare_expiry) = patient.medicare_expiry {
+            form.set_value(FormField::MedicareExpiry, format_date(medicare_expiry));
         }
         if let Some(ref ihi) = patient.ihi {
-            form.ihi = single_line("IHI").with_value(ihi.clone());
+            form.set_value(FormField::Ihi, ihi.clone());
         }
-        if let Some(ref ec) = patient.emergency_contact {
-            form.emergency_name = single_line("Emergency Contact Name").with_value(ec.name.clone());
-            form.emergency_phone =
-                single_line("Emergency Contact Phone").with_value(ec.phone.clone());
-            form.emergency_relationship =
-                single_line("Emergency Contact Relationship").with_value(ec.relationship.clone());
+        if let Some(ref emergency_contact) = patient.emergency_contact {
+            form.set_value(FormField::EmergencyName, emergency_contact.name.clone());
+            form.set_value(FormField::EmergencyPhone, emergency_contact.phone.clone());
+            form.set_value(
+                FormField::EmergencyRelationship,
+                emergency_contact.relationship.clone(),
+            );
         }
-        if let Some(ref cn) = patient.concession_number {
-            form.concession_number = single_line("Concession Number").with_value(cn.clone());
+        if let Some(ref concession_number) = patient.concession_number {
+            form.set_value(FormField::ConcessionNumber, concession_number.clone());
         }
-        form.preferred_language =
-            single_line("Preferred Language").with_value(patient.preferred_language.clone());
+        form.set_value(
+            FormField::PreferredLanguage,
+            patient.preferred_language.clone(),
+        );
 
         form.data = PatientFormData::from(patient);
 
-        form.gender_dropdown.set_value(&gender.to_string());
+        form.set_value(FormField::Gender, gender.to_string());
         if let Some(concession) = concession_type {
-            form.concession_type_dropdown
-                .set_value(&concession.to_string());
+            form.set_value(FormField::ConcessionType, concession.to_string());
         }
         if let Some(atsi) = atsi_status {
-            form.atsi_status_dropdown.set_value(&atsi.to_string());
+            form.set_value(FormField::AtsiStatus, atsi.to_string());
         }
-        form.interpreter_required_dropdown
-            .set_value(if interpreter_required { "Yes" } else { "No" });
+        form.set_value(
+            FormField::InterpreterRequired,
+            if interpreter_required {
+                "Yes".to_string()
+            } else {
+                "No".to_string()
+            },
+        );
 
         form
     }
@@ -445,254 +531,104 @@ impl PatientForm {
     }
 
     pub fn get_value(&self, field: FormField) -> String {
-        match field {
-            FormField::Title => self.title.value(),
-            FormField::FirstName => self.first_name.value(),
-            FormField::MiddleName => self.middle_name.value(),
-            FormField::LastName => self.last_name.value(),
-            FormField::PreferredName => self.preferred_name.value(),
-            FormField::DateOfBirth => self.date_of_birth.value(),
-            FormField::Gender => self
-                .gender_dropdown
-                .selected_value()
-                .unwrap_or("")
-                .to_string(),
-            FormField::AddressLine1 => self.address_line1.value(),
-            FormField::AddressLine2 => self.address_line2.value(),
-            FormField::Suburb => self.suburb.value(),
-            FormField::State => self.state.value(),
-            FormField::Postcode => self.postcode.value(),
-            FormField::Country => self.country.value(),
-            FormField::PhoneHome => self.phone_home.value(),
-            FormField::PhoneMobile => self.phone_mobile.value(),
-            FormField::Email => self.email.value(),
-            FormField::MedicareNumber => self.medicare_number.value(),
-            FormField::MedicareIrn => self.medicare_irn.value(),
-            FormField::MedicareExpiry => self.medicare_expiry.value(),
-            FormField::Ihi => self.ihi.value(),
-            FormField::EmergencyName => self.emergency_name.value(),
-            FormField::EmergencyPhone => self.emergency_phone.value(),
-            FormField::EmergencyRelationship => self.emergency_relationship.value(),
-            FormField::ConcessionType => self
-                .concession_type_dropdown
-                .selected_value()
-                .unwrap_or("")
-                .to_string(),
-            FormField::ConcessionNumber => self.concession_number.value(),
-            FormField::PreferredLanguage => self.preferred_language.value(),
-            FormField::InterpreterRequired => self
-                .interpreter_required_dropdown
-                .selected_value()
-                .unwrap_or("No")
-                .to_string(),
-            FormField::AtsiStatus => self
-                .atsi_status_dropdown
-                .selected_value()
-                .unwrap_or("")
-                .to_string(),
-        }
+        self.get_value_by_id(field.id())
     }
 
     pub fn set_value(&mut self, field: FormField, value: String) {
-        match field {
-            FormField::Title => {
-                self.title = single_line("Title").with_value(value);
+        self.set_value_by_id(field.id(), value);
+    }
+
+    fn get_value_by_id(&self, field_id: &str) -> String {
+        if let Some(textarea) = self.textareas.get(field_id) {
+            return textarea.value();
+        }
+
+        if let Some(dropdown) = self.dropdowns.get(field_id) {
+            return dropdown.selected_value().unwrap_or("").to_string();
+        }
+
+        String::new()
+    }
+
+    fn set_value_by_id(&mut self, field_id: &str, value: String) {
+        if let Some(textarea) = self.textareas.get_mut(field_id) {
+            let label = textarea.label.clone();
+            let height_mode = textarea.height_mode.clone();
+            let max_length = textarea.max_length;
+            let focused = textarea.focused;
+
+            let mut updated = TextareaState::new(label)
+                .with_height_mode(height_mode)
+                .with_value(value.clone())
+                .focused(focused);
+            if let Some(limit) = max_length {
+                updated = updated.max_length(limit);
             }
-            FormField::FirstName => {
-                self.first_name = single_line("First Name").with_value(value);
-            }
-            FormField::MiddleName => {
-                self.middle_name = single_line("Middle Name").with_value(value);
-            }
-            FormField::LastName => {
-                self.last_name = single_line("Last Name").with_value(value);
-            }
-            FormField::PreferredName => {
-                self.preferred_name = single_line("Preferred Name").with_value(value);
-            }
-            FormField::DateOfBirth => {
-                self.date_of_birth = single_line("Date of Birth").with_value(value);
-            }
-            FormField::Gender => {
-                self.gender_dropdown.set_value(&value);
+            *textarea = updated;
+        } else if let Some(dropdown) = self.dropdowns.get_mut(field_id) {
+            dropdown.set_value(&value);
+        }
+
+        self.sync_data_for_field(field_id, &value);
+        self.validate_field_by_id(field_id);
+    }
+
+    fn sync_data_for_field(&mut self, field_id: &str, value: &str) {
+        match field_id {
+            FIELD_GENDER => {
                 if let Ok(gender) = value.parse() {
                     self.data.gender = gender;
                 }
             }
-            FormField::AddressLine1 => {
-                self.address_line1 = single_line("Address Line 1").with_value(value);
-            }
-            FormField::AddressLine2 => {
-                self.address_line2 = single_line("Address Line 2").with_value(value);
-            }
-            FormField::Suburb => {
-                self.suburb = single_line("Suburb").with_value(value);
-            }
-            FormField::State => {
-                self.state = single_line("State").with_value(value);
-            }
-            FormField::Postcode => {
-                self.postcode = single_line("Postcode").with_value(value);
-            }
-            FormField::Country => {
-                self.country = single_line("Country").with_value(value);
-            }
-            FormField::PhoneHome => {
-                self.phone_home = single_line("Phone (Home)").with_value(value);
-            }
-            FormField::PhoneMobile => {
-                self.phone_mobile = single_line("Phone (Mobile)").with_value(value);
-            }
-            FormField::Email => {
-                self.email = single_line("Email").with_value(value);
-            }
-            FormField::MedicareNumber => {
-                self.medicare_number = single_line("Medicare Number")
-                    .max_length(10)
-                    .with_value(value);
-            }
-            FormField::MedicareIrn => {
-                self.medicare_irn = single_line("Medicare IRN").max_length(1).with_value(value);
-            }
-            FormField::MedicareExpiry => {
-                self.medicare_expiry = single_line("Medicare Expiry").with_value(value);
-            }
-            FormField::Ihi => {
-                self.ihi = single_line("IHI").with_value(value);
-            }
-            FormField::EmergencyName => {
-                self.emergency_name = single_line("Emergency Contact Name").with_value(value);
-            }
-            FormField::EmergencyPhone => {
-                self.emergency_phone = single_line("Emergency Contact Phone").with_value(value);
-            }
-            FormField::EmergencyRelationship => {
-                self.emergency_relationship =
-                    single_line("Emergency Contact Relationship").with_value(value);
-            }
-            FormField::ConcessionType => {
-                self.concession_type_dropdown.set_value(&value);
+            FIELD_CONCESSION_TYPE => {
                 self.data.concession_type = value.parse().ok();
             }
-            FormField::ConcessionNumber => {
-                self.concession_number = single_line("Concession Number").with_value(value);
-            }
-            FormField::PreferredLanguage => {
-                self.preferred_language = single_line("Preferred Language").with_value(value);
-            }
-            FormField::InterpreterRequired => {
-                self.interpreter_required_dropdown.set_value(&value);
+            FIELD_INTERPRETER_REQUIRED => {
                 self.data.interpreter_required = value == "Yes";
             }
-            FormField::AtsiStatus => {
-                self.atsi_status_dropdown.set_value(&value);
+            FIELD_ATSI_STATUS => {
                 self.data.aboriginal_torres_strait_islander = value.parse().ok();
             }
+            _ => {}
         }
-        self.validate_field(&field);
     }
 
     fn focused_textarea_mut(&mut self) -> Option<&mut TextareaState> {
-        match self.focused_field {
-            FormField::Title => Some(&mut self.title),
-            FormField::FirstName => Some(&mut self.first_name),
-            FormField::MiddleName => Some(&mut self.middle_name),
-            FormField::LastName => Some(&mut self.last_name),
-            FormField::PreferredName => Some(&mut self.preferred_name),
-            FormField::DateOfBirth => Some(&mut self.date_of_birth),
-            FormField::AddressLine1 => Some(&mut self.address_line1),
-            FormField::AddressLine2 => Some(&mut self.address_line2),
-            FormField::Suburb => Some(&mut self.suburb),
-            FormField::State => Some(&mut self.state),
-            FormField::Postcode => Some(&mut self.postcode),
-            FormField::Country => Some(&mut self.country),
-            FormField::PhoneHome => Some(&mut self.phone_home),
-            FormField::PhoneMobile => Some(&mut self.phone_mobile),
-            FormField::Email => Some(&mut self.email),
-            FormField::MedicareNumber => Some(&mut self.medicare_number),
-            FormField::MedicareIrn => Some(&mut self.medicare_irn),
-            FormField::MedicareExpiry => Some(&mut self.medicare_expiry),
-            FormField::Ihi => Some(&mut self.ihi),
-            FormField::EmergencyName => Some(&mut self.emergency_name),
-            FormField::EmergencyPhone => Some(&mut self.emergency_phone),
-            FormField::EmergencyRelationship => Some(&mut self.emergency_relationship),
-            FormField::ConcessionNumber => Some(&mut self.concession_number),
-            FormField::PreferredLanguage => Some(&mut self.preferred_language),
-            FormField::Gender
-            | FormField::ConcessionType
-            | FormField::InterpreterRequired
-            | FormField::AtsiStatus => None,
-        }
+        self.textareas.get_mut(&self.focused_field)
     }
 
-    fn textarea_for(&self, field: FormField) -> Option<&TextareaState> {
-        match field {
-            FormField::Title => Some(&self.title),
-            FormField::FirstName => Some(&self.first_name),
-            FormField::MiddleName => Some(&self.middle_name),
-            FormField::LastName => Some(&self.last_name),
-            FormField::PreferredName => Some(&self.preferred_name),
-            FormField::DateOfBirth => Some(&self.date_of_birth),
-            FormField::AddressLine1 => Some(&self.address_line1),
-            FormField::AddressLine2 => Some(&self.address_line2),
-            FormField::Suburb => Some(&self.suburb),
-            FormField::State => Some(&self.state),
-            FormField::Postcode => Some(&self.postcode),
-            FormField::Country => Some(&self.country),
-            FormField::PhoneHome => Some(&self.phone_home),
-            FormField::PhoneMobile => Some(&self.phone_mobile),
-            FormField::Email => Some(&self.email),
-            FormField::MedicareNumber => Some(&self.medicare_number),
-            FormField::MedicareIrn => Some(&self.medicare_irn),
-            FormField::MedicareExpiry => Some(&self.medicare_expiry),
-            FormField::Ihi => Some(&self.ihi),
-            FormField::EmergencyName => Some(&self.emergency_name),
-            FormField::EmergencyPhone => Some(&self.emergency_phone),
-            FormField::EmergencyRelationship => Some(&self.emergency_relationship),
-            FormField::ConcessionNumber => Some(&self.concession_number),
-            FormField::PreferredLanguage => Some(&self.preferred_language),
-            FormField::Gender
-            | FormField::ConcessionType
-            | FormField::InterpreterRequired
-            | FormField::AtsiStatus => None,
-        }
+    fn textarea_for(&self, field_id: &str) -> Option<&TextareaState> {
+        self.textareas.get(field_id)
     }
 
     pub fn focused_field(&self) -> FormField {
-        self.focused_field
+        FormField::from_id(&self.focused_field).unwrap_or(FormField::FirstName)
     }
 
     pub fn set_focus(&mut self, field: FormField) {
-        self.focused_field = field;
+        self.focused_field = field.id().to_string();
     }
 
-    fn get_field_position(&self, field: FormField) -> (u16, u16) {
-        let fields = FormField::all();
+    fn get_field_position(&self, field_id: &str) -> (u16, u16) {
         let mut y: u16 = 0;
 
-        for f in fields {
-            if f == field {
-                return (y, self.get_field_height(f));
+        for id in &self.field_ids {
+            if id == field_id {
+                return (y, self.get_field_height(id));
             }
-            y += self.get_field_height(f) + 1;
+            y += self.get_field_height(id) + 1;
         }
 
         (0, 0)
     }
 
-    fn get_field_height(&self, field: FormField) -> u16 {
-        match field {
-            FormField::Gender
-            | FormField::ConcessionType
-            | FormField::AtsiStatus
-            | FormField::InterpreterRequired => 4,
-            _ => {
-                if let Some(textarea) = self.textarea_for(field) {
-                    textarea.height()
-                } else {
-                    1
-                }
-            }
+    fn get_field_height(&self, field_id: &str) -> u16 {
+        if self.dropdowns.contains_key(field_id) {
+            4
+        } else if let Some(textarea) = self.textarea_for(field_id) {
+            textarea.height()
+        } else {
+            1
         }
     }
 
@@ -704,109 +640,51 @@ impl PatientForm {
         self.saving = saving;
     }
 
-    fn validate_field(&mut self, field: &FormField) {
-        self.errors.remove(field);
+    fn validate_field_by_id(&mut self, field_id: &str) {
+        self.errors.remove(field_id);
 
-        let value = self.get_value(*field);
+        let value = self.get_value_by_id(field_id);
+        let mut errors = self.validator.validate(field_id, &value);
 
-        match field {
-            FormField::FirstName | FormField::LastName => {
-                if value.trim().is_empty() {
-                    self.errors
-                        .insert(*field, "This field is required".to_string());
-                } else if value.len() > 100 {
-                    self.errors
-                        .insert(*field, "Maximum 100 characters".to_string());
-                }
+        if field_id == FIELD_MEDICARE_NUMBER && !value.is_empty() {
+            if value.len() != 10 {
+                errors = vec!["Medicare number must be 10 digits".to_string()];
+            } else if !value.chars().all(|c| c.is_ascii_digit()) {
+                errors = vec!["Medicare number must contain only digits".to_string()];
             }
-            FormField::DateOfBirth => {
-                if value.is_empty() {
-                    self.errors
-                        .insert(*field, "This field is required".to_string());
-                } else if parse_date(&value).is_none() {
-                    self.errors
-                        .insert(*field, "Use dd/mm/yyyy format".to_string());
-                }
-            }
-            FormField::Gender => {
-                if value.is_empty() {
-                    self.errors
-                        .insert(*field, "This field is required".to_string());
-                }
-            }
-            FormField::MedicareNumber => {
-                if !value.is_empty() && value.len() != 10 {
-                    self.errors
-                        .insert(*field, "Medicare number must be 10 digits".to_string());
-                } else if !value.chars().all(|c| c.is_ascii_digit()) {
-                    self.errors.insert(
-                        *field,
-                        "Medicare number must contain only digits".to_string(),
-                    );
-                }
-            }
-            FormField::Email => {
-                if !value.is_empty() && !value.contains('@') {
-                    self.errors
-                        .insert(*field, "Invalid email format".to_string());
-                }
-            }
-            FormField::PhoneHome | FormField::PhoneMobile => {
-                if !value.is_empty() {
-                    let cleaned: String = value
-                        .chars()
-                        .filter(|c| {
-                            c.is_ascii_digit() || *c == ' ' || *c == '-' || *c == '(' || *c == ')'
-                        })
-                        .collect();
-                    if cleaned.len() < 8 {
-                        self.errors
-                            .insert(*field, "Invalid phone number".to_string());
-                    }
-                }
-            }
-            _ => {}
         }
 
-        let error_msg = self.errors.get(field).cloned();
-        match field {
-            FormField::Title => self.title.set_error(error_msg),
-            FormField::FirstName => self.first_name.set_error(error_msg),
-            FormField::MiddleName => self.middle_name.set_error(error_msg),
-            FormField::LastName => self.last_name.set_error(error_msg),
-            FormField::PreferredName => self.preferred_name.set_error(error_msg),
-            FormField::DateOfBirth => self.date_of_birth.set_error(error_msg),
-            FormField::AddressLine1 => self.address_line1.set_error(error_msg),
-            FormField::AddressLine2 => self.address_line2.set_error(error_msg),
-            FormField::Suburb => self.suburb.set_error(error_msg),
-            FormField::State => self.state.set_error(error_msg),
-            FormField::Postcode => self.postcode.set_error(error_msg),
-            FormField::Country => self.country.set_error(error_msg),
-            FormField::PhoneHome => self.phone_home.set_error(error_msg),
-            FormField::PhoneMobile => self.phone_mobile.set_error(error_msg),
-            FormField::Email => self.email.set_error(error_msg),
-            FormField::MedicareNumber => self.medicare_number.set_error(error_msg),
-            FormField::MedicareIrn => self.medicare_irn.set_error(error_msg),
-            FormField::MedicareExpiry => self.medicare_expiry.set_error(error_msg),
-            FormField::Ihi => self.ihi.set_error(error_msg),
-            FormField::EmergencyName => self.emergency_name.set_error(error_msg),
-            FormField::EmergencyPhone => self.emergency_phone.set_error(error_msg),
-            FormField::EmergencyRelationship => self.emergency_relationship.set_error(error_msg),
-            FormField::ConcessionNumber => self.concession_number.set_error(error_msg),
-            FormField::PreferredLanguage => self.preferred_language.set_error(error_msg),
-            FormField::Gender
-            | FormField::ConcessionType
-            | FormField::InterpreterRequired
-            | FormField::AtsiStatus => {}
+        if matches!(field_id, FIELD_DATE_OF_BIRTH | FIELD_MEDICARE_EXPIRY)
+            && !value.trim().is_empty()
+            && parse_date(&value).is_none()
+        {
+            errors = vec!["Use dd/mm/yyyy format".to_string()];
+        }
+
+        let error_msg = errors.into_iter().next();
+        self.set_error_by_id(field_id, error_msg.clone());
+        if let Some(textarea) = self.textareas.get_mut(field_id) {
+            textarea.set_error(error_msg);
+        }
+    }
+
+    fn set_error_by_id(&mut self, field_id: &str, error: Option<String>) {
+        match error {
+            Some(msg) => {
+                self.errors.insert(field_id.to_string(), msg);
+            }
+            None => {
+                self.errors.remove(field_id);
+            }
         }
     }
 
     pub fn error(&self, field: FormField) -> Option<&String> {
-        self.errors.get(&field)
+        self.errors.get(field.id())
     }
 
     pub fn to_new_patient_data(&mut self) -> Option<NewPatientData> {
-        if !self.validate() {
+        if !FormNavigation::validate(self) {
             return None;
         }
 
@@ -865,7 +743,7 @@ impl PatientForm {
     ) -> Option<(Uuid, opengp_domain::domain::patient::UpdatePatientData)> {
         let patient_id = self.patient_id()?;
 
-        if !self.validate() {
+        if !FormNavigation::validate(self) {
             return None;
         }
 
@@ -922,9 +800,8 @@ impl PatientForm {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<PatientFormAction> {
-        use crossterm::event::{KeyCode, KeyEventKind};
+        use crossterm::event::{KeyEventKind, KeyModifiers};
 
-        // Ignore non-press key events (e.g., Release events from terminals with keyboard enhancement)
         if key.kind != KeyEventKind::Press {
             return None;
         }
@@ -933,13 +810,8 @@ impl PatientForm {
             return None;
         }
 
-        // Ctrl+S submits the form from any field
-        if key
-            .modifiers
-            .contains(crossterm::event::KeyModifiers::CONTROL)
-            && matches!(key.code, KeyCode::Char('s'))
-        {
-            self.validate();
+        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
+            FormNavigation::validate(self);
             return Some(PatientFormAction::Submit);
         }
 
@@ -947,9 +819,7 @@ impl PatientForm {
             if let Some(action) = self.date_picker.handle_key(key) {
                 match action {
                     DatePickerAction::Selected(date) => {
-                        self.date_of_birth = single_line("Date of Birth")
-                            .with_value(date.format("%Y-%m-%d").to_string());
-                        self.validate_field(&FormField::DateOfBirth);
+                        self.set_value_by_id(FIELD_DATE_OF_BIRTH, format_date(date));
                         return Some(PatientFormAction::ValueChanged);
                     }
                     DatePickerAction::Dismissed => {
@@ -960,10 +830,10 @@ impl PatientForm {
             return Some(PatientFormAction::FocusChanged);
         }
 
-        if self.focused_field == FormField::DateOfBirth
+        if self.focused_field == FIELD_DATE_OF_BIRTH
             && matches!(key.code, KeyCode::Enter | KeyCode::Char(' '))
         {
-            let current_value = parse_date(&self.date_of_birth.value());
+            let current_value = parse_date(&self.get_value_by_id(FIELD_DATE_OF_BIRTH));
             self.date_picker.open(current_value);
             return Some(PatientFormAction::FocusChanged);
         }
@@ -972,13 +842,13 @@ impl PatientForm {
             return dropdown_action;
         }
 
-        if !self.focused_field.is_dropdown() {
+        if !self.dropdowns.contains_key(&self.focused_field) {
             let ratatui_key = to_ratatui_key(key);
             if let Some(textarea) = self.focused_textarea_mut() {
                 let consumed = textarea.handle_key(ratatui_key);
                 if consumed {
-                    let field = self.focused_field;
-                    self.validate_field(&field);
+                    let field = self.focused_field.clone();
+                    self.validate_field_by_id(&field);
                     return Some(PatientFormAction::ValueChanged);
                 }
             }
@@ -986,26 +856,23 @@ impl PatientForm {
 
         match key.code {
             KeyCode::Tab => {
-                if key
-                    .modifiers
-                    .contains(crossterm::event::KeyModifiers::SHIFT)
-                {
-                    self.prev_field();
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    FormNavigation::prev_field(self);
                 } else {
-                    self.next_field();
+                    FormNavigation::next_field(self);
                 }
                 Some(PatientFormAction::FocusChanged)
             }
             KeyCode::BackTab => {
-                self.prev_field();
+                FormNavigation::prev_field(self);
                 Some(PatientFormAction::FocusChanged)
             }
             KeyCode::Up => {
-                self.prev_field();
+                FormNavigation::prev_field(self);
                 Some(PatientFormAction::FocusChanged)
             }
             KeyCode::Down => {
-                self.next_field();
+                FormNavigation::next_field(self);
                 Some(PatientFormAction::FocusChanged)
             }
             KeyCode::PageUp => {
@@ -1023,50 +890,46 @@ impl PatientForm {
     }
 
     fn handle_dropdown_key(&mut self, key: KeyEvent) -> Option<Option<PatientFormAction>> {
-        let dropdown: Option<(&mut DropdownWidget, FormField)> = match self.focused_field {
-            FormField::Gender => Some((&mut self.gender_dropdown, FormField::Gender)),
-            FormField::ConcessionType => Some((
-                &mut self.concession_type_dropdown,
-                FormField::ConcessionType,
-            )),
-            FormField::AtsiStatus => Some((&mut self.atsi_status_dropdown, FormField::AtsiStatus)),
-            FormField::InterpreterRequired => Some((
-                &mut self.interpreter_required_dropdown,
-                FormField::InterpreterRequired,
-            )),
-            _ => None,
-        };
-
-        if let Some((dropdown, field)) = dropdown {
-            if let Some(action) = dropdown.handle_key(key) {
-                // Allow Tab/BackTab/Esc to pass through to form's navigation handler
-                match key.code {
-                    KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {
-                        // Return None so caller handles Tab for field navigation
-                        return None;
-                    }
-                    _ => match action {
-                        DropdownAction::Selected(_) | DropdownAction::Closed => {
-                            let value = dropdown.selected_value().map(|v| v.to_string());
-                            if let Some(v) = value {
-                                self.set_value(field, v);
-                            }
-                            return Some(Some(PatientFormAction::ValueChanged));
-                        }
-                        DropdownAction::Opened | DropdownAction::FocusChanged => {
-                            return Some(Some(PatientFormAction::ValueChanged));
-                        }
-                    },
-                }
-            }
-            match key.code {
-                KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
-                _ => {}
-            }
-            return Some(None);
+        let field_id = self.focused_field.clone();
+        if !self.dropdowns.contains_key(&field_id) {
+            return None;
         }
 
-        None
+        let mut selected_value: Option<String> = None;
+        let action = {
+            let dropdown = self.dropdowns.get_mut(&field_id)?;
+            dropdown.handle_key(key)
+        };
+
+        if let Some(action) = action {
+            match key.code {
+                KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {
+                    return None;
+                }
+                _ => match action {
+                    DropdownAction::Selected(_) | DropdownAction::Closed => {
+                        selected_value = self
+                            .dropdowns
+                            .get(&field_id)
+                            .and_then(|dropdown| dropdown.selected_value().map(|v| v.to_string()));
+                    }
+                    DropdownAction::Opened | DropdownAction::FocusChanged => {
+                        return Some(Some(PatientFormAction::ValueChanged));
+                    }
+                },
+            }
+        } else {
+            match key.code {
+                KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
+                _ => return Some(None),
+            }
+        }
+
+        if let Some(value) = selected_value {
+            self.set_value_by_id(&field_id, value);
+        }
+
+        Some(Some(PatientFormAction::ValueChanged))
     }
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<PatientFormAction> {
@@ -1085,21 +948,20 @@ impl PatientForm {
             return None;
         }
 
-        let fields: Vec<FormField> = FormField::all();
         let mut y = inner.y + 1;
         let max_y = inner.y + inner.height - 2;
 
-        for field in &fields {
+        for field_id in &self.field_ids {
             if y > max_y {
                 break;
             }
 
-            let field_height: u16 = 3;
+            let field_height = self.get_field_height(field_id);
             let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
 
             if field_area.contains(click_pos) {
-                if *field != self.focused_field {
-                    self.focused_field = *field;
+                if *field_id != self.focused_field {
+                    self.focused_field = field_id.clone();
                     return Some(PatientFormAction::FocusChanged);
                 }
                 return None;
@@ -1110,6 +972,177 @@ impl PatientForm {
 
         None
     }
+}
+
+fn load_patient_field_definitions() -> Vec<FieldDefinition> {
+    if let Ok(config) = FormConfig::load() {
+        if let Some(form) = config.forms.get("patient") {
+            return form.fields.clone();
+        }
+    }
+
+    fallback_patient_field_definitions()
+}
+
+fn fallback_patient_field_definitions() -> Vec<FieldDefinition> {
+    FormField::all()
+        .into_iter()
+        .map(|field| {
+            let mut definition = FieldDefinition {
+                id: field.id().to_string(),
+                label: field.label().to_string(),
+                required: field.is_required(),
+                field_type: if field.is_dropdown() {
+                    ConfigFieldType::Select
+                } else {
+                    ConfigFieldType::Text
+                },
+                ..FieldDefinition::default()
+            };
+
+            definition.validation = match field {
+                FormField::FirstName | FormField::LastName => ValidationRules {
+                    max_length: Some(100),
+                    required: true,
+                    ..ValidationRules::default()
+                },
+                FormField::Email => ValidationRules {
+                    email: true,
+                    ..ValidationRules::default()
+                },
+                FormField::PhoneHome | FormField::PhoneMobile | FormField::EmergencyPhone => {
+                    ValidationRules {
+                        phone: true,
+                        ..ValidationRules::default()
+                    }
+                }
+                FormField::DateOfBirth => ValidationRules {
+                    required: true,
+                    date_format: Some("dd/mm/yyyy".to_string()),
+                    ..ValidationRules::default()
+                },
+                FormField::MedicareNumber => ValidationRules {
+                    max_length: Some(10),
+                    ..ValidationRules::default()
+                },
+                FormField::MedicareIrn => ValidationRules {
+                    max_length: Some(1),
+                    ..ValidationRules::default()
+                },
+                FormField::MedicareExpiry => ValidationRules {
+                    date_format: Some("dd/mm/yyyy".to_string()),
+                    ..ValidationRules::default()
+                },
+                _ => ValidationRules::default(),
+            };
+
+            if field.is_dropdown() {
+                definition.options = match field {
+                    FormField::Gender => vec![
+                        opengp_config::forms::SelectOption {
+                            value: "Male".to_string(),
+                            label: "Male".to_string(),
+                        },
+                        opengp_config::forms::SelectOption {
+                            value: "Female".to_string(),
+                            label: "Female".to_string(),
+                        },
+                        opengp_config::forms::SelectOption {
+                            value: "Other".to_string(),
+                            label: "Other".to_string(),
+                        },
+                        opengp_config::forms::SelectOption {
+                            value: "PreferNotToSay".to_string(),
+                            label: "Prefer not to say".to_string(),
+                        },
+                    ],
+                    FormField::ConcessionType => vec![
+                        opengp_config::forms::SelectOption {
+                            value: "DVA".to_string(),
+                            label: "DVA".to_string(),
+                        },
+                        opengp_config::forms::SelectOption {
+                            value: "Pensioner".to_string(),
+                            label: "Pensioner".to_string(),
+                        },
+                        opengp_config::forms::SelectOption {
+                            value: "HealthcareCard".to_string(),
+                            label: "Healthcare Card".to_string(),
+                        },
+                        opengp_config::forms::SelectOption {
+                            value: "SafetyNetCard".to_string(),
+                            label: "Safety Net Card".to_string(),
+                        },
+                    ],
+                    FormField::InterpreterRequired => vec![
+                        opengp_config::forms::SelectOption {
+                            value: "Yes".to_string(),
+                            label: "Yes".to_string(),
+                        },
+                        opengp_config::forms::SelectOption {
+                            value: "No".to_string(),
+                            label: "No".to_string(),
+                        },
+                    ],
+                    FormField::AtsiStatus => vec![
+                        opengp_config::forms::SelectOption {
+                            value: "AboriginalNotTorresStrait".to_string(),
+                            label: "Aboriginal (not Torres Strait)".to_string(),
+                        },
+                        opengp_config::forms::SelectOption {
+                            value: "TorresStraitNotAboriginal".to_string(),
+                            label: "Torres Strait (not Aboriginal)".to_string(),
+                        },
+                        opengp_config::forms::SelectOption {
+                            value: "BothAboriginalAndTorresStrait".to_string(),
+                            label: "Both Aboriginal and Torres Strait".to_string(),
+                        },
+                        opengp_config::forms::SelectOption {
+                            value: "NeitherAboriginalNorTorresStrait".to_string(),
+                            label: "Neither Aboriginal nor Torres Strait".to_string(),
+                        },
+                        opengp_config::forms::SelectOption {
+                            value: "NotStated".to_string(),
+                            label: "Not stated".to_string(),
+                        },
+                    ],
+                    _ => vec![],
+                };
+            }
+
+            definition
+        })
+        .collect()
+}
+
+fn make_textarea_state(field: &FieldDefinition, value: Option<String>) -> TextareaState {
+    let mut state =
+        TextareaState::new(field.label.clone()).with_height_mode(HeightMode::SingleLine);
+    if let Some(max_length) = field.validation.max_length {
+        state = state.max_length(max_length);
+    }
+    if let Some(value) = value {
+        state = state.with_value(value);
+    }
+    state
+}
+
+fn build_validator(field_configs: &HashMap<String, FieldDefinition>) -> FormValidator {
+    let rules: HashMap<String, ValidationRules> = field_configs
+        .iter()
+        .map(|(field_id, field)| {
+            let mut validation = field.validation.clone();
+            if field.required {
+                validation.required = true;
+            }
+            if matches!(field.field_type, ConfigFieldType::Date) {
+                validation.date_format = None;
+            }
+            (field_id.clone(), validation)
+        })
+        .collect();
+
+    FormValidator::new(&rules)
 }
 
 trait EmptyToNone {
@@ -1168,18 +1201,16 @@ impl Widget for PatientForm {
         let label_width = LABEL_WIDTH;
         let field_start = inner.x + label_width + 2;
 
-        let fields: Vec<FormField> = FormField::all();
+        let fields = self.field_ids.clone();
 
-        // Calculate total content height first
         let mut total_height: u16 = 0;
-        for field in &fields {
-            total_height += self.get_field_height(*field) + 1;
+        for field_id in &fields {
+            total_height += self.get_field_height(field_id) + 1;
         }
         self.scroll.set_total_height(total_height);
         self.scroll.clamp_offset(inner.height.saturating_sub(2));
 
-        // Scroll to focused field if needed
-        let (focused_y, focused_height) = self.get_field_position(self.focused_field);
+        let (focused_y, focused_height) = self.get_field_position(&self.focused_field);
         self.scroll
             .scroll_to_field(focused_y, focused_height, inner.height.saturating_sub(2));
 
@@ -1187,99 +1218,47 @@ impl Widget for PatientForm {
         let max_y = inner.y as i32 + inner.height as i32 - 2;
         let mut open_dropdown: Option<(DropdownWidget, Rect)> = None;
 
-        for field in fields {
-            let field_height = self.get_field_height(field) as i32;
+        for field_id in fields {
+            let field_height = self.get_field_height(&field_id) as i32;
 
-            // Skip fields outside viewport
             if y + field_height <= inner.y as i32 || y >= max_y {
                 y += field_height + 1;
                 continue;
             }
 
-            let is_focused = field == self.focused_field;
+            let is_focused = field_id == self.focused_field;
 
-            match field {
-                FormField::Gender => {
-                    let dropdown = self.gender_dropdown.clone();
-                    if y >= inner.y as i32 && y < max_y {
-                        let dropdown_area = Rect::new(
-                            field_start,
-                            y as u16,
-                            inner.width.saturating_sub(label_width + 4),
-                            3,
-                        );
-                        if dropdown.is_open() {
-                            open_dropdown = Some((dropdown.clone(), dropdown_area));
-                        }
-                        dropdown.focused(is_focused).render(dropdown_area, buf);
+            if let Some(dropdown) = self.dropdowns.get(&field_id).cloned() {
+                if y >= inner.y as i32 && y < max_y {
+                    let dropdown_area = Rect::new(
+                        field_start,
+                        y as u16,
+                        inner.width.saturating_sub(label_width + 4),
+                        3,
+                    );
+                    if dropdown.is_open() {
+                        open_dropdown = Some((dropdown.clone(), dropdown_area));
                     }
-                    y += 4;
+                    dropdown.focused(is_focused).render(dropdown_area, buf);
                 }
-                FormField::ConcessionType => {
-                    let dropdown = self.concession_type_dropdown.clone();
-                    if y >= inner.y as i32 && y < max_y {
-                        let dropdown_area = Rect::new(
-                            field_start,
-                            y as u16,
-                            inner.width.saturating_sub(label_width + 4),
-                            3,
-                        );
-                        if dropdown.is_open() {
-                            open_dropdown = Some((dropdown.clone(), dropdown_area));
-                        }
-                        dropdown.focused(is_focused).render(dropdown_area, buf);
-                    }
-                    y += 4;
+                y += 4;
+                continue;
+            }
+
+            if let Some(textarea) = self.textareas.get(&field_id) {
+                let textarea_height = textarea.height() as i32;
+                if y >= inner.y as i32 && y < max_y {
+                    let textarea_area = Rect::new(
+                        inner.x + 1,
+                        y as u16,
+                        inner.width - 2,
+                        textarea_height as u16,
+                    );
+                    TextareaWidget::new(textarea, self.theme.clone())
+                        .focused(is_focused)
+                        .render(textarea_area, buf);
                 }
-                FormField::AtsiStatus => {
-                    let dropdown = self.atsi_status_dropdown.clone();
-                    if y >= inner.y as i32 && y < max_y {
-                        let dropdown_area = Rect::new(
-                            field_start,
-                            y as u16,
-                            inner.width.saturating_sub(label_width + 4),
-                            3,
-                        );
-                        if dropdown.is_open() {
-                            open_dropdown = Some((dropdown.clone(), dropdown_area));
-                        }
-                        dropdown.focused(is_focused).render(dropdown_area, buf);
-                    }
-                    y += 4;
-                }
-                FormField::InterpreterRequired => {
-                    let dropdown = self.interpreter_required_dropdown.clone();
-                    if y >= inner.y as i32 && y < max_y {
-                        let dropdown_area = Rect::new(
-                            field_start,
-                            y as u16,
-                            inner.width.saturating_sub(label_width + 4),
-                            3,
-                        );
-                        if dropdown.is_open() {
-                            open_dropdown = Some((dropdown.clone(), dropdown_area));
-                        }
-                        dropdown.focused(is_focused).render(dropdown_area, buf);
-                    }
-                    y += 4;
-                }
-                _ => {
-                    if let Some(textarea) = self.textarea_for(field) {
-                        let textarea_height = textarea.height() as i32;
-                        if y >= inner.y as i32 && y < max_y {
-                            let textarea_area = Rect::new(
-                                inner.x + 1,
-                                y as u16,
-                                inner.width - 2,
-                                textarea_height as u16,
-                            );
-                            TextareaWidget::new(textarea, self.theme.clone())
-                                .focused(is_focused)
-                                .render(textarea_area, buf);
-                        }
-                        y += textarea_height + 1;
-                    }
-                }
+                y += textarea_height + 1;
             }
         }
 
@@ -1287,7 +1266,6 @@ impl Widget for PatientForm {
             dropdown.render(dropdown_area, buf);
         }
 
-        // Render scrollbar
         self.scroll.render_scrollbar(inner, buf);
 
         let help_y = inner.y + inner.height - 1;
@@ -1323,7 +1301,7 @@ mod tests {
         let theme = Theme::dark();
         let mut form = PatientForm::new(theme);
 
-        form.validate();
+        FormNavigation::validate(&mut form);
         assert!(form.has_errors());
         assert!(form.error(FormField::FirstName).is_some());
         assert!(form.error(FormField::LastName).is_some());
@@ -1335,11 +1313,11 @@ mod tests {
         let mut form = PatientForm::new(theme);
 
         form.set_value(FormField::Email, "invalid".to_string());
-        form.validate();
+        FormNavigation::validate(&mut form);
         assert!(form.error(FormField::Email).is_some());
 
         form.set_value(FormField::Email, "test@example.com".to_string());
-        form.validate();
+        FormNavigation::validate(&mut form);
         assert!(form.error(FormField::Email).is_none());
     }
 
@@ -1350,7 +1328,30 @@ mod tests {
 
         form.set_value(FormField::FirstName, "Alice".to_string());
         assert_eq!(form.get_value(FormField::FirstName), "Alice");
-        assert_eq!(form.first_name.value(), "Alice");
+        assert_eq!(
+            form.textareas
+                .get(FIELD_FIRST_NAME)
+                .expect("first_name textarea should exist")
+                .value(),
+            "Alice"
+        );
+    }
+
+    #[test]
+    fn test_dynamic_form_string_access() {
+        let theme = Theme::dark();
+        let mut form = PatientForm::new(theme);
+
+        <PatientForm as crate::ui::widgets::DynamicForm>::set_value(
+            &mut form,
+            FIELD_FIRST_NAME,
+            "John".to_string(),
+        );
+
+        let by_string =
+            <PatientForm as crate::ui::widgets::DynamicForm>::get_value(&form, FIELD_FIRST_NAME);
+        let by_enum = form.get_value(FormField::FirstName);
+        assert_eq!(by_string, by_enum);
     }
 
     #[test]
@@ -1359,7 +1360,7 @@ mod tests {
 
         let theme = Theme::dark();
         let mut form = PatientForm::new(theme);
-        form.focused_field = FormField::FirstName;
+        form.focused_field = FIELD_FIRST_NAME.to_string();
 
         let key = KeyEvent::new(KeyCode::Char('J'), KeyModifiers::NONE);
         let action = form.handle_key(key);
@@ -1385,10 +1386,34 @@ mod tests {
         let theme = Theme::dark();
         let form = PatientForm::new(theme);
 
-        assert_eq!(form.first_name.height_mode, HeightMode::SingleLine);
-        assert_eq!(form.last_name.height_mode, HeightMode::SingleLine);
-        assert_eq!(form.email.height_mode, HeightMode::SingleLine);
-        assert_eq!(form.medicare_number.height_mode, HeightMode::SingleLine);
+        assert_eq!(
+            form.textareas
+                .get(FIELD_FIRST_NAME)
+                .expect("first_name textarea should exist")
+                .height_mode,
+            HeightMode::SingleLine
+        );
+        assert_eq!(
+            form.textareas
+                .get(FIELD_LAST_NAME)
+                .expect("last_name textarea should exist")
+                .height_mode,
+            HeightMode::SingleLine
+        );
+        assert_eq!(
+            form.textareas
+                .get(FIELD_EMAIL)
+                .expect("email textarea should exist")
+                .height_mode,
+            HeightMode::SingleLine
+        );
+        assert_eq!(
+            form.textareas
+                .get(FIELD_MEDICARE_NUMBER)
+                .expect("medicare_number textarea should exist")
+                .height_mode,
+            HeightMode::SingleLine
+        );
     }
 
     #[test]
@@ -1396,9 +1421,19 @@ mod tests {
         let theme = Theme::dark();
         let mut form = PatientForm::new(theme);
 
-        form.validate();
-        assert!(form.first_name.error.is_some());
-        assert!(form.last_name.error.is_some());
+        FormNavigation::validate(&mut form);
+        assert!(form
+            .textareas
+            .get(FIELD_FIRST_NAME)
+            .expect("first_name textarea should exist")
+            .error
+            .is_some());
+        assert!(form
+            .textareas
+            .get(FIELD_LAST_NAME)
+            .expect("last_name textarea should exist")
+            .error
+            .is_some());
     }
 
     #[test]
@@ -1416,7 +1451,7 @@ mod tests {
 
         let result = form.to_new_patient_data();
         assert!(result.is_some());
-        let data = result.unwrap();
+        let data = result.expect("result should be present");
         assert_eq!(data.first_name, "Alice");
         assert_eq!(data.last_name, "Smith");
     }

@@ -22,7 +22,7 @@ pub enum HeightMode {
 #[derive(Clone)]
 pub struct TextareaState {
     pub textarea: TextArea<'static>,
-    pub label: &'static str,
+    pub label: String,
     pub focused: bool,
     pub error: Option<String>,
     pub height_mode: HeightMode,
@@ -42,11 +42,11 @@ impl std::fmt::Debug for TextareaState {
 }
 
 impl TextareaState {
-    pub fn new(label: &'static str) -> Self {
+    pub fn new(label: impl Into<String>) -> Self {
         let textarea = TextArea::default();
         Self {
             textarea,
-            label,
+            label: label.into(),
             focused: false,
             error: None,
             height_mode: HeightMode::FixedLines(4),
