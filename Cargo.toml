@@ -85,6 +85,8 @@ derive_builder = "0.20"
 ratatui-textarea = "0.8"
 deadpool-redis = "0.23"
 redis = "0.28"
+toml = "0.8"
+regex = "1"
 opengp-config = { path = "crates/opengp-config" }
 
 [dev-dependencies]

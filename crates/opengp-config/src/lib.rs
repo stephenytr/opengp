@@ -3,6 +3,8 @@
 //! Handles loading and managing application configuration from environment
 //! variables and configuration files.
 
+pub mod forms;
+
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 

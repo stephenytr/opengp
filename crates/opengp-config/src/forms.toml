@@ -1,0 +1,908 @@
+# OpenGP Forms Configuration
+# Defines all form schemas with field metadata, validation rules, and dropdown options
+
+[forms.patient]
+title = "Patient Registration"
+
+[[forms.patient.fields]]
+id = "title"
+label = "Title"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "first_name"
+label = "First Name *"
+type = "text"
+required = true
+visible = true
+navigable = true
+
+[forms.patient.fields.validation]
+max_length = 100
+
+[[forms.patient.fields]]
+id = "middle_name"
+label = "Middle Name"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "last_name"
+label = "Last Name *"
+type = "text"
+required = true
+visible = true
+navigable = true
+
+[forms.patient.fields.validation]
+max_length = 100
+
+[[forms.patient.fields]]
+id = "preferred_name"
+label = "Preferred Name"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "date_of_birth"
+label = "Date of Birth * (dd/mm/yyyy)"
+type = "date"
+required = true
+visible = true
+navigable = true
+
+[forms.patient.fields.validation]
+date_format = "dd/mm/yyyy"
+
+[[forms.patient.fields]]
+id = "gender"
+label = "Gender *"
+type = "select"
+required = true
+visible = true
+navigable = true
+
+[[forms.patient.fields.options]]
+value = "Male"
+label = "Male"
+
+[[forms.patient.fields.options]]
+value = "Female"
+label = "Female"
+
+[[forms.patient.fields.options]]
+value = "Other"
+label = "Other"
+
+[[forms.patient.fields.options]]
+value = "PreferNotToSay"
+label = "Prefer not to say"
+
+[[forms.patient.fields]]
+id = "address_line1"
+label = "Address Line 1"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "address_line2"
+label = "Address Line 2"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "suburb"
+label = "Suburb"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "state"
+label = "State"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "postcode"
+label = "Postcode"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "country"
+label = "Country"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "phone_home"
+label = "Phone (Home)"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[forms.patient.fields.validation]
+phone = true
+
+[[forms.patient.fields]]
+id = "phone_mobile"
+label = "Phone (Mobile)"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[forms.patient.fields.validation]
+phone = true
+
+[[forms.patient.fields]]
+id = "email"
+label = "Email"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[forms.patient.fields.validation]
+email = true
+
+[[forms.patient.fields]]
+id = "medicare_number"
+label = "Medicare Number"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[forms.patient.fields.validation]
+max_length = 10
+
+[[forms.patient.fields]]
+id = "medicare_irn"
+label = "Medicare IRN"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[forms.patient.fields.validation]
+max_length = 1
+
+[[forms.patient.fields]]
+id = "medicare_expiry"
+label = "Medicare Expiry (dd/mm/yyyy)"
+type = "date"
+required = false
+visible = true
+navigable = true
+
+[forms.patient.fields.validation]
+date_format = "dd/mm/yyyy"
+
+[[forms.patient.fields]]
+id = "ihi"
+label = "IHI"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "emergency_name"
+label = "Emergency Contact Name"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "emergency_phone"
+label = "Emergency Contact Phone"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[forms.patient.fields.validation]
+phone = true
+
+[[forms.patient.fields]]
+id = "emergency_relationship"
+label = "Emergency Contact Relationship"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "concession_type"
+label = "Concession Type"
+type = "select"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields.options]]
+value = "DVA"
+label = "DVA"
+
+[[forms.patient.fields.options]]
+value = "Pensioner"
+label = "Pensioner"
+
+[[forms.patient.fields.options]]
+value = "HealthcareCard"
+label = "Healthcare Card"
+
+[[forms.patient.fields.options]]
+value = "SafetyNetCard"
+label = "Safety Net Card"
+
+[[forms.patient.fields]]
+id = "concession_number"
+label = "Concession Number"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "preferred_language"
+label = "Preferred Language"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields]]
+id = "interpreter_required"
+label = "Interpreter Required"
+type = "select"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields.options]]
+value = "Yes"
+label = "Yes"
+
+[[forms.patient.fields.options]]
+value = "No"
+label = "No"
+
+[[forms.patient.fields]]
+id = "atsi_status"
+label = "ATSI Status"
+type = "select"
+required = false
+visible = true
+navigable = true
+
+[[forms.patient.fields.options]]
+value = "AboriginalNotTorresStrait"
+label = "Aboriginal (not Torres Strait)"
+
+[[forms.patient.fields.options]]
+value = "TorresStraitNotAboriginal"
+label = "Torres Strait (not Aboriginal)"
+
+[[forms.patient.fields.options]]
+value = "BothAboriginalAndTorresStrait"
+label = "Both Aboriginal and Torres Strait"
+
+[[forms.patient.fields.options]]
+value = "NeitherAboriginalNorTorresStrait"
+label = "Neither Aboriginal nor Torres Strait"
+
+[[forms.patient.fields.options]]
+value = "NotStated"
+label = "Not stated"
+
+[forms.appointment]
+title = "Appointment Booking"
+
+[[forms.appointment.fields]]
+id = "patient"
+label = "Patient"
+type = "text"
+required = true
+visible = true
+navigable = true
+
+[[forms.appointment.fields]]
+id = "practitioner"
+label = "Practitioner"
+type = "text"
+required = true
+visible = true
+navigable = true
+
+[[forms.appointment.fields]]
+id = "date"
+label = "Date (dd/mm/yyyy)"
+type = "date"
+required = true
+visible = true
+navigable = true
+
+[forms.appointment.fields.validation]
+date_format = "dd/mm/yyyy"
+
+[[forms.appointment.fields]]
+id = "start_time"
+label = "Start Time (HH:MM)"
+type = "text"
+required = true
+visible = true
+navigable = true
+
+[forms.appointment.fields.validation]
+regex = "^([0-1][0-9]|2[0-3]):[0-5][0-9]$"
+
+[[forms.appointment.fields]]
+id = "duration"
+label = "Duration (minutes)"
+type = "numeric"
+required = false
+visible = true
+navigable = false
+
+[forms.appointment.fields.validation]
+numeric_range = { min = 5.0, max = 480.0 }
+
+[[forms.appointment.fields]]
+id = "appointment_type"
+label = "Type"
+type = "select"
+required = true
+visible = true
+navigable = true
+
+[[forms.appointment.fields.options]]
+value = "Standard"
+label = "Standard (15 min)"
+
+[[forms.appointment.fields.options]]
+value = "Long"
+label = "Long (30 min)"
+
+[[forms.appointment.fields.options]]
+value = "Brief"
+label = "Brief (10 min)"
+
+[[forms.appointment.fields.options]]
+value = "NewPatient"
+label = "New Patient (45 min)"
+
+[[forms.appointment.fields.options]]
+value = "HealthAssessment"
+label = "Health Assessment"
+
+[[forms.appointment.fields.options]]
+value = "ChronicDiseaseReview"
+label = "Chronic Disease Review"
+
+[[forms.appointment.fields.options]]
+value = "MentalHealthPlan"
+label = "Mental Health Plan"
+
+[[forms.appointment.fields.options]]
+value = "Immunisation"
+label = "Immunisation"
+
+[[forms.appointment.fields.options]]
+value = "Procedure"
+label = "Procedure"
+
+[[forms.appointment.fields.options]]
+value = "Telephone"
+label = "Telephone"
+
+[[forms.appointment.fields.options]]
+value = "Telehealth"
+label = "Telehealth"
+
+[[forms.appointment.fields.options]]
+value = "HomeVisit"
+label = "Home Visit"
+
+[[forms.appointment.fields.options]]
+value = "Emergency"
+label = "Emergency"
+
+[[forms.appointment.fields]]
+id = "reason"
+label = "Reason"
+type = "textarea"
+required = false
+visible = true
+navigable = true
+
+[[forms.appointment.fields]]
+id = "notes"
+label = "Notes"
+type = "textarea"
+required = false
+visible = true
+navigable = true
+
+[forms.vitals]
+title = "Vital Signs"
+
+[[forms.vitals.fields]]
+id = "systolic_bp"
+label = "Systolic BP (mmHg)"
+type = "numeric"
+required = false
+visible = true
+navigable = true
+
+[forms.vitals.fields.validation]
+numeric_range = { min = 50.0, max = 300.0 }
+
+[[forms.vitals.fields]]
+id = "diastolic_bp"
+label = "Diastolic BP (mmHg)"
+type = "numeric"
+required = false
+visible = true
+navigable = true
+
+[forms.vitals.fields.validation]
+numeric_range = { min = 20.0, max = 200.0 }
+
+[[forms.vitals.fields]]
+id = "heart_rate"
+label = "Heart Rate (bpm)"
+type = "numeric"
+required = false
+visible = true
+navigable = true
+
+[forms.vitals.fields.validation]
+numeric_range = { min = 20.0, max = 300.0 }
+
+[[forms.vitals.fields]]
+id = "respiratory_rate"
+label = "Respiratory Rate"
+type = "numeric"
+required = false
+visible = true
+navigable = true
+
+[forms.vitals.fields.validation]
+numeric_range = { min = 4.0, max = 60.0 }
+
+[[forms.vitals.fields]]
+id = "temperature"
+label = "Temperature (C)"
+type = "numeric"
+required = false
+visible = true
+navigable = true
+
+[forms.vitals.fields.validation]
+numeric_range = { min = 30.0, max = 45.0 }
+
+[[forms.vitals.fields]]
+id = "oxygen_saturation"
+label = "O2 Saturation (%)"
+type = "numeric"
+required = false
+visible = true
+navigable = true
+
+[forms.vitals.fields.validation]
+numeric_range = { min = 50.0, max = 100.0 }
+
+[[forms.vitals.fields]]
+id = "height"
+label = "Height (cm)"
+type = "numeric"
+required = false
+visible = true
+navigable = true
+
+[forms.vitals.fields.validation]
+numeric_range = { min = 30.0, max = 300.0 }
+
+[[forms.vitals.fields]]
+id = "weight"
+label = "Weight (kg)"
+type = "numeric"
+required = false
+visible = true
+navigable = true
+
+[forms.vitals.fields.validation]
+numeric_range = { min = 0.5, max = 700.0 }
+
+[[forms.vitals.fields]]
+id = "notes"
+label = "Notes"
+type = "textarea"
+required = false
+visible = true
+navigable = true
+
+[[forms.vitals.rules]]
+type = "any_not_empty"
+fields = ["systolic_bp", "diastolic_bp", "heart_rate", "respiratory_rate", "temperature", "oxygen_saturation", "height", "weight"]
+message = "At least one measurement is required"
+
+[forms.consultation]
+title = "Consultation"
+
+[[forms.consultation.fields]]
+id = "reason"
+label = "Reason"
+type = "textarea"
+required = true
+visible = true
+navigable = true
+
+[[forms.consultation.fields]]
+id = "clinical_notes"
+label = "Clinical Notes"
+type = "textarea"
+required = true
+visible = true
+navigable = true
+
+[forms.allergy]
+title = "Allergy"
+
+[[forms.allergy.fields]]
+id = "allergen"
+label = "Allergen"
+type = "text"
+required = true
+visible = true
+navigable = true
+
+[[forms.allergy.fields]]
+id = "allergy_type"
+label = "Allergy Type"
+type = "select"
+required = true
+visible = true
+navigable = true
+
+[[forms.allergy.fields.options]]
+value = "Drug"
+label = "Drug"
+
+[[forms.allergy.fields.options]]
+value = "Food"
+label = "Food"
+
+[[forms.allergy.fields.options]]
+value = "Environmental"
+label = "Environmental"
+
+[[forms.allergy.fields.options]]
+value = "Other"
+label = "Other"
+
+[[forms.allergy.fields]]
+id = "severity"
+label = "Severity"
+type = "select"
+required = true
+visible = true
+navigable = true
+
+[[forms.allergy.fields.options]]
+value = "Mild"
+label = "Mild"
+
+[[forms.allergy.fields.options]]
+value = "Moderate"
+label = "Moderate"
+
+[[forms.allergy.fields.options]]
+value = "Severe"
+label = "Severe"
+
+[[forms.allergy.fields]]
+id = "reaction"
+label = "Reaction"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.allergy.fields]]
+id = "onset_date"
+label = "Onset Date (dd/mm/yyyy)"
+type = "date"
+required = false
+visible = true
+navigable = true
+
+[forms.allergy.fields.validation]
+date_format = "dd/mm/yyyy"
+
+[[forms.allergy.fields]]
+id = "notes"
+label = "Notes"
+type = "textarea"
+required = false
+visible = true
+navigable = true
+
+[forms.medical_history]
+title = "Medical History"
+
+[[forms.medical_history.fields]]
+id = "condition"
+label = "Condition"
+type = "text"
+required = true
+visible = true
+navigable = true
+
+[[forms.medical_history.fields]]
+id = "diagnosis_date"
+label = "Diagnosis Date (dd/mm/yyyy)"
+type = "date"
+required = false
+visible = true
+navigable = true
+
+[forms.medical_history.fields.validation]
+date_format = "dd/mm/yyyy"
+
+[[forms.medical_history.fields]]
+id = "status"
+label = "Status"
+type = "select"
+required = true
+visible = true
+navigable = true
+
+[[forms.medical_history.fields.options]]
+value = "Active"
+label = "Active"
+
+[[forms.medical_history.fields.options]]
+value = "Resolved"
+label = "Resolved"
+
+[[forms.medical_history.fields.options]]
+value = "Chronic"
+label = "Chronic"
+
+[[forms.medical_history.fields.options]]
+value = "Recurring"
+label = "Recurring"
+
+[[forms.medical_history.fields.options]]
+value = "InRemission"
+label = "In Remission"
+
+[[forms.medical_history.fields]]
+id = "severity"
+label = "Severity"
+type = "select"
+required = false
+visible = true
+navigable = true
+
+[[forms.medical_history.fields.options]]
+value = "Mild"
+label = "Mild"
+
+[[forms.medical_history.fields.options]]
+value = "Moderate"
+label = "Moderate"
+
+[[forms.medical_history.fields.options]]
+value = "Severe"
+label = "Severe"
+
+[[forms.medical_history.fields]]
+id = "notes"
+label = "Notes"
+type = "textarea"
+required = false
+visible = true
+navigable = true
+
+[forms.family_history]
+title = "Family History"
+
+[[forms.family_history.fields]]
+id = "relationship"
+label = "Relationship"
+type = "text"
+required = true
+visible = true
+navigable = true
+
+[[forms.family_history.fields]]
+id = "condition"
+label = "Condition"
+type = "text"
+required = true
+visible = true
+navigable = true
+
+[[forms.family_history.fields]]
+id = "age_at_diagnosis"
+label = "Age at Diagnosis"
+type = "numeric"
+required = false
+visible = true
+navigable = true
+
+[forms.family_history.fields.validation]
+numeric_range = { min = 0.0, max = 150.0 }
+
+[[forms.family_history.fields]]
+id = "notes"
+label = "Notes"
+type = "textarea"
+required = false
+visible = true
+navigable = true
+
+[forms.social_history]
+title = "Social History"
+
+[[forms.social_history.fields]]
+id = "smoking_status"
+label = "Smoking"
+type = "select"
+required = false
+visible = true
+navigable = true
+
+[[forms.social_history.fields.options]]
+value = "NeverSmoked"
+label = "Never smoked"
+
+[[forms.social_history.fields.options]]
+value = "CurrentSmoker"
+label = "Current smoker"
+
+[[forms.social_history.fields.options]]
+value = "ExSmoker"
+label = "Ex-smoker"
+
+[[forms.social_history.fields]]
+id = "cigarettes_per_day"
+label = "Cigarettes/day"
+type = "numeric"
+required = false
+visible = true
+navigable = true
+
+[forms.social_history.fields.validation]
+numeric_range = { min = 0.0, max = 100.0 }
+
+[[forms.social_history.fields]]
+id = "quit_date"
+label = "Quit date (dd/mm/yyyy)"
+type = "date"
+required = false
+visible = true
+navigable = true
+
+[forms.social_history.fields.validation]
+date_format = "dd/mm/yyyy"
+
+[[forms.social_history.fields]]
+id = "alcohol_status"
+label = "Alcohol"
+type = "select"
+required = false
+visible = true
+navigable = true
+
+[[forms.social_history.fields.options]]
+value = "None"
+label = "None"
+
+[[forms.social_history.fields.options]]
+value = "Occasional"
+label = "Occasional"
+
+[[forms.social_history.fields.options]]
+value = "Moderate"
+label = "Moderate"
+
+[[forms.social_history.fields.options]]
+value = "Heavy"
+label = "Heavy"
+
+[[forms.social_history.fields]]
+id = "drinks_per_week"
+label = "Drinks/week"
+type = "numeric"
+required = false
+visible = true
+navigable = true
+
+[forms.social_history.fields.validation]
+numeric_range = { min = 0.0, max = 100.0 }
+
+[[forms.social_history.fields]]
+id = "exercise_frequency"
+label = "Exercise"
+type = "select"
+required = false
+visible = true
+navigable = true
+
+[[forms.social_history.fields.options]]
+value = "None"
+label = "None"
+
+[[forms.social_history.fields.options]]
+value = "Rarely"
+label = "Rarely"
+
+[[forms.social_history.fields.options]]
+value = "OnceOrTwicePerWeek"
+label = "1-2/week"
+
+[[forms.social_history.fields.options]]
+value = "ThreeToFiveTimes"
+label = "3-5/week"
+
+[[forms.social_history.fields.options]]
+value = "Daily"
+label = "Daily"
+
+[[forms.social_history.fields]]
+id = "occupation"
+label = "Occupation"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.social_history.fields]]
+id = "living_situation"
+label = "Living situation"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.social_history.fields]]
+id = "support_network"
+label = "Support network"
+type = "text"
+required = false
+visible = true
+navigable = true
+
+[[forms.social_history.fields]]
+id = "notes"
+label = "Notes"
+type = "textarea"
+required = false
+visible = true
+navigable = true
