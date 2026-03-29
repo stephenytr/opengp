@@ -4,6 +4,7 @@
 //! variables and configuration files.
 
 pub mod forms;
+pub mod healthcare;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -60,6 +61,80 @@ impl Default for RedisConfig {
     }
 }
 
+/// UI configuration for theme and UI preferences
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UiConfig {
+    /// Theme name: "dark", "light", or "high_contrast"
+    pub theme: String,
+    /// Whether to show scrollbars
+    pub show_scrollbars: bool,
+    /// Whether to enable mouse support
+    pub mouse_support: bool,
+}
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self {
+            theme: "dark".to_string(),
+            show_scrollbars: true,
+            mouse_support: true,
+        }
+    }
+}
+
+impl UiConfig {
+    /// Load UI configuration from environment variables
+    ///
+    /// Reads the following environment variables:
+    /// - OPENGP_THEME (default: "dark")
+    /// - OPENGP_SHOW_SCROLLBARS (default: true)
+    /// - OPENGP_MOUSE_SUPPORT (default: true)
+    ///
+    /// # Validation
+    /// - theme must be one of: "dark", "light", "high_contrast"
+    ///
+    /// # Returns
+    /// * `Ok(UiConfig)` - Configuration loaded and validated
+    /// * `Err(ConfigError::Invalid)` - Validation failed
+    pub fn from_env() -> Result<Self, ConfigError> {
+        let theme = std::env::var("OPENGP_THEME").unwrap_or_else(|_| "dark".to_string());
+
+        let show_scrollbars = std::env::var("OPENGP_SHOW_SCROLLBARS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(true);
+
+        let mouse_support = std::env::var("OPENGP_MOUSE_SUPPORT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(true);
+
+        let config = Self {
+            theme,
+            show_scrollbars,
+            mouse_support,
+        };
+
+        config.validate()?;
+        Ok(config)
+    }
+
+    /// Validate UI configuration
+    ///
+    /// # Errors
+    /// Returns ConfigError::Invalid if:
+    /// - theme is not one of: "dark", "light", "high_contrast"
+    fn validate(&self) -> Result<(), ConfigError> {
+        match self.theme.as_str() {
+            "dark" | "light" | "high_contrast" => Ok(()),
+            _ => Err(ConfigError::Invalid(format!(
+                "theme must be one of: 'dark', 'light', 'high_contrast', got '{}'",
+                self.theme
+            ))),
+        }
+    }
+}
+
 /// Application configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -71,6 +146,9 @@ pub struct Config {
 
     /// Calendar configuration
     pub calendar: CalendarConfig,
+
+    /// UI configuration
+    pub ui: UiConfig,
 
     /// Encryption key (hex-encoded)
     pub encryption_key: String,
@@ -132,6 +210,7 @@ impl Config {
                 ttl_default_secs: redis_ttl_default_secs,
             },
             calendar: CalendarConfig::from_env()?,
+            ui: UiConfig::from_env()?,
             encryption_key: std::env::var("ENCRYPTION_KEY")
                 .map_err(|_| ConfigError::MissingEncryptionKey)?,
             session_timeout_secs: std::env::var("SESSION_TIMEOUT_SECS")
@@ -152,6 +231,7 @@ impl Default for Config {
             database: DatabaseConfig::default(),
             redis: RedisConfig::default(),
             calendar: CalendarConfig::default(),
+            ui: UiConfig::default(),
             encryption_key: String::new(),
             session_timeout_secs: 900,
             log_level: "info".to_string(),
@@ -280,6 +360,148 @@ pub enum ConfigError {
 mod tests {
     use super::*;
     use temp_env;
+
+    #[test]
+    fn test_ui_config_default() {
+        let config = UiConfig::default();
+        assert_eq!(config.theme, "dark");
+        assert_eq!(config.show_scrollbars, true);
+        assert_eq!(config.mouse_support, true);
+    }
+
+    #[test]
+    fn test_ui_config_from_env_defaults() {
+        temp_env::with_vars(
+            [
+                ("OPENGP_THEME", None::<&str>),
+                ("OPENGP_SHOW_SCROLLBARS", None::<&str>),
+                ("OPENGP_MOUSE_SUPPORT", None::<&str>),
+            ],
+            || {
+                let config = UiConfig::from_env().expect("should load with defaults");
+                assert_eq!(config.theme, "dark");
+                assert_eq!(config.show_scrollbars, true);
+                assert_eq!(config.mouse_support, true);
+            },
+        );
+    }
+
+    #[test]
+    fn test_ui_config_from_env_custom_theme() {
+        temp_env::with_vars(
+            [
+                ("OPENGP_THEME", Some("light")),
+                ("OPENGP_SHOW_SCROLLBARS", None::<&str>),
+                ("OPENGP_MOUSE_SUPPORT", None::<&str>),
+            ],
+            || {
+                let config = UiConfig::from_env().expect("should load custom theme");
+                assert_eq!(config.theme, "light");
+                assert_eq!(config.show_scrollbars, true);
+                assert_eq!(config.mouse_support, true);
+            },
+        );
+    }
+
+    #[test]
+    fn test_ui_config_from_env_custom_scrollbars() {
+        temp_env::with_vars(
+            [
+                ("OPENGP_THEME", None::<&str>),
+                ("OPENGP_SHOW_SCROLLBARS", Some("false")),
+                ("OPENGP_MOUSE_SUPPORT", None::<&str>),
+            ],
+            || {
+                let config = UiConfig::from_env().expect("should load custom scrollbars");
+                assert_eq!(config.theme, "dark");
+                assert_eq!(config.show_scrollbars, false);
+                assert_eq!(config.mouse_support, true);
+            },
+        );
+    }
+
+    #[test]
+    fn test_ui_config_from_env_custom_mouse_support() {
+        temp_env::with_vars(
+            [
+                ("OPENGP_THEME", None::<&str>),
+                ("OPENGP_SHOW_SCROLLBARS", None::<&str>),
+                ("OPENGP_MOUSE_SUPPORT", Some("false")),
+            ],
+            || {
+                let config = UiConfig::from_env().expect("should load custom mouse support");
+                assert_eq!(config.theme, "dark");
+                assert_eq!(config.show_scrollbars, true);
+                assert_eq!(config.mouse_support, false);
+            },
+        );
+    }
+
+    #[test]
+    fn test_ui_config_from_env_all_custom() {
+        temp_env::with_vars(
+            [
+                ("OPENGP_THEME", Some("high_contrast")),
+                ("OPENGP_SHOW_SCROLLBARS", Some("false")),
+                ("OPENGP_MOUSE_SUPPORT", Some("false")),
+            ],
+            || {
+                let config = UiConfig::from_env().expect("should load all custom values");
+                assert_eq!(config.theme, "high_contrast");
+                assert_eq!(config.show_scrollbars, false);
+                assert_eq!(config.mouse_support, false);
+            },
+        );
+    }
+
+    #[test]
+    fn test_ui_config_validation_invalid_theme() {
+        let config = UiConfig {
+            theme: "rainbow".to_string(),
+            show_scrollbars: true,
+            mouse_support: true,
+        };
+
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("theme"));
+    }
+
+    #[test]
+    fn test_ui_config_validation_valid_dark() {
+        let config = UiConfig {
+            theme: "dark".to_string(),
+            show_scrollbars: true,
+            mouse_support: true,
+        };
+
+        let result = config.validate();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_ui_config_validation_valid_light() {
+        let config = UiConfig {
+            theme: "light".to_string(),
+            show_scrollbars: false,
+            mouse_support: false,
+        };
+
+        let result = config.validate();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_ui_config_validation_valid_high_contrast() {
+        let config = UiConfig {
+            theme: "high_contrast".to_string(),
+            show_scrollbars: true,
+            mouse_support: true,
+        };
+
+        let result = config.validate();
+        assert!(result.is_ok());
+    }
 
     #[test]
     fn test_calendar_config_default() {

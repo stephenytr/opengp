@@ -11,6 +11,7 @@ pub mod keybinds;
 pub mod layout;
 pub mod screens;
 pub mod services;
+pub mod shared;
 pub mod theme;
 pub mod view_models;
 pub mod widgets;

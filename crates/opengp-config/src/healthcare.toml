@@ -1,0 +1,70 @@
+# OpenGP Healthcare Configuration
+# Defines vital sign ranges, appointment durations, billing rates, and clinical settings
+
+[vital_signs.systolic_bp]
+min = 50
+max = 300
+unit = "mmHg"
+
+[vital_signs.diastolic_bp]
+min = 20
+max = 200
+unit = "mmHg"
+
+[vital_signs.heart_rate]
+min = 20
+max = 300
+unit = "bpm"
+
+[vital_signs.respiratory_rate]
+min = 4
+max = 60
+unit = "breaths/min"
+
+[vital_signs.temperature]
+min = 30.0
+max = 45.0
+unit = "°C"
+
+[vital_signs.o2_saturation]
+min = 50
+max = 100
+unit = "%"
+
+[vital_signs.height]
+min = 30
+max = 300
+unit = "cm"
+
+[vital_signs.weight]
+min = 0.5
+max = 700.0
+unit = "kg"
+
+[appointment_durations]
+standard = 15
+long = 30
+brief = 10
+new_patient = 45
+health_assessment = 20
+chronic_disease_review = 30
+mental_health_plan = 30
+immunisation = 15
+procedure = 45
+telephone = 10
+telehealth = 15
+home_visit = 45
+emergency = 30
+
+[billing]
+gst_rate = 0.1
+
+[prescriptions]
+default_expiry_days = 365
+
+[referrals]
+default_expiry_days = 365
+
+[medicare]
+number_length = 10
+digits_only = true
