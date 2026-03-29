@@ -2,12 +2,34 @@ use crate::ui::app::App;
 use crate::ui::components::appointment::{
     AppointmentForm, AppointmentFormField, AppointmentView, CalendarAction, ScheduleAction,
 };
-use crate::ui::keybinds::Action;
+use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
 use crate::ui::widgets::format_date;
 use crossterm::event::KeyEvent;
 
 impl App {
     pub(crate) fn handle_appointment_keys(&mut self, key: KeyEvent) -> Action {
+        let registry = KeybindRegistry::global();
+        if let Some(keybind) = registry.lookup(key, KeyContext::Schedule) {
+            match keybind.action {
+                Action::PrevMonth | Action::NextMonth | Action::Today => {
+                    if let Some(action) = self.appointment_state.calendar.handle_key(key) {
+                        match action {
+                            CalendarAction::MonthChanged(date) => {
+                                self.appointment_state.selected_date = Some(date);
+                                self.refresh_context();
+                            }
+                            CalendarAction::GoToToday => {
+                                self.refresh_context();
+                            }
+                            _ => {}
+                        }
+                        return keybind.action.clone();
+                    }
+                }
+                _ => {}
+            }
+        }
+
         if self.appointment_state.current_view == AppointmentView::Calendar {
             if let Some(action) = self.appointment_state.calendar.handle_key(key) {
                 match action {

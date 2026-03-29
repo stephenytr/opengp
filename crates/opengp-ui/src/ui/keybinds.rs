@@ -515,6 +515,25 @@ impl KeybindRegistry {
             context: KeyContext::Schedule,
             description: "Scroll viewport to later hours",
         });
+        // Schedule: Month navigation
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+            action: Action::PrevMonth,
+            context: KeyContext::Schedule,
+            description: "Go to previous month",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('M'), KeyModifiers::SHIFT),
+            action: Action::NextMonth,
+            context: KeyContext::Schedule,
+            description: "Go to next month",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
+            action: Action::Today,
+            context: KeyContext::Schedule,
+            description: "Go to today",
+        });
 
         // Clinical keybinds
         // Navigation

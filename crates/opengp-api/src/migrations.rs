@@ -32,7 +32,9 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), crate::ApiError> {
             // which contain internal semicolons that would break statement splitting
             let result = sqlx::raw_sql(&sql).execute(&mut *conn).await;
             if let Err(e) = result {
-                if !e.to_string().contains("duplicate key") {
+                let error_msg = e.to_string();
+                // Ignore "duplicate key" (for UNIQUE constraints) and "already exists" (for indexes/tables)
+                if !error_msg.contains("duplicate key") && !error_msg.contains("already exists") {
                     return Err(crate::ApiError::Configuration(format!(
                         "Migration failed: {} - in {}",
                         e,

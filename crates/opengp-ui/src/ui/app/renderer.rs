@@ -173,8 +173,15 @@ impl App {
                     schedule.load_schedule(data.clone());
                 }
 
-                if !self.appointment_state.practitioners.is_empty()
-                    && self.appointment_state.schedule_data.is_none()
+                // Use practitioners from appointment_state if schedule_data is None or has empty practitioners
+                let schedule_has_practitioners = self
+                    .appointment_state
+                    .schedule_data
+                    .as_ref()
+                    .map(|d| !d.practitioners.is_empty())
+                    .unwrap_or(false);
+
+                if !self.appointment_state.practitioners.is_empty() && !schedule_has_practitioners
                 {
                     use opengp_domain::domain::appointment::{
                         CalendarDayView, PractitionerSchedule,

@@ -2,22 +2,76 @@
 //!
 //! F1 help overlay displaying keyboard shortcuts and context-sensitive help.
 
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Margin, Position, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Padding, Widget};
 
-use crate::ui::keybinds::KeyContext;
+use crate::ui::keybinds::{KeyContext, KeybindRegistry};
 use crate::ui::theme::Theme;
 
-/// Help overlay state
+/// Format a KeyEvent into a human-readable string
+fn format_key_event(key: &KeyEvent) -> String {
+    let mut parts = Vec::new();
+
+    // Add modifiers
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        parts.push("Ctrl".to_string());
+    }
+    if key.modifiers.contains(KeyModifiers::ALT) {
+        parts.push("Alt".to_string());
+    }
+    if key.modifiers.contains(KeyModifiers::SHIFT) {
+        parts.push("Shift".to_string());
+    }
+
+    // Add the key itself
+    let key_str = match key.code {
+        KeyCode::Char(c) => {
+            if key.modifiers.is_empty() {
+                c.to_string()
+            } else {
+                c.to_uppercase().to_string()
+            }
+        }
+        KeyCode::F(n) => format!("F{}", n),
+        KeyCode::Enter => "Enter".to_string(),
+        KeyCode::Esc => "Esc".to_string(),
+        KeyCode::Tab => "Tab".to_string(),
+        KeyCode::Backspace => "Backspace".to_string(),
+        KeyCode::Delete => "Del".to_string(),
+        KeyCode::Home => "Home".to_string(),
+        KeyCode::End => "End".to_string(),
+        KeyCode::PageUp => "PageUp".to_string(),
+        KeyCode::PageDown => "PageDown".to_string(),
+        KeyCode::Up => "↑".to_string(),
+        KeyCode::Down => "↓".to_string(),
+        KeyCode::Left => "←".to_string(),
+        KeyCode::Right => "→".to_string(),
+        KeyCode::Insert => "Insert".to_string(),
+        KeyCode::Null => "Null".to_string(),
+        KeyCode::BackTab => "BackTab".to_string(),
+        KeyCode::CapsLock => "CapsLock".to_string(),
+        KeyCode::ScrollLock => "ScrollLock".to_string(),
+        KeyCode::NumLock => "NumLock".to_string(),
+        KeyCode::PrintScreen => "PrintScreen".to_string(),
+        KeyCode::Pause => "Pause".to_string(),
+        KeyCode::Media(_) => "Media".to_string(),
+        KeyCode::Modifier(_) => "Modifier".to_string(),
+        KeyCode::Menu => "Menu".to_string(),
+        KeyCode::KeypadBegin => "KeypadBegin".to_string(),
+    };
+
+    parts.push(key_str);
+
+    parts.join("+")
+}
+
 #[derive(Debug, Clone)]
 pub struct HelpOverlay {
-    /// Whether the help overlay is visible
     visible: bool,
-    /// Current context for context-sensitive help
     context: KeyContext,
-    /// Theme configuration
     theme: Theme,
 }
 
@@ -56,95 +110,19 @@ impl HelpOverlay {
         self.context = context;
     }
 
-    fn get_display_keybinds(&self) -> Vec<(&'static str, &'static str)> {
-        let mut keybinds = vec![
-            ("Global", ""),
-            ("F1", "Toggle Help"),
-            ("q", "Quit (or Ctrl+Q)"),
-            ("Ctrl+N", "New Item"),
-            ("Ctrl+F", "Search"),
-            ("Ctrl+R", "Refresh"),
-            ("Tab", "Next Focus"),
-            ("Shift+Tab", "Previous Focus"),
-            ("Esc", "Cancel / Back"),
-        ];
+    fn get_display_keybinds(&self) -> Vec<(String, String)> {
+        let registry = KeybindRegistry::global();
+        let keybinds = registry.get_keybinds_for_context(self.context);
 
-        // Add context-specific keybinds
-        match self.context {
-            KeyContext::Global | KeyContext::PatientList => {
-                keybinds.push(("Navigation", ""));
-                keybinds.push(("j/↓", "Move Down"));
-                keybinds.push(("k/↑", "Move Up"));
-                keybinds.push(("/", "Search"));
-                keybinds.push(("n", "New Patient"));
-                keybinds.push(("Enter", "Open Patient"));
-            }
-            KeyContext::PatientForm => {
-                keybinds.push(("Form", ""));
-                keybinds.push(("Tab", "Next Field"));
-                keybinds.push(("Shift+Tab", "Previous Field"));
-                keybinds.push(("Enter", "Submit"));
-                keybinds.push(("Ctrl+S", "Save"));
-            }
-            KeyContext::Calendar => {
-                keybinds.push(("Calendar", ""));
-                keybinds.push(("h/←", "Previous Day"));
-                keybinds.push(("l/→", "Next Day"));
-                keybinds.push(("j/↓", "Next Week"));
-                keybinds.push(("k/↑", "Previous Week"));
-                keybinds.push(("t", "Today"));
-                keybinds.push(("Enter", "Select Date"));
-            }
-            KeyContext::Schedule => {
-                keybinds.push(("Schedule", ""));
-                keybinds.push(("h/←", "Prev Practitioner"));
-                keybinds.push(("l/→", "Next Practitioner"));
-                keybinds.push(("j/↓", "Next Time Slot"));
-                keybinds.push(("k/↑", "Prev Time Slot"));
-                keybinds.push(("n", "New Appointment"));
-                keybinds.push(("Enter", "Select"));
-            }
-            KeyContext::Clinical => {
-                keybinds.push(("Clinical", ""));
-                keybinds.push(("Enter", "View Note"));
-                keybinds.push(("n", "New Note"));
-                keybinds.push(("e", "Edit Note"));
-                keybinds.push(("Tab/Shift+Tab", "Cycle Views"));
-                keybinds.push(("←/→", "Cycle Views"));
-                keybinds.push(("1-7", "Jump to View"));
-                keybinds.push(("a", "Allergies"));
-                keybinds.push(("c", "Conditions"));
-                keybinds.push(("v", "Vital Signs"));
-                keybinds.push(("o", "Observations"));
-                keybinds.push(("f", "Family History"));
-                keybinds.push(("h", "Social History"));
-            }
-            KeyContext::Billing => {
-                keybinds.push(("Billing", ""));
-                keybinds.push(("Enter", "View Invoice"));
-                keybinds.push(("n", "New Invoice"));
-                keybinds.push(("p", "Process Payment"));
-            }
-            KeyContext::Search => {
-                keybinds.push(("Search", ""));
-                keybinds.push(("Enter", "Select"));
-                keybinds.push(("Esc", "Close"));
-            }
-            KeyContext::ClinicalForm => {
-                keybinds.push(("Clinical Form", ""));
-                keybinds.push(("Tab", "Next Field"));
-                keybinds.push(("Shift+Tab", "Previous Field"));
-                keybinds.push(("Enter", "Submit"));
-                keybinds.push(("Esc", "Cancel"));
-            }
-            KeyContext::Help => {
-                keybinds.push(("Help", ""));
-                keybinds.push(("Esc", "Close"));
-                keybinds.push(("↑/↓", "Scroll"));
-            }
-        }
+        let mut seen_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut entries: Vec<(String, String)> = keybinds
+            .iter()
+            .map(|kb| (format_key_event(&kb.key), kb.description.to_string()))
+            .filter(|(key, _)| seen_keys.insert(key.clone()))
+            .collect();
 
-        keybinds
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        entries
     }
 }
 
@@ -161,8 +139,7 @@ impl Widget for HelpOverlay {
             return;
         }
 
-        // Calculate the help box size (centered, roughly 60% of screen)
-        let width = (area.width * 3 / 5).clamp(40, 80);
+        let width = (area.width * 7 / 10).clamp(70, 100);
         let height = (area.height * 3 / 5).clamp(15, 30);
 
         let x = area.x + (area.width - width) / 2;
@@ -170,7 +147,6 @@ impl Widget for HelpOverlay {
 
         let help_area = Rect::new(x, y, width, height);
 
-        // Draw semi-transparent background overlay
         for row in area.y..area.y + area.height {
             for col in area.x..area.x + area.width {
                 if let Some(cell) = buf.cell_mut(Position::new(col, row)) {
@@ -179,7 +155,6 @@ impl Widget for HelpOverlay {
             }
         }
 
-        // Draw the help box
         let block = Block::default()
             .title(" Help (Press F1 to close) ")
             .borders(Borders::ALL)
@@ -189,47 +164,72 @@ impl Widget for HelpOverlay {
 
         block.render(help_area, buf);
 
-        // Calculate content area
         let content_area = help_area.inner(Margin::new(1, 1));
-
-        // Get keybinds to display
         let keybinds = self.get_display_keybinds();
 
-        // Render keybinds in two columns
+        let key_width = 12u16;
         let col_width = content_area.width / 2;
-        let mid_point = keybinds.len().div_ceil(2);
+        let sep_x = content_area.x + col_width - 1;
+        let mid_point = (keybinds.len() / 2).min(content_area.height as usize);
 
-        for (i, (key, desc)) in keybinds.iter().enumerate() {
-            let col = if i < mid_point { 0 } else { col_width as usize };
-            let row = if i < mid_point { i } else { i - mid_point };
-
-            let x = content_area.x + col as u16;
-            let y = content_area.y + row as u16;
-
-            if y < content_area.y + content_area.height {
-                // Render key (left column)
-                buf.set_string(x, y, *key, Style::default().fg(self.theme.colors.warning));
-
-                // Render description (with spacing after key)
-                let desc_x = x + 12;
-                if desc_x < content_area.x + content_area.width {
-                    buf.set_string(
-                        desc_x,
-                        y,
-                        *desc,
-                        Style::default().fg(self.theme.colors.foreground),
-                    );
-                }
-            }
-        }
-
-        // Draw separator line in the middle
-        let sep_x = content_area.x + col_width;
         for row in content_area.y..content_area.y + content_area.height.saturating_sub(1) {
             if let Some(cell) = buf.cell_mut(Position::new(sep_x, row)) {
                 cell.set_char('│');
                 cell.set_fg(Color::DarkGray);
             }
+        }
+
+        let mut render_entry = |i: usize, key: &str, desc: &str, start_x: u16, max_x: u16| {
+            let row_offset = i % mid_point;
+            let y = content_area.y + row_offset as u16;
+            if y >= content_area.y + content_area.height {
+                return;
+            }
+
+            let key_str = if key.len() > (key_width - 1) as usize {
+                format!("{:.1$}", key, (key_width - 1) as usize)
+            } else {
+                key.to_string()
+            };
+
+            buf.set_string(
+                start_x,
+                y,
+                key_str,
+                Style::default().fg(self.theme.colors.warning),
+            );
+
+            let desc_x = start_x + key_width;
+            if desc_x < max_x {
+                let avail = (max_x - desc_x) as usize;
+                let desc_str = if desc.len() > avail && avail > 3 {
+                    format!("{}…", &desc[..avail - 1])
+                } else {
+                    desc.to_string()
+                };
+                buf.set_string(
+                    desc_x,
+                    y,
+                    desc_str,
+                    Style::default().fg(self.theme.colors.foreground),
+                );
+            }
+        };
+
+        for (i, (key, desc)) in keybinds.iter().enumerate() {
+            if i >= mid_point * 2 {
+                break;
+            }
+
+            let is_right = i >= mid_point;
+            let start_x = if is_right { sep_x + 2 } else { content_area.x };
+            let end_x = if is_right {
+                content_area.x + content_area.width
+            } else {
+                sep_x
+            };
+
+            render_entry(i, key, desc, start_x, end_x);
         }
     }
 }

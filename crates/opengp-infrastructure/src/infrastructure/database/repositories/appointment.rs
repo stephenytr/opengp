@@ -3,7 +3,6 @@ use chrono::{DateTime, Utc};
 use sqlx::{postgres::PgPool, FromRow, Postgres, QueryBuilder};
 use uuid::Uuid;
 
-use crate::infrastructure::database::helpers::string_to_datetime;
 use crate::infrastructure::database::sqlx_to_appointment_error;
 use opengp_domain::domain::appointment::{
     Appointment, AppointmentCalendarQuery, AppointmentRepository, AppointmentSearchCriteria,
@@ -15,8 +14,8 @@ struct AppointmentRow {
     id: Uuid,
     patient_id: Uuid,
     practitioner_id: Uuid,
-    start_time: String,
-    end_time: String,
+    start_time: DateTime<Utc>,
+    end_time: DateTime<Utc>,
     appointment_type: String,
     status: String,
     reason: Option<String>,
@@ -25,8 +24,8 @@ struct AppointmentRow {
     reminder_sent: bool,
     confirmed: bool,
     cancellation_reason: Option<String>,
-    created_at: String,
-    updated_at: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
     version: i32,
     created_by: Option<Uuid>,
     updated_by: Option<Uuid>,
@@ -38,8 +37,8 @@ impl AppointmentRow {
             id: self.id,
             patient_id: self.patient_id,
             practitioner_id: self.practitioner_id,
-            start_time: string_to_datetime(&self.start_time),
-            end_time: string_to_datetime(&self.end_time),
+            start_time: self.start_time,
+            end_time: self.end_time,
             appointment_type: self
                 .appointment_type
                 .parse::<AppointmentType>()
@@ -54,8 +53,8 @@ impl AppointmentRow {
             reminder_sent: self.reminder_sent,
             confirmed: self.confirmed,
             cancellation_reason: self.cancellation_reason,
-            created_at: string_to_datetime(&self.created_at),
-            updated_at: string_to_datetime(&self.updated_at),
+            created_at: self.created_at,
+            updated_at: self.updated_at,
             version: self.version,
             created_by: self.created_by,
             updated_by: self.updated_by,
@@ -69,8 +68,8 @@ struct CalendarAppointmentRow {
     patient_id: Uuid,
     practitioner_id: Uuid,
     patient_name: Option<String>,
-    start_time: String,
-    end_time: String,
+    start_time: DateTime<Utc>,
+    end_time: DateTime<Utc>,
     appointment_type: String,
     status: String,
     is_urgent: bool,
@@ -81,8 +80,8 @@ struct CalendarAppointmentRow {
 
 impl CalendarAppointmentRow {
     fn into_calendar_appointment(self) -> Result<CalendarAppointment, RepositoryError> {
-        let start_time = string_to_datetime(&self.start_time);
-        let end_time = string_to_datetime(&self.end_time);
+        let start_time = self.start_time;
+        let end_time = self.end_time;
 
         // Calculate slot_span: number of 15-minute slots
         let duration_minutes = (end_time - start_time).num_minutes();
@@ -454,17 +453,13 @@ impl AppointmentRepository for SqlxAppointmentRepository {
 
         if let Some(date_from) = criteria.date_from {
             query_builder.push(if has_condition { " AND " } else { " WHERE " });
-            query_builder
-                .push("start_time >= ")
-                .push_bind(date_from.to_rfc3339());
+            query_builder.push("start_time >= ").push_bind(date_from);
             has_condition = true;
         }
 
         if let Some(date_to) = criteria.date_to {
             query_builder.push(if has_condition { " AND " } else { " WHERE " });
-            query_builder
-                .push("start_time < ")
-                .push_bind(date_to.to_rfc3339());
+            query_builder.push("start_time < ").push_bind(date_to);
             has_condition = true;
         }
 
@@ -501,16 +496,13 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
     ) -> Result<Vec<Appointment>, RepositoryError> {
-        let start_time_str = start_time.to_rfc3339();
-        let end_time_str = end_time.to_rfc3339();
-
         let rows = sqlx::query_as::<_, AppointmentRow>(&format!(
             "{}WHERE practitioner_id = $1 AND start_time < $2 AND end_time > $3 AND status NOT IN ('Cancelled', 'NoShow') ORDER BY start_time",
             APPOINTMENT_SELECT_QUERY
         ))
         .bind(practitioner_id)
-        .bind(end_time_str)
-        .bind(start_time_str)
+        .bind(end_time)
+        .bind(start_time)
         .fetch_all(&self.pool)
         .await
             .map_err(sqlx_to_appointment_error)?;
@@ -544,17 +536,13 @@ impl AppointmentCalendarQuery for SqlxAppointmentRepository {
 
         if let Some(date_from) = criteria.date_from {
             query_builder.push(if has_condition { " AND " } else { " WHERE " });
-            query_builder
-                .push("a.start_time >= ")
-                .push_bind(date_from.to_rfc3339());
+            query_builder.push("a.start_time >= ").push_bind(date_from);
             has_condition = true;
         }
 
         if let Some(date_to) = criteria.date_to {
             query_builder.push(if has_condition { " AND " } else { " WHERE " });
-            query_builder
-                .push("a.start_time < ")
-                .push_bind(date_to.to_rfc3339());
+            query_builder.push("a.start_time < ").push_bind(date_to);
             has_condition = true;
         }
 
