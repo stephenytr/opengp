@@ -326,10 +326,6 @@ impl FamilyHistoryForm {
         self.textareas.get(field_id)
     }
 
-    fn validate_field(&mut self, field: &FamilyHistoryFormField) {
-        self.validate_field_by_id(field.id());
-    }
-
     fn validate_field_by_id(&mut self, field_id: &str) {
         self.errors.remove(field_id);
 

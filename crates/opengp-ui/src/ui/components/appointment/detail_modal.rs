@@ -287,7 +287,7 @@ impl Widget for AppointmentDetailModal {
 
         // Calculate modal dimensions (centered, 60% width, auto height)
         let modal_width = (area.width as f32 * 0.6) as u16;
-        let modal_width = modal_width.max(50).min(80);
+        let modal_width = modal_width.clamp(50, 80);
 
         // Calculate content height based on fields
         let mut content_lines = 9; // Base fields

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::Utc;
 use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentSearchCriteria, AppointmentService, AvailabilityService,
     CalendarAppointment, RepositoryError as AppointmentRepositoryError,
@@ -170,6 +169,7 @@ fn build_user_repository(
     Arc::new(PostgresUserRepository::new(pool.clone()))
 }
 
+#[allow(dead_code)]
 struct NoopAppointmentCalendarQuery;
 
 #[async_trait]
@@ -182,6 +182,7 @@ impl AppointmentCalendarQuery for NoopAppointmentCalendarQuery {
     }
 }
 
+#[allow(dead_code)]
 struct NoopWorkingHoursRepository;
 
 #[async_trait]
@@ -215,6 +216,7 @@ struct InMemoryUserRepository {
     users: RwLock<Vec<User>>,
 }
 
+#[allow(dead_code)]
 struct DevPasswordHasher;
 
 impl PasswordHasher for DevPasswordHasher {
@@ -357,6 +359,7 @@ impl UserRepository for InMemoryUserRepository {
     }
 }
 
+#[allow(dead_code)]
 struct NoopAllergyRepository;
 
 #[async_trait]
@@ -394,6 +397,7 @@ impl AllergyRepository for NoopAllergyRepository {
     }
 }
 
+#[allow(dead_code)]
 struct NoopMedicalHistoryRepository;
 
 #[async_trait]
@@ -436,6 +440,7 @@ impl MedicalHistoryRepository for NoopMedicalHistoryRepository {
     }
 }
 
+#[allow(dead_code)]
 struct NoopVitalSignsRepository;
 
 #[async_trait]
@@ -464,6 +469,7 @@ impl VitalSignsRepository for NoopVitalSignsRepository {
     }
 }
 
+#[allow(dead_code)]
 struct NoopSocialHistoryRepository;
 
 #[async_trait]
@@ -490,6 +496,7 @@ impl SocialHistoryRepository for NoopSocialHistoryRepository {
     }
 }
 
+#[allow(dead_code)]
 struct NoopFamilyHistoryRepository;
 
 #[async_trait]

@@ -73,6 +73,7 @@ struct CalendarAppointmentRow {
     appointment_type: String,
     status: String,
     is_urgent: bool,
+    #[allow(dead_code)]
     confirmed: bool,
     reason: Option<String>,
     notes: Option<String>,

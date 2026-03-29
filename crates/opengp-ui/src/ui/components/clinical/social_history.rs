@@ -74,21 +74,6 @@ impl SocialHistoryField {
         (*self).into()
     }
 
-    fn hint(&self) -> &'static str {
-        match self {
-            SocialHistoryField::SmokingStatus => "never/current/ex",
-            SocialHistoryField::CigarettesPerDay => "number or blank",
-            SocialHistoryField::QuitDate => "dd/mm/yyyy or blank",
-            SocialHistoryField::AlcoholStatus => "none/occasional/moderate/heavy",
-            SocialHistoryField::DrinksPerWeek => "number or blank",
-            SocialHistoryField::ExerciseFrequency => "none/rarely/1-2/3-5/daily",
-            SocialHistoryField::Occupation => "free text",
-            SocialHistoryField::LivingSituation => "free text",
-            SocialHistoryField::SupportNetwork => "free text",
-            SocialHistoryField::Notes => "free text",
-        }
-    }
-
     fn id(&self) -> &'static str {
         match self {
             SocialHistoryField::SmokingStatus => FIELD_SMOKING_STATUS,

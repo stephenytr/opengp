@@ -7,10 +7,10 @@ use axum::{
 };
 use chrono::Utc;
 use opengp_domain::domain::api::{
-    ApiErrorResponse, AuthenticatedUserResponse, LoginRequest, LoginResponse,
+    ApiErrorResponse, LoginRequest,
 };
 use opengp_domain::domain::audit::{AuditAction, AuditEntry};
-use opengp_domain::domain::user::{self, AuthError};
+use opengp_domain::domain::user::AuthError;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

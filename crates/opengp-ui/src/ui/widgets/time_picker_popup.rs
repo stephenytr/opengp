@@ -3,12 +3,12 @@
 //! Reusable time slot picker popup for selecting appointment times.
 //! Provides keyboard-driven time selection with centered overlay rendering.
 
-use chrono::{NaiveDate, NaiveTime, Timelike};
+use chrono::{NaiveDate, NaiveTime};
 use crossterm::event::{KeyCode, KeyEvent};
 use opengp_config::CalendarConfig;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style, Stylize};
+use ratatui::style::{Color, Style};
 use ratatui::symbols::border;
 use ratatui::widgets::{Block, Clear, Widget};
 
@@ -188,56 +188,6 @@ impl TimePickerPopup {
         if let Some(time) = NaiveTime::from_hms_opt(hour, minute, 0) {
             self.selected_time = time;
         }
-    }
-
-    fn update_grid_from_time(&mut self) {
-        let hour = self.selected_time.hour() as i32;
-        let start_hour = self.config.viewport_start_hour as i32;
-        self.selected_row = ((hour - start_hour) as u8).min(GRID_ROWS - 1);
-        self.selected_col = (self.selected_time.minute() / 15) as u8;
-    }
-
-    fn total_slots(&self) -> u8 {
-        (self.config.max_hour - self.config.min_hour) * 4
-    }
-
-    fn slot_to_time(&self, slot: u8) -> String {
-        let total_minutes = (self.config.min_hour as u16 * 60) + (slot as u16 * 15);
-        let hour = total_minutes / 60;
-        let minute = total_minutes % 60;
-        format!("{:02}:{:02}", hour, minute)
-    }
-
-    fn time_to_slot(&self, time: NaiveTime) -> Option<u8> {
-        let hour = time.hour() as u8;
-        let minute = time.minute() as u8;
-        if hour < self.config.min_hour || hour >= self.config.max_hour {
-            return None;
-        }
-        let hour_offset = hour - self.config.min_hour;
-        let slot = hour_offset * 4 + minute / 15;
-        Some(slot)
-    }
-
-    fn ensure_visible(&mut self) {
-        let min_hour = self.config.min_hour as u32;
-        let _max_hour = self.config.max_hour as u32;
-        let viewport_hours = self.viewport_end_hour() - self.viewport_start_hour;
-
-        if self.selected_time.hour() < self.viewport_start_hour as u32 {
-            self.viewport_start_hour = self.selected_time.hour() as u8;
-        } else if self.selected_time.hour() >= self.viewport_end_hour() as u32 {
-            self.viewport_start_hour =
-                (self.selected_time.hour() as u8 + 1).saturating_sub(viewport_hours);
-            self.viewport_start_hour = self.viewport_start_hour.max(min_hour as u8);
-        }
-    }
-
-    fn viewport_end_hour(&self) -> u8 {
-        let _min_hour = self.config.min_hour as u32;
-        let max_hour = self.config.max_hour as u32;
-        let viewport_hours = 8;
-        (self.viewport_start_hour + viewport_hours).min(max_hour as u8)
     }
 
     pub fn render(&self, area: Rect, buf: &mut Buffer) {

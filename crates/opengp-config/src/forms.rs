@@ -9,18 +9,10 @@ use std::error::Error;
 use std::fmt;
 
 /// Top-level form configuration container
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FormConfig {
     /// Map of form name to form definition
     pub forms: HashMap<String, FormDefinition>,
-}
-
-impl Default for FormConfig {
-    fn default() -> Self {
-        Self {
-            forms: HashMap::new(),
-        }
-    }
 }
 
 impl FormConfig {
@@ -253,7 +245,7 @@ impl FieldDefinition {
 }
 
 /// Definition of a single form
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FormDefinition {
     /// Display title of the form
     pub title: String,
@@ -262,16 +254,6 @@ pub struct FormDefinition {
     /// Optional validation rules for the form
     #[serde(default)]
     pub rules: Vec<FormRule>,
-}
-
-impl Default for FormDefinition {
-    fn default() -> Self {
-        Self {
-            title: String::new(),
-            fields: Vec::new(),
-            rules: Vec::new(),
-        }
-    }
 }
 
 /// Definition of a single form field
@@ -320,10 +302,11 @@ impl Default for FieldDefinition {
 }
 
 /// Type of form field
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum FieldType {
     /// Text input field
+    #[default]
     Text,
     /// Date input field
     Date,
@@ -335,14 +318,8 @@ pub enum FieldType {
     Textarea,
 }
 
-impl Default for FieldType {
-    fn default() -> Self {
-        Self::Text
-    }
-}
-
 /// Option for select fields
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SelectOption {
     /// Value of the option
     pub value: String,
@@ -350,17 +327,8 @@ pub struct SelectOption {
     pub label: String,
 }
 
-impl Default for SelectOption {
-    fn default() -> Self {
-        Self {
-            value: String::new(),
-            label: String::new(),
-        }
-    }
-}
-
 /// Validation rules for a field
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ValidationRules {
     /// Maximum length for text fields
     pub max_length: Option<usize>,
@@ -381,21 +349,6 @@ pub struct ValidationRules {
     pub regex: Option<String>,
     /// Expected date format
     pub date_format: Option<String>,
-}
-
-impl Default for ValidationRules {
-    fn default() -> Self {
-        Self {
-            max_length: None,
-            min_length: None,
-            required: false,
-            email: false,
-            phone: false,
-            numeric_range: None,
-            regex: None,
-            date_format: None,
-        }
-    }
 }
 
 /// Numeric range validation
@@ -439,17 +392,12 @@ impl Default for FormRule {
 }
 
 /// Type of form-level validation rule
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum FormRuleType {
     /// At least one of the specified fields must not be empty
+    #[default]
     AnyNotEmpty,
-}
-
-impl Default for FormRuleType {
-    fn default() -> Self {
-        Self::AnyNotEmpty
-    }
 }
 
 /// Helper function for default_true serde attribute

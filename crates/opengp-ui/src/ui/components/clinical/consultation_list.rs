@@ -55,7 +55,7 @@ impl Clone for ConsultationList {
 #[derive(Debug, Clone)]
 pub enum ConsultationListAction {
     Select(usize),
-    Open(Consultation),
+    Open(Box<Consultation>),
     New,
     NextPage,
     PrevPage,
@@ -274,7 +274,7 @@ impl ConsultationList {
             }
             KeyCode::Enter => self
                 .selected()
-                .map(|consultation| ConsultationListAction::Open(consultation.clone())),
+                .map(|consultation| ConsultationListAction::Open(Box::new(consultation.clone()))),
             KeyCode::Char('n') => Some(ConsultationListAction::New),
             KeyCode::Char('+') | KeyCode::Char('=') => Some(ConsultationListAction::NextPage),
             KeyCode::Char('-') => Some(ConsultationListAction::PrevPage),

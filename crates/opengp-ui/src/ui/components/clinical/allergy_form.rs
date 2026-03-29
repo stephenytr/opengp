@@ -387,7 +387,6 @@ impl AllergyForm {
             return None;
         }
 
-        let mut selected_value: Option<String> = None;
         let action = {
             let dropdown = self.dropdowns.get_mut(&field_id)?;
             dropdown.handle_key(key)
@@ -400,10 +399,13 @@ impl AllergyForm {
                 | crossterm::event::KeyCode::Esc => return None,
                 _ => match action {
                     DropdownAction::Selected(_) | DropdownAction::Closed => {
-                        selected_value = self
+                        let selected_value = self
                             .dropdowns
                             .get(&field_id)
                             .and_then(|dropdown| dropdown.selected_value().map(|v| v.to_string()));
+                        if let Some(value) = selected_value {
+                            self.set_value_by_id(&field_id, value);
+                        }
                     }
                     DropdownAction::Opened | DropdownAction::FocusChanged => {
                         return Some(Some(AllergyFormAction::ValueChanged));
@@ -417,10 +419,6 @@ impl AllergyForm {
                 | crossterm::event::KeyCode::Esc => return None,
                 _ => return Some(None),
             }
-        }
-
-        if let Some(value) = selected_value {
-            self.set_value_by_id(&field_id, value);
         }
 
         Some(Some(AllergyFormAction::ValueChanged))

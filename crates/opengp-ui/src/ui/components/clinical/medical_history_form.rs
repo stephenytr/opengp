@@ -430,14 +430,11 @@ impl MedicalHistoryForm {
         self.set_error_by_id(field_id, errors.into_iter().next());
     }
 
-    fn validate_field(&mut self, field: &MedicalHistoryFormField) {
-        self.validate_field_by_id(field.id());
-    }
-
     pub fn error(&self, field: MedicalHistoryFormField) -> Option<&String> {
         self.errors.get(field.id())
     }
 
+    #[allow(clippy::question_mark)]
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<MedicalHistoryFormAction> {
         use crossterm::event::KeyEventKind;
 

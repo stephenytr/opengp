@@ -10,7 +10,7 @@ use std::error::Error;
 use std::fmt;
 
 /// Top-level healthcare configuration container
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HealthcareConfig {
     /// Vital sign ranges and units
     #[serde(default)]
@@ -30,19 +30,6 @@ pub struct HealthcareConfig {
     /// Medicare configuration
     #[serde(default)]
     pub medicare: MedicareConfig,
-}
-
-impl Default for HealthcareConfig {
-    fn default() -> Self {
-        Self {
-            vital_signs: HashMap::new(),
-            appointment_durations: HashMap::new(),
-            billing: BillingConfig::default(),
-            prescriptions: PrescriptionConfig::default(),
-            referrals: ReferralConfig::default(),
-            medicare: MedicareConfig::default(),
-        }
-    }
 }
 
 /// Vital sign range with min, max, and unit

@@ -90,7 +90,7 @@ impl UserRepository for PostgresUserRepository {
             .bind(id)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| sqlx_to_user_error(e))?;
+            .map_err(sqlx_to_user_error)?;
 
         match row {
             Some(r) => Ok(Some(r.into_user()?)),
@@ -104,7 +104,7 @@ impl UserRepository for PostgresUserRepository {
                 .bind(username)
                 .fetch_optional(&self.pool)
                 .await
-                .map_err(|e| sqlx_to_user_error(e))?;
+                .map_err(sqlx_to_user_error)?;
 
         match row {
             Some(r) => Ok(Some(r.into_user()?)),

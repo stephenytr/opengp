@@ -120,6 +120,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_allergy(
         &self,
         patient_id: Uuid,
@@ -198,6 +199,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn record_vitals(
         &self,
         patient_id: Uuid,
@@ -256,6 +258,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_social_history(
         &self,
         patient_id: Uuid,

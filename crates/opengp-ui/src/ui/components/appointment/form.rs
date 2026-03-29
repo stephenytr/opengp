@@ -533,7 +533,7 @@ impl AppointmentForm {
                 let v = &self.data.duration;
                 if !v.is_empty() {
                     match v.parse::<u32>() {
-                        Ok(mins) if mins == 0 => {
+                        Ok(0) => {
                             self.errors.insert(
                                 field_id.to_string(),
                                 "Duration must be greater than 0".to_string(),

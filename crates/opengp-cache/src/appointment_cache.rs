@@ -6,6 +6,7 @@ use crate::service::CacheServiceImpl;
 use opengp_domain::domain::appointment::CalendarAppointment;
 
 /// TTL for appointment slot caching: 120 seconds (2 minutes)
+#[allow(dead_code)]
 const APPOINTMENT_CACHE_TTL_SECS: u64 = 120;
 
 /// Get appointment slots from cache for a specific practice and date

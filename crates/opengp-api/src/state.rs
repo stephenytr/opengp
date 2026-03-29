@@ -85,16 +85,11 @@ impl ApiState {
     /// Returns None if Redis is not configured or connection fails
     async fn init_cache_service() -> Option<Arc<CacheServiceImpl>> {
         // Load Redis config from environment
-        let redis_url = std::env::var("REDIS_URL").ok();
-
-        // If no Redis URL, cache is disabled
-        if redis_url.is_none() {
-            return None;
-        }
+        let redis_url = std::env::var("REDIS_URL").ok()?;
 
         // Create RedisConfig with the URL
         let redis_config = opengp_config::RedisConfig {
-            url: redis_url,
+            url: Some(redis_url),
             max_connections: std::env::var("REDIS_MAX_CONNECTIONS")
                 .ok()
                 .and_then(|v| v.parse().ok())

@@ -39,6 +39,7 @@ pub struct ClinicalTableList<T> {
 }
 
 impl<T> ClinicalTableList<T> {
+    #[allow(clippy::type_complexity)]
     pub fn new(
         mut items: Vec<T>,
         columns: Vec<ColumnDef<T>>,
