@@ -5,7 +5,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Margin, Position, Rect};
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Padding, Widget};
 
 use crate::ui::keybinds::{KeyContext, KeybindRegistry};
@@ -175,7 +175,7 @@ impl Widget for HelpOverlay {
         for row in content_area.y..content_area.y + content_area.height.saturating_sub(1) {
             if let Some(cell) = buf.cell_mut(Position::new(sep_x, row)) {
                 cell.set_char('│');
-                cell.set_fg(Color::DarkGray);
+                cell.set_fg(self.theme.colors.text_dim);
             }
         }
 

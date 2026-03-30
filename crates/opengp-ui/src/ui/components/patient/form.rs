@@ -412,12 +412,12 @@ impl PatientForm {
             field_ids,
             field_configs,
             saving: false,
-            theme,
+            theme: theme.clone(),
             scroll: ScrollableFormState::new(),
             textareas,
             dropdowns,
             validator: FormValidator::new(&HashMap::new()),
-            date_picker: DatePickerPopup::new(),
+            date_picker: DatePickerPopup::new(theme),
         };
 
         form.validator = build_validator(&form.field_configs);
@@ -1266,7 +1266,7 @@ impl Widget for PatientForm {
             dropdown.render(dropdown_area, buf);
         }
 
-        self.scroll.render_scrollbar(inner, buf);
+        self.scroll.render_scrollbar(inner, buf, &self.theme);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(

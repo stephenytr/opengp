@@ -185,7 +185,7 @@ impl AllergyForm {
             validator: FormValidator::new(&HashMap::new()),
             theme: theme.clone(),
             scroll: ScrollableFormState::new(),
-            date_picker: DatePickerPopup::new(),
+            date_picker: DatePickerPopup::new(theme.clone()),
         };
 
         form.textareas.insert(
@@ -837,7 +837,7 @@ impl Widget for AllergyForm {
             dropdown.render(dropdown_area, buf);
         }
 
-        self.scroll.render_scrollbar(inner, buf);
+        self.scroll.render_scrollbar(inner, buf, &self.theme);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(

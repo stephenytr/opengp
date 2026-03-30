@@ -185,15 +185,15 @@ impl<'a> TextareaWidget<'a> {
         let border_style = if self.state.error.is_some() {
             Style::default()
                 .fg(self.theme.colors.error)
-                .bg(Color::Black)
+                .bg(self.theme.colors.background_dark)
         } else if self.focused {
             Style::default()
                 .fg(self.theme.colors.primary)
-                .bg(Color::Black)
+                .bg(self.theme.colors.background_dark)
         } else {
             Style::default()
                 .fg(self.theme.colors.border)
-                .bg(Color::Black)
+                .bg(self.theme.colors.background_dark)
         };
 
         let title_style = if self.focused {
@@ -232,7 +232,7 @@ impl Widget for TextareaWidget<'_> {
         ta.set_style(
             Style::default()
                 .fg(self.theme.colors.foreground)
-                .bg(Color::Black),
+                .bg(self.theme.colors.background_dark),
         );
 
         if self.focused {

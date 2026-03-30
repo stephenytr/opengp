@@ -10,6 +10,7 @@ use ratatui::layout::Rect;
 use ratatui::widgets::{Clear, Widget};
 
 use super::CalendarWidget;
+use crate::ui::theme::Theme;
 
 /// Actions returned by the date picker popup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,21 +31,23 @@ pub struct DatePickerPopup {
     calendar: CalendarWidget,
     visible: bool,
     initial_date: Option<NaiveDate>,
+    theme: Theme,
 }
 
 impl DatePickerPopup {
     /// Create a new date picker popup.
-    pub fn new() -> Self {
+    pub fn new(theme: Theme) -> Self {
         Self {
-            calendar: CalendarWidget::new(),
+            calendar: CalendarWidget::new(theme.clone()),
             visible: false,
             initial_date: None,
+            theme,
         }
     }
 
     /// Open the date picker with an optional current date value.
     pub fn open(&mut self, current_value: Option<NaiveDate>) {
-        self.calendar = CalendarWidget::show_date_picker(current_value);
+        self.calendar = CalendarWidget::show_date_picker(current_value, self.theme.clone());
         self.initial_date = current_value;
         self.visible = true;
     }
@@ -190,7 +193,7 @@ impl DatePickerPopup {
 
 impl Default for DatePickerPopup {
     fn default() -> Self {
-        Self::new()
+        Self::new(Theme::default())
     }
 }
 
@@ -202,13 +205,13 @@ mod tests {
 
     #[test]
     fn test_new_popup_not_visible() {
-        let popup = DatePickerPopup::new();
+        let popup = DatePickerPopup::new(Theme::default());
         assert!(!popup.is_visible());
     }
 
     #[test]
     fn test_open_sets_visible_with_date() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
         assert!(popup.is_visible());
@@ -218,7 +221,7 @@ mod tests {
 
     #[test]
     fn test_open_sets_visible_without_date() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         popup.open(None);
         assert!(popup.is_visible());
         assert_eq!(popup.initial_date, None);
@@ -226,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_close_clears_visibility() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
         popup.close();
@@ -235,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_enter_confirms_selection() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -248,7 +251,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_space_confirms_selection() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -261,7 +264,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_esc_dismisses() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -274,7 +277,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_up_navigates_previous_week() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -291,7 +294,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_k_navigates_previous_week() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -307,7 +310,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_down_navigates_next_week() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -323,7 +326,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_j_navigates_next_week() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -339,7 +342,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_left_navigates_previous_day() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -355,7 +358,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_h_navigates_previous_day() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -371,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_right_navigates_next_day() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -387,7 +390,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_l_navigates_next_day() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -403,7 +406,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_up_at_month_boundary_wraps_to_previous_month() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 5).unwrap();
         popup.open(Some(date));
 
@@ -416,7 +419,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_down_at_month_boundary_wraps_to_next_month() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 28).unwrap();
         popup.open(Some(date));
 
@@ -429,7 +432,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_left_at_month_boundary_wraps_to_previous_month() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 1).unwrap();
         popup.open(Some(date));
 
@@ -445,7 +448,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_right_at_month_boundary_wraps_to_next_month() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 31).unwrap();
         popup.open(Some(date));
 
@@ -461,7 +464,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_when_not_visible_returns_none() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
         let action = popup.handle_key(key);
 
@@ -470,7 +473,7 @@ mod tests {
 
     #[test]
     fn test_handle_key_unknown_key_returns_none() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -483,7 +486,7 @@ mod tests {
 
     #[test]
     fn test_selected_date_is_returned_on_confirmation() {
-        let mut popup = DatePickerPopup::new();
+        let mut popup = DatePickerPopup::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         popup.open(Some(date));
 
@@ -502,28 +505,28 @@ mod tests {
 
     #[test]
     fn test_days_in_month_february_leap_year() {
-        let popup = DatePickerPopup::new();
+        let popup = DatePickerPopup::new(Theme::default());
         let days = popup.days_in_month(2024, 2);
         assert_eq!(days, 29);
     }
 
     #[test]
     fn test_days_in_month_february_non_leap_year() {
-        let popup = DatePickerPopup::new();
+        let popup = DatePickerPopup::new(Theme::default());
         let days = popup.days_in_month(2023, 2);
         assert_eq!(days, 28);
     }
 
     #[test]
     fn test_days_in_month_april() {
-        let popup = DatePickerPopup::new();
+        let popup = DatePickerPopup::new(Theme::default());
         let days = popup.days_in_month(2024, 4);
         assert_eq!(days, 30);
     }
 
     #[test]
     fn test_days_in_month_december() {
-        let popup = DatePickerPopup::new();
+        let popup = DatePickerPopup::new(Theme::default());
         let days = popup.days_in_month(2024, 12);
         assert_eq!(days, 31);
     }

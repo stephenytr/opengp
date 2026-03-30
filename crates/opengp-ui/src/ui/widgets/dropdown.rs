@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crossterm::event::{MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::ui::theme::Theme;
@@ -262,11 +262,11 @@ impl Widget for DropdownWidget {
         let border_style = if self.focused {
             Style::default()
                 .fg(self.theme.colors.primary)
-                .bg(Color::Black)
+                .bg(self.theme.colors.background_dark)
         } else {
             Style::default()
                 .fg(self.theme.colors.border)
-                .bg(Color::Black)
+                .bg(self.theme.colors.background_dark)
         };
 
         let block = Block::default()
@@ -282,17 +282,20 @@ impl Widget for DropdownWidget {
         }
 
         // Fill inner area with black background
-        buf.set_style(inner, Style::default().bg(Color::Black));
+        buf.set_style(
+            inner,
+            Style::default().bg(self.theme.colors.background_dark),
+        );
 
         let display_text = self.selected_label().unwrap_or(&self.placeholder);
         let text_style = if self.selected_index.is_some() {
             Style::default()
                 .fg(self.theme.colors.foreground)
-                .bg(Color::Black)
+                .bg(self.theme.colors.background_dark)
         } else {
             Style::default()
                 .fg(self.theme.colors.disabled)
-                .bg(Color::Black)
+                .bg(self.theme.colors.background_dark)
         };
 
         let max_width = inner.width.saturating_sub(2) as usize;
@@ -312,7 +315,7 @@ impl Widget for DropdownWidget {
             arrow,
             Style::default()
                 .fg(self.theme.colors.primary)
-                .bg(Color::Black),
+                .bg(self.theme.colors.background_dark),
         );
 
         // Guard against empty options: treat as closed state
@@ -351,13 +354,16 @@ impl Widget for DropdownWidget {
             let options_block = Block::default().borders(Borders::ALL).border_style(
                 Style::default()
                     .fg(self.theme.colors.primary)
-                    .bg(Color::Black),
+                    .bg(self.theme.colors.background_dark),
             );
 
             options_block.clone().render(options_area, buf);
 
             let options_inner = options_block.inner(options_area);
-            buf.set_style(options_inner, Style::default().bg(Color::Black));
+            buf.set_style(
+                options_inner,
+                Style::default().bg(self.theme.colors.background_dark),
+            );
             for (i, option) in self.options.iter().enumerate() {
                 if (options_inner.y + i as u16) < options_inner.y + options_inner.height {
                     let is_selected = Some(i) == self.selected_index;
@@ -367,16 +373,16 @@ impl Widget for DropdownWidget {
                     let style = if is_focused {
                         Style::default()
                             .fg(self.theme.colors.primary)
-                            .bg(Color::Black)
+                            .bg(self.theme.colors.background_dark)
                             .add_modifier(Modifier::REVERSED)
                     } else if is_selected {
                         Style::default()
                             .fg(self.theme.colors.primary)
-                            .bg(Color::Black)
+                            .bg(self.theme.colors.background_dark)
                     } else {
                         Style::default()
                             .fg(self.theme.colors.foreground)
-                            .bg(Color::Black)
+                            .bg(self.theme.colors.background_dark)
                     };
 
                     let max_opt_width = options_inner.width.saturating_sub(4) as usize;

@@ -7,6 +7,8 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
+use crate::ui::theme::Theme;
+
 /// Manages scrolling state for form content
 ///
 /// Tracks scroll offset (how many rows scrolled down) and total content height.
@@ -77,7 +79,7 @@ impl ScrollableFormState {
     ///
     /// Shows a vertical bar indicator that represents the current scroll position.
     /// Only visible when content exceeds viewport height.
-    pub fn render_scrollbar(&self, area: Rect, buf: &mut Buffer) {
+    pub fn render_scrollbar(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
         if area.height == 0 || self.total_content_height <= area.height {
             return; // No scrollbar needed
         }
@@ -105,7 +107,7 @@ impl ScrollableFormState {
                 scrollbar_x,
                 y,
                 char.to_string(),
-                Style::default().fg(ratatui::style::Color::DarkGray),
+                Style::default().fg(theme.colors.text_dim),
             );
         }
     }

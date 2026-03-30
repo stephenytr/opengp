@@ -42,7 +42,7 @@ pub struct Calendar {
 impl Calendar {
     pub fn new(theme: Theme) -> Self {
         let today = chrono::Utc::now().date_naive();
-        let mut widget = CalendarWidget::with_date(today);
+        let mut widget = CalendarWidget::with_date(today, theme.clone());
         widget.set_selected_date(today); // Set selected date to today
         let current_month = NaiveDate::from_ymd_opt(today.year(), today.month(), 1).unwrap();
 
