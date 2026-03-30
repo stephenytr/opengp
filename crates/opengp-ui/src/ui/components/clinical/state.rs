@@ -370,7 +370,7 @@ impl ClinicalState {
     pub fn selected_index(&self) -> usize {
         match self.view {
             ClinicalView::PatientSummary => 0,
-            ClinicalView::Consultations => self.consultation_list.selected_index,
+            ClinicalView::Consultations => self.consultation_list.selected_index(),
             ClinicalView::Allergies => self.allergy_list.selected_index,
             ClinicalView::MedicalHistory => self.medical_history_list.selected_index,
             ClinicalView::VitalSigns => self.vitals_list.selected_index,
@@ -382,7 +382,7 @@ impl ClinicalState {
     pub fn scroll_offset(&self) -> usize {
         match self.view {
             ClinicalView::PatientSummary => 0,
-            ClinicalView::Consultations => self.consultation_list.scroll_offset,
+            ClinicalView::Consultations => self.consultation_list.scroll_offset(),
             ClinicalView::Allergies => self.allergy_list.scroll_offset,
             ClinicalView::MedicalHistory => self.medical_history_list.scroll_offset,
             ClinicalView::VitalSigns => self.vitals_list.scroll_offset,
@@ -697,7 +697,7 @@ mod tests {
         // Consultations delegates to consultation_list
         state.view = ClinicalView::Consultations;
         let idx = state.selected_index();
-        assert_eq!(idx, state.consultation_list.selected_index);
+        assert_eq!(idx, state.consultation_list.selected_index());
 
         // SocialHistory → 0
         state.view = ClinicalView::SocialHistory;
@@ -722,7 +722,10 @@ mod tests {
 
         // Consultations delegates to consultation_list
         state.view = ClinicalView::Consultations;
-        assert_eq!(state.scroll_offset(), state.consultation_list.scroll_offset);
+        assert_eq!(
+            state.scroll_offset(),
+            state.consultation_list.scroll_offset()
+        );
 
         // Allergies delegates to allergy_list
         state.view = ClinicalView::Allergies;

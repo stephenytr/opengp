@@ -5,7 +5,7 @@ use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::ui::theme::Theme;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct StatusBar {
     left: String,
     center: String,

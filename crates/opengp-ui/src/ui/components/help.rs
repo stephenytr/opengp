@@ -126,12 +126,6 @@ impl HelpOverlay {
     }
 }
 
-impl Default for HelpOverlay {
-    fn default() -> Self {
-        Self::new(Theme::dark())
-    }
-}
-
 /// Render the help overlay
 impl Widget for HelpOverlay {
     fn render(self, area: Rect, buf: &mut Buffer) {

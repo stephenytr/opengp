@@ -234,12 +234,6 @@ impl TabBar {
     }
 }
 
-impl Default for TabBar {
-    fn default() -> Self {
-        Self::new(Theme::dark())
-    }
-}
-
 /// Render the tab bar
 impl Widget for TabBar {
     fn render(self, area: Rect, buf: &mut Buffer) {
