@@ -261,7 +261,7 @@ impl ClinicalState {
     fn reset_component_selection(&mut self) {
         self.consultation_list.move_first();
         self.allergy_list.move_first();
-        self.medical_history_list.move_first();
+        self.medical_history_list.selected_index = 0;
         self.vitals_list.move_first();
         self.family_history_list.move_first();
     }
@@ -287,7 +287,7 @@ impl ClinicalState {
         self.allergy_list.allergies.clear();
         self.allergy_list.move_first();
         self.medical_history_list.conditions.clear();
-        self.medical_history_list.move_first();
+        self.medical_history_list.selected_index = 0;
         self.vitals_list.vitals.clear();
         self.vitals_list.move_first();
         self.family_history_list.entries.clear();
@@ -311,7 +311,11 @@ impl ClinicalState {
             ClinicalView::PatientSummary => {}
             ClinicalView::Consultations => self.consultation_list.next(),
             ClinicalView::Allergies => self.allergy_list.next(),
-            ClinicalView::MedicalHistory => self.medical_history_list.next(),
+            ClinicalView::MedicalHistory => {
+                self.medical_history_list.selected_index =
+                    (self.medical_history_list.selected_index + 1)
+                        .min(self.medical_history_list.conditions.len().saturating_sub(1))
+            }
             ClinicalView::VitalSigns => self.vitals_list.next(),
             ClinicalView::SocialHistory => {}
             ClinicalView::FamilyHistory => self.family_history_list.next(),
@@ -323,7 +327,10 @@ impl ClinicalState {
             ClinicalView::PatientSummary => {}
             ClinicalView::Consultations => self.consultation_list.prev(),
             ClinicalView::Allergies => self.allergy_list.prev(),
-            ClinicalView::MedicalHistory => self.medical_history_list.prev(),
+            ClinicalView::MedicalHistory => {
+                self.medical_history_list.selected_index =
+                    self.medical_history_list.selected_index.saturating_sub(1)
+            }
             ClinicalView::VitalSigns => self.vitals_list.prev(),
             ClinicalView::SocialHistory => {}
             ClinicalView::FamilyHistory => self.family_history_list.prev(),

@@ -452,8 +452,11 @@ impl App {
                         }
                         crate::ui::components::clinical::MedicalHistoryListAction::Select(_)
                         | crate::ui::components::clinical::MedicalHistoryListAction::Open(_)
-                        | crate::ui::components::clinical::MedicalHistoryListAction::SetFilter(_)
+                        | crate::ui::components::clinical::MedicalHistoryListAction::Edit(_)
                         | crate::ui::components::clinical::MedicalHistoryListAction::Delete(_) => {
+                            return Action::Enter;
+                        }
+                        crate::ui::components::clinical::MedicalHistoryListAction::ToggleInactive => {
                             return Action::Enter;
                         }
                     }
