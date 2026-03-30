@@ -2,8 +2,6 @@
 //!
 //! Form for creating and editing patient consultations (SOAP notes).
 
-use std::collections::HashMap;
-
 use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -11,9 +9,10 @@ use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::ui::input::to_ratatui_key;
+use crate::ui::shared::FormMode;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    FieldType, FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState, TextareaState,
+    FieldType, FormField, FormFieldMeta, FormNavigation, FormState, HeightMode, TextareaState,
     TextareaWidget,
 };
 use opengp_domain::domain::clinical::Consultation;
@@ -63,6 +62,36 @@ impl ConsultationFormField {
     }
 }
 
+impl FormField for ConsultationFormField {
+    fn all() -> Vec<Self> {
+        ConsultationFormField::all()
+    }
+
+    fn label(&self) -> &'static str {
+        ConsultationFormField::label(self)
+    }
+
+    fn id(&self) -> &'static str {
+        ConsultationFormField::id(self)
+    }
+
+    fn from_id(id: &str) -> Option<Self> {
+        ConsultationFormField::from_id(id)
+    }
+
+    fn is_required(&self) -> bool {
+        ConsultationFormField::is_required(self)
+    }
+
+    fn is_textarea(&self) -> bool {
+        ConsultationFormField::is_textarea(self)
+    }
+
+    fn is_dropdown(&self) -> bool {
+        false
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ConsultationFormAction {
     FocusChanged,
@@ -72,29 +101,17 @@ pub enum ConsultationFormAction {
 }
 
 pub struct ConsultationForm {
-    textareas: HashMap<String, TextareaState>,
-    focused_field: String,
+    state: FormState<ConsultationFormField>,
     field_ids: Vec<String>,
     pub is_valid: bool,
-    pub is_edit_mode: bool,
-    pub consultation_id: Option<uuid::Uuid>,
-    errors: HashMap<String, String>,
-    theme: Theme,
-    scroll: ScrollableFormState,
 }
 
 impl Clone for ConsultationForm {
     fn clone(&self) -> Self {
         Self {
-            textareas: self.textareas.clone(),
-            focused_field: self.focused_field.clone(),
+            state: self.state.clone(),
             field_ids: self.field_ids.clone(),
             is_valid: self.is_valid,
-            is_edit_mode: self.is_edit_mode,
-            consultation_id: self.consultation_id,
-            errors: self.errors.clone(),
-            theme: self.theme.clone(),
-            scroll: self.scroll.clone(),
         }
     }
 }
@@ -127,28 +144,23 @@ impl ConsultationForm {
             .map(|field| field.id().to_string())
             .collect::<Vec<_>>();
 
-        let mut textareas = HashMap::new();
+        let mut state = FormState::new(theme, ConsultationFormField::Reason);
         for field in ConsultationFormField::all() {
-            textareas.insert(field.id().to_string(), textarea_for_field(field, None));
+            state
+                .textareas
+                .insert(field.id().to_string(), textarea_for_field(field, None));
         }
 
         Self {
-            textareas,
-            focused_field: FIELD_REASON.to_string(),
+            state,
             field_ids,
             is_valid: true,
-            is_edit_mode: false,
-            consultation_id: None,
-            errors: HashMap::new(),
-            theme: theme.clone(),
-            scroll: ScrollableFormState::new(),
         }
     }
 
     pub fn from_consultation(theme: Theme, consultation: &Consultation) -> Self {
         let mut form = Self::new(theme);
-        form.is_edit_mode = true;
-        form.consultation_id = Some(consultation.id);
+        form.state.mode = FormMode::Edit(consultation.id);
         form.set_value(
             ConsultationFormField::Reason,
             consultation.reason.clone().unwrap_or_default(),
@@ -157,62 +169,47 @@ impl ConsultationForm {
             ConsultationFormField::ClinicalNotes,
             consultation.clinical_notes.clone().unwrap_or_default(),
         );
-        form.errors.clear();
+        form.state.errors.clear();
         form
     }
 
+    pub fn is_edit_mode(&self) -> bool {
+        matches!(self.state.mode, FormMode::Edit(_))
+    }
+
     fn focused_textarea_mut(&mut self) -> Option<&mut TextareaState> {
-        self.textareas.get_mut(&self.focused_field)
+        self.state.textareas.get_mut(self.state.focused_field.id())
     }
 
     fn textarea_for(&self, field_id: &str) -> Option<&TextareaState> {
-        self.textareas.get(field_id)
+        self.state.textareas.get(field_id)
     }
 
     fn get_value_by_id(&self, field_id: &str) -> String {
-        self.textareas
-            .get(field_id)
-            .map(|textarea| textarea.value())
-            .unwrap_or_default()
+        self.state.get_value_by_id(field_id)
     }
 
     fn set_value_by_id(&mut self, field_id: &str, value: String) {
-        if let Some(textarea) = self.textareas.get_mut(field_id) {
-            let label = textarea.label.clone();
-            let height_mode = textarea.height_mode.clone();
-            let max_length = textarea.max_length;
-            let focused = textarea.focused;
-
-            let mut updated = TextareaState::new(label)
-                .with_height_mode(height_mode)
-                .with_value(value)
-                .focused(focused);
-
-            if let Some(limit) = max_length {
-                updated = updated.max_length(limit);
-            }
-
-            *textarea = updated;
-        }
+        self.state.set_value_by_id(field_id, value);
     }
 
     fn set_error_by_id(&mut self, field_id: &str, error: Option<String>) {
-        if let Some(textarea) = self.textareas.get_mut(field_id) {
+        if let Some(textarea) = self.state.textareas.get_mut(field_id) {
             textarea.set_error(error.clone());
         }
 
         match error {
             Some(msg) => {
-                self.errors.insert(field_id.to_string(), msg);
+                self.state.errors.insert(field_id.to_string(), msg);
             }
             None => {
-                self.errors.remove(field_id);
+                self.state.errors.remove(field_id);
             }
         }
     }
 
     fn validate_field_by_id(&mut self, field_id: &str) {
-        self.errors.remove(field_id);
+        self.state.errors.remove(field_id);
 
         let value = self.get_value_by_id(field_id);
         let error = match field_id {
@@ -227,7 +224,8 @@ impl ConsultationForm {
     }
 
     fn get_field_height(&self, field_id: &str) -> u16 {
-        self.textareas
+        self.state
+            .textareas
             .get(field_id)
             .map(|textarea| textarea.height())
             .unwrap_or(1)
@@ -247,7 +245,7 @@ impl ConsultationForm {
     }
 
     pub fn focused_field(&self) -> ConsultationFormField {
-        ConsultationFormField::from_id(&self.focused_field).unwrap_or(ConsultationFormField::Reason)
+        self.state.focused_field
     }
 
     pub fn get_value(&self, field: ConsultationFormField) -> String {
@@ -264,7 +262,7 @@ impl ConsultationForm {
     }
 
     pub fn error(&self, field: ConsultationFormField) -> Option<&String> {
-        self.errors.get(field.id())
+        self.state.errors.get(field.id())
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ConsultationFormAction> {
@@ -285,7 +283,7 @@ impl ConsultationForm {
             if let Some(textarea) = self.focused_textarea_mut() {
                 let consumed = textarea.handle_key(ratatui_key);
                 if consumed {
-                    let focused_field = self.focused_field.clone();
+                    let focused_field = self.focused_field().id().to_string();
                     self.validate_field_by_id(&focused_field);
                     return Some(ConsultationFormAction::ValueChanged);
                 }
@@ -298,30 +296,30 @@ impl ConsultationForm {
                     return Some(ConsultationFormAction::Cancel);
                 }
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    self.prev_field();
+                    self.state.prev_field();
                 } else {
-                    self.next_field();
+                    self.state.next_field();
                 }
                 Some(ConsultationFormAction::FocusChanged)
             }
             KeyCode::BackTab => {
-                self.prev_field();
+                self.state.prev_field();
                 Some(ConsultationFormAction::FocusChanged)
             }
             KeyCode::Up => {
-                self.prev_field();
+                self.state.prev_field();
                 Some(ConsultationFormAction::FocusChanged)
             }
             KeyCode::Down => {
-                self.next_field();
+                self.state.next_field();
                 Some(ConsultationFormAction::FocusChanged)
             }
             KeyCode::PageUp => {
-                self.scroll.scroll_up();
+                self.state.scroll.scroll_up();
                 Some(ConsultationFormAction::FocusChanged)
             }
             KeyCode::PageDown => {
-                self.scroll.scroll_down();
+                self.state.scroll.scroll_down();
                 Some(ConsultationFormAction::FocusChanged)
             }
             KeyCode::Enter => None,
@@ -336,8 +334,13 @@ impl ConsultationForm {
         practitioner_id: uuid::Uuid,
         created_by: uuid::Uuid,
     ) -> Consultation {
+        let consultation_id = match self.state.mode {
+            FormMode::Edit(id) => id,
+            FormMode::Create => uuid::Uuid::new_v4(),
+        };
+
         Consultation {
-            id: self.consultation_id.unwrap_or_else(uuid::Uuid::new_v4),
+            id: consultation_id,
             patient_id,
             practitioner_id,
             appointment_id: None,
@@ -381,12 +384,12 @@ impl crate::ui::widgets::DynamicForm for ConsultationForm {
     }
 
     fn current_field(&self) -> &str {
-        &self.focused_field
+        self.state.focused_field.id()
     }
 
     fn set_current_field(&mut self, field_id: &str) {
-        if self.field_ids.iter().any(|id| id == field_id) {
-            self.focused_field = field_id.to_string();
+        if let Some(field) = ConsultationFormField::from_id(field_id) {
+            self.state.focused_field = field;
         }
     }
 
@@ -402,13 +405,13 @@ impl crate::ui::widgets::DynamicForm for ConsultationForm {
         for field_id in self.field_ids.clone() {
             self.set_error_by_id(&field_id, None);
         }
-        self.errors.clear();
+        self.state.errors.clear();
         self.is_valid = true;
         self.is_valid
     }
 
     fn get_error(&self, field_id: &str) -> Option<&str> {
-        self.errors.get(field_id).map(|s| s.as_str())
+        self.state.errors.get(field_id).map(|s| s.as_str())
     }
 
     fn set_error(&mut self, field_id: &str, error: Option<String>) {
@@ -430,7 +433,7 @@ impl FormNavigation for ConsultationForm {
     type FormField = ConsultationFormField;
 
     fn get_error(&self, field: Self::FormField) -> Option<&str> {
-        self.errors.get(field.id()).map(|s| s.as_str())
+        self.state.errors.get(field.id()).map(|s| s.as_str())
     }
 
     fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
@@ -442,18 +445,15 @@ impl FormNavigation for ConsultationForm {
     }
 
     fn current_field(&self) -> Self::FormField {
-        ConsultationFormField::from_id(&self.focused_field).unwrap_or(ConsultationFormField::Reason)
+        self.state.focused_field
     }
 
     fn fields(&self) -> Vec<Self::FormField> {
-        self.field_ids
-            .iter()
-            .filter_map(|field_id| ConsultationFormField::from_id(field_id))
-            .collect()
+        self.state.field_order.clone()
     }
 
     fn set_current_field(&mut self, field: Self::FormField) {
-        self.focused_field = field.id().to_string();
+        self.state.focused_field = field;
     }
 }
 
@@ -463,7 +463,7 @@ impl Widget for ConsultationForm {
             return;
         }
 
-        let title = if self.is_edit_mode {
+        let title = if self.is_edit_mode() {
             " Edit Consultation "
         } else {
             " New Consultation "
@@ -472,7 +472,7 @@ impl Widget for ConsultationForm {
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.theme.colors.border));
+            .border_style(Style::default().fg(self.state.theme.colors.border));
 
         block.clone().render(area, buf);
 
@@ -487,14 +487,20 @@ impl Widget for ConsultationForm {
         for field_id in &fields {
             total_height += self.get_field_height(field_id) + 1;
         }
-        self.scroll.set_total_height(total_height);
-        self.scroll.clamp_offset(inner.height.saturating_sub(2));
+        self.state.scroll.set_total_height(total_height);
+        self.state
+            .scroll
+            .clamp_offset(inner.height.saturating_sub(2));
 
-        let (focused_y, focused_height) = self.get_field_position(&self.focused_field);
-        self.scroll
-            .scroll_to_field(focused_y, focused_height, inner.height.saturating_sub(2));
+        let focused_field_id = self.state.focused_field.id().to_string();
+        let (focused_y, focused_height) = self.get_field_position(&focused_field_id);
+        self.state.scroll.scroll_to_field(
+            focused_y,
+            focused_height,
+            inner.height.saturating_sub(2),
+        );
 
-        let mut y: i32 = (inner.y as i32) + 1 - (self.scroll.scroll_offset as i32);
+        let mut y: i32 = (inner.y as i32) + 1 - (self.state.scroll.scroll_offset as i32);
         let max_y = inner.y as i32 + inner.height as i32 - 2;
 
         for field_id in fields {
@@ -505,14 +511,14 @@ impl Widget for ConsultationForm {
                 continue;
             }
 
-            let is_focused = field_id == self.focused_field;
+            let is_focused = field_id == focused_field_id;
 
             if let Some(textarea) = self.textarea_for(&field_id) {
                 let textarea_height = textarea.height();
                 if y >= inner.y as i32 && y < max_y {
                     let field_area =
                         Rect::new(inner.x + 1, y as u16, inner.width - 2, textarea_height);
-                    TextareaWidget::new(textarea, self.theme.clone())
+                    TextareaWidget::new(textarea, self.state.theme.clone())
                         .focused(is_focused)
                         .render(field_area, buf);
                 }
@@ -520,14 +526,14 @@ impl Widget for ConsultationForm {
             }
         }
 
-        self.scroll.render_scrollbar(inner, buf);
+        self.state.scroll.render_scrollbar(inner, buf);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(
             inner.x + 1,
             help_y,
             "Tab: Next | Ctrl+S: Submit | Esc: Cancel",
-            Style::default().fg(self.theme.colors.disabled),
+            Style::default().fg(self.state.theme.colors.disabled),
         );
     }
 }

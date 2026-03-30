@@ -9,7 +9,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 use ratatui::{buffer::Buffer, layout::Rect};
 use std::collections::HashMap;
-use time::Date;
+use time::{Date, Month};
 
 /// Actions that can be triggered by the calendar widget
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +28,21 @@ pub enum CalendarAction {
 pub enum CalendarMode {
     Scheduling,
     DatePicker,
+}
+
+/// Trait for styling dates in the calendar.
+#[allow(dead_code)]
+pub trait DateStyler {
+    /// Return the `Style` that should be applied to the provided date.
+    fn get_style(&self, date: Date) -> Style;
+}
+
+/// Convert a `chrono::NaiveDate` into `time::Date` for styling helpers.
+#[allow(dead_code)]
+pub fn chrono_to_time(date: NaiveDate) -> Date {
+    let month = Month::try_from(date.month() as u8).expect("invalid month");
+    Date::from_calendar_date(date.year(), month, date.day() as u8)
+        .expect("chrono NaiveDate is always valid")
 }
 
 /// Calendar widget for date selection
@@ -409,6 +424,83 @@ impl AppointmentStyler {
 
     pub fn remove_indicator(&mut self, date: Date) {
         self.indicators.remove(&date);
+    }
+}
+
+impl DateStyler for CalendarWidget {
+    fn get_style(&self, date: Date) -> Style {
+        let target = time_to_naive(date);
+
+        if Some(target) == self.selected_date {
+            Style::default()
+                .bg(Color::Blue)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        }
+    }
+}
+
+impl DateStyler for AppointmentStyler {
+    fn get_style(&self, date: Date) -> Style {
+        if let Some(color) = self.indicators.get(&date) {
+            Style::default().fg(*color).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        }
+    }
+}
+
+/// Styler used by simple date picker forms.
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct DatePickerStyler {
+    base_style: Style,
+    focus_style: Style,
+    focus_date: Option<Date>,
+}
+
+impl DatePickerStyler {
+    #[allow(dead_code)]
+    pub fn new(base_style: Style, focus_style: Style) -> Self {
+        Self {
+            base_style,
+            focus_style,
+            focus_date: None,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn with_focus(base_style: Style, focus_style: Style, focus_date: Date) -> Self {
+        Self {
+            base_style,
+            focus_style,
+            focus_date: Some(focus_date),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn set_focus(&mut self, focus: Option<Date>) {
+        self.focus_date = focus;
+    }
+}
+
+impl Default for DatePickerStyler {
+    fn default() -> Self {
+        let base = Style::default();
+        let focus = base.add_modifier(Modifier::UNDERLINED);
+        Self::new(base, focus)
+    }
+}
+
+impl DateStyler for DatePickerStyler {
+    fn get_style(&self, date: Date) -> Style {
+        if Some(date) == self.focus_date {
+            self.focus_style
+        } else {
+            self.base_style
+        }
     }
 }
 

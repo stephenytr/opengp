@@ -12,21 +12,13 @@ use uuid::Uuid;
 use crate::ui::input::to_ratatui_key;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    FormFieldMeta, FormNavigation, FormValidator, HeightMode, ScrollableFormState, TextareaState,
-    TextareaWidget,
+    FormFieldMeta, FormNavigation, FormValidator, HeightMode, TextareaState, TextareaWidget,
 };
 
 const FIELD_RELATIONSHIP: &str = "relationship";
 const FIELD_CONDITION: &str = "condition";
 const FIELD_AGE_AT_DIAGNOSIS: &str = "age_at_diagnosis";
 const FIELD_NOTES: &str = "notes";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum FormMode {
-    #[default]
-    Create,
-    Edit(Uuid),
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumIter, strum::IntoStaticStr)]
 pub enum FamilyHistoryFormField {
@@ -61,6 +53,10 @@ impl FamilyHistoryFormField {
         true
     }
 
+    pub fn is_dropdown(&self) -> bool {
+        false
+    }
+
     pub fn id(&self) -> &'static str {
         match self {
             FamilyHistoryFormField::Relationship => FIELD_RELATIONSHIP,
@@ -90,30 +86,50 @@ pub enum FamilyHistoryFormAction {
 }
 
 pub struct FamilyHistoryForm {
-    mode: FormMode,
-    textareas: HashMap<String, TextareaState>,
-    focused_field: String,
+    form_state: crate::ui::widgets::FormState<FamilyHistoryFormField>,
     field_ids: Vec<String>,
     pub is_valid: bool,
-    errors: HashMap<String, String>,
     validator: FormValidator,
-    theme: Theme,
-    scroll: ScrollableFormState,
 }
 
 impl Clone for FamilyHistoryForm {
     fn clone(&self) -> Self {
         Self {
-            mode: self.mode,
-            textareas: self.textareas.clone(),
-            focused_field: self.focused_field.clone(),
+            form_state: self.form_state.clone(),
             field_ids: self.field_ids.clone(),
             is_valid: self.is_valid,
-            errors: self.errors.clone(),
             validator: build_validator(),
-            theme: self.theme.clone(),
-            scroll: self.scroll.clone(),
         }
+    }
+}
+
+impl crate::ui::widgets::FormField for FamilyHistoryFormField {
+    fn all() -> Vec<Self> {
+        FamilyHistoryFormField::all()
+    }
+
+    fn label(&self) -> &'static str {
+        FamilyHistoryFormField::label(self)
+    }
+
+    fn id(&self) -> &'static str {
+        FamilyHistoryFormField::id(self)
+    }
+
+    fn from_id(id: &str) -> Option<Self> {
+        FamilyHistoryFormField::from_id(id)
+    }
+
+    fn is_required(&self) -> bool {
+        FamilyHistoryFormField::is_required(self)
+    }
+
+    fn is_textarea(&self) -> bool {
+        FamilyHistoryFormField::is_textarea(self)
+    }
+
+    fn is_dropdown(&self) -> bool {
+        FamilyHistoryFormField::is_dropdown(self)
     }
 }
 
@@ -131,7 +147,7 @@ impl FormNavigation for FamilyHistoryForm {
     type FormField = FamilyHistoryFormField;
 
     fn get_error(&self, field: Self::FormField) -> Option<&str> {
-        self.errors.get(field.id()).map(|s| s.as_str())
+        self.form_state.errors.get(field.id()).map(|s| s.as_str())
     }
 
     fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
@@ -143,19 +159,15 @@ impl FormNavigation for FamilyHistoryForm {
     }
 
     fn current_field(&self) -> Self::FormField {
-        FamilyHistoryFormField::from_id(&self.focused_field)
-            .unwrap_or(FamilyHistoryFormField::Relationship)
+        self.form_state.focused_field
     }
 
     fn fields(&self) -> Vec<Self::FormField> {
-        self.field_ids
-            .iter()
-            .filter_map(|field_id| FamilyHistoryFormField::from_id(field_id))
-            .collect()
+        self.form_state.field_order.clone()
     }
 
     fn set_current_field(&mut self, field: Self::FormField) {
-        self.focused_field = field.id().to_string();
+        self.form_state.focused_field = field;
     }
 }
 
@@ -183,12 +195,16 @@ impl crate::ui::widgets::DynamicForm for FamilyHistoryForm {
     }
 
     fn current_field(&self) -> &str {
-        &self.focused_field
+        self.form_state.focused_field.id()
     }
 
     fn set_current_field(&mut self, field_id: &str) {
-        if self.field_ids.iter().any(|id| id == field_id) {
-            self.focused_field = field_id.to_string();
+        if !self.field_ids.iter().any(|id| id == field_id) {
+            return;
+        }
+
+        if let Some(field) = FamilyHistoryFormField::from_id(field_id) {
+            self.form_state.focused_field = field;
         }
     }
 
@@ -201,18 +217,18 @@ impl crate::ui::widgets::DynamicForm for FamilyHistoryForm {
     }
 
     fn validate(&mut self) -> bool {
-        self.errors.clear();
+        self.form_state.errors.clear();
 
-        for field_id in self.field_ids.clone() {
-            self.validate_field_by_id(&field_id);
+        for field in self.form_state.field_order.clone() {
+            self.validate_field_by_id(field.id());
         }
 
-        self.is_valid = self.errors.is_empty();
+        self.is_valid = self.form_state.errors.is_empty();
         self.is_valid
     }
 
     fn get_error(&self, field_id: &str) -> Option<&str> {
-        self.errors.get(field_id).map(|s| s.as_str())
+        self.form_state.errors.get(field_id).map(|s| s.as_str())
     }
 
     fn set_error(&mut self, field_id: &str, error: Option<String>) {
@@ -228,27 +244,25 @@ impl FamilyHistoryForm {
             .map(|field| field.id().to_string())
             .collect::<Vec<_>>();
 
-        let mut textareas = HashMap::new();
+        let mut form_state =
+            crate::ui::widgets::FormState::new(theme, FamilyHistoryFormField::Relationship);
         for field in fields {
-            textareas.insert(field.id().to_string(), make_textarea_state(field, None));
+            form_state
+                .textareas
+                .insert(field.id().to_string(), make_textarea_state(field, None));
         }
 
         Self {
-            mode: FormMode::Create,
-            textareas,
-            focused_field: FIELD_RELATIONSHIP.to_string(),
+            form_state,
             field_ids,
             is_valid: false,
-            errors: HashMap::new(),
             validator: build_validator(),
-            theme,
-            scroll: ScrollableFormState::new(),
         }
     }
 
     pub fn from_family_history(family_history: FamilyHistory, theme: Theme) -> Self {
         let mut form = Self::new(theme);
-        form.mode = FormMode::Edit(family_history.id);
+        form.form_state.mode = crate::shared::FormMode::Edit(family_history.id);
 
         form.set_value(
             FamilyHistoryFormField::Relationship,
@@ -269,19 +283,18 @@ impl FamilyHistoryForm {
     }
 
     pub fn is_edit_mode(&self) -> bool {
-        matches!(self.mode, FormMode::Edit(_))
+        matches!(self.form_state.mode, crate::shared::FormMode::Edit(_))
     }
 
     pub fn family_history_id(&self) -> Option<Uuid> {
-        match self.mode {
-            FormMode::Edit(id) => Some(id),
-            FormMode::Create => None,
+        match self.form_state.mode {
+            crate::shared::FormMode::Edit(id) => Some(id),
+            crate::shared::FormMode::Create => None,
         }
     }
 
     pub fn focused_field(&self) -> FamilyHistoryFormField {
-        FamilyHistoryFormField::from_id(&self.focused_field)
-            .unwrap_or(FamilyHistoryFormField::Relationship)
+        self.form_state.focused_field
     }
 
     pub fn get_value(&self, field: FamilyHistoryFormField) -> String {
@@ -293,41 +306,26 @@ impl FamilyHistoryForm {
     }
 
     fn get_value_by_id(&self, field_id: &str) -> String {
-        self.textareas
-            .get(field_id)
-            .map(|textarea| textarea.value())
-            .unwrap_or_default()
+        self.form_state.get_value_by_id(field_id)
     }
 
     fn set_value_by_id(&mut self, field_id: &str, value: String) {
-        if let Some(textarea) = self.textareas.get_mut(field_id) {
-            let label = textarea.label.clone();
-            let height_mode = textarea.height_mode.clone();
-            let max_length = textarea.max_length;
-            let focused = textarea.focused;
-
-            let mut updated = TextareaState::new(label)
-                .with_height_mode(height_mode)
-                .with_value(value);
-            if let Some(limit) = max_length {
-                updated = updated.max_length(limit);
-            }
-            *textarea = updated.focused(focused);
-        }
+        self.form_state.set_value_by_id(field_id, value);
 
         self.validate_field_by_id(field_id);
     }
 
     fn focused_textarea_mut(&mut self) -> Option<&mut TextareaState> {
-        self.textareas.get_mut(&self.focused_field)
+        let focused_field_id = self.form_state.focused_field.id();
+        self.form_state.textareas.get_mut(focused_field_id)
     }
 
     fn textarea_for(&self, field_id: &str) -> Option<&TextareaState> {
-        self.textareas.get(field_id)
+        self.form_state.textareas.get(field_id)
     }
 
     fn validate_field_by_id(&mut self, field_id: &str) {
-        self.errors.remove(field_id);
+        self.form_state.errors.remove(field_id);
 
         let value = self.get_value_by_id(field_id);
         let mut errors = self.validator.validate(field_id, &value);
@@ -338,7 +336,7 @@ impl FamilyHistoryForm {
 
         let error_msg = errors.into_iter().next();
         self.set_error_by_id(field_id, error_msg.clone());
-        if let Some(textarea) = self.textareas.get_mut(field_id) {
+        if let Some(textarea) = self.form_state.textareas.get_mut(field_id) {
             textarea.set_error(error_msg);
         }
     }
@@ -346,16 +344,16 @@ impl FamilyHistoryForm {
     fn set_error_by_id(&mut self, field_id: &str, error: Option<String>) {
         match error {
             Some(msg) => {
-                self.errors.insert(field_id.to_string(), msg);
+                self.form_state.errors.insert(field_id.to_string(), msg);
             }
             None => {
-                self.errors.remove(field_id);
+                self.form_state.errors.remove(field_id);
             }
         }
     }
 
     pub fn error(&self, field: FamilyHistoryFormField) -> Option<&String> {
-        self.errors.get(field.id())
+        self.form_state.errors.get(field.id())
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<FamilyHistoryFormAction> {
@@ -388,11 +386,11 @@ impl FamilyHistoryForm {
                 return Some(FamilyHistoryFormAction::FocusChanged);
             }
             KeyCode::PageUp => {
-                self.scroll.scroll_up();
+                self.form_state.scroll.scroll_up();
                 return Some(FamilyHistoryFormAction::FocusChanged);
             }
             KeyCode::PageDown => {
-                self.scroll.scroll_down();
+                self.form_state.scroll.scroll_down();
                 return Some(FamilyHistoryFormAction::FocusChanged);
             }
             KeyCode::Esc => return Some(FamilyHistoryFormAction::Cancel),
@@ -403,7 +401,7 @@ impl FamilyHistoryForm {
         if let Some(textarea) = self.focused_textarea_mut() {
             let consumed = textarea.handle_key(ratatui_key);
             if consumed {
-                let field_id = self.focused_field.clone();
+                let field_id = self.form_state.focused_field.id().to_string();
                 self.validate_field_by_id(&field_id);
                 return Some(FamilyHistoryFormAction::ValueChanged);
             }
@@ -496,7 +494,7 @@ impl Widget for FamilyHistoryForm {
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.theme.colors.border));
+            .border_style(Style::default().fg(self.form_state.theme.colors.border));
 
         block.clone().render(area, buf);
 
@@ -521,31 +519,31 @@ impl Widget for FamilyHistoryForm {
 
             let field_height = textarea.height();
             let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
-            let is_focused = field_id == self.focused_field;
+            let is_focused = field_id == self.form_state.focused_field.id();
 
-            TextareaWidget::new(textarea, self.theme.clone())
+            TextareaWidget::new(textarea, self.form_state.theme.clone())
                 .focused(is_focused)
                 .render(field_area, buf);
 
             y += field_height;
 
-            if let Some(error_msg) = self.errors.get(&field_id) {
+            if let Some(error_msg) = self.form_state.errors.get(&field_id) {
                 if y <= max_y {
-                    let error_style = Style::default().fg(self.theme.colors.error);
+                    let error_style = Style::default().fg(self.form_state.theme.colors.error);
                     buf.set_string(inner.x + 2, y, error_msg.as_str(), error_style);
                     y += 1;
                 }
             }
         }
 
-        self.scroll.render_scrollbar(inner, buf);
+        self.form_state.scroll.render_scrollbar(inner, buf);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(
             inner.x + 1,
             help_y,
             "Tab: Next | Ctrl+S: Submit | Esc: Cancel",
-            Style::default().fg(self.theme.colors.disabled),
+            Style::default().fg(self.form_state.theme.colors.disabled),
         );
     }
 }
