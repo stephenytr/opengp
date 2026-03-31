@@ -151,7 +151,7 @@ impl PrescriptionGenerator {
             MedicationForm::Injection,
         ];
 
-        *forms.choose(&mut self.rng).expect("forms not empty")
+        *forms.choose(&mut self.rng).unwrap_or(&forms[0])
     }
 
     /// Generate a random dosage based on medication form
@@ -189,7 +189,7 @@ impl PrescriptionGenerator {
 
         directions
             .choose(&mut self.rng)
-            .expect("directions not empty")
+            .unwrap_or(&directions[0])
             .to_string()
     }
 
@@ -202,7 +202,7 @@ impl PrescriptionGenerator {
             PBSStatus::RPBS,
         ];
 
-        *statuses.choose(&mut self.rng).expect("statuses not empty")
+        *statuses.choose(&mut self.rng).unwrap_or(&statuses[0])
     }
 
     /// Generate a random PBS item code
@@ -220,7 +220,7 @@ impl PrescriptionGenerator {
             AuthorityType::Written,
         ];
 
-        *types.choose(&mut self.rng).expect("types not empty")
+        *types.choose(&mut self.rng).unwrap_or(&types[0])
     }
 
     /// Generate a random approval number
@@ -246,7 +246,7 @@ impl PrescriptionGenerator {
 
         indications
             .choose(&mut self.rng)
-            .expect("indications not empty")
+            .unwrap_or(&indications[0])
             .to_string()
     }
 
@@ -258,7 +258,7 @@ impl PrescriptionGenerator {
             PrescriptionType::Verbal,
         ];
 
-        *types.choose(&mut self.rng).expect("types not empty")
+        *types.choose(&mut self.rng).unwrap_or(&types[0])
     }
 }
 

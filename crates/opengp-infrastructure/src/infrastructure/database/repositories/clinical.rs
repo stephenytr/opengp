@@ -70,12 +70,18 @@ impl ConsultationRow {
     }
 }
 
+/// SQLx-backed clinical consultation repository for PostgreSQL
+///
+/// Stores consultation records and encrypts free-text clinical
+/// notes using the shared `EncryptionService`.
 pub struct SqlxClinicalRepository {
     pool: PgPool,
     crypto: Arc<EncryptionService>,
 }
 
 impl SqlxClinicalRepository {
+    /// Create a new clinical repository backed by a PostgreSQL pool
+    /// and shared encryption service.
     pub fn new(pool: PgPool, crypto: Arc<EncryptionService>) -> Self {
         Self { pool, crypto }
     }
@@ -377,12 +383,17 @@ impl SocialHistoryRow {
     }
 }
 
+/// SQLx-backed social history repository for PostgreSQL
+///
+/// Persists lifestyle and social history data, encrypting any
+/// free-text notes at rest.
 pub struct SqlxSocialHistoryRepository {
     pool: PgPool,
     crypto: Arc<EncryptionService>,
 }
 
 impl SqlxSocialHistoryRepository {
+    /// Create a new social history repository backed by a PostgreSQL pool
     pub fn new(pool: PgPool, crypto: Arc<EncryptionService>) -> Self {
         Self { pool, crypto }
     }
@@ -565,12 +576,17 @@ impl AllergyRow {
     }
 }
 
+/// SQLx-backed allergy repository for PostgreSQL
+///
+/// Stores allergy records and encrypts reaction and notes fields
+/// for patients in the clinic database.
 pub struct SqlxAllergyRepository {
     pool: PgPool,
     crypto: Arc<EncryptionService>,
 }
 
 impl SqlxAllergyRepository {
+    /// Create a new allergy repository backed by a PostgreSQL pool
     pub fn new(pool: PgPool, crypto: Arc<EncryptionService>) -> Self {
         Self { pool, crypto }
     }
@@ -785,12 +801,17 @@ impl MedicalHistoryRow {
     }
 }
 
+/// SQLx-backed medical history repository for PostgreSQL
+///
+/// Persists long term condition history and encrypts free-text
+/// notes associated with each entry.
 pub struct SqlxMedicalHistoryRepository {
     pool: PgPool,
     crypto: Arc<EncryptionService>,
 }
 
 impl SqlxMedicalHistoryRepository {
+    /// Create a new medical history repository backed by a PostgreSQL pool
     pub fn new(pool: PgPool, crypto: Arc<EncryptionService>) -> Self {
         Self { pool, crypto }
     }
@@ -970,6 +991,10 @@ impl VitalSignsRow {
     }
 }
 
+/// SQLx-backed vital signs repository for PostgreSQL
+///
+/// Stores structured vital sign measurements for patients and
+/// supports fetching recent readings for clinical workflows.
 pub struct SqlxVitalSignsRepository {
     pool: PgPool,
     #[allow(dead_code)]
@@ -977,6 +1002,7 @@ pub struct SqlxVitalSignsRepository {
 }
 
 impl SqlxVitalSignsRepository {
+    /// Create a new vital signs repository backed by a PostgreSQL pool
     pub fn new(pool: PgPool, crypto: Arc<EncryptionService>) -> Self {
         Self { pool, crypto }
     }
@@ -1101,12 +1127,17 @@ impl FamilyHistoryRow {
     }
 }
 
+/// SQLx-backed family history repository for PostgreSQL
+///
+/// Stores family history records and encrypts any free-text notes
+/// related to hereditary risk.
 pub struct SqlxFamilyHistoryRepository {
     pool: PgPool,
     crypto: Arc<EncryptionService>,
 }
 
 impl SqlxFamilyHistoryRepository {
+    /// Create a new family history repository backed by a PostgreSQL pool
     pub fn new(pool: PgPool, crypto: Arc<EncryptionService>) -> Self {
         Self { pool, crypto }
     }

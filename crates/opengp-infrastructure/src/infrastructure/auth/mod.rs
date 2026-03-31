@@ -2,6 +2,11 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// In-memory representation of an authenticated user session
+///
+/// Tracks expiry and activity metadata for a session token issued
+/// by the authentication layer, including timestamps and optional
+/// network context used in Australian clinic deployments.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
     pub id: Uuid,
@@ -14,6 +19,15 @@ pub struct Session {
 }
 
 impl Session {
+    /// Create a new session for a user
+    ///
+    /// The session starts with `created_at`, `last_activity`, and
+    /// `expires_at` based on the supplied timeout.
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - Authenticated user's identifier
+    /// * `timeout_minutes` - Session timeout in minutes
     pub fn new(user_id: Uuid, timeout_minutes: i64) -> Self {
         let now = Utc::now();
         Self {
@@ -27,10 +41,12 @@ impl Session {
         }
     }
 
+    /// Return true if the session has passed its expiry time
     pub fn is_expired(&self) -> bool {
         Utc::now() > self.expires_at
     }
 
+    /// Refresh last activity and extend expiry using the timeout
     pub fn update_activity(&mut self, timeout_minutes: i64) {
         let now = Utc::now();
         self.last_activity = now;
@@ -38,6 +54,10 @@ impl Session {
     }
 }
 
+/// Authentication and session errors for user login flows
+///
+/// These errors describe invalid credentials, locked or disabled
+/// accounts, expired or invalid sessions, and MFA problems.
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
     #[error("Invalid credentials")]

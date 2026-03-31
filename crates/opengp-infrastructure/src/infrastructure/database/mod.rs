@@ -24,24 +24,34 @@ use tracing::info;
 pub use opengp_config::DatabaseConfig;
 
 /// PostgreSQL-only connection pool
+///
+/// Wraps the SQLx `PgPool` used by infrastructure repositories.
 #[derive(Clone)]
 pub struct DatabasePool(PgPool);
 
 impl DatabasePool {
+    /// Return the current size of the underlying connection pool
     pub fn size(&self) -> u32 {
         self.0.size()
     }
 
+    /// Expose the inner `PgPool` for SQLx queries
     pub fn as_postgres(&self) -> &PgPool {
         &self.0
     }
 
+    /// Identify the backing database kind for this pool
     pub fn kind(&self) -> &'static str {
         "postgres"
     }
 }
 
 /// Create a PostgreSQL connection pool
+///
+/// # Errors
+///
+/// Returns a `sqlx::Error` if the connection options are invalid
+/// or the database cannot be reached or authenticated.
 pub async fn create_pool(config: &DatabaseConfig) -> Result<DatabasePool, sqlx::Error> {
     info!("Creating PostgreSQL connection pool");
     info!("  Database URL: {}", config.url);
@@ -64,6 +74,10 @@ pub async fn create_pool(config: &DatabaseConfig) -> Result<DatabasePool, sqlx::
 }
 
 /// Run database migrations
+///
+/// # Errors
+///
+/// Returns a `sqlx::Error` if any migration fails to apply.
 pub async fn run_migrations(pool: &DatabasePool) -> Result<(), sqlx::Error> {
     info!("Running database migrations");
     sqlx::migrate!("../../migrations").run(&pool.0).await?;
@@ -72,6 +86,10 @@ pub async fn run_migrations(pool: &DatabasePool) -> Result<(), sqlx::Error> {
 }
 
 /// Check database connection health
+///
+/// # Errors
+///
+/// Returns a `sqlx::Error` if the health check query fails.
 pub async fn health_check(pool: &DatabasePool) -> Result<(), sqlx::Error> {
     sqlx::query("SELECT 1").execute(&pool.0).await?;
     Ok(())

@@ -235,11 +235,11 @@ impl PatientGenerator {
         match gender {
             Gender::Male => {
                 let titles = ["Mr", "Dr"];
-                titles.choose(&mut self.rng).unwrap().to_string()
+                titles.choose(&mut self.rng).unwrap_or(&"Mr").to_string()
             }
             Gender::Female => {
                 let titles = ["Ms", "Mrs", "Miss", "Dr"];
-                titles.choose(&mut self.rng).unwrap().to_string()
+                titles.choose(&mut self.rng).unwrap_or(&"Ms").to_string()
             }
             Gender::Other | Gender::PreferNotToSay => "Mx".to_string(),
         }
@@ -303,7 +303,7 @@ impl PatientGenerator {
 
     fn generate_landline(&mut self) -> String {
         let area_codes = ["02", "03", "07", "08"];
-        let area_code = area_codes.choose(&mut self.rng).unwrap();
+        let area_code = area_codes.choose(&mut self.rng).unwrap_or(&"02");
 
         let first = self.rng.gen_range(1000..=9999);
         let second = self.rng.gen_range(1000..=9999);
@@ -328,7 +328,7 @@ impl PatientGenerator {
             "icloud.com",
             "example.com",
         ];
-        let domain = domains.choose(&mut self.rng).unwrap();
+        let domain = domains.choose(&mut self.rng).unwrap_or(&"example.com");
 
         let styles = [
             format!(
@@ -345,7 +345,7 @@ impl PatientGenerator {
             ),
             format!(
                 "{}{}@{}",
-                first_name.chars().next().unwrap().to_lowercase(),
+                first_name.chars().next().unwrap_or('a').to_lowercase(),
                 last_name.to_lowercase(),
                 domain
             ),

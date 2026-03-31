@@ -40,7 +40,11 @@ pub trait DateStyler {
 /// Convert a `chrono::NaiveDate` into `time::Date` for styling helpers.
 #[allow(dead_code)]
 pub fn chrono_to_time(date: NaiveDate) -> Date {
+    // SAFETY: date.month() is 1-12, always valid Month value
+    #[allow(clippy::expect_used)]
     let month = Month::try_from(date.month() as u8).expect("invalid month");
+    // SAFETY: chrono::NaiveDate is guaranteed to be valid calendar date
+    #[allow(clippy::expect_used)]
     Date::from_calendar_date(date.year(), month, date.day() as u8)
         .expect("chrono NaiveDate is always valid")
 }
@@ -372,7 +376,11 @@ impl CalendarWidget {
             (year, month + 1)
         };
 
+        // SAFETY: month is valid (1-12) and day 1 is always valid
+        #[allow(clippy::expect_used)]
         let start = NaiveDate::from_ymd_opt(year, month, 1).expect("valid month start");
+        // SAFETY: next_month is valid (1-12) and day 1 is always valid
+        #[allow(clippy::expect_used)]
         let next_start =
             NaiveDate::from_ymd_opt(next_year, next_month, 1).expect("valid month start");
 
@@ -399,6 +407,8 @@ impl Default for CalendarWidget {
 #[allow(dead_code)]
 fn time_to_naive(date: Date) -> NaiveDate {
     let (year, month, day) = date.to_calendar_date();
+    // SAFETY: time::Date is guaranteed to be valid calendar date
+    #[allow(clippy::expect_used)]
     NaiveDate::from_ymd_opt(year, month as u32, day as u32)
         .expect("time::Date to chrono::NaiveDate")
 }

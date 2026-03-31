@@ -7,6 +7,7 @@ use opengp_domain::domain::clinical::{
     Allergy, AllergyType, ConditionStatus, Consultation, MedicalHistory, Severity,
 };
 
+/// Configuration for generating synthetic clinical data
 #[derive(Debug, Clone)]
 pub struct ClinicalDataGeneratorConfig {
     /// Number of consultations to generate
@@ -36,12 +37,14 @@ impl Default for ClinicalDataGeneratorConfig {
     }
 }
 
+/// Generator for realistic clinical test data
 pub struct ClinicalDataGenerator {
     config: ClinicalDataGeneratorConfig,
     rng: rand::rngs::ThreadRng,
 }
 
 impl ClinicalDataGenerator {
+    /// Create a new clinical data generator with the given configuration
     pub fn new(config: ClinicalDataGeneratorConfig) -> Self {
         Self {
             config,
@@ -49,6 +52,7 @@ impl ClinicalDataGenerator {
         }
     }
 
+    /// Generate a collection of consultations for a patient
     pub fn generate_consultations(
         &mut self,
         patient_id: Uuid,
@@ -59,12 +63,14 @@ impl ClinicalDataGenerator {
             .collect()
     }
 
+    /// Generate a collection of medical history entries for a patient
     pub fn generate_medical_history(&mut self, patient_id: Uuid) -> Vec<MedicalHistory> {
         (0..self.config.medical_history_count)
             .map(|_| self.generate_medical_history_entry(patient_id))
             .collect()
     }
 
+    /// Generate a collection of allergies for a patient
     pub fn generate_allergies(&mut self, patient_id: Uuid) -> Vec<Allergy> {
         (0..self.config.allergy_count)
             .map(|_| self.generate_allergy(patient_id))
@@ -162,7 +168,10 @@ impl ClinicalDataGenerator {
             "Weight management",
         ];
 
-        reasons.choose(&mut self.rng).unwrap().to_string()
+        reasons
+            .choose(&mut self.rng)
+            .unwrap_or(&"reasons[0]")
+            .to_string()
     }
 
     fn generate_clinical_notes(&mut self) -> String {
@@ -179,7 +188,10 @@ impl ClinicalDataGenerator {
             "Patient education provided regarding condition management and lifestyle modifications.",
         ];
 
-        templates.choose(&mut self.rng).unwrap().to_string()
+        templates
+            .choose(&mut self.rng)
+            .unwrap_or(&"templates[0]")
+            .to_string()
     }
 
     fn random_condition(&mut self) -> String {
@@ -201,7 +213,10 @@ impl ClinicalDataGenerator {
             "Irritable Bowel Syndrome",
         ];
 
-        conditions.choose(&mut self.rng).unwrap().to_string()
+        conditions
+            .choose(&mut self.rng)
+            .unwrap_or(&"conditions[0]")
+            .to_string()
     }
 
     fn random_condition_status(&mut self) -> ConditionStatus {
@@ -212,12 +227,18 @@ impl ClinicalDataGenerator {
             ConditionStatus::InRemission,
         ];
 
-        *statuses.choose(&mut self.rng).unwrap()
+        statuses
+            .choose(&mut self.rng)
+            .copied()
+            .unwrap_or_else(|| statuses[0])
     }
 
     fn random_severity(&mut self) -> Severity {
         let severities = [Severity::Mild, Severity::Moderate, Severity::Severe];
-        *severities.choose(&mut self.rng).unwrap()
+        severities
+            .choose(&mut self.rng)
+            .copied()
+            .unwrap_or_else(|| severities[0])
     }
 
     fn random_condition_notes(&mut self) -> String {
@@ -229,7 +250,10 @@ impl ClinicalDataGenerator {
             "Currently under specialist care",
         ];
 
-        notes.choose(&mut self.rng).unwrap().to_string()
+        notes
+            .choose(&mut self.rng)
+            .unwrap_or(&"notes[0]")
+            .to_string()
     }
 
     fn random_allergen(&mut self) -> String {
@@ -251,7 +275,10 @@ impl ClinicalDataGenerator {
             "Local Anesthetics",
         ];
 
-        allergens.choose(&mut self.rng).unwrap().to_string()
+        allergens
+            .choose(&mut self.rng)
+            .unwrap_or(&"allergens[0]")
+            .to_string()
     }
 
     fn random_allergy_type(&mut self) -> AllergyType {
@@ -262,7 +289,10 @@ impl ClinicalDataGenerator {
             AllergyType::Other,
         ];
 
-        *types.choose(&mut self.rng).unwrap()
+        types
+            .choose(&mut self.rng)
+            .copied()
+            .unwrap_or_else(|| types[0])
     }
 
     fn random_reaction(&mut self) -> String {
@@ -278,7 +308,10 @@ impl ClinicalDataGenerator {
             "Loss of consciousness",
         ];
 
-        reactions.choose(&mut self.rng).unwrap().to_string()
+        reactions
+            .choose(&mut self.rng)
+            .unwrap_or(&"reactions[0]")
+            .to_string()
     }
 
     fn random_allergy_notes(&mut self) -> String {
@@ -290,7 +323,10 @@ impl ClinicalDataGenerator {
             "Reaction occurs even with small exposure",
         ];
 
-        notes.choose(&mut self.rng).unwrap().to_string()
+        notes
+            .choose(&mut self.rng)
+            .unwrap_or(&"notes[0]")
+            .to_string()
     }
 }
 

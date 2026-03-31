@@ -40,10 +40,12 @@ const GRID_COLS: u8 = 4;
 const GRID_ROWS: u8 = 10; // 8 AM to 6 PM = 10 hours
 
 impl TimePickerPopup {
+    #[allow(clippy::unwrap_used)]
     pub fn new() -> Self {
         let config = CalendarConfig::default();
         Self {
             is_visible: false,
+            // SAFETY: 9:00:00 is a valid time
             selected_time: NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
             selected_row: 0,
             selected_col: 0,
@@ -58,10 +60,12 @@ impl TimePickerPopup {
         }
     }
 
+    #[allow(clippy::unwrap_used)]
     pub fn with_theme(theme: Theme) -> Self {
         let config = CalendarConfig::default();
         Self {
             is_visible: false,
+            // SAFETY: 9:00:00 is a valid time
             selected_time: NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
             selected_row: 0,
             selected_col: 0,
@@ -76,10 +80,12 @@ impl TimePickerPopup {
         }
     }
 
+    #[allow(clippy::unwrap_used)]
     pub fn open(&mut self, practitioner_id: i64, date: NaiveDate, duration: u32) {
         self.practitioner_id = Some(practitioner_id);
         self.date = Some(date);
         self.duration = duration;
+        // SAFETY: viewport_start_hour is 0-23 (valid hour), 0,0 are valid minutes/seconds
         self.selected_time =
             NaiveTime::from_hms_opt(self.config.viewport_start_hour as u32, 0, 0).unwrap();
         self.selected_row = 0;

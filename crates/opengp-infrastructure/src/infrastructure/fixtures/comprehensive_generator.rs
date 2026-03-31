@@ -181,8 +181,8 @@ mod tests {
     #[test]
     fn test_comprehensive_profile_with_practitioner_pool() {
         let practitioner_ids = vec![
-            Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
-            Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap(),
+            Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap_or_else(|_| Uuid::new_v4()),
+            Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap_or_else(|_| Uuid::new_v4()),
         ];
 
         let config = ComprehensivePatientGeneratorConfig {

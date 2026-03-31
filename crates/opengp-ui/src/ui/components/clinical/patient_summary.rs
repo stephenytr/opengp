@@ -152,6 +152,8 @@ impl Widget for PatientSummaryComponent {
             return;
         }
 
+        // SAFETY: We just checked is_none() and returned early if true
+        #[allow(clippy::unwrap_used)]
         let patient = self.patient.as_ref().unwrap();
 
         // Calculate layout

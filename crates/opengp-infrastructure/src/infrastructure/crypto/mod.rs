@@ -47,7 +47,9 @@ type HmacSha256 = Hmac<Sha256>;
 /// Encryption service for sensitive data
 ///
 /// Provides AES-256-GCM encryption with random nonces.
-/// Key is loaded from environment variable on initialization.
+/// Keys are derived from a single master key so that
+/// both encryption and HMAC-based search hashes stay
+/// consistent for a given clinic deployment.
 pub struct EncryptionService {
     cipher: Aes256Gcm,
     hmac_key: [u8; 32],
@@ -127,7 +129,25 @@ impl EncryptionService {
         Ok(Self { cipher, hmac_key })
     }
 
+    /// Compute a stable HMAC-SHA256 search hash for plaintext
+    ///
+    /// Used for columns such as `medicare_search_hash` so the
+    /// clinic database can support equality lookups without
+    /// storing Medicare numbers in cleartext.
+    ///
+    /// # Arguments
+    ///
+    /// * `plaintext` - Value to hash for search
+    ///
+    /// # Returns
+    ///
+    /// Lowercase hex-encoded HMAC-SHA256 digest tied to the
+    /// current encryption key.
     pub fn hash_for_search(&self, plaintext: &str) -> String {
+        // HMAC-SHA256 key initialization is provably safe:
+        // - Key is always [u8; 32] from EncryptionService invariant
+        // - HMAC-SHA256 accepts 32-byte keys
+        #[allow(clippy::unwrap_used)]
         let mut mac = <HmacSha256 as Mac>::new_from_slice(&self.hmac_key)
             .expect("HMAC-SHA256 key initialization should not fail");
         mac.update(plaintext.as_bytes());

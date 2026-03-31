@@ -2,6 +2,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Structured audit event emitted by the infrastructure layer
+///
+/// Captures who did what, to which entity, from where, and when,
+/// across clinical, billing, and configuration workflows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEvent {
     pub id: Uuid,
@@ -18,6 +22,9 @@ pub struct AuditEvent {
 }
 
 impl AuditEvent {
+    /// Create a new audit event for a user action
+    ///
+    /// Initialises a success result with the current timestamp.
     pub fn new(user_id: Uuid, action: AuditAction) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -34,23 +41,27 @@ impl AuditEvent {
         }
     }
 
+    /// Attach an entity type and identifier to the audit event
     pub fn with_entity(mut self, entity_type: String, entity_id: Uuid) -> Self {
         self.entity_type = Some(entity_type);
         self.entity_id = Some(entity_id);
         self
     }
 
+    /// Attach structured JSON metadata to the audit event
     pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
         self.metadata = Some(metadata);
         self
     }
 
+    /// Mark the audit event as a failure outcome
     pub fn with_failure(mut self) -> Self {
         self.result = AuditResult::Failure;
         self
     }
 }
 
+/// Actions captured in the audit trail for practice activity
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AuditAction {
     Login,
@@ -164,6 +175,7 @@ impl std::fmt::Display for AuditAction {
     }
 }
 
+/// Outcome of an audited action
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AuditResult {
     Success,

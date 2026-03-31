@@ -16,19 +16,30 @@ use opengp_domain::domain::error::InfrastructureError;
 use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
 use opengp_domain::domain::patient::RepositoryError;
 
+/// Database UUID type used by infrastructure repositories
 pub type DbUuid = Uuid;
 
+/// Convert a `Uuid` into the database storage type
+///
+/// In the current PostgreSQL-backed configuration this is a no-op,
+/// but SQLite-based builds can use the alias to store raw bytes.
 pub fn uuid_to_bytes(id: &Uuid) -> DbUuid {
     *id
 }
 
+/// Convert the database UUID representation back into a `Uuid`
+///
+/// # Errors
+///
+/// In SQLite-backed builds this returns a `RepositoryError` if the
+/// stored value cannot be parsed into a valid UUID.
 pub fn bytes_to_uuid(bytes: &DbUuid) -> Result<Uuid, RepositoryError> {
     Ok(*bytes)
 }
 
 /// Convert a DateTime to RFC3339 string format
 ///
-/// Converts a DateTime<Utc> to its RFC3339 string representation for storage in SQLite.
+/// Converts a `DateTime<Utc>` to its RFC3339 string representation for storage in SQLite.
 /// This is the standard format used throughout the application for timestamp serialization.
 ///
 /// # Arguments
@@ -54,7 +65,7 @@ pub fn datetime_to_string(dt: &DateTime<Utc>) -> String {
 
 /// Convert an RFC3339 string back to a DateTime
 ///
-/// Parses an RFC3339-formatted string back into a DateTime<Utc>.
+/// Parses an RFC3339-formatted string back into a `DateTime<Utc>`.
 /// If parsing fails, returns the current time as a fallback (with a warning logged).
 /// This defensive approach prevents database corruption from malformed timestamps.
 ///
@@ -62,7 +73,7 @@ pub fn datetime_to_string(dt: &DateTime<Utc>) -> String {
 /// * `s` - The RFC3339-formatted string to parse
 ///
 /// # Returns
-/// A DateTime<Utc> representing the parsed time, or Utc::now() if parsing fails
+/// A `DateTime<Utc>` representing the parsed time, or `Utc::now()` if parsing fails
 ///
 /// # Example
 /// ```

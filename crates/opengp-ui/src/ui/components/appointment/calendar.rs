@@ -40,10 +40,12 @@ pub struct Calendar {
 }
 
 impl Calendar {
+    #[allow(clippy::unwrap_used)]
     pub fn new(theme: Theme) -> Self {
         let today = chrono::Utc::now().date_naive();
         let mut widget = CalendarWidget::with_date(today);
         widget.set_selected_date(today); // Set selected date to today
+                                         // SAFETY: today.month() is 1-12 and day 1 is always valid
         let current_month = NaiveDate::from_ymd_opt(today.year(), today.month(), 1).unwrap();
 
         let mut calendar = Self {
@@ -90,10 +92,12 @@ impl Calendar {
         self.rebuild_days();
     }
 
+    #[allow(clippy::unwrap_used)]
     pub fn rebuild_days(&mut self) {
         self.days.clear();
 
         let (year, month) = self.widget.current_month;
+        // SAFETY: month comes from CalendarWidget which validates 1-12
         self.current_month = NaiveDate::from_ymd_opt(year, month, 1).unwrap();
         self.selected_date = self.widget.selected_date();
         self.focused_date = self.widget.focused_date;

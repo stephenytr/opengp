@@ -145,11 +145,16 @@ FROM appointments a
 LEFT JOIN patients p ON a.patient_id = p.id
 "#;
 
+/// SQLx-backed appointment repository for PostgreSQL
+///
+/// Stores appointments for Australian general practice workflows,
+/// including status, type, urgency, and audit fields.
 pub struct SqlxAppointmentRepository {
     pool: PgPool,
 }
 
 impl SqlxAppointmentRepository {
+    /// Create a new appointment repository backed by a PostgreSQL pool
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }

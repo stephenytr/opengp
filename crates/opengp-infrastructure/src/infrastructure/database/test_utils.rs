@@ -9,8 +9,17 @@ use uuid::Uuid;
 
 use crate::infrastructure::database::{create_pool, run_migrations, DatabaseConfig};
 use opengp_domain::domain::appointment::{Appointment, AppointmentType};
-use opengp_domain::domain::patient::{Address, Gender, NewPatientData, Patient};
+use opengp_domain::domain::patient::{Address, Gender, Ihi, MedicareNumber, NewPatientData, Patient, PhoneNumber};
 
+/// Create a PostgreSQL test pool and apply migrations
+///
+/// Uses the `DATABASE_URL` environment variable and falls back to
+/// `postgresql://localhost/opengp` for local development.
+///
+/// # Errors
+///
+/// Returns a `sqlx::Error` if the pool cannot be created or
+/// migrations fail.
 pub async fn create_test_pool() -> Result<PgPool, sqlx::Error> {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://localhost/opengp".to_string());
@@ -53,8 +62,8 @@ pub async fn create_test_pool() -> Result<PgPool, sqlx::Error> {
 /// ```
 pub fn create_test_patient() -> Patient {
     let data = NewPatientData {
-        ihi: Some("8003608166701751".to_string()),
-        medicare_number: Some("2123456789".to_string()),
+        ihi: Some(Ihi::new_lenient("8003608166701751".to_string())),
+        medicare_number: Some(MedicareNumber::new_lenient("2123456789".to_string())),
         medicare_irn: Some(1),
         medicare_expiry: None,
         title: Some("Mr".to_string()),
@@ -72,8 +81,8 @@ pub fn create_test_patient() -> Patient {
             postcode: Some("2000".to_string()),
             country: "Australia".to_string(),
         },
-        phone_home: Some("(02) 9555 1234".to_string()),
-        phone_mobile: Some("0412 345 678".to_string()),
+        phone_home: Some(PhoneNumber::new_lenient("(02) 9555 1234".to_string())),
+        phone_mobile: Some(PhoneNumber::new_lenient("0412 345 678".to_string())),
         email: Some("john.smith@example.com".to_string()),
         emergency_contact: None,
         concession_type: None,

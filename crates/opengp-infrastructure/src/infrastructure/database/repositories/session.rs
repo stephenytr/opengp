@@ -6,11 +6,16 @@ use uuid::Uuid;
 
 use opengp_domain::domain::user::{RepositoryError, Session, SessionRepository};
 
+/// In-memory session repository backed by a Tokio RwLock
+///
+/// Stores opaque session tokens and expiry data without touching
+/// the database, useful for tests and simple deployments.
 pub struct InMemorySessionRepository {
     sessions: RwLock<Vec<Session>>,
 }
 
 impl InMemorySessionRepository {
+    /// Create a new empty in-memory session repository
     pub fn new() -> Self {
         Self {
             sessions: RwLock::new(Vec::new()),
@@ -93,11 +98,17 @@ SELECT id, user_id, created_at, expires_at, token
 FROM sessions
 "#;
 
+/// SQLx-backed session repository for PostgreSQL
+///
+/// Persists login sessions and their tokens in the `sessions`
+/// table, supporting token lookup, deletion, and cleanup of
+/// expired entries.
 pub struct SqlxSessionRepository {
     pool: PgPool,
 }
 
 impl SqlxSessionRepository {
+    /// Create a new session repository backed by a PostgreSQL pool
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }

@@ -180,7 +180,11 @@ impl DatePickerPopup {
             (year, month + 1)
         };
 
+        // SAFETY: month is valid (1-12) and day 1 is always valid
+        #[allow(clippy::expect_used)]
         let start = NaiveDate::from_ymd_opt(year, month, 1).expect("valid month start");
+        // SAFETY: next_month is valid (1-12) and day 1 is always valid
+        #[allow(clippy::expect_used)]
         let next_start =
             NaiveDate::from_ymd_opt(next_year, next_month, 1).expect("valid month start");
 

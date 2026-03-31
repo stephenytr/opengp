@@ -130,13 +130,16 @@ impl TabBar {
     }
 
     /// Move to the next tab
+    #[allow(clippy::unwrap_used)]
     pub fn next(&mut self) {
         let current_index = self.selected.index();
         let next_index = (current_index + 1) % 4;
+        // SAFETY: next_index is 0-3 due to % 4 operation
         self.selected = Tab::from_index(next_index).unwrap();
     }
 
     /// Move to the previous tab
+    #[allow(clippy::unwrap_used)]
     pub fn prev(&mut self) {
         let current_index = self.selected.index();
         let prev_index = if current_index == 0 {
@@ -144,6 +147,7 @@ impl TabBar {
         } else {
             current_index - 1
         };
+        // SAFETY: prev_index is 0-3 by conditional logic
         self.selected = Tab::from_index(prev_index).unwrap();
     }
 

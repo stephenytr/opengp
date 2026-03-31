@@ -43,6 +43,8 @@ impl App {
             .as_ref()
             .is_some_and(tokio::task::JoinHandle::is_finished)
         {
+            // SAFETY: We just checked is_some_and, so login_task must be Some
+            #[allow(clippy::expect_used)]
             let handle = self.login_task.take().expect("task exists");
             let retry_login = self.active_login_attempt.clone();
             self.active_login_attempt = None;
@@ -85,6 +87,8 @@ impl App {
             .as_ref()
             .is_some_and(tokio::task::JoinHandle::is_finished)
         {
+            // SAFETY: We just checked is_some_and, so patient_list_fetch_task must be Some
+            #[allow(clippy::expect_used)]
             let handle = self.patient_list_fetch_task.take().expect("task exists");
             self.patient_list.set_loading(false);
 
@@ -108,16 +112,18 @@ impl App {
             }
         }
 
-        if self
-            .appointment_list_fetch_task
-            .as_ref()
-            .is_some_and(tokio::task::JoinHandle::is_finished)
-        {
-            let handle = self
-                .appointment_list_fetch_task
-                .take()
-                .expect("task exists");
-            let retry_date = self.active_appointment_refresh_date;
+         if self
+             .appointment_list_fetch_task
+             .as_ref()
+             .is_some_and(tokio::task::JoinHandle::is_finished)
+         {
+             // SAFETY: We just checked is_some_and, so appointment_list_fetch_task must be Some
+             #[allow(clippy::expect_used)]
+             let handle = self
+                 .appointment_list_fetch_task
+                 .take()
+                 .expect("task exists");
+             let retry_date = self.active_appointment_refresh_date;
             self.active_appointment_refresh_date = None;
             self.appointment_state.set_loading(false);
 
@@ -144,16 +150,18 @@ impl App {
             }
         }
 
-        if self
-            .consultation_list_fetch_task
-            .as_ref()
-            .is_some_and(tokio::task::JoinHandle::is_finished)
-        {
-            let handle = self
-                .consultation_list_fetch_task
-                .take()
-                .expect("task exists");
-            let retry_patient_id = self.active_consultation_refresh_patient_id;
+         if self
+             .consultation_list_fetch_task
+             .as_ref()
+             .is_some_and(tokio::task::JoinHandle::is_finished)
+         {
+             // SAFETY: We just checked is_some_and, so consultation_list_fetch_task must be Some
+             #[allow(clippy::expect_used)]
+             let handle = self
+                 .consultation_list_fetch_task
+                 .take()
+                 .expect("task exists");
+             let retry_patient_id = self.active_consultation_refresh_patient_id;
             self.active_consultation_refresh_patient_id = None;
             self.clinical_state.consultation_list.set_loading(false);
 
@@ -182,17 +190,19 @@ impl App {
             }
         }
 
-        if self
-            .practitioners_list_fetch_task
-            .as_ref()
-            .is_some_and(tokio::task::JoinHandle::is_finished)
-        {
-            let handle = self
-                .practitioners_list_fetch_task
-                .take()
-                .expect("task exists");
+         if self
+             .practitioners_list_fetch_task
+             .as_ref()
+             .is_some_and(tokio::task::JoinHandle::is_finished)
+         {
+             // SAFETY: We just checked is_some_and, so practitioners_list_fetch_task must be Some
+             #[allow(clippy::expect_used)]
+             let handle = self
+                 .practitioners_list_fetch_task
+                 .take()
+                 .expect("task exists");
 
-            match handle.await {
+             match handle.await {
                 Ok(Ok(practitioners)) => {
                     self.appointment_state.practitioners = practitioners;
                     self.clear_server_unavailable_error();
@@ -284,6 +294,8 @@ impl App {
                 self.appointment_state.set_loading(true);
                 self.active_appointment_refresh_date = Some(date);
 
+                // SAFETY: api_client was verified to be Some at line 262
+                #[allow(clippy::expect_used)]
                 let api_client = self.api_client.clone().expect("api client already checked");
                 self.appointment_list_fetch_task = Some(tokio::spawn(async move {
                     fetch_appointments_for_day(api_client, date, page_limit, patient_names).await
@@ -297,6 +309,8 @@ impl App {
                 self.clinical_state.consultation_list.set_loading(true);
                 self.active_consultation_refresh_patient_id = Some(patient_id);
 
+                // SAFETY: api_client was verified to be Some at line 262
+                #[allow(clippy::expect_used)]
                 let api_client = self.api_client.clone().expect("api client already checked");
                 self.consultation_list_fetch_task = Some(tokio::spawn(async move {
                     fetch_consultations(api_client, patient_id, page_limit).await
@@ -304,11 +318,13 @@ impl App {
             }
         }
 
-        if self.pending_practitioners_list_refresh && self.practitioners_list_fetch_task.is_none() {
-            self.pending_practitioners_list_refresh = false;
+         if self.pending_practitioners_list_refresh && self.practitioners_list_fetch_task.is_none() {
+             self.pending_practitioners_list_refresh = false;
 
-            let api_client = self.api_client.clone().expect("api client already checked");
-            self.practitioners_list_fetch_task = Some(tokio::spawn(async move {
+             // SAFETY: api_client was verified to be Some at line 262
+             #[allow(clippy::expect_used)]
+             let api_client = self.api_client.clone().expect("api client already checked");
+             self.practitioners_list_fetch_task = Some(tokio::spawn(async move {
                 fetch_practitioners(api_client).await
             }));
         }
@@ -536,7 +552,11 @@ async fn fetch_appointments_for_day(
     limit: u32,
     patient_names: HashMap<uuid::Uuid, String>,
 ) -> Result<CalendarDayView, ApiTaskError> {
+    // SAFETY: Valid hours (0, 0-23) and valid seconds (0-59) will always produce Some
+    #[allow(clippy::expect_used)]
     let start = chrono::Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).expect("valid start"));
+    // SAFETY: Valid hours (23) and valid seconds (59) will always produce Some
+    #[allow(clippy::expect_used)]
     let end = chrono::Utc.from_utc_datetime(&date.and_hms_opt(23, 59, 59).expect("valid end"));
 
     let mut page = 1;

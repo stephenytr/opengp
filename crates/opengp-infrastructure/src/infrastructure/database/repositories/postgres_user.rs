@@ -73,11 +73,16 @@ SELECT
 FROM users
 "#;
 
+/// SQLx-backed user repository for PostgreSQL legacy schema
+///
+/// Uses the classic `password_hash` column layout and is kept
+/// alongside the newer JSON-permissions based repository.
 pub struct PostgresUserRepository {
     pool: PgPool,
 }
 
 impl PostgresUserRepository {
+    /// Create a new PostgresUserRepository backed by a PostgreSQL pool
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }

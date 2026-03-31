@@ -156,7 +156,7 @@ impl ImmunisationGenerator {
             AdministrationRoute::Intranasal,
         ];
 
-        *routes.choose(&mut self.rng).expect("routes not empty")
+        *routes.choose(&mut self.rng).unwrap_or(&routes[0])
     }
 
     /// Generate a random anatomical site based on route
@@ -169,7 +169,7 @@ impl ImmunisationGenerator {
                     AnatomicalSite::LeftThigh,
                     AnatomicalSite::RightThigh,
                 ];
-                *sites.choose(&mut self.rng).expect("sites not empty")
+                *sites.choose(&mut self.rng).unwrap_or(&sites[0])
             }
             AdministrationRoute::Subcutaneous => {
                 let sites = [
@@ -178,11 +178,11 @@ impl ImmunisationGenerator {
                     AnatomicalSite::LeftThigh,
                     AnatomicalSite::RightThigh,
                 ];
-                *sites.choose(&mut self.rng).expect("sites not empty")
+                *sites.choose(&mut self.rng).unwrap_or(&sites[0])
             }
             AdministrationRoute::Intradermal => {
                 let sites = [AnatomicalSite::LeftDeltoid, AnatomicalSite::RightDeltoid];
-                *sites.choose(&mut self.rng).expect("sites not empty")
+                *sites.choose(&mut self.rng).unwrap_or(&sites[0])
             }
             AdministrationRoute::Oral => AnatomicalSite::Oral,
             AdministrationRoute::Intranasal => AnatomicalSite::Intranasal,
@@ -210,7 +210,7 @@ impl ImmunisationGenerator {
 
         manufacturers
             .choose(&mut self.rng)
-            .expect("manufacturers not empty")
+            .unwrap_or(&manufacturers[0])
             .to_string()
     }
 
@@ -222,7 +222,7 @@ impl ImmunisationGenerator {
             ConsentType::Implied,
         ];
 
-        *types.choose(&mut self.rng).expect("types not empty")
+        *types.choose(&mut self.rng).unwrap_or(&types[0])
     }
 
     /// Generate a random vaccination date
@@ -250,7 +250,7 @@ impl ImmunisationGenerator {
 
         details
             .choose(&mut self.rng)
-            .expect("details not empty")
+            .unwrap_or(&details[0])
             .to_string()
     }
 }

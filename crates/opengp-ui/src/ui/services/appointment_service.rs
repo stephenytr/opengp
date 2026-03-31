@@ -102,9 +102,13 @@ impl AppointmentUiService {
     /// Fetches all appointments for the given date and groups them by practitioner
     /// to create a CalendarDayView for calendar rendering.
     pub async fn get_schedule(&self, date: NaiveDate) -> UiResult<CalendarDayView> {
-        // Build date range for the day
-        let start_of_day = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
-        let end_of_day = Utc.from_utc_datetime(&date.and_hms_opt(23, 59, 59).unwrap());
+         // Build date range for the day
+         // SAFETY: Valid hours (0, 23) and valid seconds (0, 59) will always produce Some
+         #[allow(clippy::unwrap_used)]
+         let start_of_day = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
+         // SAFETY: Valid hours (23) and valid seconds (59) will always produce Some
+         #[allow(clippy::unwrap_used)]
+         let end_of_day = Utc.from_utc_datetime(&date.and_hms_opt(23, 59, 59).unwrap());
 
         // Build search criteria for the date
         let criteria = AppointmentSearchCriteria {

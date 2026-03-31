@@ -136,6 +136,8 @@ impl PatientFormData {
             middle_name: None,
             last_name: String::new(),
             preferred_name: None,
+            // SAFETY: 1990-01-01 is a valid date
+            #[allow(clippy::unwrap_used)]
             date_of_birth: NaiveDate::from_ymd_opt(1990, 1, 1).unwrap(),
             gender: Gender::PreferNotToSay,
             ihi: None,

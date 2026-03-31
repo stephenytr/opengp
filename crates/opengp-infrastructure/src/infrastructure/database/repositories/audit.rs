@@ -53,11 +53,16 @@ impl AuditLogRow {
     }
 }
 
+/// SQLx-backed audit repository for PostgreSQL
+///
+/// Persists `AuditEntry` records in the `audit_logs` table so
+/// user and system actions can be reviewed for compliance.
 pub struct SqlxAuditRepository {
     pool: PgPool,
 }
 
 impl SqlxAuditRepository {
+    /// Create a new audit repository backed by a PostgreSQL pool
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }

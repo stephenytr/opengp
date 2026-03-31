@@ -54,11 +54,16 @@ impl PractitionerQueryRow {
     }
 }
 
+/// SQLx-backed practitioner repository for PostgreSQL
+///
+/// Reads practitioner-facing details from the `users` table,
+/// projecting user records into domain `Practitioner` models.
 pub struct SqlxPractitionerRepository {
     pool: PgPool,
 }
 
 impl SqlxPractitionerRepository {
+    /// Create a new practitioner repository backed by a PostgreSQL pool
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }

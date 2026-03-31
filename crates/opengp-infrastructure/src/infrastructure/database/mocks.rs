@@ -180,12 +180,17 @@ pub struct MockAppointmentRepository {
     storage: Arc<Mutex<Vec<Appointment>>>,
 }
 
+/// Mock implementation of ConsultationRepository for testing
+///
+/// Stores consultations in an in-memory vector behind Arc<Mutex<_>>
+/// so clinical workflows can be exercised without a real database.
 #[derive(Clone)]
 pub struct MockConsultationRepository {
     storage: Arc<Mutex<Vec<Consultation>>>,
 }
 
 impl MockConsultationRepository {
+    /// Create a new empty mock consultation repository
     pub fn new() -> Self {
         Self {
             storage: Arc::new(Mutex::new(Vec::new())),

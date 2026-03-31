@@ -317,9 +317,10 @@ impl AppointmentGenerator {
     fn random_patient_id(&mut self) -> Uuid {
         if let Some(ref patients) = self.config.patient_ids {
             if !patients.is_empty() {
-                return *patients
+                return patients
                     .choose(&mut self.rng)
-                    .expect("patient pool not empty");
+                    .copied()
+                    .unwrap_or_else(|| Uuid::new_v4());
             }
         }
         Uuid::new_v4()
@@ -329,9 +330,10 @@ impl AppointmentGenerator {
     fn random_practitioner_id(&mut self) -> Uuid {
         if let Some(ref practitioners) = self.config.practitioner_ids {
             if !practitioners.is_empty() {
-                return *practitioners
+                return practitioners
                     .choose(&mut self.rng)
-                    .expect("practitioner pool not empty");
+                    .copied()
+                    .unwrap_or_else(|| Uuid::new_v4());
             }
         }
         Uuid::new_v4()
@@ -437,9 +439,10 @@ impl AppointmentGenerator {
             AppointmentType::Telehealth,
         ];
 
-        *types
+        types
             .choose(&mut self.rng)
-            .expect("appointment types not empty")
+            .copied()
+            .unwrap_or(AppointmentType::Standard)
     }
 
     /// Generate a random appointment status
@@ -452,7 +455,10 @@ impl AppointmentGenerator {
             AppointmentStatus::Completed,
         ];
 
-        *statuses.choose(&mut self.rng).expect("statuses not empty")
+        statuses
+            .choose(&mut self.rng)
+            .copied()
+            .unwrap_or(AppointmentStatus::Scheduled)
     }
 
     /// Generate a random start time (9am-5pm on weekdays)
@@ -483,7 +489,11 @@ impl AppointmentGenerator {
 
         adjusted_date
             .and_hms_opt(hour, minute, 0)
-            .expect("valid datetime")
+            .unwrap_or_else(|| {
+                adjusted_date
+                    .and_hms_opt(9, 0, 0)
+                    .expect("9:00:00 is valid")
+            })
             .and_utc()
     }
 
@@ -524,7 +534,7 @@ impl AppointmentGenerator {
 
         reasons
             .choose(&mut self.rng)
-            .expect("reasons not empty")
+            .unwrap_or(&"General check-up")
             .to_string()
     }
 
@@ -540,7 +550,10 @@ impl AppointmentGenerator {
                     "Mental health treatment",
                     "Detailed injury review",
                 ];
-                reasons.choose(&mut self.rng).unwrap().to_string()
+                reasons
+                    .choose(&mut self.rng)
+                    .unwrap_or(&"Complex chronic disease management")
+                    .to_string()
             }
             AppointmentType::Brief => {
                 let reasons = [
@@ -549,7 +562,10 @@ impl AppointmentGenerator {
                     "Wound check",
                     "Quick follow-up",
                 ];
-                reasons.choose(&mut self.rng).unwrap().to_string()
+                reasons
+                    .choose(&mut self.rng)
+                    .unwrap_or(&"Script renewal")
+                    .to_string()
             }
             AppointmentType::NewPatient => {
                 let reasons = [
@@ -557,7 +573,10 @@ impl AppointmentGenerator {
                     "Transfer of care",
                     "Initial consultation",
                 ];
-                reasons.choose(&mut self.rng).unwrap().to_string()
+                reasons
+                    .choose(&mut self.rng)
+                    .unwrap_or(&"New patient registration")
+                    .to_string()
             }
             AppointmentType::HealthAssessment => {
                 let reasons = [
@@ -566,7 +585,10 @@ impl AppointmentGenerator {
                     "Preventive health assessment",
                     "Work capacity evaluation",
                 ];
-                reasons.choose(&mut self.rng).unwrap().to_string()
+                reasons
+                    .choose(&mut self.rng)
+                    .unwrap_or(&"Preventive health assessment")
+                    .to_string()
             }
             AppointmentType::ChronicDiseaseReview => {
                 let reasons = [
@@ -576,7 +598,10 @@ impl AppointmentGenerator {
                     "COPD management",
                     "Heart disease follow-up",
                 ];
-                reasons.choose(&mut self.rng).unwrap().to_string()
+                reasons
+                    .choose(&mut self.rng)
+                    .unwrap_or(&"Diabetes management")
+                    .to_string()
             }
             AppointmentType::MentalHealthPlan => {
                 let reasons = [
@@ -585,7 +610,10 @@ impl AppointmentGenerator {
                     "Anxiety treatment",
                     "Psychological support",
                 ];
-                reasons.choose(&mut self.rng).unwrap().to_string()
+                reasons
+                    .choose(&mut self.rng)
+                    .unwrap_or(&"Mental health plan development")
+                    .to_string()
             }
             AppointmentType::Immunisation => {
                 let reasons = [
@@ -594,7 +622,10 @@ impl AppointmentGenerator {
                     "Pneumococcal vaccination",
                     "Shingles vaccination",
                 ];
-                reasons.choose(&mut self.rng).unwrap().to_string()
+                reasons
+                    .choose(&mut self.rng)
+                    .unwrap_or(&"COVID-19 vaccination")
+                    .to_string()
             }
             AppointmentType::Procedure => {
                 let reasons = [
@@ -604,7 +635,10 @@ impl AppointmentGenerator {
                     "Spirometry",
                     "Ear cleaning",
                 ];
-                reasons.choose(&mut self.rng).unwrap().to_string()
+                reasons
+                    .choose(&mut self.rng)
+                    .unwrap_or(&"Blood test")
+                    .to_string()
             }
             AppointmentType::Telephone => {
                 let reasons = [
@@ -613,7 +647,10 @@ impl AppointmentGenerator {
                     "Follow-up check",
                     "Test results discussion",
                 ];
-                reasons.choose(&mut self.rng).unwrap().to_string()
+                reasons
+                    .choose(&mut self.rng)
+                    .unwrap_or(&"Telephone consultation")
+                    .to_string()
             }
             AppointmentType::Telehealth => {
                 let reasons = [
@@ -622,7 +659,10 @@ impl AppointmentGenerator {
                     "Remote follow-up",
                     "Video consultation",
                 ];
-                reasons.choose(&mut self.rng).unwrap().to_string()
+                reasons
+                    .choose(&mut self.rng)
+                    .unwrap_or(&"Telehealth consultation")
+                    .to_string()
             }
             AppointmentType::HomeVisit => {
                 let reasons = [
@@ -631,7 +671,10 @@ impl AppointmentGenerator {
                     "Mobility issue visit",
                     "Post-operative home check",
                 ];
-                reasons.choose(&mut self.rng).unwrap().to_string()
+                reasons
+                    .choose(&mut self.rng)
+                    .unwrap_or(&"Home visit assessment")
+                    .to_string()
             }
             AppointmentType::Emergency => {
                 let reasons = [
@@ -640,7 +683,10 @@ impl AppointmentGenerator {
                     "Acute condition",
                     "Urgent referral",
                 ];
-                reasons.choose(&mut self.rng).unwrap().to_string()
+                reasons
+                    .choose(&mut self.rng)
+                    .unwrap_or(&"Emergency consultation")
+                    .to_string()
             }
         }
     }
@@ -660,7 +706,7 @@ impl AppointmentGenerator {
 
         notes
             .choose(&mut self.rng)
-            .expect("notes not empty")
+            .unwrap_or(&"Patient requested early morning slot")
             .to_string()
     }
 }

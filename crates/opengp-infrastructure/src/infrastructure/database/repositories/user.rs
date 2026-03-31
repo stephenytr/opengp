@@ -70,11 +70,16 @@ SELECT
 FROM users
 "#;
 
+/// SQLx-backed user repository for PostgreSQL
+///
+/// Implements the domain `UserRepository` trait using the `users`
+/// table to store staff accounts, roles, and additional permissions.
 pub struct SqlxUserRepository {
     pool: PgPool,
 }
 
 impl SqlxUserRepository {
+    /// Create a new user repository backed by a PostgreSQL pool
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }

@@ -1,6 +1,10 @@
 use bcrypt::{hash, verify, DEFAULT_COST};
 use opengp_domain::user::{PasswordError, PasswordHasher};
 
+/// BCrypt-based password hasher for user credentials
+///
+/// This implementation is used by the authentication layer to
+/// hash and verify login passwords for practice staff.
 #[derive(Debug, Clone)]
 pub struct BcryptPasswordHasher;
 
@@ -11,6 +15,10 @@ impl Default for BcryptPasswordHasher {
 }
 
 impl BcryptPasswordHasher {
+    /// Create a new BCrypt password hasher instance
+    ///
+    /// The hasher is stateless and can be cheaply cloned or reused
+    /// across multiple password operations.
     pub fn new() -> Self {
         Self
     }

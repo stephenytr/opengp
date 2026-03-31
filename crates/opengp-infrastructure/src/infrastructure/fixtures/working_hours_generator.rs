@@ -32,6 +32,8 @@ pub async fn seed_working_hours(pool: &PgPool) -> Result<(), sqlx::Error> {
         }
 
         for day_of_week in 0..6 {
+            // SAFETY: hours/minutes are compile-time constants that are always valid
+            #[allow(clippy::unwrap_used)]
             let (start_time, end_time) = match day_of_week {
                 0..=4 => (
                     NaiveTime::from_hms_opt(8, 0, 0).unwrap(),

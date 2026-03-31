@@ -41,11 +41,16 @@ SELECT
 FROM working_hours
 "#;
 
+/// SQLx-backed working hours repository for PostgreSQL
+///
+/// Manages practitioner availability records used by the
+/// appointment booking engine.
 pub struct SqlxWorkingHoursRepository {
     pool: PgPool,
 }
 
 impl SqlxWorkingHoursRepository {
+    /// Create a new working hours repository backed by a PostgreSQL pool
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }

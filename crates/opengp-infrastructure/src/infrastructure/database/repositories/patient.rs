@@ -179,12 +179,21 @@ SELECT
 FROM patients
 "#;
 
+/// SQLx-backed patient repository for PostgreSQL
+///
+/// Persists patient records in the clinic database and uses
+/// `EncryptionService` to encrypt IHI and Medicare numbers with
+/// AES-256-GCM so identifiers are not stored in cleartext.
 pub struct SqlxPatientRepository {
     pool: PgPool,
     crypto: Arc<EncryptionService>,
 }
 
 impl SqlxPatientRepository {
+    /// Create a new patient repository backed by a PostgreSQL pool
+    ///
+    /// The provided `EncryptionService` instance is reused for
+    /// encrypting and decrypting sensitive patient identifiers.
     pub fn new(pool: PgPool, crypto: Arc<EncryptionService>) -> Self {
         Self { pool, crypto }
     }

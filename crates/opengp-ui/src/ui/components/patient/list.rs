@@ -260,6 +260,8 @@ impl PatientList {
             }
             KeyCode::Enter => {
                 if self.has_selection() {
+                    // SAFETY: has_selection() confirmed filtered is not empty
+                    #[allow(clippy::unwrap_used)]
                     Some(PatientListAction::OpenPatient(
                         self.selected_patient_id().unwrap(),
                     ))

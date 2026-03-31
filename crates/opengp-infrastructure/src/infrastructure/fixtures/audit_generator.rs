@@ -108,7 +108,7 @@ impl AuditGenerator {
 
         types
             .choose(&mut self.rng)
-            .expect("entity types not empty")
+            .unwrap_or(&types[0])
             .to_string()
     }
 
@@ -155,7 +155,7 @@ impl AuditGenerator {
 
         statuses
             .choose(&mut self.rng)
-            .expect("statuses not empty")
+            .unwrap_or(&statuses[0])
             .to_string()
     }
 
@@ -172,7 +172,7 @@ impl AuditGenerator {
 
         reasons
             .choose(&mut self.rng)
-            .expect("reasons not empty")
+            .unwrap_or(&reasons[0])
             .to_string()
     }
 
@@ -189,7 +189,7 @@ impl AuditGenerator {
 
         values
             .choose(&mut self.rng)
-            .expect("values not empty")
+            .unwrap_or(&values[0])
             .to_string()
     }
 
