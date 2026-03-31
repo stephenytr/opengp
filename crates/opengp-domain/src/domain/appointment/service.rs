@@ -16,6 +16,7 @@ use crate::domain::audit::{AuditEmitter, AuditEntry};
 use crate::domain::error::RepositoryError as BaseRepositoryError;
 use crate::domain::user::WorkingHoursRepository;
 
+/// Application service for creating, updating and querying appointments.
 service! {
     AppointmentService {
         repository: Arc<dyn AppointmentRepository>,
@@ -24,6 +25,7 @@ service! {
     }
 }
 
+/// Service that calculates available appointment slots from working hours and bookings.
 service! {
     AvailabilityService {
         appointment_repository: Arc<dyn AppointmentRepository>,
@@ -126,17 +128,11 @@ impl AppointmentService {
         self.audit_service.emit(entry).await.ok();
         Ok(())
     }
-    /// Create a new appointment with overlap checking
+    /// Create a new appointment with overlap checking.
     ///
-    /// # Arguments
-    /// * `data` - New appointment data
-    /// * `user_id` - ID of user creating the appointment
-    ///
-    /// # Returns
-    /// * `Ok(Appointment)` - Successfully created appointment
-    /// * `Err(ServiceError::Conflict)` - Overlapping appointment found (double-booking)
-    /// * `Err(ServiceError::Validation)` - Invalid appointment data
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Errors
+    /// Returns `ServiceError::Conflict` if there is an overlapping appointment or
+    /// `ServiceError::Repository` if repository calls fail.
     pub async fn create_appointment(
         &self,
         data: NewAppointmentData,
@@ -188,17 +184,12 @@ impl AppointmentService {
         }
     }
 
-    /// Update an existing appointment
+    /// Update an existing appointment while enforcing optimistic concurrency and conflict checks.
     ///
-    /// # Arguments
-    /// * `id` - Appointment ID
-    /// * `data` - Update data (only provided fields are updated)
-    /// * `user_id` - ID of user updating the appointment
-    ///
-    /// # Returns
-    /// * `Ok(Appointment)` - Successfully updated appointment
-    /// * `Err(ServiceError::NotFound)` - Appointment not found
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Errors
+    /// Returns `ServiceError::NotFound` if the appointment does not exist,
+    /// `ServiceError::Conflict` if the version has changed or a time clash is detected, or
+    /// `ServiceError::Repository` if repository calls fail.
     pub async fn update_appointment(
         &self,
         id: Uuid,
@@ -327,19 +318,12 @@ impl AppointmentService {
         }
     }
 
-    /// Cancel an appointment
+    /// Cancel an appointment and persist the new status and reason.
     ///
-    /// Uses the domain model's cancel method to ensure business rules are enforced.
-    ///
-    /// # Arguments
-    /// * `id` - Appointment ID
-    /// * `reason` - Cancellation reason
-    /// * `user_id` - ID of user cancelling the appointment
-    ///
-    /// # Returns
-    /// * `Ok(Appointment)` - Successfully cancelled appointment
-    /// * `Err(ServiceError::NotFound)` - Appointment not found
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Errors
+    /// Returns `ServiceError::NotFound` if the appointment cannot be found,
+    /// `ServiceError::Conflict` if the repository reports a conflict, or
+    /// `ServiceError::Repository` for other repository failures.
     pub async fn cancel_appointment(
         &self,
         id: Uuid,
@@ -376,28 +360,19 @@ impl AppointmentService {
         }
     }
 
-    /// Find an appointment by ID
+    /// Find an appointment by identifier for display or editing.
     ///
-    /// # Arguments
-    /// * `id` - Appointment ID
-    ///
-    /// # Returns
-    /// * `Ok(Some(Appointment))` - Appointment found
-    /// * `Ok(None)` - Appointment not found
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Errors
+    /// Returns `ServiceError::Repository` if repository access fails.
     pub async fn find_appointment(&self, id: Uuid) -> Result<Option<Appointment>, ServiceError> {
         let appointment = self.repository.find_by_id(id).await?;
         Ok(appointment)
     }
 
-    /// Search appointments using criteria
+    /// Search appointments using structured criteria such as practitioner, dates and status.
     ///
-    /// # Arguments
-    /// * `criteria` - Search criteria (all fields optional)
-    ///
-    /// # Returns
-    /// * `Ok(Vec<Appointment>)` - List of matching appointments
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Errors
+    /// Returns `ServiceError::Repository` if repository access fails.
     pub async fn search_appointments(
         &self,
         criteria: &AppointmentSearchCriteria,
@@ -410,17 +385,10 @@ impl AppointmentService {
         Ok(appointments)
     }
 
-    /// Get calendar appointments with denormalized patient names
+    /// Get calendar appointments with denormalised patient names for UI display.
     ///
-    /// This method returns a read model optimized for calendar display.
-    /// It includes patient names denormalized from the patient table for efficient rendering.
-    ///
-    /// # Arguments
-    /// * `criteria` - Search criteria (all fields optional)
-    ///
-    /// # Returns
-    /// * `Ok(Vec<CalendarAppointment>)` - List of calendar appointments with patient names
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Errors
+    /// Returns `ServiceError::Repository` if the query fails.
     pub async fn get_calendar_appointments(
         &self,
         criteria: &AppointmentSearchCriteria,
@@ -439,15 +407,10 @@ impl AppointmentService {
         Ok(appointments)
     }
 
-    /// Fetch appointments for a specific date
+    /// Fetch appointments for a specific date, optionally filtered by practitioner.
     ///
-    /// # Arguments
-    /// * `date` - The date to fetch appointments for
-    /// * `practitioner_ids` - Optional list of practitioner IDs to filter by
-    ///
-    /// # Returns
-    /// * `Ok(Vec<Appointment>)` - List of appointments for the date
-    /// * `Err(ServiceError)` - Database error
+    /// # Errors
+    /// Returns `ServiceError::Repository` if repository access fails.
     pub async fn get_day_appointments(
         &self,
         date: chrono::NaiveDate,
@@ -494,17 +457,12 @@ impl AppointmentService {
         Ok(appointments)
     }
 
-    /// Mark appointment as arrived
+    /// Mark an appointment as arrived and log an audit entry.
     ///
-    /// # Arguments
-    /// * `appointment_id` - Appointment ID
-    /// * `user_id` - ID of user marking the appointment as arrived
-    ///
-    /// # Returns
-    /// * `Ok(Appointment)` - Updated appointment
-    /// * `Err(ServiceError::NotFound)` - Appointment not found
-    /// * `Err(ServiceError::InvalidTransition)` - Invalid status transition
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Errors
+    /// Returns `ServiceError::NotFound` if the appointment is missing,
+    /// `ServiceError::InvalidTransition` if the status change is not allowed, or
+    /// `ServiceError::Conflict` or `ServiceError::Repository` if persistence fails.
     pub async fn mark_arrived(
         &self,
         appointment_id: Uuid,
@@ -546,17 +504,12 @@ impl AppointmentService {
         Ok(updated)
     }
 
-    /// Mark appointment as in progress
+    /// Mark an appointment as in progress when the consultation starts.
     ///
-    /// # Arguments
-    /// * `appointment_id` - Appointment ID
-    /// * `user_id` - ID of user marking the appointment as in progress
-    ///
-    /// # Returns
-    /// * `Ok(Appointment)` - Updated appointment
-    /// * `Err(ServiceError::NotFound)` - Appointment not found
-    /// * `Err(ServiceError::InvalidTransition)` - Invalid status transition
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Errors
+    /// Returns `ServiceError::NotFound` if the appointment is missing,
+    /// `ServiceError::InvalidTransition` if the status change is not allowed, or
+    /// `ServiceError::Conflict` or `ServiceError::Repository` if persistence fails.
     pub async fn mark_in_progress(
         &self,
         appointment_id: Uuid,
@@ -598,17 +551,12 @@ impl AppointmentService {
         Ok(updated)
     }
 
-    /// Mark appointment as completed
+    /// Mark an appointment as completed after the consultation finishes.
     ///
-    /// # Arguments
-    /// * `appointment_id` - Appointment ID
-    /// * `user_id` - ID of user marking the appointment as completed
-    ///
-    /// # Returns
-    /// * `Ok(Appointment)` - Updated appointment
-    /// * `Err(ServiceError::NotFound)` - Appointment not found
-    /// * `Err(ServiceError::InvalidTransition)` - Invalid status transition
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Errors
+    /// Returns `ServiceError::NotFound` if the appointment is missing,
+    /// `ServiceError::InvalidTransition` if the status change is not allowed, or
+    /// `ServiceError::Conflict` or `ServiceError::Repository` if persistence fails.
     pub async fn mark_completed(
         &self,
         appointment_id: Uuid,
@@ -650,17 +598,12 @@ impl AppointmentService {
         Ok(updated)
     }
 
-    /// Mark appointment as no show
+    /// Mark an appointment as no show and record the status change in the audit log.
     ///
-    /// # Arguments
-    /// * `appointment_id` - Appointment ID
-    /// * `user_id` - ID of user marking the appointment as no show
-    ///
-    /// # Returns
-    /// * `Ok(Appointment)` - Updated appointment
-    /// * `Err(ServiceError::NotFound)` - Appointment not found
-    /// * `Err(ServiceError::InvalidTransition)` - Invalid status transition
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Errors
+    /// Returns `ServiceError::NotFound` if the appointment is missing,
+    /// `ServiceError::InvalidTransition` if the status change is not allowed, or
+    /// `ServiceError::Conflict` or `ServiceError::Repository` if persistence fails.
     pub async fn mark_no_show(
         &self,
         appointment_id: Uuid,
@@ -704,6 +647,12 @@ impl AppointmentService {
         Ok(updated)
     }
 
+    /// Reschedule an appointment to a new start time and duration while checking for clashes.
+    ///
+    /// # Errors
+    /// Returns `ServiceError::NotFound` if the appointment cannot be found,
+    /// `ServiceError::Conflict` if another appointment overlaps, or
+    /// `ServiceError::Repository` if repository calls fail.
     pub async fn reschedule_appointment(
         &self,
         appointment_id: Uuid,
@@ -755,20 +704,12 @@ impl AppointmentService {
 }
 
 impl AvailabilityService {
-    /// Get available appointment slots for a practitioner on a specific date
+    /// Get available appointment slots for a practitioner on a specific date.
     ///
-    /// Combines working hours with existing appointments to determine available time slots.
-    /// Generates 15-minute slots and filters out times where an appointment of the specified
-    /// duration would overlap with existing appointments.
+    /// Combines working hours with existing appointments to determine available start times.
     ///
-    /// # Arguments
-    /// * `practitioner_id` - ID of the practitioner
-    /// * `date` - Date to check availability for
-    /// * `duration_minutes` - Duration of the appointment in minutes
-    ///
-    /// # Returns
-    /// * `Ok(Vec<NaiveTime>)` - List of available start times (15-minute intervals)
-    /// * `Err(ServiceError)` - Database error or no working hours defined for that day
+    /// # Errors
+    /// Returns `ServiceError::Repository` if the working hours or appointment queries fail.
     pub async fn get_available_slots(
         &self,
         practitioner_id: Uuid,

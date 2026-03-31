@@ -7,6 +7,7 @@ use super::error::{ServiceError, ValidationError};
 use super::model::{ClaimStatus, Invoice, MedicareClaim, Payment};
 use super::repository::BillingRepository;
 
+/// Application service for billing, Medicare claims and payments.
 service! {
     BillingService {
         repository: Arc<dyn BillingRepository>,
@@ -30,16 +31,29 @@ impl BillingService {
         Ok(())
     }
 
+    /// Create a new invoice and calculate totals before persistence.
+    ///
+    /// # Errors
+    /// Returns `ServiceError::Validation` if the invoice data is invalid or `ServiceError::Repository`
+    /// if the repository fails to store the invoice.
     pub async fn create_invoice(&self, mut invoice: Invoice) -> Result<Invoice, ServiceError> {
         self.validate_invoice(&invoice)?;
         invoice.calculate_totals();
         Ok(self.repository.create_invoice(invoice).await?)
     }
 
+    /// Submit a Medicare claim for processing.
+    ///
+    /// # Errors
+    /// Returns `ServiceError::Repository` if the claim cannot be persisted.
     pub async fn submit_claim(&self, claim: MedicareClaim) -> Result<MedicareClaim, ServiceError> {
         Ok(self.repository.create_claim(claim).await?)
     }
 
+    /// Find Medicare claims by processing status, for example Submitted or Paid.
+    ///
+    /// # Errors
+    /// Returns `ServiceError::Repository` if the repository query fails.
     pub async fn find_claims_by_status(
         &self,
         status: ClaimStatus,
@@ -47,11 +61,20 @@ impl BillingService {
         Ok(self.repository.find_claims_by_status(status).await?)
     }
 
+    /// Record a payment against an invoice after validating the amount.
+    ///
+    /// # Errors
+    /// Returns `ServiceError::Validation` if the payment amount is invalid or
+    /// `ServiceError::Repository` if persistence fails.
     pub async fn record_payment(&self, payment: Payment) -> Result<Payment, ServiceError> {
         self.validate_payment(&payment)?;
         Ok(self.repository.record_payment(payment).await?)
     }
 
+    /// Look up an invoice by identifier.
+    ///
+    /// # Errors
+    /// Returns `ServiceError::Repository` if the repository lookup fails.
     pub async fn find_invoice_by_id(&self, id: Uuid) -> Result<Option<Invoice>, ServiceError> {
         Ok(self.repository.find_invoice_by_id(id).await?)
     }

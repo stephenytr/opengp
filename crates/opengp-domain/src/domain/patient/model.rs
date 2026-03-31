@@ -7,6 +7,7 @@ use super::dto::{NewPatientData, UpdatePatientData};
 use super::error::ValidationError;
 use super::{Ihi, MedicareNumber, PhoneNumber};
 
+/// Demographic and identifier details for a patient in an Australian general practice.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Patient {
     pub id: Uuid,
@@ -47,6 +48,10 @@ pub struct Patient {
 }
 
 impl Patient {
+    /// Construct a new patient record with validated names, date of birth and key identifiers.
+    ///
+    /// # Errors
+    /// Returns `ValidationError::EmptyName` or `ValidationError::InvalidDateOfBirth` if core demographics are invalid.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         first_name: String,
@@ -106,6 +111,10 @@ impl Patient {
         })
     }
 
+    /// Build a new patient record from inbound DTO data coming from the UI or API boundary.
+    ///
+    /// # Errors
+    /// Returns the same validation errors as `Patient::new` when the supplied demographics are invalid.
     pub fn from_dto(data: NewPatientData) -> Result<Self, ValidationError> {
         Self::new(
             data.first_name,
@@ -132,11 +141,13 @@ impl Patient {
         )
     }
 
+    /// Calculate the patient's age in whole years based on today's date.
     pub fn age(&self) -> u32 {
         let today = Utc::now().date_naive();
         today.years_since(self.date_of_birth).unwrap_or(0)
     }
 
+    /// Return true when the patient is considered a child for GP workflows (under 18 years).
     pub fn is_child(&self) -> bool {
         self.age() < 18
     }
@@ -159,6 +170,10 @@ impl Patient {
         Ok(())
     }
 
+    /// Apply partial updates to a patient while revalidating key demographic fields.
+    ///
+    /// # Errors
+    /// Returns `ValidationError::EmptyName` or `ValidationError::InvalidDateOfBirth` if updated demographics are invalid.
     pub fn update(&mut self, data: UpdatePatientData) -> Result<(), ValidationError> {
         if let Some(first_name) = data.first_name {
             Self::validate_names(&first_name, &self.last_name)?;
@@ -207,6 +222,7 @@ impl Patient {
     }
 }
 
+/// Postal or residential address for a patient within or outside Australia.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Address {
     pub line1: Option<String>,
@@ -230,6 +246,7 @@ impl Default for Address {
     }
 }
 
+/// Emergency contact details recorded for a patient.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmergencyContact {
     pub name: String,
@@ -237,27 +254,43 @@ pub struct EmergencyContact {
     pub relationship: String,
 }
 
+/// Administrative gender used for clinical documentation and billing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
 pub enum Gender {
+    /// Male gender.
     Male,
+    /// Female gender.
     Female,
+    /// Non binary or other gender description.
     Other,
+    /// Patient chose not to state a gender.
     PreferNotToSay,
 }
 
+/// Concession card types that affect Medicare and PBS billing.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Display, EnumString)]
 pub enum ConcessionType {
+    /// Department of Veterans' Affairs card.
     DVA,
+    /// Age or disability support pension concession.
     Pensioner,
+    /// Centrelink health care card.
     HealthcareCard,
+    /// Medicare safety net entitlement card.
     SafetyNetCard,
 }
 
+/// Aboriginal and Torres Strait Islander status used for clinical reporting and funding programs.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Display, EnumString)]
 pub enum AtsiStatus {
+    /// Identifies as Aboriginal but not Torres Strait Islander.
     AboriginalNotTorresStrait,
+    /// Identifies as Torres Strait Islander but not Aboriginal.
     TorresStraitNotAboriginal,
+    /// Identifies as both Aboriginal and Torres Strait Islander.
     BothAboriginalAndTorresStrait,
+    /// Identifies as neither Aboriginal nor Torres Strait Islander.
     NeitherAboriginalNorTorresStrait,
+    /// Patient did not state their Aboriginal or Torres Strait Islander status.
     NotStated,
 }

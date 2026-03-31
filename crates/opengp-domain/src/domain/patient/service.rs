@@ -10,6 +10,7 @@ use super::model::Patient;
 use super::repository::PatientRepository;
 use crate::domain::error::RepositoryError as BaseRepositoryError;
 
+/// Application service for patient registration, updates and lookup within a GP clinic.
 service! {
     PatientService {
         repository: Arc<dyn PatientRepository>,
@@ -17,6 +18,11 @@ service! {
 }
 
 impl PatientService {
+    /// Register a new patient using Medicare, IHI and contact details supplied by staff.
+    ///
+    /// # Errors
+    /// Returns `ServiceError::DuplicatePatient` if a patient with the same Medicare number exists,
+    /// `ServiceError::Validation` if the demographics are invalid, or `ServiceError::Repository` if persistence fails.
     pub async fn register_patient(&self, data: NewPatientData) -> Result<Patient, ServiceError> {
         info!(
             "Registering new patient: {} {}",
@@ -74,11 +80,21 @@ impl PatientService {
         }
     }
 
+    /// Look up a single patient by identifier for viewing or editing.
+    ///
+    /// # Errors
+    /// Returns `ServiceError::Repository` if the repository lookup fails.
     pub async fn find_patient(&self, id: Uuid) -> Result<Option<Patient>, ServiceError> {
         let patient = self.repository.find_by_id(id).await?;
         Ok(patient)
     }
 
+    /// Update an existing patient while enforcing optimistic concurrency on the version.
+    ///
+    /// # Errors
+    /// Returns `ServiceError::NotFound` if the patient is missing, `ServiceError::Conflict` if the
+    /// version no longer matches, `ServiceError::Validation` for invalid changes, or
+    /// `ServiceError::Repository` if the repository rejects the update.
     pub async fn update_patient(
         &self,
         id: Uuid,
@@ -115,6 +131,10 @@ impl PatientService {
         Ok(updated)
     }
 
+    /// List active patients for use in search screens and clinical workflows.
+    ///
+    /// # Errors
+    /// Returns `ServiceError::Repository` if the repository query fails.
     pub async fn list_active_patients(&self) -> Result<Vec<Patient>, ServiceError> {
         debug!("Listing active patients from repository");
         let patients = self.repository.list_active(None).await.map_err(|err| {
@@ -128,11 +148,20 @@ impl PatientService {
         Ok(patients)
     }
 
+    /// Search patients by name or other identifying details for front desk lookup.
+    ///
+    /// # Errors
+    /// Returns `ServiceError::Repository` if the repository query fails.
     pub async fn search_patients(&self, query: &str) -> Result<Vec<Patient>, ServiceError> {
         let patients = self.repository.search(query).await?;
         Ok(patients)
     }
 
+    /// Deactivate a patient so they no longer appear in active lists while retaining history.
+    ///
+    /// # Errors
+    /// Returns `ServiceError::NotFound` if the patient does not exist or `ServiceError::Repository`
+    /// if the repository operation fails.
     pub async fn deactivate_patient(&self, id: Uuid) -> Result<(), ServiceError> {
         let exists = self.repository.find_by_id(id).await?.is_some();
         if !exists {

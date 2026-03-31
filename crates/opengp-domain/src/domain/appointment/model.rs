@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
-/// Core appointment entity
+/// Core appointment entity for scheduling consultations in a GP clinic.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Appointment {
     pub id: Uuid,
@@ -46,6 +46,7 @@ pub struct Appointment {
 }
 
 impl Appointment {
+    /// Create a new appointment with derived end time and default status.
     pub fn new(
         patient_id: Uuid,
         practitioner_id: Uuid,
@@ -76,44 +77,44 @@ impl Appointment {
         }
     }
 
-    /// Calculate duration in minutes
+    /// Calculate appointment duration in minutes.
     pub fn duration_minutes(&self) -> i64 {
         (self.end_time - self.start_time).num_minutes()
     }
 
-    /// Check if appointment is in the past
+    /// Check if the appointment has already finished.
     pub fn is_past(&self) -> bool {
         self.end_time < Utc::now()
     }
 
-    /// Check if appointment is today
+    /// Check if the appointment occurs on the current calendar day.
     pub fn is_today(&self) -> bool {
         let today = Utc::now().date_naive();
         self.start_time.date_naive() == today
     }
 
-    /// Mark as arrived
+    /// Mark the appointment as arrived when the patient checks in.
     pub fn mark_arrived(&mut self, user_id: Uuid) {
         self.status = AppointmentStatus::Arrived;
         self.updated_at = Utc::now();
         self.updated_by = Some(user_id);
     }
 
-    /// Mark as in progress
+    /// Mark the appointment as in progress once the consultation starts.
     pub fn mark_in_progress(&mut self, user_id: Uuid) {
         self.status = AppointmentStatus::InProgress;
         self.updated_at = Utc::now();
         self.updated_by = Some(user_id);
     }
 
-    /// Mark as completed
+    /// Mark the appointment as completed when the consultation finishes.
     pub fn mark_completed(&mut self, user_id: Uuid) {
         self.status = AppointmentStatus::Completed;
         self.updated_at = Utc::now();
         self.updated_by = Some(user_id);
     }
 
-    /// Cancel appointment
+    /// Cancel the appointment and record a reason.
     pub fn cancel(&mut self, reason: String, user_id: Uuid) {
         self.status = AppointmentStatus::Cancelled;
         self.cancellation_reason = Some(reason);
@@ -453,19 +454,28 @@ pub struct WaitlistEntry {
     pub resolved_at: Option<DateTime<Utc>>,
 }
 
+/// Priority assigned to a patient on the appointment waitlist.
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Display, EnumString,
 )]
 pub enum WaitlistPriority {
+    /// Low priority request.
     Low,
+    /// Routine priority.
     Normal,
+    /// High clinical or administrative priority.
     High,
+    /// Urgent request that should be filled as soon as possible.
     Urgent,
 }
 
+/// Broad time of day bucket used when patients express availability preferences.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Display, EnumString)]
 pub enum TimeSlot {
-    Morning,   // 8am-12pm
-    Afternoon, // 12pm-5pm
-    Evening,   // 5pm-8pm
+    /// Morning session, typically 8 am to 12 pm.
+    Morning,
+    /// Afternoon session, typically 12 pm to 5 pm.
+    Afternoon,
+    /// Evening session, typically 5 pm to 8 pm.
+    Evening,
 }
