@@ -16,7 +16,9 @@ use crate::ui::theme::Theme;
 use crate::ui::view_models::PractitionerViewItem;
 use chrono::NaiveDate;
 use opengp_config::CalendarConfig;
-use opengp_domain::domain::appointment::{AppointmentStatus, CalendarAppointment, CalendarDayView};
+use opengp_domain::domain::appointment::{
+    AppointmentStatus, AppointmentType, CalendarAppointment, CalendarDayView,
+};
 
 /// Actions that can be triggered from the schedule view
 #[derive(Debug, Clone)]
@@ -452,24 +454,8 @@ impl Schedule {
         }
     }
 
-    fn get_appointment_type_abbreviation(
-        apt_type: &opengp_domain::domain::appointment::AppointmentType,
-    ) -> &'static str {
-        match apt_type {
-            opengp_domain::domain::appointment::AppointmentType::Standard => "STD",
-            opengp_domain::domain::appointment::AppointmentType::Long => "LNG",
-            opengp_domain::domain::appointment::AppointmentType::Brief => "BRF",
-            opengp_domain::domain::appointment::AppointmentType::NewPatient => "NEW",
-            opengp_domain::domain::appointment::AppointmentType::HealthAssessment => "HLT",
-            opengp_domain::domain::appointment::AppointmentType::ChronicDiseaseReview => "CHR",
-            opengp_domain::domain::appointment::AppointmentType::MentalHealthPlan => "MHP",
-            opengp_domain::domain::appointment::AppointmentType::Immunisation => "IMM",
-            opengp_domain::domain::appointment::AppointmentType::Procedure => "PRC",
-            opengp_domain::domain::appointment::AppointmentType::Telephone => "TEL",
-            opengp_domain::domain::appointment::AppointmentType::Telehealth => "TEL",
-            opengp_domain::domain::appointment::AppointmentType::HomeVisit => "HOM",
-            opengp_domain::domain::appointment::AppointmentType::Emergency => "EMG",
-        }
+    fn get_abbreviation(&self, apt_type: &AppointmentType) -> String {
+        self.config.get_abbreviation(&apt_type.to_string())
     }
 
     /// Render the time column on the left side.
@@ -529,6 +515,64 @@ impl Schedule {
                 buf.set_string(col_x, y, "│", sep_style);
             }
 
+            // Render working hours background
+            if let Some(schedule) = &self.schedule_data {
+                if let Some(practitioner_schedule) = schedule
+                    .practitioners
+                    .iter()
+                    .find(|ps| ps.practitioner_id == practitioner.id)
+                {
+                    if let Some(working_hours) = &practitioner_schedule.working_hours {
+                        let start_hour = working_hours.start_time.hour() as u8;
+                        let start_minute = working_hours.start_time.minute() as u8;
+                        let end_hour = working_hours.end_time.hour() as u8;
+                        let end_minute = working_hours.end_time.minute() as u8;
+
+                        let start_slot = if start_hour >= self.viewport_start_hour {
+                            Some(
+                                ((start_hour - self.viewport_start_hour) * 4) + (start_minute / 15),
+                            )
+                        } else {
+                            None
+                        };
+
+                        let end_slot = if end_hour >= self.viewport_start_hour {
+                            Some(((end_hour - self.viewport_start_hour) * 4) + (end_minute / 15))
+                        } else {
+                            None
+                        };
+
+                        if let (Some(start), Some(end)) = (start_slot, end_slot) {
+                            let viewport_max_slot = max_slot;
+
+                            // Grey out slots before working hours
+                            for slot in 0..start.min(viewport_max_slot + 1) {
+                                let y = area.y + 1 + slot as u16 * 2;
+                                if y < area.y + area.height {
+                                    for x in col_x + 1..col_x + col_width {
+                                        if let Some(cell) = buf.cell_mut((x, y)) {
+                                            cell.set_bg(self.theme.colors.disabled);
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Grey out slots after working hours
+                            for slot in (end + 1)..=viewport_max_slot {
+                                let y = area.y + 1 + slot as u16 * 2;
+                                if y < area.y + area.height {
+                                    for x in col_x + 1..col_x + col_width {
+                                        if let Some(cell) = buf.cell_mut((x, y)) {
+                                            cell.set_bg(self.theme.colors.disabled);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Render appointments for this practitioner
             if let Some(schedule) = &self.schedule_data {
                 if let Some(practitioner_schedule) = schedule
@@ -536,15 +580,102 @@ impl Schedule {
                     .iter()
                     .find(|ps| ps.practitioner_id == practitioner.id)
                 {
-                    for apt in &practitioner_schedule.appointments {
-                        self.render_appointment_block(
-                            buf,
-                            col_x + 1,
-                            col_width.saturating_sub(2),
-                            apt,
-                            max_slot,
-                            area,
-                        );
+                    // Pre-compute overlap groups for side-by-side rendering
+                    let mut overlap_groups: Vec<Vec<usize>> = Vec::new();
+                    let mut processed = std::collections::HashSet::new();
+
+                    for (idx, apt) in practitioner_schedule.appointments.iter().enumerate() {
+                        if processed.contains(&idx) {
+                            continue;
+                        }
+
+                        let mut group = vec![idx];
+                        processed.insert(idx);
+
+                        if apt.is_overlapping {
+                            // Find all appointments that overlap with this one
+                            for (other_idx, other_apt) in
+                                practitioner_schedule.appointments.iter().enumerate()
+                            {
+                                if other_idx != idx
+                                    && !processed.contains(&other_idx)
+                                    && other_apt.is_overlapping
+                                {
+                                    // Check if time ranges overlap
+                                    if !(other_apt.end_time <= apt.start_time
+                                        || other_apt.start_time >= apt.end_time)
+                                    {
+                                        group.push(other_idx);
+                                        processed.insert(other_idx);
+                                    }
+                                }
+                            }
+                        }
+
+                        overlap_groups.push(group);
+                    }
+
+                    // Render each group
+                    for group in overlap_groups {
+                        if group.len() <= 2 {
+                            // Render up to 2 appointments side-by-side
+                            for (group_pos, &apt_idx) in group.iter().enumerate() {
+                                let apt = &practitioner_schedule.appointments[apt_idx];
+                                let half_width = col_width.saturating_sub(2) / 2;
+                                let apt_x = if apt.is_overlapping {
+                                    col_x + 1 + (group_pos as u16 * half_width)
+                                } else {
+                                    col_x + 1
+                                };
+                                let apt_width = if apt.is_overlapping {
+                                    half_width
+                                } else {
+                                    col_width.saturating_sub(2)
+                                };
+
+                                self.render_appointment_block(
+                                    buf, apt_x, apt_width, apt, max_slot, area,
+                                );
+                            }
+                        } else {
+                            // 3+ overlapping appointments: show first 2, +N badge on 2nd
+                            for (group_pos, &apt_idx) in group.iter().enumerate() {
+                                if group_pos >= 2 {
+                                    break; // Only render first 2
+                                }
+                                let apt = &practitioner_schedule.appointments[apt_idx];
+                                let half_width = col_width.saturating_sub(2) / 2;
+                                let apt_x = col_x + 1 + (group_pos as u16 * half_width);
+
+                                self.render_appointment_block(
+                                    buf, apt_x, half_width, apt, max_slot, area,
+                                );
+                            }
+
+                            // Render +N badge on the 2nd appointment slot
+                            if let Some(&second_idx) = group.get(1) {
+                                let second_apt = &practitioner_schedule.appointments[second_idx];
+                                if let Some(start_slot) = self.time_to_slot(second_apt.start_time) {
+                                    if start_slot <= max_slot {
+                                        let y = area.y + 1 + start_slot as u16 * 2;
+                                        if y < area.y + area.height {
+                                            let half_width = col_width.saturating_sub(2) / 2;
+                                            let badge_x = col_x + 1 + half_width;
+                                            let remaining = group.len() - 2;
+                                            let badge_text = format!("+{}", remaining);
+                                            buf.set_string(
+                                                badge_x,
+                                                y,
+                                                &badge_text,
+                                                Style::default()
+                                                    .fg(self.theme.colors.warning)
+                                                    .bold(),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -602,114 +733,54 @@ impl Schedule {
         let max_height = area.y + area.height - y;
         let actual_height = height.min(max_height).max(1);
 
-        let color = self.get_appointment_color(apt.status);
-
-        if slot_span >= 2 {
-            // Render with border for multi-slot appointments
-            let block_area = Rect::new(area_x, y, area_width, actual_height);
-
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(self.theme.colors.border));
-
-            block.clone().render(block_area, buf);
-
-            let inner = block.inner(block_area);
-
-            if inner.is_empty() {
-                return;
-            }
-
-            let (content_x, content_y, content_width, content_height) =
-                (inner.x, inner.y, inner.width, inner.height);
-
-            // Render appointment block background
-            for row in 0..content_height {
-                let row_y = content_y + row;
-                if row_y >= area.y + area.height {
-                    break;
-                }
-                for col in 0..content_width {
-                    let col_x = content_x + col;
-                    if col_x >= area.x + area.width {
-                        break;
-                    }
-                    if let Some(cell) = buf.cell_mut((col_x, row_y)) {
-                        cell.set_bg(color);
-                    }
-                }
-            }
-
-            let abbreviation = Self::get_appointment_type_abbreviation(&apt.appointment_type);
-            let abbrev_len = abbreviation.len();
-            let name_width = (content_width as usize)
-                .saturating_sub(2)
-                .saturating_sub(abbrev_len + 1);
-            if name_width > 0 && content_y < area.y + area.height {
-                let name = if apt.patient_name.len() > name_width {
-                    format!("{}...", &apt.patient_name[..name_width.saturating_sub(3)])
-                } else {
-                    apt.patient_name.clone()
-                };
-                let name_x = content_x + 1;
-                if name_x < area.x + area.width {
-                    let full_text = format!("{} {}", name, abbreviation);
-                    buf.set_string(
-                        name_x,
-                        content_y,
-                        full_text,
-                        Style::default().fg(self.theme.colors.success).bold(),
-                    );
-                }
-            }
+        let color = if apt.is_urgent {
+            self.theme.colors.warning
         } else {
-            // Original behavior for 1-slot appointments (no border)
-            let _block_area = Rect::new(area_x, y, area_width, actual_height);
+            self.get_appointment_color(apt.status)
+        };
 
-            let (content_x, content_y, content_width, content_height) =
-                (area_x, y, area_width, actual_height);
+        // Unified rendering for all appointments (no borders regardless of slot_span)
+        let (content_x, content_y, content_width, content_height) =
+            (area_x, y, area_width, actual_height);
 
-            // Render appointment block background
-            for row in 0..content_height {
-                let row_y = content_y + row;
-                if row_y >= area.y + area.height {
+        // Render appointment block background
+        for row in 0..content_height {
+            let row_y = content_y + row;
+            if row_y >= area.y + area.height {
+                break;
+            }
+            for col in 0..content_width {
+                let col_x = content_x + col;
+                if col_x >= area.x + area.width {
                     break;
                 }
-                for col in 0..content_width {
-                    let col_x = content_x + col;
-                    if col_x >= area.x + area.width {
-                        break;
-                    }
-                    if let Some(cell) = buf.cell_mut((col_x, row_y)) {
-                        cell.set_bg(color);
-                        if row == 0 {
-                            cell.set_fg(self.theme.colors.foreground);
-                        }
-                    }
+                if let Some(cell) = buf.cell_mut((col_x, row_y)) {
+                    cell.set_bg(color);
                 }
             }
+        }
 
-            let abbreviation = Self::get_appointment_type_abbreviation(&apt.appointment_type);
-            let abbrev_len = abbreviation.len();
-            let name_width = (content_width as usize)
-                .saturating_sub(2)
-                .saturating_sub(abbrev_len + 1);
-            if name_width > 0 && content_y < area.y + area.height {
-                let name = if apt.patient_name.len() > name_width {
-                    format!("{}...", &apt.patient_name[..name_width.saturating_sub(3)])
-                } else {
-                    apt.patient_name.clone()
-                };
-                let name_x = content_x + 1;
-                if name_x < area.x + area.width {
-                    let full_text = format!("{} {}", name, abbreviation);
-                    buf.set_string(
-                        name_x,
-                        content_y,
-                        full_text,
-                        Style::default().fg(self.theme.colors.background).bold(),
-                    );
-                }
+        let abbreviation = self.get_abbreviation(&apt.appointment_type);
+        let abbrev_len = abbreviation.len();
+        let name_width = (content_width as usize)
+            .saturating_sub(2)
+            .saturating_sub(abbrev_len + 1);
+        if name_width > 0 && content_y < area.y + area.height {
+            let name = if apt.patient_name.len() > name_width {
+                format!("{}...", &apt.patient_name[..name_width.saturating_sub(3)])
+            } else {
+                apt.patient_name.clone()
+            };
+            let name_x = content_x + 1;
+            if name_x < area.x + area.width {
+                let prefix = if apt.is_urgent { "⚡ " } else { "" };
+                let full_text = format!("{}{} [{}]", prefix, name, abbreviation);
+                buf.set_string(
+                    name_x,
+                    content_y,
+                    full_text,
+                    Style::default().fg(self.theme.colors.success).bold(),
+                );
             }
         }
     }
@@ -769,6 +840,52 @@ impl Widget for Schedule {
             height: inner.height,
         };
         self.render_time_column(time_column, buf);
+
+        // Draw "now" indicator line if viewing today
+        let today = chrono::Local::now().date_naive();
+        if self.schedule_data.as_ref().map(|d| d.date) == Some(today) {
+            let now_local = chrono::Local::now();
+            let now_hour = now_local.hour() as u8;
+            let now_minute = now_local.minute() as u8;
+
+            // Convert now to slot relative to viewport
+            if now_hour >= self.viewport_start_hour && now_hour < self.viewport_end_hour {
+                let now_slot = (now_hour - self.viewport_start_hour) * 4 + (now_minute / 15);
+                let viewport_max_slot =
+                    (self.viewport_end_hour - self.viewport_start_hour) as u8 * 4;
+
+                if now_slot <= viewport_max_slot {
+                    let line_y = 1 + now_slot as u16 * 2;
+                    let style = Style::default()
+                        .fg(self.theme.colors.primary)
+                        .add_modifier(ratatui::style::Modifier::UNDERLINED);
+
+                    // Draw across all practitioner columns
+                    for col in 0..practitioner_area.width {
+                        let x = practitioner_area.x + col;
+                        let y = practitioner_area.y + line_y;
+                        if y < inner.y + inner.height {
+                            if let Some(cell) = buf.cell_mut((x, y)) {
+                                cell.set_style(style);
+                                cell.set_char('─');
+                            }
+                        }
+                    }
+
+                    // Draw ● at leftmost edge (time column)
+                    let indicator_x = inner.x;
+                    let indicator_y = inner.y + line_y;
+                    if indicator_y < inner.y + inner.height {
+                        buf.set_string(
+                            indicator_x,
+                            indicator_y,
+                            "●",
+                            Style::default().fg(self.theme.colors.primary).bold(),
+                        );
+                    }
+                }
+            }
+        }
 
         // Render practitioner columns
         self.render_practitioner_columns(practitioner_area, buf);
