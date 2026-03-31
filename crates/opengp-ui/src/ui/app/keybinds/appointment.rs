@@ -81,7 +81,10 @@ impl App {
                         date,
                         time,
                     } => {
-                        self.appointment_form = Some(AppointmentForm::new(self.theme.clone()));
+                        self.appointment_form = Some(AppointmentForm::new(
+                            self.theme.clone(),
+                            self.healthcare_config.clone(),
+                        ));
                         if let Some(ref mut form) = self.appointment_form {
                             if let Some(ref schedule_data) = self.appointment_state.schedule_data {
                                 if let Some(practitioner) = schedule_data

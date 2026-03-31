@@ -89,6 +89,7 @@ pub struct App {
     pending_clinical_patient_id: Option<uuid::Uuid>,
     pending_clinical_save_data: Option<PendingClinicalSaveData>,
     clinical_state: ClinicalState,
+    healthcare_config: opengp_config::healthcare::HealthcareConfig,
     api_client: Option<Arc<crate::api::ApiClient>>,
     patient_page_limit: u32,
     appointment_page_limit: u32,
@@ -168,8 +169,9 @@ impl App {
     pub fn new(
         api_client: Option<Arc<crate::api::ApiClient>>,
         calendar_config: CalendarConfig,
+        theme: Theme,
+        healthcare_config: opengp_config::healthcare::HealthcareConfig,
     ) -> Self {
-        let theme = Theme::dark();
         let mut app = Self {
             theme: theme.clone(),
             keybinds: KeybindRegistry::global(),
@@ -196,7 +198,8 @@ impl App {
             pending_appointment_status_transition: None,
             pending_clinical_patient_id: None,
             pending_clinical_save_data: None,
-            clinical_state: ClinicalState::with_theme(theme.clone()),
+            clinical_state: ClinicalState::with_theme(theme.clone(), healthcare_config.clone()),
+            healthcare_config,
             api_client,
             patient_page_limit: DEFAULT_PATIENT_PAGE_LIMIT,
             appointment_page_limit: DEFAULT_APPOINTMENT_PAGE_LIMIT,
@@ -349,7 +352,7 @@ impl App {
 
 impl Default for App {
     fn default() -> Self {
-        Self::new(None, CalendarConfig::default())
+        Self::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default())
     }
 }
 
@@ -359,14 +362,14 @@ mod tests {
 
     #[test]
     fn test_app_creation() {
-        let app = App::new(None, CalendarConfig::default());
+        let app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
         assert_eq!(app.current_tab(), Tab::Patient);
         assert!(!app.should_quit());
     }
 
     #[test]
     fn test_tab_switching() {
-        let mut app = App::new(None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -378,7 +381,7 @@ mod tests {
 
     #[test]
     fn test_help_toggle() {
-        let mut app = App::new(None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
 
         assert!(!app.help_overlay.is_visible());
 
@@ -397,7 +400,7 @@ mod tests {
 
     #[test]
     fn test_quit() {
-        let mut app = App::new(None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
 
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('q'),
@@ -410,7 +413,7 @@ mod tests {
 
     #[test]
     fn test_calendar_keybind_routing() {
-        let mut app = App::new(None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -438,7 +441,7 @@ mod tests {
 
     #[test]
     fn test_calendar_enter_selects_date() {
-        let mut app = App::new(None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -461,7 +464,7 @@ mod tests {
 
     #[test]
     fn test_schedule_keybind_routing() {
-        let mut app = App::new(None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -493,7 +496,7 @@ mod tests {
 
     #[test]
     fn test_q_does_not_quit_on_appointment() {
-        let mut app = App::new(None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -514,7 +517,7 @@ mod tests {
 
     #[test]
     fn test_ctrl_q_always_quits() {
-        let mut app = App::new(None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -531,7 +534,7 @@ mod tests {
 
     #[test]
     fn test_schedule_escape_returns_to_calendar() {
-        let mut app = App::new(None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -563,7 +566,7 @@ mod tests {
 
     #[test]
     fn test_patient_keybind_regression() {
-        let mut app = App::new(None, CalendarConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
         assert_eq!(app.current_tab(), Tab::Patient);
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('q'),

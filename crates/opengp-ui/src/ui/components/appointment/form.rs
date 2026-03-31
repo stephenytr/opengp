@@ -23,6 +23,7 @@ use crate::ui::widgets::{
     HeightMode, ScrollableFormState, SearchableListAction, SearchableListState, TextareaState,
     TextareaWidget, TimePickerAction, TimePickerPopup,
 };
+use opengp_config::healthcare::HealthcareConfig;
 use opengp_domain::domain::appointment::{
     Appointment, AppointmentType, NewAppointmentData, UpdateAppointmentData,
 };
@@ -197,6 +198,7 @@ pub struct AppointmentForm {
     dropdowns: HashMap<String, DropdownWidget>,
     saving: bool,
     theme: Theme,
+    healthcare_config: HealthcareConfig,
     scroll: ScrollableFormState,
     patient_picker: SearchableListState<PatientListItem>,
     practitioner_picker: SearchableListState<PractitionerViewItem>,
@@ -216,6 +218,7 @@ impl Clone for AppointmentForm {
             dropdowns: self.dropdowns.clone(),
             saving: self.saving,
             theme: self.theme.clone(),
+            healthcare_config: self.healthcare_config.clone(),
             scroll: self.scroll.clone(),
             patient_picker: self.patient_picker.clone(),
             practitioner_picker: self.practitioner_picker.clone(),
@@ -226,12 +229,52 @@ impl Clone for AppointmentForm {
 }
 
 impl AppointmentForm {
-    pub fn new(theme: Theme) -> Self {
+    pub fn new(theme: Theme, healthcare_config: HealthcareConfig) -> Self {
         let type_options = vec![
-            DropdownOption::new("Standard", "Standard (15 min)"),
-            DropdownOption::new("Long", "Long (30 min)"),
-            DropdownOption::new("Brief", "Brief (10 min)"),
-            DropdownOption::new("NewPatient", "New Patient (45 min)"),
+            DropdownOption::new(
+                "Standard",
+                &format!(
+                    "Standard ({} min)",
+                    healthcare_config
+                        .appointment_durations
+                        .get("Standard")
+                        .copied()
+                        .unwrap_or(15)
+                ),
+            ),
+            DropdownOption::new(
+                "Long",
+                &format!(
+                    "Long ({} min)",
+                    healthcare_config
+                        .appointment_durations
+                        .get("Long")
+                        .copied()
+                        .unwrap_or(30)
+                ),
+            ),
+            DropdownOption::new(
+                "Brief",
+                &format!(
+                    "Brief ({} min)",
+                    healthcare_config
+                        .appointment_durations
+                        .get("Brief")
+                        .copied()
+                        .unwrap_or(10)
+                ),
+            ),
+            DropdownOption::new(
+                "NewPatient",
+                &format!(
+                    "New Patient ({} min)",
+                    healthcare_config
+                        .appointment_durations
+                        .get("NewPatient")
+                        .copied()
+                        .unwrap_or(45)
+                ),
+            ),
             DropdownOption::new("HealthAssessment", "Health Assessment"),
             DropdownOption::new("ChronicDiseaseReview", "Chronic Disease Review"),
             DropdownOption::new("MentalHealthPlan", "Mental Health Plan"),
@@ -285,6 +328,7 @@ impl AppointmentForm {
             dropdowns,
             saving: false,
             theme: theme.clone(),
+            healthcare_config,
             scroll: ScrollableFormState::new(),
             patient_picker: SearchableListState::new(Vec::new()),
             practitioner_picker: SearchableListState::new(Vec::new()),
@@ -293,8 +337,12 @@ impl AppointmentForm {
         }
     }
 
-    pub fn from_appointment(appointment: Appointment, theme: Theme) -> Self {
-        let mut form = Self::new(theme);
+    pub fn from_appointment(
+        appointment: Appointment,
+        theme: Theme,
+        healthcare_config: HealthcareConfig,
+    ) -> Self {
+        let mut form = Self::new(theme, healthcare_config);
         form.mode = FormMode::Edit(appointment.id);
 
         form.data.patient_id = Some(appointment.patient_id);
@@ -438,7 +486,12 @@ impl AppointmentForm {
             }
             FIELD_APPOINTMENT_TYPE => {
                 if let Ok(apt_type) = value.parse::<AppointmentType>() {
-                    let default_mins = apt_type.default_duration_minutes();
+                    let default_mins = self
+                        .healthcare_config
+                        .appointment_durations
+                        .get(&value)
+                        .copied()
+                        .unwrap_or_else(|| apt_type.default_duration_minutes() as u32);
                     self.data.duration = default_mins.to_string();
                 }
                 if let Some(dropdown) = self.dropdowns.get_mut(FIELD_APPOINTMENT_TYPE) {
@@ -744,7 +797,14 @@ impl AppointmentForm {
                                 .and_then(|dropdown| dropdown.selected_value())
                             {
                                 if let Ok(apt_type) = value.parse::<AppointmentType>() {
-                                    let default_mins: i64 = apt_type.default_duration_minutes();
+                                    let default_mins: i64 =
+                                        self.healthcare_config
+                                            .appointment_durations
+                                            .get(value)
+                                            .copied()
+                                            .unwrap_or_else(|| {
+                                                apt_type.default_duration_minutes() as u32
+                                            }) as i64;
                                     self.data.duration = default_mins.to_string();
                                 }
                                 self.data.appointment_type = value.to_string();
@@ -1367,7 +1427,7 @@ mod tests {
     use super::*;
 
     fn make_form() -> AppointmentForm {
-        AppointmentForm::new(Theme::dark())
+        AppointmentForm::new(Theme::dark(), HealthcareConfig::default())
     }
 
     #[test]

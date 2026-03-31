@@ -6,6 +6,7 @@
 pub mod forms;
 pub mod healthcare;
 
+use crate::healthcare::HealthcareConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -150,6 +151,9 @@ pub struct Config {
     /// UI configuration
     pub ui: UiConfig,
 
+    /// Healthcare configuration
+    pub healthcare: HealthcareConfig,
+
     /// Encryption key (hex-encoded)
     pub encryption_key: String,
 
@@ -211,6 +215,7 @@ impl Config {
             },
             calendar: CalendarConfig::from_env()?,
             ui: UiConfig::from_env()?,
+            healthcare: HealthcareConfig::load()?,
             encryption_key: std::env::var("ENCRYPTION_KEY")
                 .map_err(|_| ConfigError::MissingEncryptionKey)?,
             session_timeout_secs: std::env::var("SESSION_TIMEOUT_SECS")
@@ -232,6 +237,7 @@ impl Default for Config {
             redis: RedisConfig::default(),
             calendar: CalendarConfig::default(),
             ui: UiConfig::default(),
+            healthcare: HealthcareConfig::default(),
             encryption_key: String::new(),
             session_timeout_secs: 900,
             log_level: "info".to_string(),
@@ -354,6 +360,15 @@ pub enum ConfigError {
 
     #[error("Invalid configuration: {0}")]
     Invalid(String),
+
+    #[error("Healthcare configuration error: {0}")]
+    Healthcare(String),
+}
+
+impl From<crate::healthcare::HealthcareConfigError> for ConfigError {
+    fn from(err: crate::healthcare::HealthcareConfigError) -> Self {
+        ConfigError::Healthcare(err.to_string())
+    }
 }
 
 #[cfg(test)]

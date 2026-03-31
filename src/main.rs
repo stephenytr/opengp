@@ -18,6 +18,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use opengp_config::CalendarConfig;
 use opengp_config::Config;
+use opengp_ui::ui::theme::Theme;
 
 mod conversions;
 
@@ -39,14 +40,19 @@ async fn main() -> Result<()> {
         api_client.set_session_token(Some(token)).await;
     }
 
-    run_tui(api_client, config.calendar).await?;
+    run_tui(api_client, config.calendar, config.ui, config.healthcare).await?;
 
     tracing::info!("OpenGP shutdown complete");
 
     Ok(())
 }
 
-async fn run_tui(api_client: Arc<ApiClient>, calendar_config: CalendarConfig) -> Result<()> {
+async fn run_tui(
+    api_client: Arc<ApiClient>,
+    calendar_config: CalendarConfig,
+    ui_config: opengp_config::UiConfig,
+    healthcare_config: opengp_config::healthcare::HealthcareConfig,
+) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -55,7 +61,13 @@ async fn run_tui(api_client: Arc<ApiClient>, calendar_config: CalendarConfig) ->
 
     let has_session_token = api_client.current_session_token().await.is_some();
 
-    let mut app = App::new(Some(api_client.clone()), calendar_config.clone());
+    let theme = match ui_config.theme.as_str() {
+        "light" => Theme::light(),
+        "high_contrast" => Theme::high_contrast(),
+        _ => Theme::dark(),
+    };
+
+    let mut app = App::new(Some(api_client.clone()), calendar_config.clone(), theme, healthcare_config);
     app.set_authenticated(has_session_token);
     if has_session_token {
         app.request_refresh_patients();

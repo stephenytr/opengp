@@ -119,7 +119,7 @@ impl App {
                 .expect("task exists");
             let retry_date = self.active_appointment_refresh_date;
             self.active_appointment_refresh_date = None;
-            self.appointment_state.is_loading = false;
+            self.appointment_state.set_loading(false);
 
             match handle.await {
                 Ok(Ok(schedule)) => {
@@ -226,7 +226,7 @@ impl App {
                 self.active_appointment_refresh_date = None;
                 self.active_consultation_refresh_patient_id = None;
                 self.patient_list.set_loading(false);
-                self.appointment_state.is_loading = false;
+                self.appointment_state.set_loading(false);
                 self.clinical_state.consultation_list.set_loading(false);
                 self.login_screen.set_loading(false);
                 self.login_screen
@@ -281,7 +281,7 @@ impl App {
                     .iter()
                     .map(|p| (p.id, p.full_name.clone()))
                     .collect::<HashMap<_, _>>();
-                self.appointment_state.is_loading = true;
+                self.appointment_state.set_loading(true);
                 self.active_appointment_refresh_date = Some(date);
 
                 let api_client = self.api_client.clone().expect("api client already checked");
@@ -765,6 +765,7 @@ fn parse_appointment_type(value: &str) -> AppointmentType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Theme;
     use axum::{
         extract::{Query, State},
         http::StatusCode,
@@ -801,7 +802,7 @@ mod tests {
             .set_session_token(Some("test-token".to_string()))
             .await;
 
-        let mut app = App::new(Some(api_client), opengp_config::CalendarConfig::default());
+        let mut app = App::new(Some(api_client), opengp_config::CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
         app.request_refresh_patients();
 
         for _ in 0..20 {
@@ -830,7 +831,7 @@ mod tests {
             .set_session_token(Some("test-token".to_string()))
             .await;
 
-        let mut app = App::new(Some(api_client), opengp_config::CalendarConfig::default());
+        let mut app = App::new(Some(api_client), opengp_config::CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
 
         let patient_id = uuid::Uuid::new_v4();
         app.request_refresh_appointments(Utc::now().date_naive());
@@ -865,6 +866,8 @@ mod tests {
         let mut app = App::new(
             Some(api_client.clone()),
             opengp_config::CalendarConfig::default(),
+            Theme::dark(),
+            opengp_config::healthcare::HealthcareConfig::default(),
         );
         app.set_authenticated(false);
 
@@ -895,6 +898,8 @@ mod tests {
         let mut app = App::new(
             Some(api_client.clone()),
             opengp_config::CalendarConfig::default(),
+            Theme::dark(),
+            opengp_config::healthcare::HealthcareConfig::default(),
         );
         app.set_authenticated(false);
 
@@ -923,6 +928,8 @@ mod tests {
         let mut app = App::new(
             Some(api_client.clone()),
             opengp_config::CalendarConfig::default(),
+            Theme::dark(),
+            opengp_config::healthcare::HealthcareConfig::default(),
         );
         app.set_authenticated(true);
         app.request_refresh_patients();
@@ -941,7 +948,7 @@ mod tests {
 
     #[test]
     fn pending_form_data_is_preserved_while_logged_out_and_available_after_relogin() {
-        let mut app = App::new(None, opengp_config::CalendarConfig::default());
+        let mut app = App::new(None, opengp_config::CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
 
         let patient_id = uuid::Uuid::new_v4();
         let practitioner_id = uuid::Uuid::new_v4();
@@ -1017,7 +1024,7 @@ mod tests {
             .set_session_token(Some("test-token".to_string()))
             .await;
 
-        let mut app = App::new(Some(api_client), opengp_config::CalendarConfig::default());
+        let mut app = App::new(Some(api_client), opengp_config::CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
 
         app.request_refresh_patients();
 

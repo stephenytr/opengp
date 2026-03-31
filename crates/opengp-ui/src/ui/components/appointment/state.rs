@@ -5,6 +5,8 @@ use opengp_config::CalendarConfig;
 use opengp_domain::domain::appointment::CalendarDayView;
 use opengp_domain::domain::user::Practitioner;
 
+use crate::ui::widgets::LoadingState;
+
 use super::calendar::Calendar;
 use super::schedule::Schedule;
 
@@ -24,7 +26,8 @@ pub struct AppointmentState {
     pub practitioners: Vec<Practitioner>,
     pub selected_practitioner: Option<Uuid>,
     pub selected_appointment: Option<Uuid>,
-    pub is_loading: bool,
+    pub loading_state: LoadingState,
+    loading: bool,
 }
 
 impl AppointmentState {
@@ -38,7 +41,8 @@ impl AppointmentState {
             practitioners: Vec::new(),
             selected_practitioner: None,
             selected_appointment: None,
-            is_loading: false,
+            loading_state: LoadingState::new().message("Loading appointments..."),
+            loading: false,
         }
     }
 
@@ -57,9 +61,14 @@ impl AppointmentState {
         self.current_view = view;
     }
 
+    /// Check if loading
+    pub fn is_loading(&self) -> bool {
+        self.loading
+    }
+
     /// Set loading state
     pub fn set_loading(&mut self, loading: bool) {
-        self.is_loading = loading;
+        self.loading = loading;
     }
 
     /// Set the selected practitioner
@@ -111,7 +120,7 @@ mod tests {
         assert!(state.practitioners.is_empty());
         assert!(state.selected_practitioner.is_none());
         assert!(state.selected_appointment.is_none());
-        assert!(!state.is_loading);
+        assert!(!state.is_loading());
     }
 
     #[test]
@@ -190,13 +199,13 @@ mod tests {
     #[test]
     fn test_loading_state_management() {
         let mut state = create_test_state();
-        assert!(!state.is_loading);
+        assert!(!state.is_loading());
 
         state.set_loading(true);
-        assert!(state.is_loading);
+        assert!(state.is_loading());
 
         state.set_loading(false);
-        assert!(!state.is_loading);
+        assert!(!state.is_loading());
     }
 
     #[test]

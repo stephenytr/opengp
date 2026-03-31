@@ -309,7 +309,10 @@ impl App {
                     if self.tab_bar.selected() == Tab::Appointment
                         && self.appointment_form.is_none()
                     {
-                        self.appointment_form = Some(AppointmentForm::new(self.theme.clone()));
+                        self.appointment_form = Some(AppointmentForm::new(
+                            self.theme.clone(),
+                            self.healthcare_config.clone(),
+                        ));
                         self.request_load_practitioners();
                     }
                 }

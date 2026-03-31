@@ -145,22 +145,27 @@ impl App {
 
                 frame.render_widget(self.appointment_state.calendar.clone(), chunks[0]);
 
-                if self.appointment_state.is_loading {
-                    use ratatui::text::Text;
-                    use ratatui::widgets::{Block, Borders, Paragraph};
+                if self.appointment_state.is_loading() {
+                    use ratatui::widgets::{Block, Borders};
 
-                    let paragraph = Paragraph::new(Text::from("Loading appointments..."))
-                        .block(
-                            Block::default()
-                                .title(" Schedule ")
-                                .borders(Borders::ALL)
-                                .border_style(
-                                    ratatui::style::Style::default().fg(self.theme.colors.border),
-                                ),
-                        )
-                        .alignment(ratatui::layout::Alignment::Center)
-                        .style(ratatui::style::Style::default().fg(self.theme.colors.foreground));
-                    frame.render_widget(paragraph, chunks[1]);
+                    let mut loading_state = self.appointment_state.loading_state.clone();
+                    loading_state.tick();
+                    let indicator = loading_state.to_indicator(self.theme.clone());
+
+                    let block = Block::default()
+                        .title(" Schedule ")
+                        .borders(Borders::ALL)
+                        .border_style(
+                            ratatui::style::Style::default().fg(self.theme.colors.border),
+                        );
+
+                    frame.render_widget(block, chunks[1]);
+
+                    let inner = chunks[1].inner(ratatui::layout::Margin {
+                        vertical: 1,
+                        horizontal: 1,
+                    });
+                    frame.render_widget(indicator, inner);
                     return;
                 }
 
@@ -181,8 +186,7 @@ impl App {
                     .map(|d| !d.practitioners.is_empty())
                     .unwrap_or(false);
 
-                if !self.appointment_state.practitioners.is_empty() && !schedule_has_practitioners
-                {
+                if !self.appointment_state.practitioners.is_empty() && !schedule_has_practitioners {
                     use opengp_domain::domain::appointment::{
                         CalendarDayView, PractitionerSchedule,
                     };

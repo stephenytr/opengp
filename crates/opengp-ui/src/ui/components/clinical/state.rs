@@ -6,6 +6,7 @@ use crate::ui::components::clinical::{
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientListItem;
 use crate::ui::widgets::SearchableListState;
+use opengp_config::healthcare::HealthcareConfig;
 use opengp_domain::domain::clinical::{
     Allergy, Consultation, FamilyHistory, MedicalHistory, SocialHistory, VitalSigns,
 };
@@ -54,6 +55,7 @@ pub struct ClinicalState {
     pub page: usize,
     pub page_size: usize,
     pub theme: Theme,
+    pub healthcare_config: HealthcareConfig,
     pub allergy_form: Option<AllergyForm>,
     pub consultation_form: Option<ConsultationForm>,
     pub medical_history_form: Option<MedicalHistoryForm>,
@@ -76,11 +78,11 @@ pub struct ClinicalState {
 }
 
 impl ClinicalState {
-    pub fn new(theme: Theme) -> Self {
-        Self::with_theme(theme)
+    pub fn new(theme: Theme, healthcare_config: HealthcareConfig) -> Self {
+        Self::with_theme(theme, healthcare_config)
     }
 
-    pub fn with_theme(theme: Theme) -> Self {
+    pub fn with_theme(theme: Theme, healthcare_config: HealthcareConfig) -> Self {
         Self {
             view: ClinicalView::PatientSummary,
             form_view: ClinicalFormView::None,
@@ -97,6 +99,7 @@ impl ClinicalState {
             page: 0,
             page_size: 20,
             theme: theme.clone(),
+            healthcare_config,
             allergy_form: None,
             consultation_form: None,
             medical_history_form: None,
@@ -164,7 +167,10 @@ impl ClinicalState {
     }
 
     pub fn open_vitals_form(&mut self) {
-        self.vitals_form = Some(VitalSignsForm::new(self.theme.clone()));
+        self.vitals_form = Some(VitalSignsForm::new(
+            self.theme.clone(),
+            self.healthcare_config.clone(),
+        ));
         self.form_view = ClinicalFormView::VitalSignsForm;
     }
 
@@ -399,7 +405,7 @@ mod tests {
 
     // Helper to create a test state
     fn test_state() -> ClinicalState {
-        ClinicalState::with_theme(Theme::dark())
+        ClinicalState::with_theme(Theme::dark(), HealthcareConfig::default())
     }
 
     // Test 1: View cycling forward

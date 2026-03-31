@@ -1,6 +1,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::ui::theme::Theme;
@@ -147,7 +147,7 @@ impl Widget for StatusBar {
         // Use a block with top border
         let block = Block::default()
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray));
+            .border_style(Style::default().fg(self.theme.colors.border));
 
         block.render(area, buf);
 
@@ -194,7 +194,7 @@ impl Widget for StatusBar {
                 center_start,
                 area.y,
                 center_text,
-                Style::default().fg(Color::Gray),
+                Style::default().fg(self.theme.colors.disabled),
             );
         }
 
@@ -205,7 +205,7 @@ impl Widget for StatusBar {
                 right_start,
                 area.y,
                 &self.right,
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(self.theme.colors.border),
             );
         }
     }
