@@ -19,6 +19,7 @@ pub enum HeightMode {
     AutoGrow { min: u16, max: u16 },
 }
 
+/// Mutable state for a text input field backed by `ratatui_textarea`.
 #[derive(Clone)]
 pub struct TextareaState {
     pub textarea: TextArea<'static>,
@@ -42,6 +43,7 @@ impl std::fmt::Debug for TextareaState {
 }
 
 impl TextareaState {
+    /// Creates a new textarea state with the given label and default sizing.
     pub fn new(label: impl Into<String>) -> Self {
         let textarea = TextArea::default();
         Self {
@@ -54,6 +56,7 @@ impl TextareaState {
         }
     }
 
+    /// Returns a copy of this state with its contents set to the given value.
     pub fn with_value(mut self, value: impl Into<String>) -> Self {
         let text = value.into();
         let lines: Vec<String> = text.lines().map(|l| l.to_string()).collect();
@@ -65,47 +68,57 @@ impl TextareaState {
         self
     }
 
+    /// Returns a copy of this state with the focused flag updated.
     pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
         self
     }
 
+    /// Returns a copy of this state with the error message updated.
     pub fn error(mut self, error: Option<String>) -> Self {
         self.error = error;
         self
     }
 
+    /// Returns a copy of this state with a different height mode.
     pub fn with_height_mode(mut self, mode: HeightMode) -> Self {
         self.height_mode = mode;
         self
     }
 
+    /// Returns a copy of this state with a maximum character length.
     pub fn max_length(mut self, limit: usize) -> Self {
         self.max_length = Some(limit);
         self
     }
 
+    /// Returns the current contents of the textarea as a single string.
     pub fn value(&self) -> String {
         self.textarea.lines().join("\n")
     }
 
+    /// Returns true if the textarea has no visible content.
     pub fn is_empty(&self) -> bool {
         let lines = self.textarea.lines();
         lines.is_empty() || (lines.len() == 1 && lines[0].is_empty())
     }
 
+    /// Clears all text from the textarea.
     pub fn clear(&mut self) {
         self.textarea = TextArea::default();
     }
 
+    /// Sets whether the textarea is focused.
     pub fn set_focused(&mut self, focused: bool) {
         self.focused = focused;
     }
 
+    /// Sets the current validation error message.
     pub fn set_error(&mut self, error: Option<String>) {
         self.error = error;
     }
 
+    /// Computes the widget height in terminal rows, including borders.
     pub fn height(&self) -> u16 {
         match self.height_mode {
             HeightMode::SingleLine => 3,
@@ -117,6 +130,10 @@ impl TextareaState {
         }
     }
 
+    /// Handles a key press and updates the textarea contents.
+    ///
+    /// Returns true if the key was consumed by the textarea, or false
+    /// if the caller should handle the key at a higher level.
     pub fn handle_key(&mut self, key: KeyEvent) -> bool {
         use ratatui::crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
 
@@ -161,6 +178,7 @@ impl TextareaState {
     }
 }
 
+/// Ratatui widget for rendering a [`TextareaState`] with labels and errors.
 pub struct TextareaWidget<'a> {
     state: &'a TextareaState,
     theme: Theme,
@@ -168,6 +186,7 @@ pub struct TextareaWidget<'a> {
 }
 
 impl<'a> TextareaWidget<'a> {
+    /// Creates a new widget that renders the given textarea state.
     pub fn new(state: &'a TextareaState, theme: Theme) -> Self {
         Self {
             state,
@@ -176,6 +195,7 @@ impl<'a> TextareaWidget<'a> {
         }
     }
 
+    /// Returns a copy of this widget configured with the focused flag.
     pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
         self

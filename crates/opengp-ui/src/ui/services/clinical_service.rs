@@ -9,13 +9,19 @@ use opengp_domain::domain::clinical::{
     UpdateSocialHistoryData, VitalSigns,
 };
 
+/// Result type used by clinical UI services.
 pub type UiResult<T> = Result<T, UiServiceError>;
 
+/// Errors that can occur when calling clinical UI services.
 #[derive(Debug)]
 pub enum UiServiceError {
+    /// Requested entity was not found.
     NotFound(String),
+    /// Validation failure for user supplied data.
     Validation(String),
+    /// Underlying repository or domain level failure.
     Repository(String),
+    /// Any other unexpected error.
     Unknown(String),
 }
 
@@ -38,15 +44,18 @@ impl From<DomainServiceError> for UiServiceError {
     }
 }
 
+/// UI facing wrapper around the clinical domain service.
 pub struct ClinicalUiService {
     service: Arc<ClinicalService>,
 }
 
 impl ClinicalUiService {
+    /// Creates a new clinical UI service from the domain service.
     pub fn new(service: Arc<ClinicalService>) -> Self {
         Self { service }
     }
 
+    /// Lists all consultations for a given patient.
     pub async fn list_consultations(&self, patient_id: Uuid) -> UiResult<Vec<Consultation>> {
         self.service
             .list_patient_consultations(patient_id)
@@ -54,6 +63,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    /// Retrieves a single consultation by id.
     pub async fn get_consultation(&self, id: Uuid) -> UiResult<Option<Consultation>> {
         self.service
             .find_consultation(id)
@@ -61,6 +71,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    /// Creates a new consultation for the given patient and practitioner.
     pub async fn create_consultation(
         &self,
         patient_id: Uuid,
@@ -82,6 +93,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    /// Updates the clinical notes and reason fields for a consultation.
     pub async fn update_clinical_notes(
         &self,
         consultation_id: Uuid,
@@ -102,6 +114,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    /// Signs a consultation to indicate completion.
     pub async fn sign_consultation(&self, consultation_id: Uuid, user_id: Uuid) -> UiResult<()> {
         self.service
             .sign_consultation(consultation_id, user_id)
@@ -109,6 +122,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    /// Lists allergies for a patient, optionally filtering to active only.
     pub async fn list_allergies(
         &self,
         patient_id: Uuid,
@@ -121,6 +135,7 @@ impl ClinicalUiService {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Records a new allergy for a patient.
     pub async fn add_allergy(
         &self,
         patient_id: Uuid,
@@ -146,6 +161,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    /// Marks an allergy as inactive.
     pub async fn deactivate_allergy(&self, allergy_id: Uuid, user_id: Uuid) -> UiResult<()> {
         self.service
             .deactivate_allergy(allergy_id, user_id)
@@ -153,6 +169,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    /// Lists medical history entries for a patient.
     pub async fn list_medical_history(
         &self,
         patient_id: Uuid,
@@ -164,6 +181,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    /// Adds a new medical history entry for a patient.
     pub async fn add_medical_history(
         &self,
         patient_id: Uuid,
@@ -187,6 +205,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    /// Updates the status field of a medical history entry.
     pub async fn update_condition_status(
         &self,
         history_id: Uuid,
@@ -200,6 +219,7 @@ impl ClinicalUiService {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Records a new set of vital signs for a patient.
     pub async fn record_vitals(
         &self,
         patient_id: Uuid,
@@ -233,6 +253,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    /// Gets the most recent vital signs for a patient, if any.
     pub async fn get_latest_vitals(&self, patient_id: Uuid) -> UiResult<Option<VitalSigns>> {
         self.service
             .get_latest_vital_signs(patient_id)
@@ -240,6 +261,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    /// Lists historical vital sign entries for a patient.
     pub async fn list_vitals_history(
         &self,
         patient_id: Uuid,
@@ -251,6 +273,7 @@ impl ClinicalUiService {
             .map_err(|e| UiServiceError::Repository(e.to_string()))
     }
 
+    /// Retrieves the social history record for a patient, if present.
     pub async fn get_social_history(&self, patient_id: Uuid) -> UiResult<Option<SocialHistory>> {
         self.service
             .get_social_history(patient_id)

@@ -8,13 +8,17 @@ use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::ui::theme::Theme;
 
+/// A single selectable option in a [`DropdownWidget`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DropdownOption {
+    /// Machine readable value returned when this option is selected.
     pub value: String,
+    /// Human readable label shown in the UI.
     pub label: String,
 }
 
 impl DropdownOption {
+    /// Creates a new dropdown option from a value and label.
     pub fn new(value: impl Into<String>, label: impl Into<String>) -> Self {
         Self {
             value: value.into(),
@@ -23,13 +27,17 @@ impl DropdownOption {
     }
 }
 
+/// Open or closed state of a [`DropdownWidget`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DropdownState {
+    /// The dropdown popup is not visible.
     #[default]
     Closed,
+    /// The dropdown popup is visible and can be interacted with.
     Open,
 }
 
+/// Interactive dropdown widget for choosing one option from a list.
 pub struct DropdownWidget {
     pub options: Vec<DropdownOption>,
     pub selected_index: Option<usize>,
@@ -59,6 +67,7 @@ impl Clone for DropdownWidget {
 }
 
 impl DropdownWidget {
+    /// Creates a new dropdown with the given label, options, and theme.
     pub fn new(label: impl Into<String>, options: Vec<DropdownOption>, theme: Theme) -> Self {
         Self {
             options,
@@ -73,36 +82,43 @@ impl DropdownWidget {
         }
     }
 
+    /// Sets placeholder text shown when no value is selected.
     pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
         self.placeholder = placeholder.into();
         self
     }
 
+    /// Returns a copy of this widget configured with the focused flag.
     pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
         self
     }
 
+    /// Returns the value of the currently selected option, if any.
     pub fn selected_value(&self) -> Option<&str> {
         self.selected_index
             .and_then(|i| self.options.get(i))
             .map(|o| o.value.as_str())
     }
 
+    /// Returns the label of the currently selected option, if any.
     pub fn selected_label(&self) -> Option<&str> {
         self.selected_index
             .and_then(|i| self.options.get(i))
             .map(|o| o.label.as_str())
     }
 
+    /// Selects the option that matches the given value.
     pub fn set_value(&mut self, value: &str) {
         self.selected_index = self.options.iter().position(|o| o.value == value);
     }
 
+    /// Returns true if the dropdown popup is open.
     pub fn is_open(&self) -> bool {
         self.state == DropdownState::Open
     }
 
+    /// Toggles between open and closed states.
     pub fn toggle(&mut self) {
         self.state = match self.state {
             DropdownState::Closed => DropdownState::Open,
@@ -116,6 +132,7 @@ impl DropdownWidget {
         }
     }
 
+    /// Opens the dropdown popup and focuses the current selection.
     pub fn open(&mut self) {
         self.state = DropdownState::Open;
         self.focused_index = self
@@ -124,16 +141,19 @@ impl DropdownWidget {
             .min(self.options.len().saturating_sub(1));
     }
 
+    /// Closes the dropdown popup.
     pub fn close(&mut self) {
         self.state = DropdownState::Closed;
     }
 
+    /// Moves the focused option to the next item in the list.
     pub fn select_next(&mut self) {
         if !self.options.is_empty() {
             self.focused_index = (self.focused_index + 1) % self.options.len();
         }
     }
 
+    /// Moves the focused option to the previous item in the list.
     pub fn select_prev(&mut self) {
         if !self.options.is_empty() {
             self.focused_index = if self.focused_index == 0 {
@@ -144,11 +164,16 @@ impl DropdownWidget {
         }
     }
 
+    /// Confirms the currently focused option as the selected value.
     pub fn confirm_selection(&mut self) {
         self.selected_index = Some(self.focused_index);
         self.state = DropdownState::Closed;
     }
 
+    /// Handles keyboard input for opening, closing, and navigating options.
+    ///
+    /// Returns a [`DropdownAction`] that the caller can use to react to
+    /// changes or `None` when the key is ignored.
     pub fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> Option<DropdownAction> {
         use crossterm::event::KeyCode;
 
@@ -208,6 +233,10 @@ impl DropdownWidget {
         }
     }
 
+    /// Handles mouse clicks inside or outside the dropdown area.
+    ///
+    /// Returns a [`DropdownAction`] when a click opens, closes, or selects
+    /// a value, or `None` when the event is ignored.
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<DropdownAction> {
         if mouse.kind != MouseEventKind::Up(crossterm::event::MouseButton::Left) {
             return None;
@@ -245,11 +274,16 @@ impl DropdownWidget {
     }
 }
 
+/// High level events produced by a [`DropdownWidget`].
 #[derive(Debug, Clone)]
 pub enum DropdownAction {
+    /// The dropdown popup was opened.
     Opened,
+    /// The dropdown popup was closed.
     Closed,
+    /// A selection was confirmed, returning the selected index if present.
     Selected(Option<usize>),
+    /// The focused option changed while the dropdown was open.
     FocusChanged,
 }
 

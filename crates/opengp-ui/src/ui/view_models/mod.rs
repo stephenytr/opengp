@@ -8,6 +8,7 @@ use uuid::Uuid;
 use opengp_domain::domain::appointment::{Appointment, AppointmentStatus, AppointmentType};
 use opengp_domain::domain::patient::{AtsiStatus, ConcessionType, Gender, Patient};
 
+/// Lightweight representation of a patient used in list views and search widgets.
 #[derive(Debug, Clone)]
 pub struct PatientListItem {
     pub id: Uuid,
@@ -49,6 +50,10 @@ impl From<Patient> for PatientListItem {
     }
 }
 
+/// Data backing the patient form UI.
+///
+/// This struct flattens the domain `Patient` into fields that match the
+/// interactive form widgets.
 #[derive(Debug, Clone)]
 pub struct PatientFormData {
     // Identification
@@ -129,6 +134,7 @@ impl From<Patient> for PatientFormData {
 }
 
 impl PatientFormData {
+    /// Returns an empty patient form with sensible defaults.
     pub fn empty() -> Self {
         Self {
             title: None,
@@ -165,6 +171,7 @@ impl PatientFormData {
     }
 }
 
+/// View model used for rendering appointments in the calendar and schedule UI.
 #[derive(Debug, Clone)]
 pub struct AppointmentViewItem {
     pub id: Uuid,
@@ -235,6 +242,7 @@ impl From<CalendarAppointment> for AppointmentViewItem {
     }
 }
 
+/// Minimal practitioner details required by the UI.
 #[derive(Debug, Clone)]
 pub struct PractitionerViewItem {
     pub id: Uuid,

@@ -60,7 +60,7 @@ pub struct AppointmentUiService {
 }
 
 impl AppointmentUiService {
-    /// Create a new appointment UI service
+    /// Creates a new appointment UI service.
     pub fn new(
         practitioner_repo: Arc<dyn PractitionerRepository>,
         calendar_query: Arc<dyn AppointmentCalendarQuery>,
@@ -77,6 +77,7 @@ impl AppointmentUiService {
         }
     }
 
+    /// Creates a new appointment using the domain service.
     pub async fn create_appointment(
         &self,
         data: NewAppointmentData,
@@ -89,7 +90,7 @@ impl AppointmentUiService {
             .map_err(|e| UiServiceError::Unknown(e.to_string()))
     }
 
-    /// List all active practitioners
+    /// Lists all active practitioners.
     pub async fn get_practitioners(&self) -> UiResult<Vec<Practitioner>> {
         self.practitioner_repo
             .list_active()
@@ -171,6 +172,7 @@ impl AppointmentUiService {
         })
     }
 
+    /// Marks an appointment as arrived.
     pub async fn mark_arrived(
         &self,
         appointment_id: uuid::Uuid,
@@ -183,6 +185,7 @@ impl AppointmentUiService {
             .map_err(|e| UiServiceError::Unknown(e.to_string()))
     }
 
+    /// Marks an appointment as in progress.
     pub async fn mark_in_progress(
         &self,
         appointment_id: uuid::Uuid,
@@ -195,6 +198,7 @@ impl AppointmentUiService {
             .map_err(|e| UiServiceError::Unknown(e.to_string()))
     }
 
+    /// Marks an appointment as completed.
     pub async fn mark_completed(
         &self,
         appointment_id: uuid::Uuid,
@@ -207,6 +211,7 @@ impl AppointmentUiService {
             .map_err(|e| UiServiceError::Unknown(e.to_string()))
     }
 
+    /// Returns the available time slots for a practitioner on a given date.
     pub async fn get_available_slots(
         &self,
         practitioner_id: uuid::Uuid,

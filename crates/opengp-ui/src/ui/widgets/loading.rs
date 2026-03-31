@@ -8,15 +8,20 @@ use crate::ui::theme::Theme;
 
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
+/// Different visual styles for loading spinners.
 #[derive(Debug, Clone, Copy, Default)]
 pub enum SpinnerStyle {
+    /// Dot based spinner.
     #[default]
     Dots,
+    /// Line style spinner.
     Line,
+    /// Arrow style spinner.
     Arrow,
 }
 
 impl SpinnerStyle {
+    /// Returns the animation frames used for this style.
     pub fn frames(&self) -> &[&str] {
         match self {
             SpinnerStyle::Dots => SPINNER_FRAMES,
@@ -26,6 +31,7 @@ impl SpinnerStyle {
     }
 }
 
+/// Widget friendly representation of a loading spinner with a message.
 #[derive(Debug, Clone)]
 pub struct LoadingIndicator {
     message: String,
@@ -35,6 +41,7 @@ pub struct LoadingIndicator {
 }
 
 impl LoadingIndicator {
+    /// Creates a new loading indicator using the given theme.
     pub fn new(theme: Theme) -> Self {
         Self {
             message: "Loading...".to_string(),
@@ -44,21 +51,25 @@ impl LoadingIndicator {
         }
     }
 
+    /// Returns a copy of this indicator with a different message.
     pub fn message(mut self, message: impl Into<String>) -> Self {
         self.message = message.into();
         self
     }
 
+    /// Returns a copy of this indicator with a different spinner style.
     pub fn style(mut self, style: SpinnerStyle) -> Self {
         self.style = style;
         self
     }
 
+    /// Advances the spinner by one frame.
     pub fn tick(&mut self) {
         let frames = self.style.frames();
         self.frame_index = (self.frame_index + 1) % frames.len();
     }
 
+    /// Returns the current spinner frame as a string slice.
     pub fn current_frame(&self) -> &str {
         self.style.frames()[self.frame_index]
     }
@@ -92,6 +103,7 @@ impl Widget for LoadingIndicator {
     }
 }
 
+/// Simple state holder for a loading spinner that can be turned into a widget.
 #[derive(Debug, Clone, Default)]
 pub struct LoadingState {
     message: String,
@@ -100,25 +112,30 @@ pub struct LoadingState {
 }
 
 impl LoadingState {
+    /// Creates a new empty loading state.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Returns a copy of this state with a different message.
     pub fn message(mut self, message: impl Into<String>) -> Self {
         self.message = message.into();
         self
     }
 
+    /// Returns a copy of this state with a different spinner style.
     pub fn style(mut self, style: SpinnerStyle) -> Self {
         self.style = style;
         self
     }
 
+    /// Advances the stored frame index by one.
     pub fn tick(&mut self) {
         let frames = self.style.frames();
         self.frame_index = (self.frame_index + 1) % frames.len();
     }
 
+    /// Converts this state into a [`LoadingIndicator`] widget.
     pub fn to_indicator(&self, theme: Theme) -> LoadingIndicator {
         LoadingIndicator {
             message: self.message.clone(),

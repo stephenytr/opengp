@@ -8,16 +8,39 @@ use crate::theme::Theme;
 
 use super::{DropdownWidget, ScrollableFormState, TextareaState};
 
+/// Describes a logical field in a form that is driven by a [`FormState`].
+///
+/// Implementors map enum variants to concrete widget configuration such as
+/// labels, identifiers, and whether the field is required or uses a textarea
+/// or dropdown.
 pub trait FormField: Copy + Eq + Hash + strum::IntoEnumIterator + Into<&'static str> {
+    /// Returns all fields in the order they should be focused.
     fn all() -> Vec<Self>;
+
+    /// Human friendly label shown next to the field in the UI.
     fn label(&self) -> &'static str;
+
+    /// Stable identifier for this field, used as the key in form state maps.
     fn id(&self) -> &'static str;
+
+    /// Looks up a field by its identifier string.
     fn from_id(id: &str) -> Option<Self>;
+
+    /// Returns true if the field must have a non empty value to be valid.
     fn is_required(&self) -> bool;
+
+    /// Returns true if the field is rendered as a textarea widget.
     fn is_textarea(&self) -> bool;
+
+    /// Returns true if the field is rendered as a dropdown widget.
     fn is_dropdown(&self) -> bool;
 }
 
+/// Shared state for forms that are built from [`FormField`] definitions.
+///
+/// This struct owns the widget state for all fields in a form, tracks focus
+/// and validation errors, and translates keyboard input into high level
+/// [`FormAction`] values.
 #[derive(Clone)]
 pub struct FormState<F: FormField> {
     pub textareas: HashMap<String, TextareaState>,
@@ -31,6 +54,7 @@ pub struct FormState<F: FormField> {
 }
 
 impl<F: FormField> FormState<F> {
+    /// Creates a new form state for the given theme and initial focused field.
     pub fn new(theme: Theme, focused_field: F) -> Self {
         Self {
             textareas: HashMap::new(),
@@ -44,14 +68,17 @@ impl<F: FormField> FormState<F> {
         }
     }
 
+    /// Returns the current textual value for the given field.
     pub fn get_value(&self, field: F) -> String {
         self.get_value_by_id(field.id())
     }
 
+    /// Sets the textual value for the given field and revalidates it.
     pub fn set_value(&mut self, field: F, value: String) {
         self.set_value_by_id(field.id(), value);
     }
 
+    /// Returns the current textual value for a field identified by its id.
     pub fn get_value_by_id(&self, field_id: &str) -> String {
         if let Some(field) = F::from_id(field_id) {
             if field.is_textarea() {
@@ -83,6 +110,10 @@ impl<F: FormField> FormState<F> {
         String::new()
     }
 
+    /// Sets the textual value for the field identified by the given id.
+    ///
+    /// This updates the underlying widget state and revalidates the field if
+    /// it can be resolved from the id.
     pub fn set_value_by_id(&mut self, field_id: &str, value: String) {
         if let Some(field) = F::from_id(field_id) {
             let mut handled = false;
@@ -140,6 +171,9 @@ impl<F: FormField> FormState<F> {
         }
     }
 
+    /// Validates a single field and updates the error map.
+    ///
+    /// Returns true if the field is valid after validation.
     pub fn validate_field(&mut self, field: F) -> bool {
         let field_id = field.id();
         self.errors.remove(field_id);
@@ -164,6 +198,10 @@ impl<F: FormField> FormState<F> {
         }
     }
 
+    /// Handles a navigation key press and updates focus or triggers actions.
+    ///
+    /// Returns a [`FormAction`] when the key should be handled by the caller,
+    /// such as submit or cancel, and `None` when the key is ignored.
     pub fn handle_navigation_key(&mut self, key: KeyEvent) -> Option<FormAction> {
         if key.kind != KeyEventKind::Press {
             return None;
@@ -201,10 +239,12 @@ impl<F: FormField> FormState<F> {
         }
     }
 
+    /// Returns the field that is currently focused.
     pub fn focused_field(&self) -> F {
         self.focused_field
     }
 
+    /// Moves focus to the next field, wrapping at the end.
     pub fn next_field(&mut self) {
         if self.field_order.is_empty() {
             return;
@@ -220,6 +260,7 @@ impl<F: FormField> FormState<F> {
         }
     }
 
+    /// Moves focus to the previous field, wrapping at the start.
     pub fn prev_field(&mut self) {
         if self.field_order.is_empty() {
             return;

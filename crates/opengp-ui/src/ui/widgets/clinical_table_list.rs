@@ -11,22 +11,34 @@ use crate::ui::layout::HEADER_HEIGHT;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::LoadingIndicator;
 
+/// Configuration for a single column in a [`ClinicalTableList`].
 pub struct ColumnDef<T> {
+    /// Column header text.
     pub title: &'static str,
+    /// Fixed width for this column in terminal cells.
     pub width: u16,
+    /// Function that renders a row item into the cell text for this column.
     pub render: Box<dyn Fn(&T) -> String>,
 }
 
+/// Actions that can be produced by interacting with a [`ClinicalTableList`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ListAction<T> {
+    /// A different row was selected by index.
     Select(usize),
+    /// The currently selected row was opened.
     Open(T),
+    /// The user requested to create a new item.
     New,
+    /// The user requested to edit the selected item.
     Edit(T),
+    /// The user requested to delete the selected item.
     Delete(T),
+    /// The user toggled whether inactive items are shown.
     ToggleInactive,
 }
 
+/// Generic table widget used for clinical lists such as allergies or medical history.
 pub struct ClinicalTableList<T> {
     pub items: Vec<T>,
     pub columns: Vec<ColumnDef<T>>,
@@ -40,6 +52,10 @@ pub struct ClinicalTableList<T> {
 
 impl<T> ClinicalTableList<T> {
     #[allow(clippy::type_complexity)]
+    /// Creates a new clinical table list from items and column definitions.
+    ///
+    /// An optional sort function can be supplied to control the initial
+    /// ordering of items.
     pub fn new(
         mut items: Vec<T>,
         columns: Vec<ColumnDef<T>>,
@@ -63,26 +79,31 @@ impl<T> ClinicalTableList<T> {
         }
     }
 
+    /// Moves the selection up by one row if possible.
     pub fn move_up(&mut self) {
         if self.selected_index > 0 {
             self.selected_index -= 1;
         }
     }
 
+    /// Moves the selection down by one row if possible.
     pub fn move_down(&mut self) {
         if self.selected_index < self.items.len().saturating_sub(1) {
             self.selected_index += 1;
         }
     }
 
+    /// Moves the selection to the first row.
     pub fn move_first(&mut self) {
         self.selected_index = 0;
     }
 
+    /// Moves the selection to the last row.
     pub fn move_last(&mut self) {
         self.selected_index = self.items.len().saturating_sub(1);
     }
 
+    /// Adjusts the scroll offset so the selected row stays within view.
     pub fn adjust_scroll(&mut self, visible_rows: usize) {
         if visible_rows == 0 {
             return;
@@ -95,6 +116,10 @@ impl<T> ClinicalTableList<T> {
         }
     }
 
+    /// Handles keyboard navigation and commands for the list.
+    ///
+    /// Returns a [`ListAction`] that the caller can use to drive the rest of
+    /// the UI, or `None` when the key is ignored.
     pub fn handle_key(&mut self, _key: KeyEvent) -> Option<ListAction<T>>
     where
         T: Clone,
@@ -158,6 +183,10 @@ impl<T> ClinicalTableList<T> {
         }
     }
 
+    /// Handles mouse scrolling and click selection inside the list area.
+    ///
+    /// Returns a [`ListAction`] when the mouse event changes selection,
+    /// or `None` for events that are outside the list or ignored.
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ListAction<T>> {
         if let MouseEventKind::ScrollUp = mouse.kind {
             if self.scroll_offset > 0 {

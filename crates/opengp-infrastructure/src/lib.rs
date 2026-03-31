@@ -1,6 +1,9 @@
 // OpenGP Infrastructure Layer
 // Database, authentication, encryption implementations
 
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+
 pub mod infrastructure;
 
 // Re-export all infrastructure modules

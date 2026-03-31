@@ -1,6 +1,9 @@
 // OpenGP UI Layer
 // Terminal User Interface using Ratatui
 
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+
 pub mod api;
 pub mod ui;
 

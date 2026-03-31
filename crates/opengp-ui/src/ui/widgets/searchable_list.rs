@@ -12,9 +12,13 @@ use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::ScrollableState;
 
+/// Trait for items that can be shown and searched in a `SearchableList`.
 pub trait Searchable: Clone {
+    /// Unique identifier returned when the item is selected.
     fn id(&self) -> Uuid;
+    /// Text shown in the list row.
     fn display_text(&self) -> &str;
+    /// Text used when matching against the search query.
     fn search_text(&self) -> &str;
 }
 
@@ -46,13 +50,18 @@ impl Searchable for PractitionerViewItem {
     }
 }
 
+/// High level actions emitted when the searchable list is used.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SearchableListAction {
+    /// An item was selected, returning its id and display text.
     Selected(Uuid, String),
+    /// The user cancelled out of the list without selecting.
     Cancelled,
+    /// No action was taken.
     None,
 }
 
+/// State for a generic searchable list of items.
 #[derive(Clone)]
 pub struct SearchableListState<T: Searchable> {
     pub items: Vec<T>,
@@ -65,6 +74,7 @@ pub struct SearchableListState<T: Searchable> {
 }
 
 impl<T: Searchable> SearchableListState<T> {
+    /// Creates a new state with the given items.
     pub fn new(items: Vec<T>) -> Self {
         let filtered = items.clone();
         Self {
@@ -78,6 +88,7 @@ impl<T: Searchable> SearchableListState<T> {
         }
     }
 
+    /// Replaces the list items and refreshes any active filters.
     pub fn set_items(&mut self, items: Vec<T>) {
         self.items = items.clone();
         if self.query.is_empty() {
@@ -88,6 +99,7 @@ impl<T: Searchable> SearchableListState<T> {
         self.scrollable.set_item_count(self.filtered.len());
     }
 
+    /// Opens the list and resets the query and scroll state.
     pub fn open(&mut self) {
         self.open = true;
         self.query.clear();
@@ -95,11 +107,13 @@ impl<T: Searchable> SearchableListState<T> {
         self.filtered = self.items.clone();
     }
 
+    /// Closes the list and clears the query.
     pub fn close(&mut self) {
         self.open = false;
         self.query.clear();
     }
 
+    /// Returns true if the list is currently visible.
     pub fn is_open(&self) -> bool {
         self.open
     }
@@ -146,6 +160,7 @@ impl<T: Searchable> SearchableListState<T> {
         self.scrollable = ScrollableState::new();
     }
 
+    /// Updates the search query and reapplies either fuzzy or substring matching.
     pub fn set_query(&mut self, query: String, fuzzy: bool) {
         self.query = query;
         if fuzzy {
@@ -155,23 +170,28 @@ impl<T: Searchable> SearchableListState<T> {
         }
     }
 
+    /// Moves the highlighted row up by one.
     pub fn move_up(&mut self) {
         self.scrollable.move_up();
     }
 
+    /// Moves the highlighted row down by one.
     pub fn move_down(&mut self) {
         self.scrollable.set_item_count(self.filtered.len());
         self.scrollable.move_down();
     }
 
+    /// Returns the currently highlighted item in the filtered list.
     pub fn selected_item(&self) -> Option<&T> {
         self.filtered.get(self.scrollable.selected_index())
     }
 
+    /// Returns the id of the currently highlighted item.
     pub fn selected_id(&self) -> Option<Uuid> {
         self.selected_item().map(|item| item.id())
     }
 
+    /// Returns the display text of the currently highlighted item.
     pub fn selected_display(&self) -> Option<String> {
         self.selected_item()
             .map(|item| item.display_text().to_string())
@@ -184,6 +204,7 @@ impl<T: Searchable> Default for SearchableListState<T> {
     }
 }
 
+/// Ratatui widget that renders and drives a [`SearchableListState`].
 pub struct SearchableList<'a, T: Searchable> {
     state: &'a mut SearchableListState<T>,
     theme: &'a Theme,
@@ -192,6 +213,7 @@ pub struct SearchableList<'a, T: Searchable> {
 }
 
 impl<'a, T: Searchable> SearchableList<'a, T> {
+    /// Creates a new widget view over the given state.
     pub fn new(
         state: &'a mut SearchableListState<T>,
         theme: &'a Theme,
@@ -206,6 +228,7 @@ impl<'a, T: Searchable> SearchableList<'a, T> {
         }
     }
 
+    /// Handles key presses for opening the list, typing the query, and navigation.
     pub fn handle_key(&mut self, key: KeyEvent) -> SearchableListAction {
         if key.kind != KeyEventKind::Press {
             return SearchableListAction::None;
