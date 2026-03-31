@@ -85,6 +85,7 @@ impl<F: FormField> FormState<F> {
 
     pub fn set_value_by_id(&mut self, field_id: &str, value: String) {
         if let Some(field) = F::from_id(field_id) {
+            let mut handled = false;
             if field.is_textarea() {
                 if let Some(textarea) = self.textareas.get_mut(field_id) {
                     let label = textarea.label.clone();
@@ -94,22 +95,26 @@ impl<F: FormField> FormState<F> {
 
                     let mut updated = TextareaState::new(label)
                         .with_height_mode(height_mode)
-                        .with_value(value)
+                        .with_value(value.clone())
                         .focused(focused);
                     if let Some(limit) = max_length {
                         updated = updated.max_length(limit);
                     }
 
                     *textarea = updated;
+                    handled = true;
                 }
             } else if field.is_dropdown() {
                 if let Some(dropdown) = self.dropdowns.get_mut(field_id) {
                     dropdown.set_value(&value);
+                    handled = true;
                 }
             }
 
-            let _ = self.validate_field(field);
-            return;
+            if handled {
+                let _ = self.validate_field(field);
+                return;
+            }
         }
 
         if let Some(textarea) = self.textareas.get_mut(field_id) {
@@ -128,6 +133,10 @@ impl<F: FormField> FormState<F> {
             *textarea = updated;
         } else if let Some(dropdown) = self.dropdowns.get_mut(field_id) {
             dropdown.set_value(&value);
+        }
+
+        if let Some(field) = F::from_id(field_id) {
+            let _ = self.validate_field(field);
         }
     }
 

@@ -765,7 +765,6 @@ fn parse_appointment_type(value: &str) -> AppointmentType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Theme;
     use axum::{
         extract::{Query, State},
         http::StatusCode,
@@ -789,6 +788,15 @@ mod tests {
         consultation_calls: Arc<Mutex<u32>>,
     }
 
+    fn new_test_app(api_client: Option<Arc<crate::api::ApiClient>>) -> App {
+        App::new(
+            api_client,
+            opengp_config::CalendarConfig::default(),
+            crate::ui::theme::Theme::dark(),
+            opengp_config::healthcare::HealthcareConfig::default(),
+        )
+    }
+
     #[tokio::test]
     async fn app_patient_refresh_uses_api_client() {
         let state = TestState::default();
@@ -802,7 +810,7 @@ mod tests {
             .set_session_token(Some("test-token".to_string()))
             .await;
 
-        let mut app = App::new(Some(api_client), opengp_config::CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
+        let mut app = new_test_app(Some(api_client));
         app.request_refresh_patients();
 
         for _ in 0..20 {
@@ -831,7 +839,7 @@ mod tests {
             .set_session_token(Some("test-token".to_string()))
             .await;
 
-        let mut app = App::new(Some(api_client), opengp_config::CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
+        let mut app = new_test_app(Some(api_client));
 
         let patient_id = uuid::Uuid::new_v4();
         app.request_refresh_appointments(Utc::now().date_naive());
@@ -863,12 +871,7 @@ mod tests {
         let (base_url, _server) = spawn_server(app_router).await;
         let api_client = Arc::new(crate::api::ApiClient::new(base_url));
 
-        let mut app = App::new(
-            Some(api_client.clone()),
-            opengp_config::CalendarConfig::default(),
-            Theme::dark(),
-            opengp_config::healthcare::HealthcareConfig::default(),
-        );
+        let mut app = new_test_app(Some(api_client.clone()));
         app.set_authenticated(false);
 
         enter_login_credentials(&mut app, "dr_smith", "correct-password");
@@ -895,12 +898,7 @@ mod tests {
         let (base_url, _server) = spawn_server(app_router).await;
         let api_client = Arc::new(crate::api::ApiClient::new(base_url));
 
-        let mut app = App::new(
-            Some(api_client.clone()),
-            opengp_config::CalendarConfig::default(),
-            Theme::dark(),
-            opengp_config::healthcare::HealthcareConfig::default(),
-        );
+        let mut app = new_test_app(Some(api_client.clone()));
         app.set_authenticated(false);
 
         enter_login_credentials(&mut app, "dr_smith", "wrong-password");
@@ -925,12 +923,7 @@ mod tests {
             .set_session_token(Some("test-token".to_string()))
             .await;
 
-        let mut app = App::new(
-            Some(api_client.clone()),
-            opengp_config::CalendarConfig::default(),
-            Theme::dark(),
-            opengp_config::healthcare::HealthcareConfig::default(),
-        );
+        let mut app = new_test_app(Some(api_client.clone()));
         app.set_authenticated(true);
         app.request_refresh_patients();
 
@@ -948,7 +941,7 @@ mod tests {
 
     #[test]
     fn pending_form_data_is_preserved_while_logged_out_and_available_after_relogin() {
-        let mut app = App::new(None, opengp_config::CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
+        let mut app = new_test_app(None);
 
         let patient_id = uuid::Uuid::new_v4();
         let practitioner_id = uuid::Uuid::new_v4();
@@ -1024,7 +1017,7 @@ mod tests {
             .set_session_token(Some("test-token".to_string()))
             .await;
 
-        let mut app = App::new(Some(api_client), opengp_config::CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default());
+        let mut app = new_test_app(Some(api_client));
 
         app.request_refresh_patients();
 

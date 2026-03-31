@@ -15,19 +15,13 @@ use uuid::Uuid;
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
+use crate::ui::shared::{FormAction, FormMode};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    DynamicForm, DynamicFormMeta, FormFieldMeta, FormNavigation, FormRuleEngine, FormValidator,
-    HeightMode, ScrollableFormState, TextareaState, TextareaWidget,
+    DynamicForm, DynamicFormMeta, FormField, FormFieldMeta, FormNavigation, FormRuleEngine,
+    FormState, FormValidator, HeightMode, TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::VitalSigns;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum FormMode {
-    #[default]
-    Create,
-    Edit(Uuid),
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumIter, strum::IntoStaticStr)]
 pub enum VitalSignsFormField {
@@ -53,15 +47,45 @@ pub enum VitalSignsFormField {
 
 impl VitalSignsFormField {
     pub fn all() -> Vec<VitalSignsFormField> {
-        use strum::IntoEnumIterator;
-        VitalSignsFormField::iter().collect()
+        <Self as FormField>::all()
     }
 
     pub fn label(&self) -> &'static str {
-        (*self).into()
+        <Self as FormField>::label(self)
     }
 
     pub fn id(&self) -> &'static str {
+        <Self as FormField>::id(self)
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        <Self as FormField>::from_id(id)
+    }
+
+    pub fn is_required(&self) -> bool {
+        <Self as FormField>::is_required(self)
+    }
+
+    pub fn is_textarea(&self) -> bool {
+        <Self as FormField>::is_textarea(self)
+    }
+
+    pub fn is_dropdown(&self) -> bool {
+        <Self as FormField>::is_dropdown(self)
+    }
+}
+
+impl FormField for VitalSignsFormField {
+    fn all() -> Vec<Self> {
+        use strum::IntoEnumIterator;
+        Self::iter().collect()
+    }
+
+    fn label(&self) -> &'static str {
+        (*self).into()
+    }
+
+    fn id(&self) -> &'static str {
         match self {
             VitalSignsFormField::SystolicBp => FIELD_SYSTOLIC_BP,
             VitalSignsFormField::DiastolicBp => FIELD_DIASTOLIC_BP,
@@ -75,7 +99,7 @@ impl VitalSignsFormField {
         }
     }
 
-    pub fn from_id(id: &str) -> Option<Self> {
+    fn from_id(id: &str) -> Option<Self> {
         match id {
             FIELD_SYSTOLIC_BP => Some(VitalSignsFormField::SystolicBp),
             FIELD_DIASTOLIC_BP => Some(VitalSignsFormField::DiastolicBp),
@@ -90,23 +114,21 @@ impl VitalSignsFormField {
         }
     }
 
-    pub fn is_required(&self) -> bool {
+    fn is_required(&self) -> bool {
         // No individual field is required - at least one measurement must be filled
         false
     }
 
-    pub fn is_textarea(&self) -> bool {
+    fn is_textarea(&self) -> bool {
         matches!(self, VitalSignsFormField::Notes)
+    }
+
+    fn is_dropdown(&self) -> bool {
+        false
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum VitalSignsFormAction {
-    FocusChanged,
-    ValueChanged,
-    Submit,
-    Cancel,
-}
+pub type VitalSignsFormAction = FormAction;
 
 const FIELD_SYSTOLIC_BP: &str = "systolic_bp";
 const FIELD_DIASTOLIC_BP: &str = "diastolic_bp";
@@ -119,34 +141,26 @@ const FIELD_WEIGHT: &str = "weight";
 const FIELD_NOTES: &str = "notes";
 
 pub struct VitalSignsForm {
-    mode: FormMode,
+    form_state: FormState<VitalSignsFormField>,
     field_ids: Vec<String>,
-    textareas: HashMap<String, TextareaState>,
     pub focused_field: VitalSignsFormField,
     pub calculated_bmi: Option<f32>,
-    errors: HashMap<String, String>,
     validation_rules: HashMap<String, ValidationRules>,
     validator: FormValidator,
     rule_engine: FormRuleEngine,
-    theme: Theme,
-    scroll: ScrollableFormState,
     healthcare_config: HealthcareConfig,
 }
 
 impl Clone for VitalSignsForm {
     fn clone(&self) -> Self {
         Self {
-            mode: self.mode,
+            form_state: self.form_state.clone(),
             field_ids: self.field_ids.clone(),
-            textareas: self.textareas.clone(),
             focused_field: self.focused_field,
             calculated_bmi: self.calculated_bmi,
-            errors: self.errors.clone(),
             validation_rules: self.validation_rules.clone(),
             validator: FormValidator::new(&self.validation_rules),
             rule_engine: self.rule_engine.clone(),
-            theme: self.theme.clone(),
-            scroll: self.scroll.clone(),
             healthcare_config: self.healthcare_config.clone(),
         }
     }
@@ -159,25 +173,23 @@ impl VitalSignsForm {
             .map(|field| field.id().to_string())
             .collect::<Vec<_>>();
 
-        let textareas = VitalSignsFormField::all()
-            .into_iter()
-            .map(|field| (field.id().to_string(), make_textarea_state(field, None)))
-            .collect::<HashMap<_, _>>();
+        let mut form_state = FormState::new(theme, VitalSignsFormField::SystolicBp);
+        for field in VitalSignsFormField::all() {
+            form_state
+                .textareas
+                .insert(field.id().to_string(), make_textarea_state(field, None));
+        }
 
         let validation_rules = build_validation_rules(&healthcare_config);
 
         Self {
-            mode: FormMode::Create,
+            form_state,
             field_ids,
-            textareas,
             focused_field: VitalSignsFormField::SystolicBp,
             calculated_bmi: None,
-            errors: HashMap::new(),
             validator: FormValidator::new(&validation_rules),
             rule_engine: build_rule_engine(),
             validation_rules,
-            theme,
-            scroll: ScrollableFormState::new(),
             healthcare_config,
         }
     }
@@ -188,7 +200,7 @@ impl VitalSignsForm {
         healthcare_config: HealthcareConfig,
     ) -> Self {
         let mut form = Self::new(theme, healthcare_config);
-        form.mode = FormMode::Edit(vitals.id);
+        form.form_state.mode = FormMode::Edit(vitals.id);
 
         if let Some(systolic) = vitals.systolic_bp {
             form.set_value(VitalSignsFormField::SystolicBp, systolic.to_string());
@@ -233,11 +245,11 @@ impl VitalSignsForm {
     }
 
     pub fn is_edit_mode(&self) -> bool {
-        matches!(self.mode, FormMode::Edit(_))
+        matches!(self.form_state.mode, FormMode::Edit(_))
     }
 
     pub fn vitals_id(&self) -> Option<Uuid> {
-        match self.mode {
+        match self.form_state.mode {
             FormMode::Edit(id) => Some(id),
             FormMode::Create => None,
         }
@@ -256,18 +268,11 @@ impl VitalSignsForm {
     }
 
     fn get_value_by_id(&self, field_id: &str) -> String {
-        self.textareas
-            .get(field_id)
-            .map(TextareaState::value)
-            .unwrap_or_default()
+        self.form_state.get_value_by_id(field_id)
     }
 
     fn set_value_by_id(&mut self, field_id: &str, value: String) {
-        if let Some(field) = VitalSignsFormField::from_id(field_id) {
-            let mut state = make_textarea_state(field, Some(value));
-            state = state.focused(field == self.focused_field);
-            self.textareas.insert(field_id.to_string(), state);
-        }
+        self.form_state.set_value_by_id(field_id, value);
         self.calculate_bmi();
         self.validate_field_by_id(field_id);
     }
@@ -284,7 +289,7 @@ impl VitalSignsForm {
     }
 
     fn validate_field_by_id(&mut self, field_id: &str) {
-        self.errors.remove(field_id);
+        self.form_state.errors.remove(field_id);
 
         let value = self.get_value_by_id(field_id);
         let validator_errors = self.validator.validate(field_id, &value);
@@ -295,13 +300,15 @@ impl VitalSignsForm {
 
         match error {
             Some(err) => {
-                self.errors.insert(field_id.to_string(), err.clone());
-                if let Some(textarea) = self.textareas.get_mut(field_id) {
+                self.form_state
+                    .errors
+                    .insert(field_id.to_string(), err.clone());
+                if let Some(textarea) = self.form_state.textareas.get_mut(field_id) {
                     textarea.set_error(Some(err));
                 }
             }
             None => {
-                if let Some(textarea) = self.textareas.get_mut(field_id) {
+                if let Some(textarea) = self.form_state.textareas.get_mut(field_id) {
                     textarea.set_error(None);
                 }
             }
@@ -359,7 +366,7 @@ impl VitalSignsForm {
     }
 
     pub fn error(&self, field: VitalSignsFormField) -> Option<&String> {
-        self.errors.get(field.id())
+        self.form_state.errors.get(field.id())
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<VitalSignsFormAction> {
@@ -378,6 +385,7 @@ impl VitalSignsForm {
         let field_id = self.focused_field.id().to_string();
         let ratatui_key = to_ratatui_key(key);
         let consumed = self
+            .form_state
             .textareas
             .get_mut(&field_id)
             .map(|textarea| textarea.handle_key(ratatui_key))
@@ -390,37 +398,26 @@ impl VitalSignsForm {
         }
 
         match key.code {
-            KeyCode::Tab => {
-                if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    FormNavigation::prev_field(self);
-                } else {
-                    FormNavigation::next_field(self);
-                }
-                Some(VitalSignsFormAction::FocusChanged)
-            }
-            KeyCode::BackTab => {
-                FormNavigation::prev_field(self);
-                Some(VitalSignsFormAction::FocusChanged)
-            }
-            KeyCode::Up => {
-                FormNavigation::prev_field(self);
-                Some(VitalSignsFormAction::FocusChanged)
-            }
-            KeyCode::Down => {
-                FormNavigation::next_field(self);
-                Some(VitalSignsFormAction::FocusChanged)
-            }
             KeyCode::PageUp => {
-                self.scroll.scroll_up();
+                self.form_state.scroll.scroll_up();
                 Some(VitalSignsFormAction::FocusChanged)
             }
             KeyCode::PageDown => {
-                self.scroll.scroll_down();
+                self.form_state.scroll.scroll_down();
                 Some(VitalSignsFormAction::FocusChanged)
             }
             KeyCode::Enter => None,
-            KeyCode::Esc => Some(VitalSignsFormAction::Cancel),
-            _ => None,
+            _ => {
+                self.form_state.focused_field = self.focused_field;
+                if let Some(action) = self.form_state.handle_navigation_key(key) {
+                    self.focused_field = self.form_state.focused_field;
+                    if matches!(action, FormAction::Submit) {
+                        let _ = DynamicForm::validate(self);
+                    }
+                    return Some(action);
+                }
+                None
+            }
         }
     }
 
@@ -474,6 +471,7 @@ impl DynamicForm for VitalSignsForm {
     fn set_current_field(&mut self, field_id: &str) {
         if let Some(field) = VitalSignsFormField::from_id(field_id) {
             self.focused_field = field;
+            self.form_state.focused_field = field;
         }
     }
 
@@ -486,36 +484,37 @@ impl DynamicForm for VitalSignsForm {
     }
 
     fn validate(&mut self) -> bool {
-        self.errors.clear();
+        self.form_state.errors.clear();
 
         for field_id in self.field_ids.clone() {
             self.validate_field_by_id(&field_id);
         }
 
-        if self.errors.is_empty() {
+        if self.form_state.errors.is_empty() {
             let form_errors = self
                 .rule_engine
                 .evaluate(|field_id| self.get_value_by_id(field_id));
             if let Some(first_error) = form_errors.into_iter().next() {
-                self.errors
+                self.form_state
+                    .errors
                     .insert(FIELD_SYSTOLIC_BP.to_string(), first_error);
             }
         }
 
-        self.errors.is_empty()
+        self.form_state.errors.is_empty()
     }
 
     fn get_error(&self, field_id: &str) -> Option<&str> {
-        self.errors.get(field_id).map(|s| s.as_str())
+        self.form_state.errors.get(field_id).map(|s| s.as_str())
     }
 
     fn set_error(&mut self, field_id: &str, error: Option<String>) {
         match error {
             Some(msg) => {
-                self.errors.insert(field_id.to_string(), msg);
+                self.form_state.errors.insert(field_id.to_string(), msg);
             }
             None => {
-                self.errors.remove(field_id);
+                self.form_state.errors.remove(field_id);
             }
         }
     }
@@ -535,7 +534,7 @@ impl FormNavigation for VitalSignsForm {
     type FormField = VitalSignsFormField;
 
     fn get_error(&self, field: Self::FormField) -> Option<&str> {
-        self.errors.get(field.id()).map(|s| s.as_str())
+        self.form_state.errors.get(field.id()).map(|s| s.as_str())
     }
 
     fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
@@ -556,6 +555,7 @@ impl FormNavigation for VitalSignsForm {
 
     fn set_current_field(&mut self, field: Self::FormField) {
         self.focused_field = field;
+        self.form_state.focused_field = field;
     }
 }
 
@@ -574,7 +574,7 @@ impl Widget for VitalSignsForm {
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.theme.colors.border));
+            .border_style(Style::default().fg(self.form_state.theme.colors.border));
 
         block.clone().render(area, buf);
 
@@ -597,7 +597,7 @@ impl Widget for VitalSignsForm {
             }
 
             let is_focused = field_id == self.focused_field.id();
-            let Some(textarea) = self.textareas.get(&field_id) else {
+            let Some(textarea) = self.form_state.textareas.get(&field_id) else {
                 continue;
             };
             let field_height = textarea.height();
@@ -605,10 +605,10 @@ impl Widget for VitalSignsForm {
             let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
 
             let mut state = textarea.clone();
-            if let Some(err) = self.errors.get(&field_id) {
+            if let Some(err) = self.form_state.errors.get(&field_id) {
                 state.set_error(Some(err.clone()));
             }
-            TextareaWidget::new(&state, self.theme.clone())
+            TextareaWidget::new(&state, self.form_state.theme.clone())
                 .focused(is_focused)
                 .render(field_area, buf);
 
@@ -617,25 +617,25 @@ impl Widget for VitalSignsForm {
 
         if let Some(bmi) = self.calculated_bmi {
             if y <= max_y {
-                let bmi_label_style = Style::default().fg(self.theme.colors.info);
+                let bmi_label_style = Style::default().fg(self.form_state.theme.colors.info);
                 buf.set_string(inner.x + 1, y, "Calculated BMI:", bmi_label_style);
                 buf.set_string(
                     field_start,
                     y,
                     format!("{:.1}", bmi),
-                    Style::default().fg(self.theme.colors.success),
+                    Style::default().fg(self.form_state.theme.colors.success),
                 );
             }
         }
 
-        self.scroll.render_scrollbar(inner, buf);
+        self.form_state.scroll.render_scrollbar(inner, buf);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(
             inner.x + 1,
             help_y,
             "Tab: Next | Ctrl+S: Submit | Esc: Cancel",
-            Style::default().fg(self.theme.colors.disabled),
+            Style::default().fg(self.form_state.theme.colors.disabled),
         );
     }
 }
