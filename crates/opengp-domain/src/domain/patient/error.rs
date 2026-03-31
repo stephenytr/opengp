@@ -13,6 +13,12 @@ pub enum ValidationError {
 
     #[error("Invalid Medicare number")]
     InvalidMedicareNumber,
+
+    #[error("Invalid IHI")]
+    InvalidIhi,
+
+    #[error("Invalid phone number")]
+    InvalidPhoneNumber,
 }
 
 #[derive(Debug, Error)]

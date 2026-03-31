@@ -30,3 +30,4 @@ prescription = []
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util", "macros"] }
+serde_json = "1"
