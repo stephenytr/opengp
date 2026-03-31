@@ -1,0 +1,47 @@
+[smoking_status.never_smoked]
+label = "Never Smoked"
+enabled = true
+
+[smoking_status.current_smoker]
+label = "Current Smoker"
+enabled = true
+
+[smoking_status.ex_smoker]
+label = "Ex-Smoker"
+enabled = true
+
+[alcohol_status.none]
+label = "None"
+enabled = true
+
+[alcohol_status.occasional]
+label = "Occasional"
+enabled = true
+
+[alcohol_status.moderate]
+label = "Moderate"
+enabled = true
+
+[alcohol_status.heavy]
+label = "Heavy"
+enabled = true
+
+[exercise_frequency.none]
+label = "None"
+enabled = true
+
+[exercise_frequency.rarely]
+label = "Rarely"
+enabled = true
+
+[exercise_frequency.once_or_twice_per_week]
+label = "1-2x/Week"
+enabled = true
+
+[exercise_frequency.three_to_five_times]
+label = "3-5x/Week"
+enabled = true
+
+[exercise_frequency.daily]
+label = "Daily"
+enabled = true
