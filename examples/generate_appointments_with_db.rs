@@ -181,7 +181,7 @@ fn print_sample_appointments(
 
     println!("Sample appointments (first {}):", to_show);
     println!(
-        "  {:20} | {:20} | {:15} | {}",
+        "  {:20} | {:20} | {:15} | {:15}",
         "Date/Time", "Patient", "Type", "Status"
     );
     println!(

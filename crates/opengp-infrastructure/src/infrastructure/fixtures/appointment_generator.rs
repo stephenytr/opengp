@@ -320,7 +320,7 @@ impl AppointmentGenerator {
                 return patients
                     .choose(&mut self.rng)
                     .copied()
-                    .unwrap_or_else(|| Uuid::new_v4());
+                    .unwrap_or_else(Uuid::new_v4);
             }
         }
         Uuid::new_v4()
@@ -333,7 +333,7 @@ impl AppointmentGenerator {
                 return practitioners
                     .choose(&mut self.rng)
                     .copied()
-                    .unwrap_or_else(|| Uuid::new_v4());
+                    .unwrap_or_else(Uuid::new_v4);
             }
         }
         Uuid::new_v4()
@@ -462,6 +462,7 @@ impl AppointmentGenerator {
     }
 
     /// Generate a random start time (9am-5pm on weekdays)
+    #[allow(clippy::expect_used)]
     fn random_start_time(&mut self) -> chrono::DateTime<Utc> {
         let now = Utc::now();
         let is_future = self.rng.gen_bool(self.config.future_percentage as f64);

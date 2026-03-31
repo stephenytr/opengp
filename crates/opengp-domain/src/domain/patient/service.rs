@@ -10,7 +10,7 @@ use super::model::Patient;
 use super::repository::PatientRepository;
 use crate::domain::error::RepositoryError as BaseRepositoryError;
 
-/// Application service for patient registration, updates and lookup within a GP clinic.
+// Application service for patient registration, updates and lookup within a GP clinic.
 service! {
     PatientService {
         repository: Arc<dyn PatientRepository>,

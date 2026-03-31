@@ -7,7 +7,7 @@ use super::error::{ServiceError, ValidationError};
 use super::model::{ClaimStatus, Invoice, MedicareClaim, Payment};
 use super::repository::BillingRepository;
 
-/// Application service for billing, Medicare claims and payments.
+// Application service for billing, Medicare claims and payments.
 service! {
     BillingService {
         repository: Arc<dyn BillingRepository>,

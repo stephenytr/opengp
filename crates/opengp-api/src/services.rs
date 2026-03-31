@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+#[cfg(test)]
 use chrono::Utc;
 use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentSearchCriteria, AppointmentService, AvailabilityService,

@@ -319,6 +319,7 @@ impl PatientGenerator {
         format!("0{} {} {}", first, second, third)
     }
 
+    #[allow(clippy::unwrap_used)]
     fn generate_email(&mut self, first_name: &str, last_name: &str) -> String {
         let domains = [
             "gmail.com",
@@ -361,6 +362,7 @@ impl PatientGenerator {
         styles.choose(&mut self.rng).unwrap().clone()
     }
 
+    #[allow(clippy::unwrap_used)]
     fn generate_address(&mut self) -> Address {
         let street_numbers = self.rng.gen_range(1..=999);
         let street_names = [
@@ -423,6 +425,7 @@ impl PatientGenerator {
         }
     }
 
+    #[allow(clippy::unwrap_used)]
     fn generate_emergency_contact(
         &mut self,
         _first_name: &str,
@@ -446,6 +449,7 @@ impl PatientGenerator {
         }
     }
 
+    #[allow(clippy::unwrap_used)]
     fn generate_concession(&mut self) -> (Option<ConcessionType>, Option<String>) {
         let concession_types = [
             ConcessionType::DVA,
@@ -509,6 +513,7 @@ impl PatientGenerator {
             .unwrap_or_else(|| "Mandarin Chinese".to_string())
     }
 
+    #[allow(clippy::unwrap_used)]
     fn random_atsi_status(&mut self) -> AtsiStatus {
         let statuses = [
             AtsiStatus::AboriginalNotTorresStrait,

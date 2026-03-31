@@ -11,8 +11,8 @@ use super::model::{Medication, PBSStatus, Prescription};
 use super::repository::PrescriptionRepository;
 use crate::domain::audit::{AuditEntry, AuditService};
 
+// Service layer for prescribing and PBS validation.
 service! {
-    /// Service layer for prescribing and PBS validation.
     PrescriptionService {
         repository: Arc<dyn PrescriptionRepository>,
         audit_service: Arc<AuditService>,
@@ -243,7 +243,7 @@ impl PrescriptionService {
             .repository
             .find_by_id(id)
             .await?
-            .ok_or_else(|| ServiceError::NotFound(id))?;
+            .ok_or(ServiceError::NotFound(id))?;
 
         // Check if already cancelled
         if !prescription.is_active {

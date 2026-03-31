@@ -32,11 +32,10 @@ pub struct ClinicalRepositories {
     pub family_history: Arc<dyn FamilyHistoryRepository>,
 }
 
-/// Service layer for clinical encounters and related patient history.
-///
-/// Coordinates consultations, allergies, medical history, vital signs,
-/// social history and family history around a patient within a general
-/// practice context.
+// Service layer for clinical encounters and related patient history.
+// Coordinates consultations, allergies, medical history, vital signs,
+// social history and family history around a patient within a general
+// practice context.
 service! {
     ClinicalService {
         repos: ClinicalRepositories,

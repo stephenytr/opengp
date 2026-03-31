@@ -233,7 +233,7 @@ impl AppointmentForm {
         let type_options = vec![
             DropdownOption::new(
                 "Standard",
-                &format!(
+                format!(
                     "Standard ({} min)",
                     healthcare_config
                         .appointment_durations
@@ -244,7 +244,7 @@ impl AppointmentForm {
             ),
             DropdownOption::new(
                 "Long",
-                &format!(
+                format!(
                     "Long ({} min)",
                     healthcare_config
                         .appointment_durations
@@ -255,7 +255,7 @@ impl AppointmentForm {
             ),
             DropdownOption::new(
                 "Brief",
-                &format!(
+                format!(
                     "Brief ({} min)",
                     healthcare_config
                         .appointment_durations
@@ -266,7 +266,7 @@ impl AppointmentForm {
             ),
             DropdownOption::new(
                 "NewPatient",
-                &format!(
+                format!(
                     "New Patient ({} min)",
                     healthcare_config
                         .appointment_durations

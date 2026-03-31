@@ -686,22 +686,25 @@ impl PatientForm {
         let value = self.get_value_by_id(field_id);
         let mut errors = self.validator.validate(field_id, &value);
 
-        if field_id == FIELD_MEDICARE_NUMBER && !value.trim().is_empty() {
-            if MedicareNumber::new_strict(value.clone()).is_err() {
-                errors = vec!["Medicare number must be 10 digits".to_string()];
-            }
+        if field_id == FIELD_MEDICARE_NUMBER
+            && !value.trim().is_empty()
+            && MedicareNumber::new_strict(value.clone()).is_err()
+        {
+            errors = vec!["Medicare number must be 10 digits".to_string()];
         }
 
-        if field_id == FIELD_IHI && !value.trim().is_empty() {
-            if Ihi::new_strict(value.clone()).is_err() {
-                errors = vec!["IHI must be 16 digits".to_string()];
-            }
+        if field_id == FIELD_IHI
+            && !value.trim().is_empty()
+            && Ihi::new_strict(value.clone()).is_err()
+        {
+            errors = vec!["IHI must be 16 digits".to_string()];
         }
 
-        if matches!(field_id, FIELD_PHONE_HOME | FIELD_PHONE_MOBILE) && !value.trim().is_empty() {
-            if PhoneNumber::new_strict(value.clone()).is_err() {
-                errors = vec!["Enter a valid Australian phone number".to_string()];
-            }
+        if matches!(field_id, FIELD_PHONE_HOME | FIELD_PHONE_MOBILE)
+            && !value.trim().is_empty()
+            && PhoneNumber::new_strict(value.clone()).is_err()
+        {
+            errors = vec!["Enter a valid Australian phone number".to_string()];
         }
 
         if matches!(field_id, FIELD_DATE_OF_BIRTH | FIELD_MEDICARE_EXPIRY)

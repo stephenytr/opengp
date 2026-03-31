@@ -143,11 +143,11 @@ impl EncryptionService {
     ///
     /// Lowercase hex-encoded HMAC-SHA256 digest tied to the
     /// current encryption key.
+    #[allow(clippy::expect_used)]
     pub fn hash_for_search(&self, plaintext: &str) -> String {
         // HMAC-SHA256 key initialization is provably safe:
         // - Key is always [u8; 32] from EncryptionService invariant
         // - HMAC-SHA256 accepts 32-byte keys
-        #[allow(clippy::unwrap_used)]
         let mut mac = <HmacSha256 as Mac>::new_from_slice(&self.hmac_key)
             .expect("HMAC-SHA256 key initialization should not fail");
         mac.update(plaintext.as_bytes());

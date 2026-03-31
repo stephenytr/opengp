@@ -7,11 +7,9 @@ use super::error::{ServiceError, ValidationError};
 use super::model::{Referral, ReferralStatus};
 use super::repository::ReferralRepository;
 
+// Service layer for managing outgoing referrals.
+// Validates referral details and coordinates persistence via the ReferralRepository.
 service! {
-    /// Service layer for managing outgoing referrals.
-    ///
-    /// Validates referral details and coordinates persistence via the
-    /// [`ReferralRepository`].
     ReferralService {
         repository: Arc<dyn ReferralRepository>,
     }

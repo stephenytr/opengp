@@ -909,7 +909,7 @@ fn render_progress(current: usize, total: usize) -> Result<(), io::Error> {
     let percentage = ((current as f64 / total as f64) * 100.0).round() as usize;
     let width: usize = 30;
     let filled: usize = ((current as f64 / total as f64) * width as f64).round() as usize;
-    let empty: usize = if filled >= width { 0 } else { width - filled };
+    let empty: usize = width.saturating_sub(filled);
 
     print!(
         "\r  [{}{}] {:>3}% ({}/{})",

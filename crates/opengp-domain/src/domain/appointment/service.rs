@@ -16,7 +16,7 @@ use crate::domain::audit::{AuditEmitter, AuditEntry};
 use crate::domain::error::RepositoryError as BaseRepositoryError;
 use crate::domain::user::WorkingHoursRepository;
 
-/// Application service for creating, updating and querying appointments.
+// Application service for creating, updating and querying appointments.
 service! {
     AppointmentService {
         repository: Arc<dyn AppointmentRepository>,
@@ -25,7 +25,7 @@ service! {
     }
 }
 
-/// Service that calculates available appointment slots from working hours and bookings.
+// Service that calculates available appointment slots from working hours and bookings.
 service! {
     AvailabilityService {
         appointment_repository: Arc<dyn AppointmentRepository>,

@@ -16,7 +16,7 @@ pub struct ConsultationList {
 #[derive(Debug, Clone)]
 pub enum ConsultationListAction {
     Select(usize),
-    Open(Consultation),
+    Open(Box<Consultation>),
     New,
     NextPage,
     PrevPage,
@@ -122,7 +122,7 @@ impl ConsultationList {
         let mut table = self.table();
         let out = match table.handle_key(key) {
             Some(ListAction::Select(i)) => Some(ConsultationListAction::Select(i)),
-            Some(ListAction::Open(c)) => Some(ConsultationListAction::Open(c)),
+            Some(ListAction::Open(c)) => Some(ConsultationListAction::Open(Box::new(c))),
             Some(ListAction::New) => Some(ConsultationListAction::New),
             _ => None,
         };

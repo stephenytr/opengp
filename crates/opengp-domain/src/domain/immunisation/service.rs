@@ -7,9 +7,8 @@ use super::error::{ServiceError, ValidationError};
 use super::model::{Immunisation, VaccinationSchedule};
 use super::repository::ImmunisationRepository;
 
+// Service layer for recording immunisations and managing vaccination schedules.
 service! {
-    /// Service layer for recording immunisations and managing
-    /// vaccination schedules.
     ImmunisationService {
         repository: Arc<dyn ImmunisationRepository>,
     }
