@@ -528,7 +528,7 @@ async fn run_tui(
                             terminal_size.width,
                             terminal_size.height,
                         );
-                        app.handle_mouse_event(mouse, terminal_rect);
+                        app.handle_global_mouse_event(mouse, terminal_rect);
                     }
                     Event::Resize(_, _) => {}
                     _ => {}

@@ -6,7 +6,7 @@ use crossterm::event::MouseEvent;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 impl App {
-    pub(crate) fn handle_global_mouse_event(&mut self, mouse: MouseEvent, area: Rect) {
+    pub fn handle_global_mouse_event(&mut self, mouse: MouseEvent, area: Rect) {
         let tab_bar_area = self.tab_bar.area(area);
         if self.tab_bar.handle_mouse(mouse, tab_bar_area).is_some() {
             self.refresh_status_bar();
