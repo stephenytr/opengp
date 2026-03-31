@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use opengp_config::CalendarConfig;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::symbols::border;
 use ratatui::widgets::{Block, Clear, Widget};
 
@@ -260,7 +260,7 @@ impl TimePickerPopup {
                     let style = if is_selected {
                         Style::new().fg(self.theme.colors.primary).bold().reversed()
                     } else if is_booked {
-                        Style::new().fg(Color::DarkGray).dim()
+                        Style::new().fg(self.theme.colors.text_dim).dim()
                     } else {
                         Style::new().fg(self.theme.colors.foreground)
                     };

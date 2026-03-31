@@ -460,7 +460,9 @@ impl Widget for MedicalHistoryForm {
         if let Some((dropdown, dropdown_area)) = open_dropdown {
             dropdown.render(dropdown_area, buf);
         }
-        self.state.scroll.render_scrollbar(inner, buf);
+        self.state
+            .scroll
+            .render_scrollbar(inner, buf, &self.state.theme);
         let help_y = inner.y + inner.height - 1;
         buf.set_string(
             inner.x + 1,

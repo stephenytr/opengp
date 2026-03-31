@@ -43,7 +43,7 @@ impl Calendar {
     #[allow(clippy::unwrap_used)]
     pub fn new(theme: Theme) -> Self {
         let today = chrono::Utc::now().date_naive();
-        let mut widget = CalendarWidget::with_date(today);
+        let mut widget = CalendarWidget::with_date(today, theme.clone());
         widget.set_selected_date(today); // Set selected date to today
                                          // SAFETY: today.month() is 1-12 and day 1 is always valid
         let current_month = NaiveDate::from_ymd_opt(today.year(), today.month(), 1).unwrap();

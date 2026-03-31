@@ -193,7 +193,9 @@ impl Widget for AllergyForm {
             dropdown.render(dropdown_area, buf);
         }
 
-        self.form_state.scroll.render_scrollbar(inner, buf);
+        self.form_state
+            .scroll
+            .render_scrollbar(inner, buf, &self.form_state.theme);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(

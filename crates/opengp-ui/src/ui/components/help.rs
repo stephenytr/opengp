@@ -169,7 +169,7 @@ impl Widget for HelpOverlay {
         for row in content_area.y..content_area.y + content_area.height.saturating_sub(1) {
             if let Some(cell) = buf.cell_mut(Position::new(sep_x, row)) {
                 cell.set_char('│');
-                cell.set_fg(self.theme.colors.border);
+                cell.set_fg(self.theme.colors.text_dim);
             }
         }
 

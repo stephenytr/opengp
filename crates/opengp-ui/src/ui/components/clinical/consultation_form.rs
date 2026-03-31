@@ -526,7 +526,9 @@ impl Widget for ConsultationForm {
             }
         }
 
-        self.state.scroll.render_scrollbar(inner, buf);
+        self.state
+            .scroll
+            .render_scrollbar(inner, buf, &self.state.theme);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(

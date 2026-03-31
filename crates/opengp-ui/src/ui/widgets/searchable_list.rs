@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 use sublime_fuzzy::best_match;
 use uuid::Uuid;
@@ -301,7 +301,7 @@ impl<'a, T: Searchable> Widget for SearchableList<'a, T> {
             .border_style(
                 Style::default()
                     .fg(self.theme.colors.border)
-                    .bg(Color::Black),
+                    .bg(self.theme.colors.background_dark),
             )
             .title(self.label);
 
@@ -312,7 +312,10 @@ impl<'a, T: Searchable> Widget for SearchableList<'a, T> {
             return;
         }
 
-        buf.set_style(inner, Style::default().bg(Color::Black));
+        buf.set_style(
+            inner,
+            Style::default().bg(self.theme.colors.background_dark),
+        );
 
         let query_area = Rect::new(inner.x, inner.y, inner.width, 3);
         buf.set_string(
@@ -321,7 +324,7 @@ impl<'a, T: Searchable> Widget for SearchableList<'a, T> {
             format!("Search: {}_", self.state.query),
             Style::default()
                 .fg(self.theme.colors.foreground)
-                .bg(Color::Black),
+                .bg(self.theme.colors.background_dark),
         );
 
         let list_area = Rect::new(
@@ -338,7 +341,7 @@ impl<'a, T: Searchable> Widget for SearchableList<'a, T> {
                 "No results",
                 Style::default()
                     .fg(self.theme.colors.disabled)
-                    .bg(Color::Black),
+                    .bg(self.theme.colors.background_dark),
             );
             return;
         }
@@ -361,11 +364,11 @@ impl<'a, T: Searchable> Widget for SearchableList<'a, T> {
             let style = if is_selected {
                 Style::default()
                     .fg(self.theme.colors.primary)
-                    .bg(Color::Black)
+                    .bg(self.theme.colors.background_dark)
             } else {
                 Style::default()
                     .fg(self.theme.colors.foreground)
-                    .bg(Color::Black)
+                    .bg(self.theme.colors.background_dark)
             };
 
             let display = if item.display_text().len() > list_area.width as usize - 2 {

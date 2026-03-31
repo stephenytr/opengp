@@ -147,7 +147,7 @@ impl Widget for StatusBar {
         // Use a block with top border
         let block = Block::default()
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(self.theme.colors.border));
+            .border_style(Style::default().fg(self.theme.colors.text_dim));
 
         block.render(area, buf);
 
@@ -194,7 +194,7 @@ impl Widget for StatusBar {
                 center_start,
                 area.y,
                 center_text,
-                Style::default().fg(self.theme.colors.disabled),
+                Style::default().fg(self.theme.colors.text_secondary),
             );
         }
 
@@ -205,7 +205,7 @@ impl Widget for StatusBar {
                 right_start,
                 area.y,
                 &self.right,
-                Style::default().fg(self.theme.colors.border),
+                Style::default().fg(self.theme.colors.text_dim),
             );
         }
     }

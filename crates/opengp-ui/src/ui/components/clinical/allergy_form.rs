@@ -187,7 +187,7 @@ impl AllergyForm {
             onset_date: None,
             is_valid: false,
             validator: FormValidator::new(&HashMap::new()),
-            date_picker: DatePickerPopup::new(),
+            date_picker: DatePickerPopup::new(theme.clone()),
         };
 
         form.form_state.textareas.insert(

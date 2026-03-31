@@ -11,6 +11,8 @@ use ratatui::{buffer::Buffer, layout::Rect};
 use std::collections::HashMap;
 use time::{Date, Month};
 
+use crate::ui::theme::Theme;
+
 /// Actions that can be triggered by the calendar widget
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CalendarAction {
@@ -60,27 +62,31 @@ pub struct CalendarWidget {
     pub focused_date: NaiveDate,
     /// Error messages
     pub errors: HashMap<String, String>,
+    /// Theme for styling
+    pub theme: Theme,
 }
 
 impl CalendarWidget {
     /// Create a new calendar widget with today's date
-    pub fn new() -> Self {
+    pub fn new(theme: Theme) -> Self {
         let today = Local::now().naive_local().date();
         Self {
             current_month: (today.year(), today.month()),
             selected_date: None,
             focused_date: today,
             errors: HashMap::new(),
+            theme,
         }
     }
 
     /// Create a calendar widget with a specific initial date
-    pub fn with_date(date: NaiveDate) -> Self {
+    pub fn with_date(date: NaiveDate, theme: Theme) -> Self {
         Self {
             current_month: (date.year(), date.month()),
             selected_date: None,
             focused_date: date,
             errors: HashMap::new(),
+            theme,
         }
     }
 
@@ -136,13 +142,14 @@ impl CalendarWidget {
     }
 
     /// Create a date picker mode calendar with the given initial date
-    pub fn show_date_picker(current_value: Option<NaiveDate>) -> Self {
+    pub fn show_date_picker(current_value: Option<NaiveDate>, theme: Theme) -> Self {
         let initial_date = current_value.unwrap_or_else(|| Local::now().naive_local().date());
         Self {
             current_month: (initial_date.year(), initial_date.month()),
             selected_date: current_value,
             focused_date: initial_date,
             errors: HashMap::new(),
+            theme,
         }
     }
 
@@ -164,7 +171,7 @@ impl CalendarWidget {
         let block = Block::default()
             .title(format!(" {} ", title))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Gray));
+            .border_style(Style::default().fg(self.theme.colors.text_secondary));
 
         block.clone().render(area, buf);
         let inner = block.inner(area);
@@ -182,7 +189,7 @@ impl CalendarWidget {
         let block = Block::default()
             .title(format!(" {} ", title))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Yellow));
+            .border_style(Style::default().fg(self.theme.colors.warning));
 
         block.clone().render(area, buf);
         let inner = block.inner(area);
@@ -222,7 +229,7 @@ impl CalendarWidget {
         let cell_width = (area.width as usize / 7).max(2);
         let weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Sun"];
         let style = Style::default()
-            .fg(Color::White)
+            .fg(self.theme.colors.foreground)
             .add_modifier(Modifier::BOLD);
 
         for (i, weekday) in weekdays.iter().enumerate() {
@@ -259,15 +266,15 @@ impl CalendarWidget {
 
                 let style = if Some(date) == self.selected_date {
                     Style::default()
-                        .bg(Color::Blue)
-                        .fg(Color::Black)
+                        .bg(self.theme.colors.selected)
+                        .fg(self.theme.colors.background_dark)
                         .add_modifier(Modifier::BOLD)
                 } else if date == self.focused_date {
-                    Style::default().fg(Color::Yellow)
+                    Style::default().fg(self.theme.colors.warning)
                 } else if date.month() != month {
-                    Style::default().fg(Color::DarkGray)
+                    Style::default().fg(self.theme.colors.text_dim)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(self.theme.colors.foreground)
                 };
 
                 buf.set_string(
@@ -301,17 +308,17 @@ impl CalendarWidget {
 
                 let style = if Some(date) == self.selected_date {
                     Style::default()
-                        .bg(Color::Magenta)
-                        .fg(Color::White)
+                        .bg(self.theme.colors.secondary)
+                        .fg(self.theme.colors.foreground)
                         .add_modifier(Modifier::UNDERLINED)
                 } else if date == self.focused_date {
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(self.theme.colors.primary)
                         .add_modifier(Modifier::UNDERLINED)
                 } else if date.month() != month {
-                    Style::default().fg(Color::DarkGray)
+                    Style::default().fg(self.theme.colors.text_dim)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(self.theme.colors.foreground)
                 };
 
                 buf.set_string(
@@ -400,7 +407,7 @@ impl CalendarWidget {
 
 impl Default for CalendarWidget {
     fn default() -> Self {
-        Self::new()
+        Self::new(Theme::default())
     }
 }
 
@@ -413,6 +420,22 @@ fn time_to_naive(date: Date) -> NaiveDate {
         .expect("time::Date to chrono::NaiveDate")
 }
 
+impl DateStyler for CalendarWidget {
+    fn get_style(&self, date: Date) -> Style {
+        let target = time_to_naive(date);
+
+        if Some(target) == self.selected_date {
+            Style::default()
+                .bg(self.theme.colors.selected)
+                .fg(self.theme.colors.background_dark)
+                .add_modifier(Modifier::BOLD)
+        } else if target == self.focused_date {
+            Style::default().fg(self.theme.colors.warning)
+        } else {
+            Style::default()
+        }
+    }
+}
 /// Styler that highlights dates with appointments.
 #[derive(Debug, Clone, Default)]
 pub struct AppointmentStyler {
@@ -434,21 +457,6 @@ impl AppointmentStyler {
 
     pub fn remove_indicator(&mut self, date: Date) {
         self.indicators.remove(&date);
-    }
-}
-
-impl DateStyler for CalendarWidget {
-    fn get_style(&self, date: Date) -> Style {
-        let target = time_to_naive(date);
-
-        if Some(target) == self.selected_date {
-            Style::default()
-                .bg(Color::Blue)
-                .fg(Color::Black)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default()
-        }
     }
 }
 
@@ -522,7 +530,7 @@ mod tests {
 
     #[test]
     fn test_calendar_widget_new() {
-        let calendar = CalendarWidget::new();
+        let calendar = CalendarWidget::new(Theme::default());
         assert_eq!(calendar.selected_date, None);
         assert!(calendar.errors.is_empty());
     }
@@ -530,14 +538,14 @@ mod tests {
     #[test]
     fn test_calendar_widget_with_date() {
         let date = NaiveDate::from_ymd_opt(2026, 2, 25).unwrap();
-        let calendar = CalendarWidget::with_date(date);
+        let calendar = CalendarWidget::with_date(date, Theme::default());
         assert_eq!(calendar.focused_date, date);
         assert_eq!(calendar.current_month, (2026, 2));
     }
 
     #[test]
     fn test_set_selected_date() {
-        let mut calendar = CalendarWidget::new();
+        let mut calendar = CalendarWidget::new(Theme::default());
         let date = NaiveDate::from_ymd_opt(2026, 3, 15).unwrap();
         calendar.set_selected_date(date);
         assert_eq!(calendar.selected_date(), Some(date));
@@ -545,36 +553,50 @@ mod tests {
 
     #[test]
     fn test_next_month() {
-        let mut calendar = CalendarWidget::with_date(NaiveDate::from_ymd_opt(2026, 2, 25).unwrap());
+        let mut calendar = CalendarWidget::with_date(
+            NaiveDate::from_ymd_opt(2026, 2, 25).unwrap(),
+            Theme::default(),
+        );
         calendar.next_month();
         assert_eq!(calendar.current_month, (2026, 3));
     }
 
     #[test]
     fn test_next_month_year_wrap() {
-        let mut calendar =
-            CalendarWidget::with_date(NaiveDate::from_ymd_opt(2026, 12, 25).unwrap());
+        let mut calendar = CalendarWidget::with_date(
+            NaiveDate::from_ymd_opt(2026, 12, 25).unwrap(),
+            Theme::default(),
+        );
         calendar.next_month();
         assert_eq!(calendar.current_month, (2027, 1));
     }
 
     #[test]
     fn test_prev_month() {
-        let mut calendar = CalendarWidget::with_date(NaiveDate::from_ymd_opt(2026, 3, 25).unwrap());
+        let mut calendar = CalendarWidget::with_date(
+            NaiveDate::from_ymd_opt(2026, 3, 25).unwrap(),
+            Theme::default(),
+        );
         calendar.prev_month();
         assert_eq!(calendar.current_month, (2026, 2));
     }
 
     #[test]
     fn test_prev_month_year_wrap() {
-        let mut calendar = CalendarWidget::with_date(NaiveDate::from_ymd_opt(2026, 1, 25).unwrap());
+        let mut calendar = CalendarWidget::with_date(
+            NaiveDate::from_ymd_opt(2026, 1, 25).unwrap(),
+            Theme::default(),
+        );
         calendar.prev_month();
         assert_eq!(calendar.current_month, (2025, 12));
     }
 
     #[test]
     fn test_navigation_actions_move_months() {
-        let mut calendar = CalendarWidget::with_date(NaiveDate::from_ymd_opt(2026, 5, 1).unwrap());
+        let mut calendar = CalendarWidget::with_date(
+            NaiveDate::from_ymd_opt(2026, 5, 1).unwrap(),
+            Theme::default(),
+        );
         calendar.next_month();
         assert_eq!(calendar.current_month, (2026, 6));
         calendar.prev_month();
@@ -583,7 +605,10 @@ mod tests {
 
     #[test]
     fn test_handle_mouse_selects_current_month_date() {
-        let mut calendar = CalendarWidget::with_date(NaiveDate::from_ymd_opt(2026, 2, 10).unwrap());
+        let mut calendar = CalendarWidget::with_date(
+            NaiveDate::from_ymd_opt(2026, 2, 10).unwrap(),
+            Theme::default(),
+        );
         let area = Rect::new(0, 0, 30, 12);
         let first_of_month = NaiveDate::from_ymd_opt(2026, 2, 1).unwrap();
         let offset = (first_of_month.weekday().number_from_monday() - 1) as u16;
@@ -607,7 +632,7 @@ mod tests {
 
     #[test]
     fn test_error_handling() {
-        let mut calendar = CalendarWidget::new();
+        let mut calendar = CalendarWidget::new(Theme::default());
         calendar.add_error("date", "Invalid date");
         assert_eq!(
             calendar.errors.get("date"),
@@ -630,13 +655,14 @@ mod tests {
     #[test]
     fn test_calendar_widget_date_styler_highlights_selected() {
         let date = NaiveDate::from_ymd_opt(2026, 4, 5).unwrap();
-        let mut calendar = CalendarWidget::with_date(date);
+        let theme = Theme::default();
+        let mut calendar = CalendarWidget::with_date(date, theme.clone());
         calendar.set_selected_date(date);
 
         let style = calendar.get_style(chrono_to_time(date));
         let expected = Style::default()
-            .bg(Color::Blue)
-            .fg(Color::Black)
+            .bg(theme.colors.selected)
+            .fg(theme.colors.background_dark)
             .add_modifier(Modifier::BOLD);
 
         assert_eq!(style, expected);
@@ -644,12 +670,13 @@ mod tests {
 
     #[test]
     fn test_appointment_styler_applies_indicator() {
+        let theme = Theme::default();
         let mut styler = AppointmentStyler::new();
         let appointment_date = chrono_to_time(NaiveDate::from_ymd_opt(2026, 5, 11).unwrap());
-        styler.add_indicator(appointment_date, Color::Green);
+        styler.add_indicator(appointment_date, theme.colors.success);
 
         let indicator_style = Style::default()
-            .fg(Color::Green)
+            .fg(theme.colors.success)
             .add_modifier(Modifier::BOLD);
         assert_eq!(styler.get_style(appointment_date), indicator_style);
 
@@ -659,9 +686,10 @@ mod tests {
 
     #[test]
     fn test_date_picker_styler_focus_style() {
+        let theme = Theme::default();
         let base_style = Style::default();
         let focus_style = Style::default()
-            .bg(Color::Magenta)
+            .bg(theme.colors.secondary)
             .add_modifier(Modifier::UNDERLINED);
         let focus_date = chrono_to_time(NaiveDate::from_ymd_opt(2026, 6, 1).unwrap());
 
@@ -676,7 +704,7 @@ mod tests {
 
     #[test]
     fn test_show_date_picker_with_none() {
-        let picker = CalendarWidget::show_date_picker(None);
+        let picker = CalendarWidget::show_date_picker(None, Theme::default());
         let today = Local::now().naive_local().date();
         assert_eq!(picker.focused_date, today);
         assert_eq!(picker.selected_date, None);
@@ -686,7 +714,7 @@ mod tests {
     #[test]
     fn test_show_date_picker_with_date() {
         let target_date = NaiveDate::from_ymd_opt(2026, 5, 15).unwrap();
-        let picker = CalendarWidget::show_date_picker(Some(target_date));
+        let picker = CalendarWidget::show_date_picker(Some(target_date), Theme::default());
 
         assert_eq!(picker.focused_date, target_date);
         assert_eq!(picker.selected_date, Some(target_date));
@@ -696,7 +724,7 @@ mod tests {
     #[test]
     fn test_date_picker_mode_render() {
         let date = NaiveDate::from_ymd_opt(2026, 3, 10).unwrap();
-        let mut calendar = CalendarWidget::with_date(date);
+        let mut calendar = CalendarWidget::with_date(date, Theme::default());
         calendar.set_selected_date(date);
 
         let area = Rect::new(0, 0, 25, 12);
@@ -710,7 +738,7 @@ mod tests {
     #[test]
     fn test_scheduling_mode_render() {
         let date = NaiveDate::from_ymd_opt(2026, 3, 10).unwrap();
-        let mut calendar = CalendarWidget::with_date(date);
+        let mut calendar = CalendarWidget::with_date(date, Theme::default());
         calendar.set_selected_date(date);
 
         let area = Rect::new(0, 0, 25, 12);
@@ -723,14 +751,17 @@ mod tests {
 
     #[test]
     fn test_format_month_title() {
-        let calendar = CalendarWidget::with_date(NaiveDate::from_ymd_opt(2026, 7, 15).unwrap());
+        let calendar = CalendarWidget::with_date(
+            NaiveDate::from_ymd_opt(2026, 7, 15).unwrap(),
+            Theme::default(),
+        );
         let title = calendar.format_month_title();
         assert_eq!(title, "July 2026");
     }
 
     #[test]
     fn test_render_calendar_small_area_ignored() {
-        let calendar = CalendarWidget::new();
+        let calendar = CalendarWidget::new(Theme::default());
         let small_area = Rect::new(0, 0, 10, 5);
         let mut buf = Buffer::empty(small_area);
 
@@ -740,7 +771,7 @@ mod tests {
     #[test]
     fn test_date_picker_preserves_selected_date() {
         let target_date = NaiveDate::from_ymd_opt(2026, 2, 28).unwrap();
-        let picker = CalendarWidget::show_date_picker(Some(target_date));
+        let picker = CalendarWidget::show_date_picker(Some(target_date), Theme::default());
 
         assert_eq!(picker.selected_date(), Some(target_date));
     }
@@ -748,7 +779,7 @@ mod tests {
     #[test]
     fn test_date_picker_month_navigation() {
         let target_date = NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
-        let mut picker = CalendarWidget::show_date_picker(Some(target_date));
+        let mut picker = CalendarWidget::show_date_picker(Some(target_date), Theme::default());
 
         picker.next_month();
         assert_eq!(picker.current_month, (2026, 7));

@@ -332,7 +332,7 @@ impl AppointmentForm {
             scroll: ScrollableFormState::new(),
             patient_picker: SearchableListState::new(Vec::new()),
             practitioner_picker: SearchableListState::new(Vec::new()),
-            date_picker: DatePickerPopup::new(),
+            date_picker: DatePickerPopup::new(theme),
             time_picker: TimePickerPopup::new(),
         }
     }
@@ -1290,7 +1290,7 @@ impl Widget for AppointmentForm {
             picker.render(picker_area, buf);
         }
 
-        self.scroll.render_scrollbar(inner, buf);
+        self.scroll.render_scrollbar(inner, buf, &self.theme);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(
