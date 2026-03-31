@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use chrono::{NaiveDate, TimeZone, Utc};
+use chrono::{Datelike, NaiveDate, TimeZone, Utc, Weekday};
 
 use chrono::NaiveTime;
 use opengp_domain::domain::appointment::{
@@ -13,7 +13,7 @@ use opengp_domain::domain::appointment::{
     PractitionerSchedule,
 };
 use opengp_domain::domain::error::RepositoryError;
-use opengp_domain::domain::user::{Practitioner, PractitionerRepository};
+use opengp_domain::domain::user::{Practitioner, PractitionerRepository, WorkingHoursRepository};
 
 /// Result type for UI operations
 pub type UiResult<T> = Result<T, UiServiceError>;
@@ -57,6 +57,8 @@ pub struct AppointmentUiService {
     domain_service: Arc<AppointmentService>,
     /// Availability service for checking slot availability
     availability_service: Arc<AvailabilityService>,
+    /// Working hours repository for fetching practitioner schedules
+    working_hours_repo: Arc<dyn WorkingHoursRepository>,
 }
 
 impl AppointmentUiService {
@@ -67,6 +69,7 @@ impl AppointmentUiService {
         appointment_repo: Arc<dyn AppointmentRepository>,
         domain_service: Arc<AppointmentService>,
         availability_service: Arc<AvailabilityService>,
+        working_hours_repo: Arc<dyn WorkingHoursRepository>,
     ) -> Self {
         Self {
             practitioner_repo,
@@ -74,6 +77,7 @@ impl AppointmentUiService {
             appointment_repo,
             domain_service,
             availability_service,
+            working_hours_repo,
         }
     }
 
@@ -151,20 +155,51 @@ impl AppointmentUiService {
             .await
             .map_err(|e| UiServiceError::Repository(e.to_string()))?;
 
-        let schedules: Vec<PractitionerSchedule> = practitioners
-            .into_iter()
-            .map(|p| {
-                let practitioner_appointments = appointments_by_practitioner
-                    .remove(&p.id)
-                    .unwrap_or_default();
+        let mut schedules: Vec<PractitionerSchedule> = Vec::new();
+        for p in practitioners {
+            let mut practitioner_appointments = appointments_by_practitioner
+                .remove(&p.id)
+                .unwrap_or_default();
 
-                PractitionerSchedule {
-                    practitioner_id: p.id,
-                    practitioner_name: format!("{} {}", p.title, p.full_name()),
-                    appointments: practitioner_appointments,
+            // Sort by start time for overlap detection
+            practitioner_appointments.sort_by_key(|a| a.start_time);
+            
+            // Detect overlaps: for each pair where start_i < end_j and end_i > start_j
+            for i in 0..practitioner_appointments.len() {
+                for j in (i + 1)..practitioner_appointments.len() {
+                    if practitioner_appointments[j].start_time < practitioner_appointments[i].end_time {
+                        practitioner_appointments[i].is_overlapping = true;
+                        practitioner_appointments[j].is_overlapping = true;
+                    } else {
+                        break;
+                    }
                 }
-            })
-            .collect();
+            }
+
+            // Fetch working hours for this practitioner on this day
+            let day_of_week = match date.weekday() {
+                Weekday::Mon => 0,
+                Weekday::Tue => 1,
+                Weekday::Wed => 2,
+                Weekday::Thu => 3,
+                Weekday::Fri => 4,
+                Weekday::Sat => 5,
+                Weekday::Sun => 6,
+            };
+            let working_hours = self
+                .working_hours_repo
+                .find_for_day(p.id, day_of_week as u8)
+                .await
+                .ok()
+                .and_then(|wh| wh);
+
+            schedules.push(PractitionerSchedule {
+                practitioner_id: p.id,
+                practitioner_name: format!("{} {}", p.title, p.full_name()),
+                appointments: practitioner_appointments,
+                working_hours,
+            });
+        }
 
         Ok(CalendarDayView {
             date,
@@ -257,5 +292,117 @@ mod tests {
     fn test_ui_service_error_is_error_trait() {
         let err: Box<dyn std::error::Error> = Box::new(UiServiceError::Unknown("test".to_string()));
         assert_eq!(err.to_string(), "Error: test");
+    }
+
+    #[test]
+    fn test_overlap_detection_two_overlapping() {
+        use chrono::{Duration, Utc};
+        use opengp_domain::domain::appointment::{AppointmentStatus, AppointmentType};
+        use uuid::Uuid;
+
+        let practitioner_id = Uuid::new_v4();
+        let base = Utc::now();
+        
+        let a = CalendarAppointment {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            practitioner_id,
+            patient_name: "A".to_string(),
+            start_time: base,
+            end_time: base + Duration::minutes(30),
+            appointment_type: AppointmentType::Standard,
+            status: AppointmentStatus::Scheduled,
+            is_urgent: false,
+            slot_span: 2,
+            reason: None,
+            notes: None,
+            is_overlapping: false,
+        };
+        let b = CalendarAppointment {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            practitioner_id,
+            patient_name: "B".to_string(),
+            start_time: base + Duration::minutes(15),
+            end_time: base + Duration::minutes(45),
+            appointment_type: AppointmentType::Standard,
+            status: AppointmentStatus::Scheduled,
+            is_urgent: false,
+            slot_span: 2,
+            reason: None,
+            notes: None,
+            is_overlapping: false,
+        };
+        
+        let mut appts = vec![a, b];
+        appts.sort_by_key(|a| a.start_time);
+        for i in 0..appts.len() {
+            for j in (i + 1)..appts.len() {
+                if appts[j].start_time < appts[i].end_time {
+                    appts[i].is_overlapping = true;
+                    appts[j].is_overlapping = true;
+                } else {
+                    break;
+                }
+            }
+        }
+        assert!(appts[0].is_overlapping);
+        assert!(appts[1].is_overlapping);
+    }
+
+    #[test]
+    fn test_overlap_detection_non_overlapping() {
+        use chrono::{Duration, Utc};
+        use opengp_domain::domain::appointment::{AppointmentStatus, AppointmentType};
+        use uuid::Uuid;
+
+        let practitioner_id = Uuid::new_v4();
+        let base = Utc::now();
+        
+        let a = CalendarAppointment {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            practitioner_id,
+            patient_name: "A".to_string(),
+            start_time: base,
+            end_time: base + Duration::minutes(30),
+            appointment_type: AppointmentType::Standard,
+            status: AppointmentStatus::Scheduled,
+            is_urgent: false,
+            slot_span: 2,
+            reason: None,
+            notes: None,
+            is_overlapping: false,
+        };
+        let b = CalendarAppointment {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            practitioner_id,
+            patient_name: "B".to_string(),
+            start_time: base + Duration::minutes(60),
+            end_time: base + Duration::minutes(90),
+            appointment_type: AppointmentType::Standard,
+            status: AppointmentStatus::Scheduled,
+            is_urgent: false,
+            slot_span: 2,
+            reason: None,
+            notes: None,
+            is_overlapping: false,
+        };
+        
+        let mut appts = vec![a, b];
+        appts.sort_by_key(|a| a.start_time);
+        for i in 0..appts.len() {
+            for j in (i + 1)..appts.len() {
+                if appts[j].start_time < appts[i].end_time {
+                    appts[i].is_overlapping = true;
+                    appts[j].is_overlapping = true;
+                } else {
+                    break;
+                }
+            }
+        }
+        assert!(!appts[0].is_overlapping);
+        assert!(!appts[1].is_overlapping);
     }
 }

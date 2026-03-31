@@ -459,6 +459,7 @@ mod tests {
             slot_span: 2,
             reason: Some("Follow-up consultation".to_string()),
             notes: Some("Patient requested morning appointment".to_string()),
+            is_overlapping: false,
         }
     }
 

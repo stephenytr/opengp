@@ -204,6 +204,7 @@ impl App {
                             practitioner_id: p.id,
                             practitioner_name: p.display_name(),
                             appointments: Vec::new(),
+                            working_hours: None,
                         })
                         .collect();
 

@@ -28,6 +28,7 @@ pub struct AppointmentState {
     pub selected_appointment: Option<Uuid>,
     pub loading_state: LoadingState,
     loading: bool,
+    pub hidden_columns: Vec<Uuid>,
 }
 
 impl AppointmentState {
@@ -43,6 +44,7 @@ impl AppointmentState {
             selected_appointment: None,
             loading_state: LoadingState::new().message("Loading appointments..."),
             loading: false,
+            hidden_columns: Vec::new(),
         }
     }
 
@@ -97,6 +99,38 @@ impl AppointmentState {
         self.selected_practitioner = None;
         self.selected_appointment = None;
         self.schedule_data = None;
+        self.hidden_columns = Vec::new();
+    }
+
+    /// Toggle visibility of a practitioner column
+    /// If hiding would leave 0 visible columns, this is a no-op (minimum 1 visible enforced)
+    pub fn toggle_column(&mut self, practitioner_id: Uuid, total_practitioners: usize) {
+        if let Some(pos) = self
+            .hidden_columns
+            .iter()
+            .position(|&id| id == practitioner_id)
+        {
+            // Column is hidden, show it
+            self.hidden_columns.remove(pos);
+        } else {
+            // Column is visible, hide it (but only if at least 1 will remain visible)
+            if self.hidden_columns.len() < total_practitioners - 1 {
+                self.hidden_columns.push(practitioner_id);
+            }
+        }
+    }
+
+    /// Check if a practitioner column is hidden
+    pub fn is_column_hidden(&self, practitioner_id: Uuid) -> bool {
+        self.hidden_columns.contains(&practitioner_id)
+    }
+
+    /// Get visible practitioners (excluding hidden columns)
+    pub fn visible_practitioners(&self) -> Vec<&Practitioner> {
+        self.practitioners
+            .iter()
+            .filter(|p| !self.is_column_hidden(p.id))
+            .collect()
     }
 }
 
@@ -229,5 +263,122 @@ mod tests {
         assert!(state.selected_practitioner().is_none());
         assert!(state.selected_appointment().is_none());
         assert!(state.schedule_data.is_none());
+    }
+
+    #[test]
+    fn test_toggle_column_hides_then_shows() {
+        let mut state = create_test_state();
+        let practitioner_id = Uuid::new_v4();
+
+        // Initially visible (not hidden)
+        assert!(!state.is_column_hidden(practitioner_id));
+
+        // Toggle once → hidden
+        state.toggle_column(practitioner_id, 3);
+        assert!(state.is_column_hidden(practitioner_id));
+
+        // Toggle again → visible
+        state.toggle_column(practitioner_id, 3);
+        assert!(!state.is_column_hidden(practitioner_id));
+    }
+
+    #[test]
+    fn test_toggle_last_visible_column_is_noop() {
+        let mut state = create_test_state();
+        let practitioner_id = Uuid::new_v4();
+
+        // Only 1 practitioner, hiding it should be a no-op
+        state.toggle_column(practitioner_id, 1);
+        assert!(!state.is_column_hidden(practitioner_id)); // Still visible
+    }
+
+    #[test]
+    fn test_clear_selections_resets_hidden_columns() {
+        let mut state = create_test_state();
+        let practitioner_id = Uuid::new_v4();
+
+        state.toggle_column(practitioner_id, 3);
+        assert!(state.is_column_hidden(practitioner_id));
+
+        state.clear_selections();
+        assert!(!state.is_column_hidden(practitioner_id)); // Reset
+    }
+
+    #[test]
+    fn test_visible_practitioners_excludes_hidden() {
+        let mut state = create_test_state();
+        let p1 = Uuid::new_v4();
+        let p2 = Uuid::new_v4();
+        let p3 = Uuid::new_v4();
+
+        use chrono::{DateTime, Utc};
+        use opengp_domain::domain::user::Practitioner;
+
+        let now = Utc::now();
+        state.practitioners = vec![
+            Practitioner {
+                id: p1,
+                user_id: None,
+                first_name: "Alice".to_string(),
+                middle_name: None,
+                last_name: "Doctor".to_string(),
+                title: "Dr".to_string(),
+                hpi_i: None,
+                ahpra_registration: None,
+                prescriber_number: None,
+                provider_number: "12345".to_string(),
+                speciality: None,
+                qualifications: vec![],
+                phone: None,
+                email: None,
+                is_active: true,
+                created_at: now,
+                updated_at: now,
+            },
+            Practitioner {
+                id: p2,
+                user_id: None,
+                first_name: "Bob".to_string(),
+                middle_name: None,
+                last_name: "Doctor".to_string(),
+                title: "Dr".to_string(),
+                hpi_i: None,
+                ahpra_registration: None,
+                prescriber_number: None,
+                provider_number: "12346".to_string(),
+                speciality: None,
+                qualifications: vec![],
+                phone: None,
+                email: None,
+                is_active: true,
+                created_at: now,
+                updated_at: now,
+            },
+            Practitioner {
+                id: p3,
+                user_id: None,
+                first_name: "Carol".to_string(),
+                middle_name: None,
+                last_name: "Doctor".to_string(),
+                title: "Dr".to_string(),
+                hpi_i: None,
+                ahpra_registration: None,
+                prescriber_number: None,
+                provider_number: "12347".to_string(),
+                speciality: None,
+                qualifications: vec![],
+                phone: None,
+                email: None,
+                is_active: true,
+                created_at: now,
+                updated_at: now,
+            },
+        ];
+
+        state.toggle_column(p2, 3);
+
+        let visible: Vec<_> = state.visible_practitioners();
+        assert_eq!(visible.len(), 2);
+        assert!(!visible.iter().any(|p| p.id == p2));
     }
 }

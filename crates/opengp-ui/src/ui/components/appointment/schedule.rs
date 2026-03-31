@@ -867,6 +867,8 @@ mod tests {
             max_hour: 22,
             viewport_start_hour: 8,
             viewport_end_hour: 18,
+            appointment_type_abbreviations: CalendarConfig::default_appointment_type_abbreviations(
+            ),
         };
         let schedule = Schedule::new(theme.clone(), config);
         let max_slot = schedule.max_time_slot();
@@ -882,6 +884,8 @@ mod tests {
             max_hour: 22,
             viewport_start_hour: 6,
             viewport_end_hour: 18,
+            appointment_type_abbreviations: CalendarConfig::default_appointment_type_abbreviations(
+            ),
         };
         let schedule2 = Schedule::new(theme, config2);
         assert_eq!(

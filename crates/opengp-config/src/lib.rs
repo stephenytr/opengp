@@ -276,7 +276,7 @@ impl Default for CalendarConfig {
 
 impl CalendarConfig {
     /// Default appointment type abbreviations
-    fn default_appointment_type_abbreviations() -> HashMap<String, String> {
+    pub fn default_appointment_type_abbreviations() -> HashMap<String, String> {
         let mut map = HashMap::new();
         map.insert("Standard".to_string(), "STD".to_string());
         map.insert("Long".to_string(), "LNG".to_string());

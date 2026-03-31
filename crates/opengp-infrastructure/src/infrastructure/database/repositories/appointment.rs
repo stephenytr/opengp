@@ -109,6 +109,7 @@ impl CalendarAppointmentRow {
             slot_span,
             reason: self.reason,
             notes: self.notes,
+            is_overlapping: false,
         })
     }
 }

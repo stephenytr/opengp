@@ -164,6 +164,7 @@ mod tests {
             slot_span: 2,
             reason: None,
             notes: None,
+            is_overlapping: false,
         }
     }
 

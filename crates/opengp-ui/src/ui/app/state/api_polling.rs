@@ -446,6 +446,7 @@ async fn fetch_appointments_for_day(
                 slot_span,
                 reason: appointment.reason,
                 notes: None,
+                is_overlapping: false,
             });
     }
 
@@ -455,6 +456,7 @@ async fn fetch_appointments_for_day(
             practitioner_id,
             practitioner_name: format!("Practitioner {}", &practitioner_id.to_string()[..8]),
             appointments,
+            working_hours: None,
         })
         .collect();
 
