@@ -113,64 +113,108 @@ pub struct Vaccine {
 /// Type or program category of vaccine.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum VaccineType {
+    /// COVID-19 vaccine.
     COVID19,
+    /// Seasonal influenza vaccine.
     Influenza,
+    /// Pneumococcal vaccine.
     Pneumococcal,
+    /// Shingles (zoster) vaccine.
     Shingles,
+    /// Measles, mumps and rubella vaccine.
     MMR,
+    /// Diphtheria, tetanus and pertussis vaccine.
     DTPa,
+    /// Poliomyelitis vaccine.
     Polio,
+    /// Hepatitis B vaccine.
     HepB,
+    /// Hepatitis A vaccine.
     HepA,
+    /// Combined hepatitis A and B vaccine.
     HepAB,
+    /// Haemophilus influenzae type b vaccine.
     Hib,
+    /// Meningococcal C vaccine.
     MenC,
+    /// Meningococcal B vaccine.
     MenB,
+    /// Meningococcal ACWY vaccine.
     MenACWY,
+    /// Rotavirus vaccine.
     Rotavirus,
+    /// Varicella (chickenpox) vaccine.
     Varicella,
+    /// Human papillomavirus vaccine.
     HPV,
+    /// Bacillus Calmette Guerin (tuberculosis) vaccine.
     BCG,
+    /// Rabies vaccine.
     Rabies,
+    /// Yellow fever vaccine.
     YellowFever,
+    /// Japanese encephalitis vaccine.
     JapaneseEncephalitis,
+    /// Oral typhoid vaccine.
     TyphoidOral,
+    /// Injectable typhoid vaccine.
     TyphoidInjectable,
+    /// Cholera vaccine.
     Cholera,
+    /// Any other vaccine type.
     Other,
 }
 
 /// Route of vaccine administration.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AdministrationRoute {
+    /// Intramuscular injection.
     Intramuscular,
+    /// Subcutaneous injection.
     Subcutaneous,
+    /// Intradermal injection.
     Intradermal,
+    /// Oral administration.
     Oral,
+    /// Intranasal administration.
     Intranasal,
 }
 
 /// Anatomical site where the vaccine was administered.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AnatomicalSite {
+    /// Left deltoid region.
     LeftDeltoid,
+    /// Right deltoid region.
     RightDeltoid,
+    /// Left thigh.
     LeftThigh,
+    /// Right thigh.
     RightThigh,
+    /// Left upper arm.
     LeftUpperArm,
+    /// Right upper arm.
     RightUpperArm,
+    /// Left gluteal region.
     LeftGluteal,
+    /// Right gluteal region.
     RightGluteal,
+    /// Oral cavity.
     Oral,
+    /// Intranasal site.
     Intranasal,
+    /// Other anatomical site.
     Other,
 }
 
 /// Type of consent documented prior to vaccination.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ConsentType {
+    /// Written consent recorded.
     Written,
+    /// Verbal consent recorded.
     Verbal,
+    /// Implied consent, for example parent attendance and cooperation.
     Implied,
 }
 
@@ -188,9 +232,14 @@ pub struct VaccinationSchedule {
 /// Status of a scheduled vaccination dose.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ScheduleStatus {
+    /// Vaccination is due.
     Due,
+    /// Vaccination is overdue.
     Overdue,
+    /// Vaccination has been completed.
     Completed,
+    /// Vaccination has been deferred.
     Deferred,
+    /// Vaccination is contraindicated.
     Contraindicated,
 }

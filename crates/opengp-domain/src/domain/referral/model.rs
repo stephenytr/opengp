@@ -119,11 +119,17 @@ impl Referral {
 /// Category of referral destination.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ReferralType {
+    /// Referral to a medical specialist.
     Specialist,
+    /// Referral to an allied health provider.
     AlliedHealth,
+    /// Referral to a hospital outpatient or inpatient service.
     Hospital,
+    /// Referral to the emergency department.
     EmergencyDepartment,
+    /// Referral focused on mental health services.
     MentalHealth,
+    /// Referral for diagnostic imaging or pathology.
     Diagnostic,
 }
 
@@ -143,22 +149,34 @@ pub enum ReferralUrgency {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ReferralStatus {
+    /// Draft referral that has not yet been sent.
     Draft,
+    /// Referral has been dispatched to the recipient.
     Sent,
+    /// Recipient has acknowledged receipt.
     Acknowledged,
+    /// Appointment has been booked with the recipient service.
     AppointmentBooked,
+    /// Episode of care is complete.
     Completed,
+    /// Referral has passed its validity period.
     Expired,
+    /// Referral has been cancelled.
     Cancelled,
 }
 
 /// Delivery channel used to send the referral.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ReferralDeliveryMethod {
+    /// Sent via secure messaging provider.
     SecureMessaging,
+    /// Sent by fax.
     Fax,
+    /// Sent by email.
     Email,
+    /// Sent via postal mail.
     Post,
+    /// Hand delivered or given to the patient.
     HandDelivered,
 }
 

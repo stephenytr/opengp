@@ -32,6 +32,11 @@ pub struct ClinicalRepositories {
     pub family_history: Arc<dyn FamilyHistoryRepository>,
 }
 
+/// Service layer for clinical encounters and related patient history.
+///
+/// Coordinates consultations, allergies, medical history, vital signs,
+/// social history and family history around a patient within a general
+/// practice context.
 service! {
     ClinicalService {
         repos: ClinicalRepositories,
@@ -99,6 +104,10 @@ impl ClinicalService {
     }
 
     /// Find a consultation by identifier.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the consultation lookup
+    /// fails in persistent storage.
     #[instrument(skip(self), fields(consultation_id = %id))]
     pub async fn find_consultation(&self, id: Uuid) -> Result<Option<Consultation>, ServiceError> {
         let consultation = self.repos.consultation.find_by_id(id).await?;
@@ -106,6 +115,10 @@ impl ClinicalService {
     }
 
     /// List consultations for a patient.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the repository query
+    /// fails.
     #[instrument(skip(self), fields(patient_id = %patient_id))]
     pub async fn list_patient_consultations(
         &self,
@@ -324,6 +337,10 @@ impl ClinicalService {
     }
 
     /// Deactivate (soft delete) an allergy.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the allergy cannot be
+    /// updated in persistent storage.
     #[instrument(skip(self), fields(allergy_id = %allergy_id))]
     pub async fn deactivate_allergy(
         &self,
@@ -349,6 +366,11 @@ impl ClinicalService {
     // ==================== Medical History ====================
 
     /// Add a new medical history entry for a patient.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::PatientNotFound`] if the patient cannot
+    /// be resolved and [`ServiceError::Repository`] if the history
+    /// record cannot be saved.
     #[instrument(skip(self), fields(patient_id = %data.patient_id))]
     pub async fn add_medical_history(
         &self,
@@ -405,6 +427,15 @@ impl ClinicalService {
         Ok(saved)
     }
 
+    /// List medical history entries for a patient.
+    ///
+    /// When `active_only` is true, only active conditions are
+    /// returned which is the common view used for chronic disease
+    /// management in Australian general practice.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the repository query
+    /// fails.
     #[instrument(skip(self), fields(patient_id = %patient_id))]
     pub async fn list_medical_history(
         &self,
@@ -428,6 +459,15 @@ impl ClinicalService {
         Ok(history)
     }
 
+    /// Update the status for an existing medical history entry.
+    ///
+    /// This is typically used when a condition becomes chronic,
+    /// resolved or moves into remission.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::MedicalHistoryNotFound`] when the entry
+    /// does not exist and [`ServiceError::Repository`] if the update
+    /// fails.
     #[instrument(skip(self), fields(history_id = %history_id))]
     pub async fn update_condition_status(
         &self,
@@ -469,6 +509,15 @@ impl ClinicalService {
 
     // ==================== Vital Signs ====================
 
+    /// Record a new set of vital signs for a patient.
+    ///
+    /// BMI is calculated automatically from height and weight when
+    /// available.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::PatientNotFound`] when the patient
+    /// cannot be found and [`ServiceError::Repository`] if persisting
+    /// the record fails.
     #[instrument(skip(self), fields(patient_id = %data.patient_id))]
     pub async fn record_vital_signs(
         &self,
@@ -529,6 +578,10 @@ impl ClinicalService {
         Ok(saved)
     }
 
+    /// Fetch the most recent vital signs for a patient.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the lookup fails.
     #[instrument(skip(self), fields(patient_id = %patient_id))]
     pub async fn get_latest_vital_signs(
         &self,
@@ -542,6 +595,14 @@ impl ClinicalService {
         Ok(vitals)
     }
 
+    /// List historical vital signs readings for a patient.
+    ///
+    /// The `limit` parameter can be used to restrict how many recent
+    /// readings are returned, for example when plotting a trend.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the repository query
+    /// fails.
     #[instrument(skip(self), fields(patient_id = %patient_id))]
     pub async fn list_vital_signs_history(
         &self,
@@ -559,6 +620,16 @@ impl ClinicalService {
 
     // ==================== Social History ====================
 
+    /// Create or update a patient's social history snapshot.
+    ///
+    /// Includes smoking, alcohol, exercise and broader social
+    /// context information that informs risk assessment and MBS health
+    /// assessments.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::PatientNotFound`] when the patient
+    /// cannot be resolved and [`ServiceError::Repository`] if the
+    /// social history cannot be saved.
     #[instrument(skip(self), fields(patient_id = %patient_id))]
     pub async fn update_social_history(
         &self,
@@ -639,6 +710,11 @@ impl ClinicalService {
         Ok(social_history)
     }
 
+    /// Retrieve a patient's social history record if present.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the repository lookup
+    /// fails.
     #[instrument(skip(self), fields(patient_id = %patient_id))]
     pub async fn get_social_history(
         &self,
@@ -654,6 +730,11 @@ impl ClinicalService {
 
     // ==================== Family History ====================
 
+    /// Add a new family history entry for a patient.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::PatientNotFound`] if the patient cannot
+    /// be found and [`ServiceError::Repository`] if persistence fails.
     #[instrument(skip(self), fields(patient_id = %data.patient_id))]
     pub async fn add_family_history(
         &self,
@@ -706,6 +787,11 @@ impl ClinicalService {
         Ok(saved)
     }
 
+    /// List family history entries for a patient.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the repository query
+    /// fails.
     #[instrument(skip(self), fields(patient_id = %patient_id))]
     pub async fn list_family_history(
         &self,
@@ -720,6 +806,15 @@ impl ClinicalService {
         Ok(history)
     }
 
+    /// Permanently delete a family history entry.
+    ///
+    /// Family history is allowed to be hard deleted as it does not
+    /// carry the same medico legal requirements as clinical
+    /// encounters.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the delete operation
+    /// fails.
     #[instrument(skip(self), fields(history_id = %history_id))]
     pub async fn delete_family_history(
         &self,

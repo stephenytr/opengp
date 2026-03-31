@@ -43,6 +43,10 @@ impl ImmunisationService {
     }
 
     /// List immunisations recorded for a patient.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the repository query
+    /// fails.
     pub async fn find_by_patient(
         &self,
         patient_id: Uuid,
@@ -51,6 +55,10 @@ impl ImmunisationService {
     }
 
     /// Return due vaccination schedule entries for a patient.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the repository query
+    /// fails.
     pub async fn due_schedule(
         &self,
         patient_id: Uuid,

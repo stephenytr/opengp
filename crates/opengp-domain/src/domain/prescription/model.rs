@@ -130,20 +130,35 @@ pub struct Medication {
 /// Pharmaceutical form of a medication.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum MedicationForm {
+    /// Solid tablet dosage form.
     Tablet,
+    /// Hard or soft capsule dosage form.
     Capsule,
+    /// Liquid preparation, for example oral solution.
     Liquid,
+    /// Syrup formulation, often for paediatric dosing.
     Syrup,
+    /// Suspended particles in liquid.
     Suspension,
+    /// Topical cream.
     Cream,
+    /// Topical ointment.
     Ointment,
+    /// Topical gel.
     Gel,
+    /// Transdermal patch.
     Patch,
+    /// Metered dose or dry powder inhaler.
     Inhaler,
+    /// Injectable preparation.
     Injection,
+    /// Eye, ear or nose drops.
     Drops,
+    /// Nasal or topical spray.
     Spray,
+    /// Rectal or vaginal suppository.
     Suppository,
+    /// Any other medication form.
     Other,
 }
 
@@ -165,18 +180,26 @@ pub enum PBSStatus {
 /// Type of PBS authority used for AuthorityRequired items.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AuthorityType {
+    /// Streamlined authority item using a predefined code.
     Streamlined,
+    /// Complex authority requiring assessment by Services Australia.
     Complex,
+    /// Telephone authority provided by a Medicare operator.
     Telephone,
+    /// Written authority application.
     Written,
 }
 
 /// Channel through which the prescription is issued.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum PrescriptionType {
+    /// Traditional paper prescription.
     Paper,
+    /// Electronic prescription (eScript) token or list.
     Electronic,
+    /// Verbal order provided to a pharmacist.
     Verbal,
+    /// Faxed copy of a prescription.
     Fax,
 }
 

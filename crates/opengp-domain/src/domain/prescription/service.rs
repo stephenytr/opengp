@@ -20,15 +20,15 @@ service! {
 }
 
 impl PrescriptionService {
-    /// Validate PBS status and authority requirements
+    /// Validate PBS status and authority requirements.
     ///
     /// # Arguments
     /// * `prescription` - The prescription to validate
     ///
-    /// # Returns
-    /// * `Ok(())` - PBS validation passed
-    /// * `Err(ServiceError::PBSAuthorityRequired)` - Authority required but not provided
-    /// * `Err(ServiceError::Validation)` - Invalid PBS data
+    /// # Errors
+    /// Returns [`ServiceError::PBSAuthorityRequired`] when authority
+    /// details are missing for an authority item and
+    /// [`ServiceError::Validation`] for other PBS data problems.
     fn validate_pbs_status(&self, prescription: &Prescription) -> Result<(), ServiceError> {
         info!("Validating PBS status for prescription {}", prescription.id);
 
@@ -72,15 +72,15 @@ impl PrescriptionService {
         Ok(())
     }
 
-    /// Check for potential drug interactions
+    /// Check for potential drug interactions.
     ///
     /// # Arguments
     /// * `patient_id` - Patient ID to check current medications
     /// * `medication` - New medication to check for interactions
     ///
-    /// # Returns
-    /// * `Ok(Vec<String>)` - List of warnings (empty if no interactions)
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] when fetching current
+    /// prescriptions fails.
     pub async fn check_drug_interactions(
         &self,
         patient_id: Uuid,
@@ -119,14 +119,13 @@ impl PrescriptionService {
         Ok(warnings)
     }
 
-    /// Log an audit entry for prescription operations
+    /// Log an audit entry for prescription operations.
     ///
     /// # Arguments
     /// * `entry` - The audit entry to log
     ///
-    /// # Returns
-    /// * `Ok(())` - Successfully logged
-    /// * `Err(ServiceError::Audit)` - Failed to log audit entry
+    /// # Errors
+    /// Returns [`ServiceError::Audit`] when logging fails.
     async fn audit_log(&self, entry: AuditEntry) -> Result<(), ServiceError> {
         self.audit_service
             .log(entry)
@@ -274,12 +273,20 @@ impl PrescriptionService {
     }
 
     /// Find a prescription by identifier.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the repository lookup
+    /// fails.
     pub async fn find_prescription(&self, id: Uuid) -> Result<Option<Prescription>, ServiceError> {
         let prescription = self.repository.find_by_id(id).await?;
         Ok(prescription)
     }
 
     /// List prescriptions for the given patient.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the repository query
+    /// fails.
     pub async fn find_by_patient(
         &self,
         patient_id: Uuid,
@@ -298,6 +305,10 @@ impl PrescriptionService {
     }
 
     /// List active prescriptions for the given patient.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the repository query
+    /// fails.
     pub async fn find_active_by_patient(
         &self,
         patient_id: Uuid,

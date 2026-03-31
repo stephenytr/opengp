@@ -18,6 +18,14 @@ service! {
 }
 
 impl ReferralService {
+    /// Validate core referral fields before persistence.
+    ///
+    /// This ensures specialty and reason are populated, which is
+    /// required for MBS compliance and safe coordination of care.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Validation`] when mandatory fields are
+    /// missing.
     fn validate_referral(&self, referral: &Referral) -> Result<(), ServiceError> {
         if referral.specialty.trim().is_empty() {
             return Err(ValidationError::EmptySpecialty.into());
@@ -46,6 +54,11 @@ impl ReferralService {
     }
 
     /// Mark a referral as sent by a particular user.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::NotFound`] when the referral does not
+    /// exist and [`ServiceError::AlreadySent`] if it has already been
+    /// marked as sent.
     pub async fn mark_sent(&self, id: Uuid, user_id: Uuid) -> Result<Referral, ServiceError> {
         let mut referral = self
             .repository
@@ -65,6 +78,10 @@ impl ReferralService {
     }
 
     /// Find referrals filtered by their current status.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the repository query
+    /// fails.
     pub async fn find_by_status(
         &self,
         status: ReferralStatus,
