@@ -1,14 +1,12 @@
-use crate::ui::app::{App, AppointmentStatusTransition, PendingPatientData};
-use crate::ui::components::appointment::{
-    AppointmentDetailModalAction, AppointmentForm, AppointmentFormAction, AppointmentView,
-};
-use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
+mod appointment;
+mod global;
+
+use crate::ui::app::{App, PendingPatientData};
+use crate::ui::components::appointment::{AppointmentForm, AppointmentView};
 use crate::ui::components::tabs::Tab;
 use crate::ui::keybinds::{Action, KeyContext};
 use crate::ui::widgets::FormNavigation;
-use chrono::Utc;
-use crossterm::event::{Event, KeyEvent, MouseEvent};
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use crossterm::event::{Event, KeyEvent};
 
 impl App {
     pub fn handle_key_event(&mut self, key: KeyEvent) -> Action {
@@ -363,272 +361,17 @@ impl App {
         Action::Unknown
     }
 
-    fn handle_appointment_form_keys(&mut self, key: KeyEvent) -> Action {
-        if let Some(ref mut form) = self.appointment_form {
-            if let Some(action) = form.handle_key(key) {
-                match action {
-                    AppointmentFormAction::FocusChanged | AppointmentFormAction::ValueChanged => {}
-                    AppointmentFormAction::Submit => {
-                        if let Some(ref mut form) = self.appointment_form {
-                            if let Some(data) = form.to_new_appointment_data() {
-                                self.pending_appointment_save = Some(data);
-                                self.appointment_form = None;
-                                self.status_bar.clear_error();
-                            } else {
-                                self.status_bar.set_error(
-                                    "Cannot save: select a patient and practitioner from the picker",
-                                );
-                            }
-                        }
-                    }
-                    AppointmentFormAction::Cancel => {
-                        self.appointment_form = None;
-                        self.status_bar.clear_error();
-                    }
-                    AppointmentFormAction::SaveComplete => {
-                        self.appointment_form = None;
-                        self.status_bar.clear_error();
-                        self.request_refresh_appointments(Utc::now().date_naive());
-                    }
-                    AppointmentFormAction::OpenTimePicker {
-                        practitioner_id,
-                        date,
-                        duration,
-                    } => {
-                        let practitioner_id_i64 = practitioner_id.as_u128() as i64;
-                        if let Some(ref mut form) = self.appointment_form {
-                            form.open_time_picker(practitioner_id_i64, date, duration);
-                        }
-                        self.pending_load_booked_slots = Some((practitioner_id, date, duration));
-                    }
-                }
-                return Action::Enter;
-            }
-        }
-        Action::Unknown
-    }
-
-    fn handle_appointment_detail_modal_keys(&mut self, key: KeyEvent) -> Action {
-        if let Some(ref mut modal) = self.appointment_detail_modal {
-            if let Some(action) = modal.handle_key(key) {
-                match action {
-                    AppointmentDetailModalAction::Close => {
-                        self.appointment_detail_modal = None;
-                    }
-                    AppointmentDetailModalAction::ViewClinicalNotes => {
-                        let patient_id = modal.patient_id();
-                        self.appointment_detail_modal = None;
-                        self.clinical_state.clear_patient();
-                        self.clinical_state.set_patient(patient_id);
-                        self.clinical_state.show_patient_summary();
-                        self.tab_bar.select(Tab::Clinical);
-                        self.pending_clinical_patient_id = Some(patient_id);
-                        self.refresh_status_bar();
-                        self.refresh_context();
-                    }
-                    AppointmentDetailModalAction::MarkArrived => {
-                        let appointment_id = modal.appointment_id();
-                        self.pending_appointment_status_transition =
-                            Some((appointment_id, AppointmentStatusTransition::MarkArrived));
-                    }
-                    AppointmentDetailModalAction::MarkInProgress => {
-                        let appointment_id = modal.appointment_id();
-                        self.pending_appointment_status_transition =
-                            Some((appointment_id, AppointmentStatusTransition::MarkInProgress));
-                    }
-                    AppointmentDetailModalAction::MarkCompleted => {
-                        let appointment_id = modal.appointment_id();
-                        self.pending_appointment_status_transition =
-                            Some((appointment_id, AppointmentStatusTransition::MarkCompleted));
-                    }
-                }
-                return Action::Enter;
-            }
-        }
-        Action::Unknown
-    }
-
-    pub fn handle_mouse_event(&mut self, mouse: MouseEvent, area: Rect) {
-        let tab_bar_area = self.tab_bar.area(area);
-        if self.tab_bar.handle_mouse(mouse, tab_bar_area).is_some() {
-            self.refresh_status_bar();
-            self.refresh_context();
-            return;
-        }
-
-        if let Some(ref mut form) = self.patient_form {
-            if let Some(action) = form.handle_mouse(mouse, area) {
-                match action {
-                    crate::ui::components::patient::PatientFormAction::FocusChanged => {}
-                    crate::ui::components::patient::PatientFormAction::ValueChanged => {}
-                    crate::ui::components::patient::PatientFormAction::Submit => {}
-                    crate::ui::components::patient::PatientFormAction::Cancel => {}
-                    crate::ui::components::patient::PatientFormAction::SaveComplete => {
-                        self.request_refresh_patients();
-                    }
-                }
-                return;
-            }
-        }
-
-        if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
-            let content_area = Rect::new(
-                area.x,
-                area.y + 2,
-                area.width,
-                area.height.saturating_sub(2 + STATUS_BAR_HEIGHT),
-            );
-            if let Some(action) = self.patient_list.handle_mouse(mouse, content_area) {
-                match action {
-                    crate::ui::components::patient::PatientListAction::SelectionChanged => {}
-                    crate::ui::components::patient::PatientListAction::OpenPatient(id) => {
-                        self.request_edit_patient(id);
-                    }
-                    crate::ui::components::patient::PatientListAction::FocusSearch => {}
-                    crate::ui::components::patient::PatientListAction::SearchChanged => {}
-                }
-            }
-        }
-
-        if self.tab_bar.selected() == Tab::Appointment {
-            use crate::ui::components::appointment::schedule::ScheduleAction;
-
-            let appointment_content_area = Rect::new(
-                area.x,
-                area.y + 2,
-                area.width,
-                area.height.saturating_sub(2 + STATUS_BAR_HEIGHT),
-            );
-
-            match self.appointment_state.current_view {
-                AppointmentView::Calendar => {
-                    self.appointment_state.calendar.focused = true;
-                    self.appointment_state.schedule.focused = false;
-                    if let Some(action) = self
-                        .appointment_state
-                        .calendar
-                        .handle_mouse(mouse, appointment_content_area)
-                    {
-                        match action {
-                            crate::ui::components::appointment::CalendarAction::SelectDate(
-                                date,
-                            ) => {
-                                self.appointment_state.selected_date = Some(date);
-                                self.appointment_state.current_view = AppointmentView::Schedule;
-                                self.pending_appointment_date = Some(date);
-                                self.refresh_context();
-                            }
-                            crate::ui::components::appointment::CalendarAction::FocusDate(_) => {}
-                            crate::ui::components::appointment::CalendarAction::MonthChanged(_) => {
-                            }
-                            crate::ui::components::appointment::CalendarAction::GoToToday => {}
-                        }
-                    }
-                }
-                AppointmentView::Schedule => {
-                    let chunks = Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
-                        .split(appointment_content_area);
-
-                    use crossterm::event::MouseEventKind;
-                    if let MouseEventKind::Up(_) | MouseEventKind::Down(_) = mouse.kind {
-                        if let Some(action) = self
-                            .appointment_state
-                            .calendar
-                            .handle_mouse(mouse, chunks[0])
-                        {
-                            self.appointment_state.calendar.focused = true;
-                            self.appointment_state.schedule.focused = false;
-                            match action {
-                                crate::ui::components::appointment::CalendarAction::SelectDate(date) => {
-                                    self.appointment_state.selected_date = Some(date);
-                                    self.pending_appointment_date = Some(date);
-                                }
-                                crate::ui::components::appointment::CalendarAction::FocusDate(_) => {}
-                                crate::ui::components::appointment::CalendarAction::MonthChanged(_) => {}
-                                crate::ui::components::appointment::CalendarAction::GoToToday => {}
-                            }
-                        }
-                    }
-
-                    if let Some(action) = self
-                        .appointment_state
-                        .schedule
-                        .handle_mouse(mouse, chunks[1])
-                    {
-                        self.appointment_state.schedule.focused = true;
-                        self.appointment_state.calendar.focused = false;
-                        match action {
-                            ScheduleAction::SelectPractitioner(id) => {
-                                self.appointment_state.selected_practitioner = Some(id);
-                            }
-                            ScheduleAction::SelectAppointment(id) => {
-                                self.appointment_state.selected_appointment = Some(id);
-                            }
-                            ScheduleAction::NavigateTimeSlot(_) => {}
-                            ScheduleAction::NavigatePractitioner(_) => {}
-                            ScheduleAction::CreateAtSlot { .. } => {}
-                        }
-                    }
-                }
-            }
-        }
-
-        if self.tab_bar.selected() == Tab::Clinical && !self.clinical_state.is_form_open() {
-            use crate::ui::components::clinical::ClinicalView;
-            let clinical_area = Rect::new(
-                area.x,
-                area.y + 2,
-                area.width,
-                area.height.saturating_sub(2 + STATUS_BAR_HEIGHT),
-            );
-            match self.clinical_state.view {
-                ClinicalView::Consultations => {
-                    let _ = self
-                        .clinical_state
-                        .consultation_list
-                        .handle_mouse(mouse, clinical_area);
-                }
-                ClinicalView::Allergies => {
-                    let _ = self
-                        .clinical_state
-                        .allergy_list
-                        .handle_mouse(mouse, clinical_area);
-                }
-                ClinicalView::MedicalHistory => {
-                    let _ = self
-                        .clinical_state
-                        .medical_history_list
-                        .handle_mouse(mouse, clinical_area);
-                }
-                ClinicalView::VitalSigns => {
-                    let _ = self
-                        .clinical_state
-                        .vitals_list
-                        .handle_mouse(mouse, clinical_area);
-                }
-                ClinicalView::FamilyHistory => {
-                    let _ = self
-                        .clinical_state
-                        .family_history_list
-                        .handle_mouse(mouse, clinical_area);
-                }
-                ClinicalView::PatientSummary | ClinicalView::SocialHistory => {}
-            }
-        }
-    }
-
     pub fn handle_event(&mut self, event: Event) {
         match event {
             Event::Key(key) => {
                 self.handle_key_event(key);
             }
             Event::Mouse(mouse) => {
-                self.handle_mouse_event(mouse, self.terminal_size);
+                let area = self.terminal_size;
+                self.handle_global_mouse_event(mouse, area);
             }
             Event::Resize(w, h) => {
-                self.terminal_size = Rect::new(0, 0, w, h);
+                self.terminal_size = ratatui::layout::Rect::new(0, 0, w, h);
             }
             _ => {}
         }
