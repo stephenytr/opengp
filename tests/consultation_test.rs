@@ -60,7 +60,7 @@ async fn create_test_patient(pool: &PgPool) -> Uuid {
 
     let data = NewPatientData {
         ihi: None,
-        medicare_number: Some(format!("{:010}", Uuid::new_v4().as_u128() % 10000000000)),
+        medicare_number: Some(format!("{:010}", Uuid::new_v4().as_u128() % 10000000000).into()),
         medicare_irn: Some(1),
         medicare_expiry: None,
         title: Some("Ms".to_string()),
@@ -72,7 +72,7 @@ async fn create_test_patient(pool: &PgPool) -> Uuid {
         gender: Gender::Female,
         address: Address::default(),
         phone_home: None,
-        phone_mobile: Some("0412345678".to_string()),
+        phone_mobile: Some("0412345678".to_string().into()),
         email: Some("test.patient@example.com".to_string()),
         emergency_contact: None,
         concession_type: None,
@@ -163,7 +163,7 @@ async fn test_create_consultation_with_reason() {
         reason: Some("Chest pain and shortness of breath".to_string()),
         clinical_notes: None,
     };
-    let consultation = service
+    let _consultation = service
         .create_consultation(data, practitioner_id)
         .await
         .expect("Failed to create consultation");

@@ -4,6 +4,10 @@ use uuid::Uuid;
 
 use super::model::{AuthorityType, Medication, PBSStatus, PrescriptionType};
 
+/// Data transfer object for creating a new prescription.
+///
+/// This mirrors the fields captured in the prescribing UI including
+/// PBS and authority details.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewPrescriptionData {
     pub patient_id: Uuid,
@@ -31,6 +35,8 @@ pub struct NewPrescriptionData {
     pub expiry_date: Option<NaiveDate>,
 }
 
+/// Data for updating selected prescription metadata such as PBS
+/// fields or notes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdatePrescriptionData {
     pub authority_approval_number: Option<String>,

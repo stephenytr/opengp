@@ -75,7 +75,7 @@ fn print_patient_summary(num: usize, patient: &Patient) {
             if let Some(irn) = patient.medicare_irn {
                 format!("{}-{}", m, irn)
             } else {
-                m.clone()
+                m.to_string()
             }
         })
         .unwrap_or_else(|| "-".to_string());
@@ -84,7 +84,7 @@ fn print_patient_summary(num: usize, patient: &Patient) {
         .phone_mobile
         .as_ref()
         .or(patient.phone_home.as_ref())
-        .cloned()
+        .map(|phone| phone.to_string())
         .unwrap_or_else(|| "-".to_string());
 
     println!(

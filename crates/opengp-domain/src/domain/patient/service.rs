@@ -25,7 +25,12 @@ impl PatientService {
 
         if let Some(ref medicare) = data.medicare_number {
             info!("Checking for duplicate Medicare number: {}", medicare);
-            if self.repository.find_by_medicare(medicare).await?.is_some() {
+            if self
+                .repository
+                .find_by_medicare(medicare.as_str())
+                .await?
+                .is_some()
+            {
                 error!("Duplicate Medicare number found: {}", medicare);
                 return Err(ServiceError::DuplicatePatient);
             }
@@ -142,7 +147,9 @@ impl PatientService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::patient::{Address, Gender, PatientRepository, RepositoryError};
+    use crate::domain::patient::{
+        Address, Gender, Ihi, MedicareNumber, PatientRepository, PhoneNumber, RepositoryError,
+    };
     use async_trait::async_trait;
     use chrono::NaiveDate;
     use std::sync::Mutex;
@@ -166,7 +173,12 @@ mod tests {
             Ok(self
                 .existing_patients
                 .iter()
-                .find(|p| p.medicare_number.as_deref() == Some(medicare))
+                .find(|p| {
+                    p.medicare_number
+                        .as_ref()
+                        .map(|m| m.as_str())
+                        == Some(medicare)
+                })
                 .cloned())
         }
 
@@ -210,8 +222,10 @@ mod tests {
 
     fn create_new_patient_data(medicare_number: Option<&str>) -> NewPatientData {
         NewPatientData {
-            ihi: Some("8003600000000000".to_string()),
-            medicare_number: medicare_number.map(ToString::to_string),
+            ihi: Some(Ihi::new_lenient("8003600000000000".to_string())),
+            medicare_number: medicare_number
+                .map(ToString::to_string)
+                .map(MedicareNumber::new_lenient),
             medicare_irn: Some(1),
             medicare_expiry: None,
             title: None,
@@ -223,7 +237,7 @@ mod tests {
             gender: Gender::Other,
             address: Address::default(),
             phone_home: None,
-            phone_mobile: Some("0400000000".to_string()),
+            phone_mobile: Some(PhoneNumber::new_lenient("0400000000".to_string())),
             email: None,
             emergency_contact: None,
             concession_type: None,
@@ -240,8 +254,8 @@ mod tests {
             "Existing".to_string(),
             NaiveDate::from_ymd_opt(1970, 1, 1).expect("valid date"),
             Gender::Male,
-            Some("8003601111111111".to_string()),
-            Some(medicare_number.to_string()),
+            Some(Ihi::new_lenient("8003601111111111".to_string())),
+            Some(MedicareNumber::new_lenient(medicare_number.to_string())),
             Some(1),
             None,
             None,
@@ -294,7 +308,10 @@ mod tests {
         assert!(result.is_ok());
         let patient = result.expect("patient should be created");
         assert_eq!(patient.first_name, "Sam");
-        assert_eq!(patient.medicare_number.as_deref(), Some("1234567890"));
+        assert_eq!(
+            patient.medicare_number.as_ref().map(|m| m.as_str()),
+            Some("1234567890")
+        );
     }
 
     fn update_data_with_first_name(first_name: &str) -> UpdatePatientData {

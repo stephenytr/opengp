@@ -3,6 +3,7 @@ use uuid::Uuid;
 
 pub use crate::domain::error::RepositoryError;
 
+/// Validation errors for immunisation data.
 #[derive(Debug, Error)]
 pub enum ValidationError {
     #[error("Dose number must be greater than zero")]
@@ -12,6 +13,7 @@ pub enum ValidationError {
     EmptyBatchNumber,
 }
 
+/// Errors returned from the immunisation service layer.
 #[derive(Debug, Error)]
 pub enum ServiceError {
     #[error("Immunisation not found: {0}")]

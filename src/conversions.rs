@@ -4,7 +4,7 @@ use opengp_domain::domain::api::{
     PatientRequest, PatientResponse, SocialHistoryResponse, VitalSignsResponse,
 };
 use opengp_domain::domain::appointment::AppointmentType;
-use opengp_domain::domain::patient::{Gender, Patient};
+use opengp_domain::domain::patient::{Gender, Patient, PhoneNumber};
 
 pub fn patient_request_from_new(
     data: opengp_domain::domain::patient::NewPatientData,
@@ -14,9 +14,9 @@ pub fn patient_request_from_new(
         last_name: data.last_name,
         date_of_birth: data.date_of_birth,
         gender: gender_to_api_string(data.gender),
-        phone_mobile: data.phone_mobile,
+        phone_mobile: data.phone_mobile.map(|p| p.to_string()),
         email: data.email,
-        medicare_number: data.medicare_number,
+        medicare_number: data.medicare_number.map(|m| m.to_string()),
         version: 1,
     }
 }
@@ -50,9 +50,12 @@ pub fn patient_request_from_update(
             .gender
             .map(gender_to_api_string)
             .unwrap_or_else(|| current.gender.clone()),
-        phone_mobile: data.phone_mobile.or_else(|| current.phone_mobile.clone()),
+        phone_mobile: data
+            .phone_mobile
+            .map(|p| p.to_string())
+            .or_else(|| current.phone_mobile.clone()),
         email: data.email.or_else(|| current.email.clone()),
-        medicare_number: data.medicare_number,
+        medicare_number: data.medicare_number.map(|m| m.to_string()),
         version: current.version,
     }
 }
@@ -76,7 +79,7 @@ pub fn domain_patient_from_api_response(response: PatientResponse) -> Patient {
         }),
         address: opengp_domain::domain::patient::Address::default(),
         phone_home: None,
-        phone_mobile: response.phone_mobile,
+        phone_mobile: response.phone_mobile.map(PhoneNumber::new_lenient),
         email: response.email,
         emergency_contact: None,
         concession_type: None,

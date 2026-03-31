@@ -3,6 +3,11 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
+/// Outgoing referral from the general practice to another provider.
+///
+/// Links a patient and referring practitioner to the target
+/// specialist or service, including reason for referral, urgency and
+/// delivery metadata (eg secure messaging, fax).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Referral {
     pub id: Uuid,
@@ -40,6 +45,11 @@ pub struct Referral {
 }
 
 impl Referral {
+    /// Create a new referral in draft form.
+    ///
+    /// For specialist and allied health referrals the validity period
+    /// is initialised according to common Australian rules
+    /// (typically 12 months).
     pub fn new(
         patient_id: Uuid,
         referring_practitioner_id: Uuid,
@@ -87,6 +97,7 @@ impl Referral {
         }
     }
 
+    /// Return true when the referral has passed its validity period.
     pub fn is_expired(&self) -> bool {
         if let Some(expiry) = self.valid_until {
             expiry < Utc::now().date_naive()
@@ -95,6 +106,7 @@ impl Referral {
         }
     }
 
+    /// Mark the referral as sent via the specified delivery method.
     pub fn mark_sent(&mut self, method: ReferralDeliveryMethod, user_id: Uuid) {
         self.status = ReferralStatus::Sent;
         self.sent_via = Some(method);
@@ -104,6 +116,7 @@ impl Referral {
     }
 }
 
+/// Category of referral destination.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ReferralType {
     Specialist,
@@ -118,9 +131,13 @@ pub enum ReferralType {
     Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Display, EnumString,
 )]
 pub enum ReferralUrgency {
+    /// Routine referral.
     Routine,
+    /// Referral that should be prioritised but is not an emergency.
     SemiUrgent,
+    /// Requires urgent review.
     Urgent,
+    /// Immediate emergency department transfer.
     Emergency,
 }
 
@@ -135,6 +152,7 @@ pub enum ReferralStatus {
     Cancelled,
 }
 
+/// Delivery channel used to send the referral.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ReferralDeliveryMethod {
     SecureMessaging,
@@ -144,6 +162,10 @@ pub enum ReferralDeliveryMethod {
     HandDelivered,
 }
 
+/// Directory entry for a specialist or external clinician.
+///
+/// Includes HPI‑I and provider number details where available plus
+/// preferred referral method.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Specialist {
     pub id: Uuid,
@@ -172,10 +194,12 @@ pub struct Specialist {
 }
 
 impl Specialist {
+    /// Construct a human‑friendly display name for the specialist.
     pub fn display_name(&self) -> String {
         format!("{} {} {}", self.title, self.first_name, self.last_name)
     }
 
+    /// Full details string including specialty and practice name.
     pub fn full_details(&self) -> String {
         format!(
             "{} - {}{}",

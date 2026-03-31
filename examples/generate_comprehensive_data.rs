@@ -501,16 +501,19 @@ async fn insert_patient(
     let encrypted_ihi = patient
         .ihi
         .as_ref()
-        .map(|s| crypto.encrypt(s))
+        .map(|s| crypto.encrypt(s.as_str()))
         .transpose()
         .map_err(|e| sqlx::Error::Protocol(format!("IHI encryption failed: {e}")))?;
 
     let encrypted_medicare = patient
         .medicare_number
         .as_ref()
-        .map(|s| crypto.encrypt(s))
+        .map(|s| crypto.encrypt(s.as_str()))
         .transpose()
         .map_err(|e| sqlx::Error::Protocol(format!("Medicare encryption failed: {e}")))?;
+
+    let phone_home = patient.phone_home.as_ref().map(|p| p.to_string());
+    let phone_mobile = patient.phone_mobile.as_ref().map(|p| p.to_string());
 
     sqlx::query(
         r#"
@@ -554,8 +557,8 @@ async fn insert_patient(
     .bind(&patient.address.state)
     .bind(&patient.address.postcode)
     .bind(&patient.address.country)
-    .bind(&patient.phone_home)
-    .bind(&patient.phone_mobile)
+    .bind(phone_home)
+    .bind(phone_mobile)
     .bind(&patient.email)
     .bind(patient.emergency_contact.as_ref().map(|c| c.name.clone()))
     .bind(patient.emergency_contact.as_ref().map(|c| c.phone.clone()))

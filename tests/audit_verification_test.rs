@@ -96,7 +96,9 @@ async fn audit_comprehensive() {
     let patient = patient_service
         .register_patient(NewPatientData {
             ihi: None,
-            medicare_number: Some(format!("{:010}", Uuid::new_v4().as_u128() % 10000000000)),
+            medicare_number: Some(
+                format!("{:010}", Uuid::new_v4().as_u128() % 10000000000).into(),
+            ),
             medicare_irn: Some(1),
             medicare_expiry: None,
             title: Some("Mr".to_string()),
@@ -108,7 +110,7 @@ async fn audit_comprehensive() {
             gender: Gender::Male,
             address: Address::default(),
             phone_home: None,
-            phone_mobile: Some("0412345678".to_string()),
+            phone_mobile: Some("0412345678".to_string().into()),
             email: Some("audit.patient@example.com".to_string()),
             emergency_contact: None,
             concession_type: None,

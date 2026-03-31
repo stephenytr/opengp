@@ -3,6 +3,11 @@ use uuid::Uuid;
 
 use crate::domain::error::RepositoryError as BaseRepositoryError;
 
+/// High‑level errors produced by clinical services.
+///
+/// Wraps missing records (consultations, allergies and history
+/// entries), validation problems and repository failures so that UI
+/// layers can present user‑friendly messages.
 #[derive(Debug, Error)]
 pub enum ServiceError {
     #[error("Consultation not found: {0}")]
@@ -42,6 +47,10 @@ pub enum ServiceError {
     AlreadySigned,
 }
 
+/// Errors originating from clinical repository implementations.
+///
+/// This type wraps the shared base repository error plus
+/// clinical‑specific infrastructure issues.
 #[derive(Debug, Error)]
 pub enum RepositoryError {
     #[error(transparent)]

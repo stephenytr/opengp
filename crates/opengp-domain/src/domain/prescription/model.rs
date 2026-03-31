@@ -4,6 +4,11 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
+/// Prescription issued for a patient under the PBS or privately.
+///
+/// Captures the prescribed medication, PBS status, directions,
+/// authority details and audit information linking back to the
+/// consultation and prescriber.
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 #[builder(setter(into))]
 pub struct Prescription {
@@ -42,6 +47,10 @@ pub struct Prescription {
 
 impl Prescription {
     #[allow(clippy::too_many_arguments)]
+    /// Create a new prescription with default PBS settings.
+    ///
+    /// Initial prescriptions are created as private, active, paper
+    /// prescriptions with a one‑year expiry from creation.
     pub fn new(
         patient_id: Uuid,
         practitioner_id: Uuid,
@@ -84,6 +93,7 @@ impl Prescription {
         }
     }
 
+    /// Return true when the prescription has passed its expiry date.
     pub fn is_expired(&self) -> bool {
         if let Some(expiry) = self.expiry_date {
             expiry < Utc::now().date_naive()
@@ -92,6 +102,10 @@ impl Prescription {
         }
     }
 
+    /// Cancel the prescription with a recorded reason.
+    ///
+    /// This marks the prescription as inactive and records
+    /// cancellation metadata.
     pub fn cancel(&mut self, reason: String, _user_id: Uuid) {
         self.is_active = false;
         self.cancelled_at = Some(Utc::now());
@@ -99,6 +113,11 @@ impl Prescription {
     }
 }
 
+/// Core medicine details used within a prescription.
+///
+/// Includes generic and optional brand names plus AMT/SNOMED
+/// identifiers for interoperability with Australian medication
+/// terminologies.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Medication {
     pub generic_name: String,
@@ -108,6 +127,7 @@ pub struct Medication {
     pub amt_code: Option<String>,
 }
 
+/// Pharmaceutical form of a medication.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum MedicationForm {
     Tablet,
@@ -127,15 +147,22 @@ pub enum MedicationForm {
     Other,
 }
 
+/// PBS entitlement or funding status for a prescription.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum PBSStatus {
+    /// Standard PBS general schedule.
     GeneralSchedule,
+    /// Restricted benefit requiring an indication.
     RestrictedBenefit,
+    /// PBS authority required from Services Australia.
     AuthorityRequired,
+    /// Non‑PBS private script.
     Private,
+    /// Repatriation PBS (RPBS) for eligible veterans.
     RPBS,
 }
 
+/// Type of PBS authority used for AuthorityRequired items.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AuthorityType {
     Streamlined,
@@ -144,6 +171,7 @@ pub enum AuthorityType {
     Written,
 }
 
+/// Channel through which the prescription is issued.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum PrescriptionType {
     Paper,
@@ -152,6 +180,10 @@ pub enum PrescriptionType {
     Fax,
 }
 
+/// Current long‑term medication record for a patient.
+///
+/// This models the active medication list used in prescribing and
+/// medication review workflows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CurrentMedication {
     pub id: Uuid,

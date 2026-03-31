@@ -5,13 +5,14 @@ use uuid::Uuid;
 
 use super::dto::{NewPatientData, UpdatePatientData};
 use super::error::ValidationError;
+use super::{Ihi, MedicareNumber, PhoneNumber};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Patient {
     pub id: Uuid,
 
-    pub ihi: Option<String>,
-    pub medicare_number: Option<String>,
+    pub ihi: Option<Ihi>,
+    pub medicare_number: Option<MedicareNumber>,
     pub medicare_irn: Option<u8>,
     pub medicare_expiry: Option<NaiveDate>,
 
@@ -24,8 +25,8 @@ pub struct Patient {
     pub gender: Gender,
 
     pub address: Address,
-    pub phone_home: Option<String>,
-    pub phone_mobile: Option<String>,
+    pub phone_home: Option<PhoneNumber>,
+    pub phone_mobile: Option<PhoneNumber>,
     pub email: Option<String>,
 
     pub emergency_contact: Option<EmergencyContact>,
@@ -52,16 +53,16 @@ impl Patient {
         last_name: String,
         date_of_birth: NaiveDate,
         gender: Gender,
-        ihi: Option<String>,
-        medicare_number: Option<String>,
+        ihi: Option<Ihi>,
+        medicare_number: Option<MedicareNumber>,
         medicare_irn: Option<u8>,
         medicare_expiry: Option<NaiveDate>,
         title: Option<String>,
         middle_name: Option<String>,
         preferred_name: Option<String>,
         address: Address,
-        phone_home: Option<String>,
-        phone_mobile: Option<String>,
+        phone_home: Option<PhoneNumber>,
+        phone_mobile: Option<PhoneNumber>,
         email: Option<String>,
         emergency_contact: Option<EmergencyContact>,
         concession_type: Option<ConcessionType>,

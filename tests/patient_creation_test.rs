@@ -58,7 +58,7 @@ async fn test_create_patient_with_database() {
 
     let data = NewPatientData {
         ihi: None,
-        medicare_number: Some(medicare_number.clone()),
+        medicare_number: Some(medicare_number.clone().into()),
         medicare_irn: Some(1),
         medicare_expiry: None,
         title: Some("Mr".to_string()),
@@ -70,7 +70,7 @@ async fn test_create_patient_with_database() {
         gender: Gender::Male,
         address: Address::default(),
         phone_home: None,
-        phone_mobile: Some("0412345678".to_string()),
+        phone_mobile: Some("0412345678".to_string().into()),
         email: Some("test@example.com".to_string()),
         emergency_contact: None,
         concession_type: None,
@@ -91,7 +91,10 @@ async fn test_create_patient_with_database() {
     let patient = result.unwrap();
     assert_eq!(patient.first_name, "Test");
     assert_eq!(patient.last_name, "Patient");
-    assert_eq!(patient.medicare_number, Some(medicare_number));
+    assert_eq!(
+        patient.medicare_number.as_ref().map(|m| m.as_str()),
+        Some(medicare_number.as_str())
+    );
     assert!(patient.is_active);
     assert!(!patient.is_deceased);
 }
@@ -111,7 +114,7 @@ async fn test_duplicate_medicare_number() {
 
     let data = NewPatientData {
         ihi: None,
-        medicare_number: Some(unique_medicare),
+        medicare_number: Some(unique_medicare.into()),
         medicare_irn: Some(1),
         medicare_expiry: None,
         title: Some("Ms".to_string()),
@@ -123,7 +126,7 @@ async fn test_duplicate_medicare_number() {
         gender: Gender::Female,
         address: Address::default(),
         phone_home: None,
-        phone_mobile: Some("0423456789".to_string()),
+        phone_mobile: Some("0423456789".to_string().into()),
         email: None,
         emergency_contact: None,
         concession_type: None,
@@ -156,7 +159,7 @@ async fn test_find_patient_by_id() {
 
     let data = NewPatientData {
         ihi: None,
-        medicare_number: Some(generate_unique_medicare()),
+        medicare_number: Some(generate_unique_medicare().into()),
         medicare_irn: Some(2),
         medicare_expiry: None,
         title: None,

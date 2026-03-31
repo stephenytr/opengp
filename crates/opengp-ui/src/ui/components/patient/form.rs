@@ -8,7 +8,9 @@ use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use opengp_config::forms::{
     FieldDefinition, FieldType as ConfigFieldType, FormConfig, ValidationRules,
 };
-use opengp_domain::domain::patient::{Address, EmergencyContact, NewPatientData, Patient};
+use opengp_domain::domain::patient::{
+    Address, EmergencyContact, Ihi, MedicareNumber, NewPatientData, Patient, PhoneNumber,
+};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::Style;
@@ -504,16 +506,19 @@ impl PatientForm {
         }
         form.set_value(PatientFormField::Country, patient.address.country.clone());
         if let Some(ref phone_home) = patient.phone_home {
-            form.set_value(PatientFormField::PhoneHome, phone_home.clone());
+            form.set_value(PatientFormField::PhoneHome, phone_home.to_string());
         }
         if let Some(ref phone_mobile) = patient.phone_mobile {
-            form.set_value(PatientFormField::PhoneMobile, phone_mobile.clone());
+            form.set_value(PatientFormField::PhoneMobile, phone_mobile.to_string());
         }
         if let Some(ref email) = patient.email {
             form.set_value(PatientFormField::Email, email.clone());
         }
         if let Some(ref medicare_number) = patient.medicare_number {
-            form.set_value(PatientFormField::MedicareNumber, medicare_number.clone());
+            form.set_value(
+                PatientFormField::MedicareNumber,
+                medicare_number.to_string(),
+            );
         }
         if let Some(medicare_irn) = patient.medicare_irn {
             form.set_value(PatientFormField::MedicareIrn, medicare_irn.to_string());
@@ -525,7 +530,7 @@ impl PatientForm {
             );
         }
         if let Some(ref ihi) = patient.ihi {
-            form.set_value(PatientFormField::Ihi, ihi.clone());
+            form.set_value(PatientFormField::Ihi, ihi.to_string());
         }
         if let Some(ref emergency_contact) = patient.emergency_contact {
             form.set_value(
@@ -681,11 +686,21 @@ impl PatientForm {
         let value = self.get_value_by_id(field_id);
         let mut errors = self.validator.validate(field_id, &value);
 
-        if field_id == FIELD_MEDICARE_NUMBER && !value.is_empty() {
-            if value.len() != 10 {
+        if field_id == FIELD_MEDICARE_NUMBER && !value.trim().is_empty() {
+            if MedicareNumber::new_strict(value.clone()).is_err() {
                 errors = vec!["Medicare number must be 10 digits".to_string()];
-            } else if !value.chars().all(|c| c.is_ascii_digit()) {
-                errors = vec!["Medicare number must contain only digits".to_string()];
+            }
+        }
+
+        if field_id == FIELD_IHI && !value.trim().is_empty() {
+            if Ihi::new_strict(value.clone()).is_err() {
+                errors = vec!["IHI must be 16 digits".to_string()];
+            }
+        }
+
+        if matches!(field_id, FIELD_PHONE_HOME | FIELD_PHONE_MOBILE) && !value.trim().is_empty() {
+            if PhoneNumber::new_strict(value.clone()).is_err() {
+                errors = vec!["Enter a valid Australian phone number".to_string()];
             }
         }
 
@@ -756,12 +771,34 @@ impl PatientForm {
             .parse()
             .ok();
         let atsi_status = self.get_value(PatientFormField::AtsiStatus).parse().ok();
+        let ihi = self.get_value(PatientFormField::Ihi);
+        let ihi = if ihi.trim().is_empty() {
+            None
+        } else {
+            Some(Ihi::new_strict(ihi).ok()?)
+        };
+        let medicare_number = self.get_value(PatientFormField::MedicareNumber);
+        let medicare_number = if medicare_number.trim().is_empty() {
+            None
+        } else {
+            Some(MedicareNumber::new_strict(medicare_number).ok()?)
+        };
+        let phone_home = self.get_value(PatientFormField::PhoneHome);
+        let phone_home = if phone_home.trim().is_empty() {
+            None
+        } else {
+            Some(PhoneNumber::new_strict(phone_home).ok()?)
+        };
+        let phone_mobile = self.get_value(PatientFormField::PhoneMobile);
+        let phone_mobile = if phone_mobile.trim().is_empty() {
+            None
+        } else {
+            Some(PhoneNumber::new_strict(phone_mobile).ok()?)
+        };
 
         Some(NewPatientData {
-            ihi: self.get_value(PatientFormField::Ihi).empty_to_none(),
-            medicare_number: self
-                .get_value(PatientFormField::MedicareNumber)
-                .empty_to_none(),
+            ihi,
+            medicare_number,
             medicare_irn: self.get_value(PatientFormField::MedicareIrn).parse().ok(),
             medicare_expiry: parse_date(&self.get_value(PatientFormField::MedicareExpiry)),
             title: self.get_value(PatientFormField::Title).empty_to_none(),
@@ -774,10 +811,8 @@ impl PatientForm {
             date_of_birth: dob,
             gender,
             address,
-            phone_home: self.get_value(PatientFormField::PhoneHome).empty_to_none(),
-            phone_mobile: self
-                .get_value(PatientFormField::PhoneMobile)
-                .empty_to_none(),
+            phone_home,
+            phone_mobile,
             email: self.get_value(PatientFormField::Email).empty_to_none(),
             emergency_contact,
             concession_type,
@@ -832,12 +867,34 @@ impl PatientForm {
             .parse()
             .ok();
         let atsi_status = self.get_value(PatientFormField::AtsiStatus).parse().ok();
+        let ihi = self.get_value(PatientFormField::Ihi);
+        let ihi = if ihi.trim().is_empty() {
+            None
+        } else {
+            Some(Ihi::new_strict(ihi).ok()?)
+        };
+        let medicare_number = self.get_value(PatientFormField::MedicareNumber);
+        let medicare_number = if medicare_number.trim().is_empty() {
+            None
+        } else {
+            Some(MedicareNumber::new_strict(medicare_number).ok()?)
+        };
+        let phone_home = self.get_value(PatientFormField::PhoneHome);
+        let phone_home = if phone_home.trim().is_empty() {
+            None
+        } else {
+            Some(PhoneNumber::new_strict(phone_home).ok()?)
+        };
+        let phone_mobile = self.get_value(PatientFormField::PhoneMobile);
+        let phone_mobile = if phone_mobile.trim().is_empty() {
+            None
+        } else {
+            Some(PhoneNumber::new_strict(phone_mobile).ok()?)
+        };
 
         let data = opengp_domain::domain::patient::UpdatePatientData {
-            ihi: self.get_value(PatientFormField::Ihi).empty_to_none(),
-            medicare_number: self
-                .get_value(PatientFormField::MedicareNumber)
-                .empty_to_none(),
+            ihi,
+            medicare_number,
             medicare_irn: self.get_value(PatientFormField::MedicareIrn).parse().ok(),
             medicare_expiry: parse_date(&self.get_value(PatientFormField::MedicareExpiry)),
             title: self.get_value(PatientFormField::Title).empty_to_none(),
@@ -850,10 +907,8 @@ impl PatientForm {
             date_of_birth: dob,
             gender,
             address: Some(address),
-            phone_home: self.get_value(PatientFormField::PhoneHome).empty_to_none(),
-            phone_mobile: self
-                .get_value(PatientFormField::PhoneMobile)
-                .empty_to_none(),
+            phone_home,
+            phone_mobile,
             email: self.get_value(PatientFormField::Email).empty_to_none(),
             emergency_contact,
             concession_type,

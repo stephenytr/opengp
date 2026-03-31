@@ -8,6 +8,10 @@ use super::model::{Referral, ReferralStatus};
 use super::repository::ReferralRepository;
 
 service! {
+    /// Service layer for managing outgoing referrals.
+    ///
+    /// Validates referral details and coordinates persistence via the
+    /// [`ReferralRepository`].
     ReferralService {
         repository: Arc<dyn ReferralRepository>,
     }
@@ -26,11 +30,22 @@ impl ReferralService {
         Ok(())
     }
 
+    /// Create a new referral after validating mandatory fields.
+    ///
+    /// # Errors
+    /// * [`ServiceError::Validation`] if specialty or reason are empty.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let saved = referral_service.create_referral(referral).await?;
+    /// # Ok::<(), opengp_domain::domain::referral::ServiceError>(())
+    /// ```
     pub async fn create_referral(&self, referral: Referral) -> Result<Referral, ServiceError> {
         self.validate_referral(&referral)?;
         Ok(self.repository.create(referral).await?)
     }
 
+    /// Mark a referral as sent by a particular user.
     pub async fn mark_sent(&self, id: Uuid, user_id: Uuid) -> Result<Referral, ServiceError> {
         let mut referral = self
             .repository
@@ -49,6 +64,7 @@ impl ReferralService {
         Ok(self.repository.update(referral).await?)
     }
 
+    /// Find referrals filtered by their current status.
     pub async fn find_by_status(
         &self,
         status: ReferralStatus,

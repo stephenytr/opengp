@@ -7,7 +7,8 @@ use super::error::ValidationError;
 ///
 /// Lenient deserialization accepts any string (for DB compatibility).
 /// Strict validation enforces 10-digit format (for UI entry).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type)]
+#[sqlx(transparent)]
 pub struct MedicareNumber(String);
 
 impl MedicareNumber {
@@ -73,7 +74,8 @@ impl<'de> Deserialize<'de> for MedicareNumber {
 ///
 /// Lenient deserialization accepts any string (for DB compatibility).
 /// Strict validation enforces 16-digit Australian IHI format.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type)]
+#[sqlx(transparent)]
 pub struct Ihi(String);
 
 impl Ihi {
@@ -139,7 +141,8 @@ impl<'de> Deserialize<'de> for Ihi {
 ///
 /// Lenient deserialization accepts any string (for DB compatibility).
 /// Strict validation enforces Australian mobile/landline format.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type)]
+#[sqlx(transparent)]
 pub struct PhoneNumber(String);
 
 impl PhoneNumber {

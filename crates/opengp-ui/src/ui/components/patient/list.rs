@@ -460,7 +460,9 @@ mod tests {
             NaiveDate::from_ymd_opt(1980, 1, 1).unwrap(),
             opengp_domain::domain::patient::Gender::Male,
             None,
-            Some("1234567890".to_string()),
+            Some(opengp_domain::domain::patient::MedicareNumber::new_lenient(
+                "1234567890".to_string(),
+            )),
             None,
             None,
             None,
@@ -468,7 +470,9 @@ mod tests {
             None,
             opengp_domain::domain::patient::Address::default(),
             None,
-            Some("0412345678".to_string()),
+            Some(opengp_domain::domain::patient::PhoneNumber::new_lenient(
+                "0412345678".to_string(),
+            )),
             None,
             None,
             None,

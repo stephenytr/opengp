@@ -20,6 +20,7 @@ tracing = "0.1"
 rand = "0.8"
 hex = "0.4"
 utoipa = { version = "5", features = ["chrono", "uuid"] }
+sqlx.workspace = true
 
 [features]
 billing = []

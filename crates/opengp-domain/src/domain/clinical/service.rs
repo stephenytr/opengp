@@ -4,6 +4,8 @@ use uuid::Uuid;
 
 use crate::domain::audit::{AuditEmitter, AuditEntry};
 use crate::domain::patient::{PatientService, ServiceError as PatientServiceError};
+#[cfg(test)]
+use crate::domain::patient::{Ihi, MedicareNumber};
 use crate::service;
 
 use super::dto::{
@@ -20,6 +22,7 @@ use super::repository::{
 };
 use crate::domain::error::RepositoryError as BaseRepositoryError;
 
+/// Aggregates the repository traits used by [`ClinicalService`].
 pub struct ClinicalRepositories {
     pub consultation: Arc<dyn ConsultationRepository>,
     pub allergy: Arc<dyn AllergyRepository>,
@@ -40,6 +43,18 @@ service! {
 impl ClinicalService {
     // ==================== Consultation Management ====================
 
+    /// Create a new consultation for a patient.
+    ///
+    /// The patient is first verified via [`PatientService`], then a
+    /// [`Consultation`] is created and persisted with audit logging.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// let consultation = clinical_service
+    ///     .create_consultation(data, user_id)
+    ///     .await?;
+    /// # Ok::<(), opengp_domain::domain::clinical::ServiceError>(())
+    /// ```
     #[instrument(skip(self), fields(patient_id = %data.patient_id))]
     pub async fn create_consultation(
         &self,
@@ -83,12 +98,14 @@ impl ClinicalService {
         Ok(saved)
     }
 
+    /// Find a consultation by identifier.
     #[instrument(skip(self), fields(consultation_id = %id))]
     pub async fn find_consultation(&self, id: Uuid) -> Result<Option<Consultation>, ServiceError> {
         let consultation = self.repos.consultation.find_by_id(id).await?;
         Ok(consultation)
     }
 
+    /// List consultations for a patient.
     #[instrument(skip(self), fields(patient_id = %patient_id))]
     pub async fn list_patient_consultations(
         &self,
@@ -99,6 +116,18 @@ impl ClinicalService {
         Ok(consultations)
     }
 
+    /// Update the reason and clinical notes for a consultation.
+    ///
+    /// Uses optimistic locking on the `version` field and prevents
+    /// edits once the consultation is signed.
+    ///
+    /// # Examples
+    /// ```ignore
+    /// clinical_service
+    ///     .update_clinical_notes(id, Some("Follow‑up".into()), Some("Updated notes".into()), 1, user_id)
+    ///     .await?;
+    /// # Ok::<(), opengp_domain::domain::clinical::ServiceError>(())
+    /// ```
     #[instrument(skip(self), fields(consultation_id = %consultation_id))]
     pub async fn update_clinical_notes(
         &self,
@@ -168,6 +197,7 @@ impl ClinicalService {
         Ok(updated)
     }
 
+    /// Mark a consultation as signed by the given user.
     #[instrument(skip(self), fields(consultation_id = %consultation_id))]
     pub async fn sign_consultation(
         &self,
@@ -210,6 +240,10 @@ impl ClinicalService {
 
     // ==================== Allergy Management ====================
 
+    /// Record a new allergy for a patient.
+    ///
+    /// Verifies that the patient exists, then persists the allergy
+    /// and emits a corresponding audit entry.
     #[instrument(skip(self), fields(patient_id = %data.patient_id))]
     pub async fn add_allergy(
         &self,
@@ -267,6 +301,8 @@ impl ClinicalService {
         Ok(saved)
     }
 
+    /// List allergies for a patient, optionally filtering to active
+    /// entries only.
     #[instrument(skip(self), fields(patient_id = %patient_id))]
     pub async fn list_patient_allergies(
         &self,
@@ -287,6 +323,7 @@ impl ClinicalService {
         Ok(allergies)
     }
 
+    /// Deactivate (soft delete) an allergy.
     #[instrument(skip(self), fields(allergy_id = %allergy_id))]
     pub async fn deactivate_allergy(
         &self,
@@ -311,6 +348,7 @@ impl ClinicalService {
 
     // ==================== Medical History ====================
 
+    /// Add a new medical history entry for a patient.
     #[instrument(skip(self), fields(patient_id = %data.patient_id))]
     pub async fn add_medical_history(
         &self,
@@ -963,7 +1001,7 @@ mod tests {
             Ok(self
                 .patients
                 .iter()
-                .find(|p| p.medicare_number.as_deref() == Some(medicare))
+                .find(|p| p.medicare_number.as_ref().map(|m| m.as_ref()) == Some(medicare))
                 .cloned())
         }
 
@@ -1014,8 +1052,8 @@ mod tests {
             "Citizen".to_string(),
             NaiveDate::from_ymd_opt(1990, 1, 1).expect("valid dob"),
             Gender::Female,
-            Some("8003601234567890".to_string()),
-            Some("1234567890".to_string()),
+            Some(Ihi::new_lenient("8003601234567890".to_string())),
+            Some(MedicareNumber::new_lenient("1234567890".to_string())),
             Some(1),
             None,
             None,

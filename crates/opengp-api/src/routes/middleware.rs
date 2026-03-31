@@ -21,7 +21,8 @@ use opengp_domain::domain::clinical::{
     ServiceError as ClinicalServiceError, Severity, SmokingStatus, UpdateSocialHistoryData,
 };
 use opengp_domain::domain::patient::{
-    Address, Gender, NewPatientData, ServiceError as PatientServiceError, UpdatePatientData,
+    Address, Gender, MedicareNumber, NewPatientData, PhoneNumber,
+    ServiceError as PatientServiceError, UpdatePatientData,
 };
 use opengp_domain::domain::user::Role;
 use serde::Deserialize;
@@ -296,7 +297,7 @@ pub(super) fn patient_request_to_new_data(
 ) -> Result<NewPatientData, (StatusCode, Json<ApiErrorResponse>)> {
     Ok(NewPatientData {
         ihi: None,
-        medicare_number: payload.medicare_number,
+        medicare_number: payload.medicare_number.map(MedicareNumber::new_lenient),
         medicare_irn: None,
         medicare_expiry: None,
         title: None,
@@ -308,7 +309,7 @@ pub(super) fn patient_request_to_new_data(
         gender: parse_gender(&payload.gender)?,
         address: Address::default(),
         phone_home: None,
-        phone_mobile: payload.phone_mobile,
+        phone_mobile: payload.phone_mobile.map(PhoneNumber::new_lenient),
         email: payload.email,
         emergency_contact: None,
         concession_type: None,
@@ -324,7 +325,7 @@ pub(super) fn patient_request_to_update_data(
 ) -> Result<UpdatePatientData, (StatusCode, Json<ApiErrorResponse>)> {
     Ok(UpdatePatientData {
         ihi: None,
-        medicare_number: payload.medicare_number,
+        medicare_number: payload.medicare_number.map(MedicareNumber::new_lenient),
         medicare_irn: None,
         medicare_expiry: None,
         title: None,
@@ -336,7 +337,7 @@ pub(super) fn patient_request_to_update_data(
         gender: Some(parse_gender(&payload.gender)?),
         address: None,
         phone_home: None,
-        phone_mobile: payload.phone_mobile,
+        phone_mobile: payload.phone_mobile.map(PhoneNumber::new_lenient),
         email: payload.email,
         emergency_contact: None,
         concession_type: None,
@@ -730,7 +731,7 @@ pub(super) fn patient_to_response(
         last_name: patient.last_name,
         date_of_birth: patient.date_of_birth,
         gender: patient.gender.to_string().to_lowercase(),
-        phone_mobile: patient.phone_mobile,
+        phone_mobile: patient.phone_mobile.map(|p| p.to_string()),
         email: patient.email,
         is_active: patient.is_active,
         version: patient.version,

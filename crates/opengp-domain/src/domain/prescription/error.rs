@@ -3,6 +3,7 @@ use uuid::Uuid;
 
 pub use crate::domain::error::RepositoryError;
 
+/// Validation errors for prescription data.
 #[derive(Debug, Error)]
 pub enum ValidationError {
     #[error("Empty field: {0}")]
@@ -21,6 +22,7 @@ pub enum ValidationError {
     MissingAuthorityApproval,
 }
 
+/// High‑level errors from the prescribing service layer.
 #[derive(Debug, Error)]
 pub enum ServiceError {
     #[error("Prescription not found: {0}")]

@@ -8,6 +8,8 @@ use super::model::{Immunisation, VaccinationSchedule};
 use super::repository::ImmunisationRepository;
 
 service! {
+    /// Service layer for recording immunisations and managing
+    /// vaccination schedules.
     ImmunisationService {
         repository: Arc<dyn ImmunisationRepository>,
     }
@@ -26,6 +28,11 @@ impl ImmunisationService {
         Ok(())
     }
 
+    /// Record a new immunisation for a patient.
+    ///
+    /// # Errors
+    /// * [`ServiceError::Validation`] if the dose number or batch
+    ///   number are invalid.
     pub async fn record_immunisation(
         &self,
         immunisation: Immunisation,
@@ -35,6 +42,7 @@ impl ImmunisationService {
         Ok(saved)
     }
 
+    /// List immunisations recorded for a patient.
     pub async fn find_by_patient(
         &self,
         patient_id: Uuid,
@@ -42,6 +50,7 @@ impl ImmunisationService {
         Ok(self.repository.find_by_patient(patient_id).await?)
     }
 
+    /// Return due vaccination schedule entries for a patient.
     pub async fn due_schedule(
         &self,
         patient_id: Uuid,

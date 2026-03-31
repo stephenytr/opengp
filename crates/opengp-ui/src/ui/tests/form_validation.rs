@@ -1,4 +1,4 @@
-use crate::ui::components::patient::{PatientFormField, PatientForm};
+use crate::ui::components::patient::{PatientForm, PatientFormField};
 use crate::ui::widgets::FormNavigation;
 use crate::ui::Theme;
 
@@ -41,8 +41,9 @@ fn patient_form_phone_number_validation() {
 
     form.set_value(PatientFormField::PhoneMobile, "12345".to_string());
     assert_eq!(
-        form.error(PatientFormField::PhoneMobile).map(String::as_str),
-        Some("Invalid phone number")
+        form.error(PatientFormField::PhoneMobile)
+            .map(String::as_str),
+        Some("Enter a valid Australian phone number")
     );
 
     form.set_value(PatientFormField::PhoneMobile, "0412 345 678".to_string());

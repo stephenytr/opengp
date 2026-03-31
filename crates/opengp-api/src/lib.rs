@@ -52,17 +52,22 @@ fn init_tracing(level: &str) {
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C signal handler");
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::error!("failed to install Ctrl+C signal handler: {}", e);
+        }
     };
 
     #[cfg(unix)]
     let terminate = async {
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("failed to install SIGTERM signal handler")
-            .recv()
-            .await;
+        let signal = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate());
+        match signal {
+            Ok(mut s) => {
+                s.recv().await;
+            }
+            Err(e) => {
+                tracing::error!("failed to install SIGTERM signal handler: {}", e);
+            }
+        }
     };
 
     #[cfg(not(unix))]

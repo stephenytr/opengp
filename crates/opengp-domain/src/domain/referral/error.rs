@@ -3,6 +3,7 @@ use uuid::Uuid;
 
 pub use crate::domain::error::RepositoryError;
 
+/// Validation errors for referral data.
 #[derive(Debug, Error)]
 pub enum ValidationError {
     #[error("Specialty cannot be empty")]
@@ -12,6 +13,7 @@ pub enum ValidationError {
     EmptyReason,
 }
 
+/// Errors returned from the referral service layer.
 #[derive(Debug, Error)]
 pub enum ServiceError {
     #[error("Referral not found: {0}")]

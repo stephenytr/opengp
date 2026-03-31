@@ -38,16 +38,8 @@ pub(super) async fn list_appointments(
     let (date_from, date_to) =
         if let Some(date) = query.date {
             (
-                Some(Utc.from_utc_datetime(
-                    &date.and_hms_opt(0, 0, 0).expect("00:00:00 should be valid"),
-                )),
-                Some(
-                    Utc.from_utc_datetime(
-                        &date
-                            .and_hms_opt(23, 59, 59)
-                            .expect("23:59:59 should be valid"),
-                    ),
-                ),
+                date.and_hms_opt(0, 0, 0).map(|dt| Utc.from_utc_datetime(&dt)),
+                date.and_hms_opt(23, 59, 59).map(|dt| Utc.from_utc_datetime(&dt)),
             )
         } else {
             (query.date_from, query.date_to)

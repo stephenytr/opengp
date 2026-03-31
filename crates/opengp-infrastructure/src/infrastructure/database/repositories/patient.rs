@@ -12,7 +12,8 @@ use crate::infrastructure::database::helpers::*;
 use crate::infrastructure::database::sqlx_to_patient_error;
 use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
 use opengp_domain::domain::patient::{
-    Address, EmergencyContact, Gender, Patient, PatientRepository, RepositoryError,
+    Address, EmergencyContact, Gender, Ihi, MedicareNumber, Patient, PatientRepository,
+    PhoneNumber, RepositoryError,
 };
 
 #[derive(Debug, FromRow)]
@@ -80,7 +81,8 @@ impl PatientRow {
                 }
             }
             None => None,
-        };
+        }
+        .map(Ihi::new_lenient);
 
         let medicare_number = match self.medicare_number {
             Some(data) => {
@@ -107,7 +109,8 @@ impl PatientRow {
                 }
             }
             None => None,
-        };
+        }
+        .map(MedicareNumber::new_lenient);
 
         debug!(patient_id = %patient_id, "Patient row converted into domain model");
 
@@ -135,8 +138,8 @@ impl PatientRow {
                 postcode: self.postcode,
                 country: self.country.unwrap_or_else(|| "Australia".to_string()),
             },
-            phone_home: self.phone_home,
-            phone_mobile: self.phone_mobile,
+            phone_home: self.phone_home.map(PhoneNumber::new_lenient),
+            phone_mobile: self.phone_mobile.map(PhoneNumber::new_lenient),
             email: self.email,
             emergency_contact: if let Some(name) = self.emergency_contact_name {
                 Some(EmergencyContact {
@@ -212,7 +215,7 @@ impl PatientRepository for SqlxPatientRepository {
         Ok(patients.into_iter().find(|p| {
             p.medicare_number
                 .as_ref()
-                .map(|m| m == medicare)
+                .map(|m| m.as_str() == medicare)
                 .unwrap_or(false)
         }))
     }
@@ -304,17 +307,19 @@ impl PatientRepository for SqlxPatientRepository {
         let dob = patient.date_of_birth;
         let medicare_expiry = patient.medicare_expiry;
         let medicare_irn_i32 = patient.medicare_irn.map(|i| i as i32);
+        let phone_home = patient.phone_home.as_ref().map(|phone| phone.to_string());
+        let phone_mobile = patient.phone_mobile.as_ref().map(|phone| phone.to_string());
 
         // Encrypt sensitive fields
         let ihi_encrypted: Option<Vec<u8>> = match &patient.ihi {
-            Some(ihi) => Some(self.crypto.encrypt(ihi).map_err(|e| {
+            Some(ihi) => Some(self.crypto.encrypt(ihi.as_str()).map_err(|e| {
                 RepositoryError::Encryption(format!("Failed to encrypt IHI: {}", e))
             })?),
             None => None,
         };
 
         let medicare_encrypted: Option<Vec<u8>> = match &patient.medicare_number {
-            Some(num) => Some(self.crypto.encrypt(num).map_err(|e| {
+            Some(num) => Some(self.crypto.encrypt(num.as_str()).map_err(|e| {
                 RepositoryError::Encryption(format!("Failed to encrypt Medicare number: {}", e))
             })?),
             None => None,
@@ -363,8 +368,8 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(&patient.address.state)
         .bind(&patient.address.postcode)
         .bind(&patient.address.country)
-        .bind(&patient.phone_home)
-        .bind(&patient.phone_mobile)
+        .bind(phone_home)
+        .bind(phone_mobile)
         .bind(&patient.email)
         .bind(emergency_contact_name)
         .bind(emergency_contact_phone)
@@ -391,17 +396,19 @@ impl PatientRepository for SqlxPatientRepository {
         let dob = patient.date_of_birth;
         let medicare_expiry = patient.medicare_expiry;
         let medicare_irn_i32 = patient.medicare_irn.map(|i| i as i32);
+        let phone_home = patient.phone_home.as_ref().map(|phone| phone.to_string());
+        let phone_mobile = patient.phone_mobile.as_ref().map(|phone| phone.to_string());
 
         // Encrypt sensitive fields
         let ihi_encrypted: Option<Vec<u8>> = match &patient.ihi {
-            Some(ihi) => Some(self.crypto.encrypt(ihi).map_err(|e| {
+            Some(ihi) => Some(self.crypto.encrypt(ihi.as_str()).map_err(|e| {
                 RepositoryError::Encryption(format!("Failed to encrypt IHI: {}", e))
             })?),
             None => None,
         };
 
         let medicare_encrypted: Option<Vec<u8>> = match &patient.medicare_number {
-            Some(num) => Some(self.crypto.encrypt(num).map_err(|e| {
+            Some(num) => Some(self.crypto.encrypt(num.as_str()).map_err(|e| {
                 RepositoryError::Encryption(format!("Failed to encrypt Medicare number: {}", e))
             })?),
             None => None,
@@ -487,8 +494,8 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(&patient.address.state)
         .bind(&patient.address.postcode)
         .bind(&patient.address.country)
-        .bind(&patient.phone_home)
-        .bind(&patient.phone_mobile)
+        .bind(phone_home)
+        .bind(phone_mobile)
         .bind(&patient.email)
         .bind(emergency_contact_name)
         .bind(emergency_contact_phone)

@@ -961,7 +961,7 @@ mod tests {
                 gender: Gender::Female,
                 address: opengp_domain::domain::patient::Address::default(),
                 phone_home: None,
-                phone_mobile: Some("0400000000".to_string()),
+                phone_mobile: Some(opengp_domain::domain::patient::PhoneNumber::new_lenient("0400000000".to_string())),
                 email: None,
                 emergency_contact: None,
                 concession_type: None,

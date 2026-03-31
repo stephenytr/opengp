@@ -6,7 +6,8 @@ use rand::Rng;
 use uuid::Uuid;
 
 use opengp_domain::domain::patient::{
-    Address, AtsiStatus, ConcessionType, EmergencyContact, Gender, Patient,
+    Address, AtsiStatus, ConcessionType, EmergencyContact, Gender, Ihi, MedicareNumber, Patient,
+    PhoneNumber,
 };
 
 #[derive(Debug, Clone)]
@@ -167,8 +168,10 @@ impl PatientGenerator {
 
         Patient {
             id: Uuid::new_v4(),
-            ihi,
-            medicare_number: medicare.as_ref().map(|(num, _, _)| num.clone()),
+            ihi: ihi.map(Ihi::new_lenient),
+            medicare_number: medicare
+                .as_ref()
+                .map(|(num, _, _)| MedicareNumber::new_lenient(num.clone())),
             medicare_irn: medicare.as_ref().map(|(_, irn, _)| *irn),
             medicare_expiry: medicare.and_then(|(_, _, exp)| exp),
             title: Some(title),
@@ -179,8 +182,8 @@ impl PatientGenerator {
             date_of_birth,
             gender,
             address: self.generate_address(),
-            phone_home,
-            phone_mobile,
+            phone_home: phone_home.map(PhoneNumber::new_lenient),
+            phone_mobile: phone_mobile.map(PhoneNumber::new_lenient),
             email,
             emergency_contact,
             concession_type,

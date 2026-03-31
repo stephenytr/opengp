@@ -2,11 +2,12 @@ use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
 use super::model::{Address, AtsiStatus, ConcessionType, EmergencyContact, Gender};
+use super::{Ihi, MedicareNumber, PhoneNumber};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewPatientData {
-    pub ihi: Option<String>,
-    pub medicare_number: Option<String>,
+    pub ihi: Option<Ihi>,
+    pub medicare_number: Option<MedicareNumber>,
     pub medicare_irn: Option<u8>,
     pub medicare_expiry: Option<NaiveDate>,
 
@@ -19,8 +20,8 @@ pub struct NewPatientData {
     pub gender: Gender,
 
     pub address: Address,
-    pub phone_home: Option<String>,
-    pub phone_mobile: Option<String>,
+    pub phone_home: Option<PhoneNumber>,
+    pub phone_mobile: Option<PhoneNumber>,
     pub email: Option<String>,
 
     pub emergency_contact: Option<EmergencyContact>,
@@ -35,8 +36,8 @@ pub struct NewPatientData {
 /// Data for updating an existing patient - all fields optional for partial updates
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdatePatientData {
-    pub ihi: Option<String>,
-    pub medicare_number: Option<String>,
+    pub ihi: Option<Ihi>,
+    pub medicare_number: Option<MedicareNumber>,
     pub medicare_irn: Option<u8>,
     pub medicare_expiry: Option<NaiveDate>,
 
@@ -49,8 +50,8 @@ pub struct UpdatePatientData {
     pub gender: Option<Gender>,
 
     pub address: Option<Address>,
-    pub phone_home: Option<String>,
-    pub phone_mobile: Option<String>,
+    pub phone_home: Option<PhoneNumber>,
+    pub phone_mobile: Option<PhoneNumber>,
     pub email: Option<String>,
 
     pub emergency_contact: Option<EmergencyContact>,

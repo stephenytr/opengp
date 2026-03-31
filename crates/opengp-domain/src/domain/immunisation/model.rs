@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
+/// Record of a single vaccination event for a patient.
+///
+/// Includes vaccine details, dose information, AIR reporting
+/// metadata and any adverse events following immunisation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Immunisation {
     pub id: Uuid,
@@ -42,6 +46,8 @@ pub struct Immunisation {
 
 impl Immunisation {
     #[allow(clippy::too_many_arguments)]
+    /// Create a new immunisation record with default consent and
+    /// AIR reporting state.
     pub fn new(
         patient_id: Uuid,
         practitioner_id: Uuid,
@@ -82,6 +88,8 @@ impl Immunisation {
         }
     }
 
+    /// Mark this immunisation as reported to the Australian
+    /// Immunisation Register (AIR).
     pub fn mark_air_reported(&mut self, transaction_id: String) {
         self.air_reported = true;
         self.air_report_date = Some(Utc::now());
@@ -89,6 +97,10 @@ impl Immunisation {
     }
 }
 
+/// Vaccine metadata used for immunisation recording.
+///
+/// Includes brand and AMT/SNOMED coding to support AIR reporting and
+/// decision support.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vaccine {
     pub name: String,
@@ -98,6 +110,7 @@ pub struct Vaccine {
     pub amt_code: Option<String>,
 }
 
+/// Type or program category of vaccine.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum VaccineType {
     COVID19,
@@ -127,6 +140,7 @@ pub enum VaccineType {
     Other,
 }
 
+/// Route of vaccine administration.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AdministrationRoute {
     Intramuscular,
@@ -136,6 +150,7 @@ pub enum AdministrationRoute {
     Intranasal,
 }
 
+/// Anatomical site where the vaccine was administered.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum AnatomicalSite {
     LeftDeltoid,
@@ -151,6 +166,7 @@ pub enum AnatomicalSite {
     Other,
 }
 
+/// Type of consent documented prior to vaccination.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ConsentType {
     Written,
@@ -158,6 +174,7 @@ pub enum ConsentType {
     Implied,
 }
 
+/// Planned vaccination schedule entry for a patient.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaccinationSchedule {
     pub patient_id: Uuid,
@@ -168,6 +185,7 @@ pub struct VaccinationSchedule {
     pub completed_immunisation_id: Option<Uuid>,
 }
 
+/// Status of a scheduled vaccination dose.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 pub enum ScheduleStatus {
     Due,

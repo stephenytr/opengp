@@ -90,7 +90,12 @@ impl PatientRepository for MockPatientRepository {
         let storage = self.storage.lock().await;
         Ok(storage
             .iter()
-            .find(|p| p.medicare_number.as_deref() == Some(medicare))
+            .find(|p| {
+                p.medicare_number
+                    .as_ref()
+                    .map(|m| m.as_str())
+                    == Some(medicare)
+            })
             .cloned())
     }
 
@@ -578,7 +583,7 @@ mod tests {
             last_name: "Doe".to_string(),
             date_of_birth: NaiveDate::from_ymd_opt(1980, 1, 1).unwrap(),
             gender: Gender::Male,
-            medicare_number: Some("1234567890".to_string()),
+            medicare_number: Some("1234567890".to_string().into()),
             ihi: None,
             medicare_irn: None,
             medicare_expiry: None,
@@ -649,7 +654,7 @@ mod tests {
             last_name: "Smith".to_string(),
             date_of_birth: NaiveDate::from_ymd_opt(1985, 5, 15).unwrap(),
             gender: Gender::Female,
-            medicare_number: Some("9876543210".to_string()),
+            medicare_number: Some("9876543210".to_string().into()),
             ihi: None,
             medicare_irn: None,
             medicare_expiry: None,

@@ -12,6 +12,7 @@ use super::repository::PrescriptionRepository;
 use crate::domain::audit::{AuditEntry, AuditService};
 
 service! {
+    /// Service layer for prescribing and PBS validation.
     PrescriptionService {
         repository: Arc<dyn PrescriptionRepository>,
         audit_service: Arc<AuditService>,
@@ -134,17 +135,21 @@ impl PrescriptionService {
         Ok(())
     }
 
-    /// Create a new prescription with validation
+    /// Create a new prescription with PBS validation.
     ///
-    /// # Arguments
-    /// * `data` - New prescription data
-    /// * `user_id` - ID of user creating the prescription
+    /// # Errors
+    /// * [`ServiceError::PBSAuthorityRequired`] when authority details
+    ///   are missing for an AuthorityRequired item.
+    /// * [`ServiceError::Validation`] for other PBS data problems.
+    /// * [`ServiceError::Repository`] if persistence fails.
     ///
-    /// # Returns
-    /// * `Ok(Prescription)` - Successfully created prescription
-    /// * `Err(ServiceError::PBSAuthorityRequired)` - PBS authority validation failed
-    /// * `Err(ServiceError::Validation)` - Invalid prescription data
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Examples
+    /// ```ignore
+    /// let saved = prescription_service
+    ///     .create_prescription(data, user_id)
+    ///     .await?;
+    /// # Ok::<(), opengp_domain::domain::prescription::ServiceError>(())
+    /// ```
     pub async fn create_prescription(
         &self,
         data: NewPrescriptionData,
@@ -218,20 +223,14 @@ impl PrescriptionService {
         Ok(saved)
     }
 
-    /// Cancel a prescription
+    /// Cancel a prescription using the domain model's cancellation
+    /// logic.
     ///
-    /// Uses the domain model's cancel method to ensure business rules are enforced.
-    ///
-    /// # Arguments
-    /// * `id` - Prescription ID
-    /// * `reason` - Cancellation reason
-    /// * `user_id` - ID of user cancelling the prescription
-    ///
-    /// # Returns
-    /// * `Ok(())` - Successfully cancelled prescription
-    /// * `Err(ServiceError::NotFound)` - Prescription not found
-    /// * `Err(ServiceError::AlreadyCancelled)` - Prescription already cancelled
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// # Errors
+    /// * [`ServiceError::NotFound`] if the prescription cannot be
+    ///   located.
+    /// * [`ServiceError::AlreadyCancelled`] if it is already inactive.
+    /// * [`ServiceError::Repository`] if the update fails.
     pub async fn cancel_prescription(
         &self,
         id: Uuid,
@@ -274,28 +273,13 @@ impl PrescriptionService {
         Ok(())
     }
 
-    /// Find a prescription by ID
-    ///
-    /// # Arguments
-    /// * `id` - Prescription ID
-    ///
-    /// # Returns
-    /// * `Ok(Some(Prescription))` - Prescription found
-    /// * `Ok(None)` - Prescription not found
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// Find a prescription by identifier.
     pub async fn find_prescription(&self, id: Uuid) -> Result<Option<Prescription>, ServiceError> {
         let prescription = self.repository.find_by_id(id).await?;
         Ok(prescription)
     }
 
-    /// Find all prescriptions for a patient
-    ///
-    /// # Arguments
-    /// * `patient_id` - Patient ID
-    ///
-    /// # Returns
-    /// * `Ok(Vec<Prescription>)` - List of prescriptions
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// List prescriptions for the given patient.
     pub async fn find_by_patient(
         &self,
         patient_id: Uuid,
@@ -313,14 +297,7 @@ impl PrescriptionService {
         Ok(prescriptions)
     }
 
-    /// Find active prescriptions for a patient
-    ///
-    /// # Arguments
-    /// * `patient_id` - Patient ID
-    ///
-    /// # Returns
-    /// * `Ok(Vec<Prescription>)` - List of active prescriptions
-    /// * `Err(ServiceError::Repository)` - Database error
+    /// List active prescriptions for the given patient.
     pub async fn find_active_by_patient(
         &self,
         patient_id: Uuid,
