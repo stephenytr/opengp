@@ -29,6 +29,8 @@ pub enum ScheduleAction {
     NavigateTimeSlot(i32),
     /// Navigate between practitioners (positive = right, negative = left)
     NavigatePractitioner(i32),
+    /// Toggle visibility of the selected practitioner column
+    ToggleColumn,
     /// Create a new appointment at the selected empty slot
     CreateAtSlot {
         /// The practitioner for the new appointment
@@ -216,6 +218,7 @@ impl Schedule {
                     }
                     Some(ScheduleAction::NavigateTimeSlot(1))
                 }
+                Action::TogglePractitionerColumn => Some(ScheduleAction::ToggleColumn),
                 Action::Enter => {
                     // Try to select appointment at current position, or create new if empty
                     if let Some(apt) = self.get_appointment_at_selection() {

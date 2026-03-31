@@ -8,6 +8,7 @@ pub mod healthcare;
 
 use crate::healthcare::HealthcareConfig;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Database configuration
@@ -257,6 +258,8 @@ pub struct CalendarConfig {
     pub viewport_start_hour: u8,
     /// Initial viewport end hour (default: 18)
     pub viewport_end_hour: u8,
+    /// Appointment type abbreviations mapping
+    pub appointment_type_abbreviations: HashMap<String, String>,
 }
 
 impl Default for CalendarConfig {
@@ -266,11 +269,39 @@ impl Default for CalendarConfig {
             max_hour: 22,
             viewport_start_hour: 8,
             viewport_end_hour: 18,
+            appointment_type_abbreviations: Self::default_appointment_type_abbreviations(),
         }
     }
 }
 
 impl CalendarConfig {
+    /// Default appointment type abbreviations
+    fn default_appointment_type_abbreviations() -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("Standard".to_string(), "STD".to_string());
+        map.insert("Long".to_string(), "LNG".to_string());
+        map.insert("Brief".to_string(), "BRF".to_string());
+        map.insert("NewPatient".to_string(), "NEW".to_string());
+        map.insert("HealthAssessment".to_string(), "HLT".to_string());
+        map.insert("ChronicDiseaseReview".to_string(), "CHR".to_string());
+        map.insert("MentalHealthPlan".to_string(), "MHP".to_string());
+        map.insert("Immunisation".to_string(), "IMM".to_string());
+        map.insert("Procedure".to_string(), "PRC".to_string());
+        map.insert("Telephone".to_string(), "TEL".to_string());
+        map.insert("Telehealth".to_string(), "TLH".to_string());
+        map.insert("HomeVisit".to_string(), "HOM".to_string());
+        map.insert("Emergency".to_string(), "EMG".to_string());
+        map
+    }
+
+    /// Get abbreviation for appointment type with 3-char fallback
+    pub fn get_abbreviation(&self, appointment_type: &str) -> String {
+        self.appointment_type_abbreviations
+            .get(appointment_type)
+            .cloned()
+            .unwrap_or_else(|| appointment_type.chars().take(3).collect::<String>())
+    }
+
     /// Load calendar configuration from environment variables
     ///
     /// Reads the following environment variables:
@@ -313,6 +344,7 @@ impl CalendarConfig {
             max_hour,
             viewport_start_hour,
             viewport_end_hour,
+            appointment_type_abbreviations: Self::default_appointment_type_abbreviations(),
         };
 
         config.validate()?;
@@ -525,6 +557,7 @@ mod tests {
         assert_eq!(config.max_hour, 22);
         assert_eq!(config.viewport_start_hour, 8);
         assert_eq!(config.viewport_end_hour, 18);
+        assert_eq!(config.appointment_type_abbreviations.len(), 13);
     }
 
     #[test]
@@ -542,6 +575,7 @@ mod tests {
                 assert_eq!(config.max_hour, 22);
                 assert_eq!(config.viewport_start_hour, 8);
                 assert_eq!(config.viewport_end_hour, 18);
+                assert_eq!(config.appointment_type_abbreviations.len(), 13);
             },
         );
     }
@@ -561,6 +595,7 @@ mod tests {
                 assert_eq!(config.max_hour, 23);
                 assert_eq!(config.viewport_start_hour, 7);
                 assert_eq!(config.viewport_end_hour, 19);
+                assert_eq!(config.appointment_type_abbreviations.len(), 13);
             },
         );
     }
@@ -572,6 +607,8 @@ mod tests {
             max_hour: 22,
             viewport_start_hour: 5,
             viewport_end_hour: 18,
+            appointment_type_abbreviations: CalendarConfig::default_appointment_type_abbreviations(
+            ),
         };
 
         let result = config.validate();
@@ -589,6 +626,8 @@ mod tests {
             max_hour: 22,
             viewport_start_hour: 8,
             viewport_end_hour: 23,
+            appointment_type_abbreviations: CalendarConfig::default_appointment_type_abbreviations(
+            ),
         };
 
         let result = config.validate();
@@ -606,6 +645,8 @@ mod tests {
             max_hour: 22,
             viewport_start_hour: 18,
             viewport_end_hour: 18,
+            appointment_type_abbreviations: CalendarConfig::default_appointment_type_abbreviations(
+            ),
         };
 
         let result = config.validate();
@@ -623,9 +664,45 @@ mod tests {
             max_hour: 22,
             viewport_start_hour: 8,
             viewport_end_hour: 18,
+            appointment_type_abbreviations: CalendarConfig::default_appointment_type_abbreviations(
+            ),
         };
 
         let result = config.validate();
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn default_appointment_abbreviations_count() {
+        assert_eq!(
+            CalendarConfig::default()
+                .appointment_type_abbreviations
+                .len(),
+            13
+        );
+    }
+
+    #[test]
+    fn telehealth_is_tlh() {
+        assert_eq!(
+            CalendarConfig::default().get_abbreviation("Telehealth"),
+            "TLH"
+        );
+    }
+
+    #[test]
+    fn telephone_is_tel() {
+        assert_eq!(
+            CalendarConfig::default().get_abbreviation("Telephone"),
+            "TEL"
+        );
+    }
+
+    #[test]
+    fn abbreviation_fallback() {
+        assert_eq!(
+            CalendarConfig::default().get_abbreviation("UnknownType"),
+            "Unk"
+        );
     }
 }

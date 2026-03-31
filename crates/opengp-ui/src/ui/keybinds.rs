@@ -134,6 +134,8 @@ pub enum Action {
     PrevTimeSlot,
     /// Move to next time slot
     NextTimeSlot,
+    /// Toggle selected practitioner column visibility
+    TogglePractitionerColumn,
     /// Select appointment
     SelectAppointment,
     /// Create new appointment
@@ -469,6 +471,19 @@ impl KeybindRegistry {
             action: Action::NewAppointment,
             context: KeyContext::Schedule,
             description: "Create new appointment",
+        });
+        // Schedule: Toggle practitioner column visibility
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+            action: Action::TogglePractitionerColumn,
+            context: KeyContext::Schedule,
+            description: "Toggle selected practitioner column visibility",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('H'), KeyModifiers::SHIFT),
+            action: Action::TogglePractitionerColumn,
+            context: KeyContext::Schedule,
+            description: "Toggle selected practitioner column visibility",
         });
         // Schedule horizontal navigation (h/l for practitioner columns)
         self.register(Keybind {

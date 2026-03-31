@@ -126,6 +126,7 @@ impl App {
                             }
                             ScheduleAction::NavigateTimeSlot(_) => {}
                             ScheduleAction::NavigatePractitioner(_) => {}
+                            ScheduleAction::ToggleColumn => {}
                             ScheduleAction::CreateAtSlot { .. } => {}
                         }
                     }

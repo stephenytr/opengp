@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::model::{AppointmentStatus, AppointmentType};
+use crate::domain::user::WorkingHours;
 
 /// Data transfer object for creating a new appointment
 ///
@@ -131,6 +132,10 @@ pub struct PractitionerSchedule {
 
     /// All appointments for this practitioner on this day
     pub appointments: Vec<CalendarAppointment>,
+
+    /// Working hours for this practitioner (optional)
+    #[serde(default)]
+    pub working_hours: Option<WorkingHours>,
 }
 
 /// Simplified appointment for calendar display
@@ -170,6 +175,10 @@ pub struct CalendarAppointment {
     /// Number of 15-minute slots this appointment spans (for rendering)
     pub slot_span: u8,
 
+    /// Whether this appointment overlaps with another
+    #[serde(default)]
+    pub is_overlapping: bool,
+
     /// Reason for visit (optional, for modal display)
     pub reason: Option<String>,
 
@@ -181,5 +190,45 @@ impl CalendarAppointment {
     /// Calculate duration in minutes
     pub fn duration_minutes(&self) -> i64 {
         (self.end_time - self.start_time).num_minutes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn practitioner_schedule_with_working_hours_serializes() {
+        let schedule = PractitionerSchedule {
+            practitioner_id: Uuid::new_v4(),
+            practitioner_name: "Dr. Smith".to_string(),
+            appointments: vec![],
+            working_hours: None,
+        };
+        let json = serde_json::to_string(&schedule).unwrap();
+        let deserialized: PractitionerSchedule = serde_json::from_str(&json).unwrap();
+        assert!(deserialized.working_hours.is_none());
+    }
+
+    #[test]
+    fn calendar_appointment_is_overlapping_roundtrips() {
+        let apt = CalendarAppointment {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            practitioner_id: Uuid::new_v4(),
+            patient_name: "John Doe".to_string(),
+            start_time: Utc::now(),
+            end_time: Utc::now(),
+            appointment_type: AppointmentType::Standard,
+            status: AppointmentStatus::Scheduled,
+            is_urgent: false,
+            slot_span: 2,
+            is_overlapping: true,
+            reason: None,
+            notes: None,
+        };
+        let json = serde_json::to_string(&apt).unwrap();
+        let deserialized: CalendarAppointment = serde_json::from_str(&json).unwrap();
+        assert!(deserialized.is_overlapping);
     }
 }

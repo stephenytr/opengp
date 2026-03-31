@@ -49,6 +49,8 @@ pub struct ColorPalette {
     pub appointment_cancelled: Color,
     /// Appointment status: Did Not Attend
     pub appointment_dna: Color,
+    /// Appointment status: Rescheduled
+    pub appointment_rescheduled: Color,
     /// Dark background color (for Color::Black replacements)
     pub background_dark: Color,
     /// Dim text color (for Color::DarkGray replacements)
@@ -89,6 +91,7 @@ impl ColorPalette {
             appointment_completed: Color::Green,
             appointment_cancelled: Color::Red,
             appointment_dna: Color::Red,
+            appointment_rescheduled: Color::Rgb(180, 100, 20),
             background_dark: Color::Black,
             text_dim: Color::DarkGray,
             text_secondary: Color::Gray,
@@ -120,6 +123,7 @@ impl ColorPalette {
             appointment_completed: Color::Green,
             appointment_cancelled: Color::Red,
             appointment_dna: Color::Red,
+            appointment_rescheduled: Color::Rgb(200, 120, 0),
             background_dark: Color::White,
             text_dim: Color::Gray,
             text_secondary: Color::DarkGray,
@@ -151,6 +155,7 @@ impl ColorPalette {
             appointment_completed: Color::LightGreen,
             appointment_cancelled: Color::LightRed,
             appointment_dna: Color::LightRed,
+            appointment_rescheduled: Color::LightYellow,
             background_dark: Color::Black,
             text_dim: Color::DarkGray,
             text_secondary: Color::White,

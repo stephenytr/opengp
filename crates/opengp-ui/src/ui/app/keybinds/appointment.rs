@@ -76,6 +76,7 @@ impl App {
                     }
                     ScheduleAction::NavigateTimeSlot(_delta) => {}
                     ScheduleAction::NavigatePractitioner(_delta) => {}
+                    ScheduleAction::ToggleColumn => {}
                     ScheduleAction::CreateAtSlot {
                         practitioner_id,
                         date,
