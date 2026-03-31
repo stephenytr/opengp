@@ -1,0 +1,50 @@
+[api_server]
+host = "0.0.0.0"
+port = 8080
+
+[api_server.database]
+url = "postgres://postgres:postgres@127.0.0.1:5432/opengp"
+max_connections = 10
+min_connections = 2
+connect_timeout_secs = 30
+idle_timeout_secs = 600
+
+[ui]
+theme = "dark"
+show_scrollbars = true
+mouse_support = true
+tick_rate_ms = 16
+
+[calendar]
+min_hour = 6
+max_hour = 22
+viewport_start_hour = 8
+viewport_end_hour = 18
+
+[api_client]
+base_url = "http://127.0.0.1:8080"
+
+[logging]
+log_file = "logs/opengp.log"
+level = "info"
+
+[session]
+timeout_secs = 900
+
+[cache]
+default_ttl_secs = 3600
+key_prefix = "opengp"
+
+[cache.circuit_breaker]
+failure_threshold = 5
+open_duration_secs = 30
+
+[cache.stampede]
+default_ttl_secs = 5
+retry_attempts = 3
+retry_delay_ms = 100
+
+[cache.entity_ttl]
+patient_secs = 900
+search_secs = 300
+appointment_secs = 120
