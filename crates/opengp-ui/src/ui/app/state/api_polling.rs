@@ -495,6 +495,8 @@ async fn fetch_consultations(
                 is_signed: item.is_signed,
                 signed_at: None,
                 signed_by: None,
+                consultation_started_at: None,
+                consultation_ended_at: None,
                 created_at: item.consultation_date,
                 updated_at: item.consultation_date,
                 version: 1,

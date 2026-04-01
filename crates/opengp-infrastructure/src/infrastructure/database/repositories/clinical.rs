@@ -61,6 +61,8 @@ impl ConsultationRow {
             is_signed: self.is_signed,
             signed_at: self.signed_at,
             signed_by: self.signed_by,
+            consultation_started_at: None,
+            consultation_ended_at: None,
             created_at: self.created_at,
             updated_at: self.updated_at,
             version: self.version,

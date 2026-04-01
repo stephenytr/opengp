@@ -351,6 +351,8 @@ impl ConsultationForm {
             is_signed: false,
             signed_at: None,
             signed_by: None,
+            consultation_started_at: None,
+            consultation_ended_at: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             version: 1,

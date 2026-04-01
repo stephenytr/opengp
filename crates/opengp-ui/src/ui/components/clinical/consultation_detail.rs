@@ -449,6 +449,8 @@ mod tests {
             is_signed: false,
             signed_at: None,
             signed_by: None,
+            consultation_started_at: None,
+            consultation_ended_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             version: 1,
