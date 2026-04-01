@@ -15,6 +15,11 @@ use crate::ui::components::tabs::{Tab, TabBar};
 use crate::ui::keybinds::{KeyContext, KeybindRegistry};
 use crate::ui::theme::Theme;
 use opengp_config::CalendarConfig;
+#[cfg(feature = "billing")]
+use opengp_domain::domain::billing::BillingType;
+
+#[cfg(feature = "billing")]
+use crate::ui::components::billing::BillingState;
 
 mod event_handler;
 mod keybinds;
@@ -88,7 +93,11 @@ pub struct App {
     pending_appointment_status_transition: Option<(uuid::Uuid, AppointmentStatusTransition)>,
     pending_clinical_patient_id: Option<uuid::Uuid>,
     pending_clinical_save_data: Option<PendingClinicalSaveData>,
+    #[cfg(feature = "billing")]
+    pending_billing: Option<PendingBillingSaveData>,
     clinical_state: ClinicalState,
+    #[cfg(feature = "billing")]
+    billing_state: BillingState,
     healthcare_config: opengp_config::healthcare::HealthcareConfig,
     patient_config: opengp_config::PatientConfig,
     api_client: Option<Arc<crate::api::ApiClient>>,
@@ -151,6 +160,19 @@ pub enum PendingClinicalSaveData {
     },
 }
 
+#[cfg(feature = "billing")]
+pub enum PendingBillingSaveData {
+    AwaitingMbsSelection {
+        consultation_id: uuid::Uuid,
+        patient_id: uuid::Uuid,
+    },
+    CreatingInvoice {
+        consultation_id: uuid::Uuid,
+        mbs_items: Vec<(String, f64, bool)>,
+        billing_type: BillingType,
+    },
+}
+
 #[derive(Debug)]
 pub enum AppointmentStatusTransition {
     MarkArrived,
@@ -203,7 +225,11 @@ impl App {
             pending_appointment_status_transition: None,
             pending_clinical_patient_id: None,
             pending_clinical_save_data: None,
+            #[cfg(feature = "billing")]
+            pending_billing: None,
             clinical_state: ClinicalState::with_theme(theme.clone(), healthcare_config.clone(), allergy_config, clinical_config, social_history_config.clone()),
+            #[cfg(feature = "billing")]
+            billing_state: BillingState::new(),
             healthcare_config,
             patient_config,
             api_client,

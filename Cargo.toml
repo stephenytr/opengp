@@ -19,7 +19,7 @@ authors.workspace = true
 rust-version.workspace = true
 
 [features]
-billing = ["opengp-domain/billing"]
+billing = ["opengp-domain/billing", "opengp-ui/billing"]
 referral = ["opengp-domain/referral"]
 pathology = ["opengp-domain/pathology"]
 immunisation = ["opengp-domain/immunisation"]

@@ -10,11 +10,18 @@ use opengp_domain::domain::api::{
 };
 use opengp_ui::api::ApiClient;
 use opengp_ui::ui::app::App;
+#[cfg(feature = "billing")]
+use opengp_ui::ui::app::PendingBillingSaveData;
+#[cfg(feature = "billing")]
+use opengp_ui::ui::services::BillingUiService;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+#[cfg(feature = "billing")]
+use opengp_domain::domain::billing::BillingType;
 
 use opengp_config::CalendarConfig;
 use opengp_config::Config;
@@ -87,6 +94,9 @@ async fn run_tui(
     if has_session_token {
         app.request_refresh_patients();
     }
+
+    #[cfg(feature = "billing")]
+    let billing_service: Option<BillingUiService> = None;
 
     loop {
         app.poll_api_tasks().await;
@@ -404,6 +414,13 @@ async fn run_tui(
                                 consultation.id,
                                 patient_id
                             );
+                            #[cfg(feature = "billing")]
+                            if consultation.is_signed {
+                                app.set_pending_billing(PendingBillingSaveData::AwaitingMbsSelection {
+                                    consultation_id: consultation.id,
+                                    patient_id: consultation.patient_id,
+                                });
+                            }
                             app.request_refresh_consultations(patient_id);
                         }
                         Err(e) => {
@@ -458,6 +475,72 @@ async fn run_tui(
                             tracing::error!("Failed to save social history: {}", e);
                             app.set_status_error(format!("Failed to save social history: {}", e));
                         }
+                    }
+                }
+            }
+        }
+
+        #[cfg(feature = "billing")]
+        if let Some(pending) = app.take_pending_billing() {
+            match pending {
+                PendingBillingSaveData::AwaitingMbsSelection {
+                    consultation_id,
+                    patient_id: _,
+                } => {
+                    let selected_items = vec![("23".to_string(), 89.0, true)];
+                    app.set_pending_billing(PendingBillingSaveData::CreatingInvoice {
+                        consultation_id,
+                        mbs_items: selected_items,
+                        billing_type: BillingType::PrivateBilling,
+                    });
+                    tracing::info!(
+                        "Selected default MBS item 23 for consultation {}",
+                        consultation_id
+                    );
+                }
+                PendingBillingSaveData::CreatingInvoice {
+                    consultation_id,
+                    mbs_items,
+                    billing_type,
+                } => {
+                    if let Some(service) = billing_service.as_ref() {
+                        match service
+                            .create_invoice(
+                                consultation_id,
+                                mbs_items,
+                                billing_type,
+                                app.current_user_id,
+                            )
+                            .await
+                        {
+                            Ok(invoice) => {
+                                app.open_billing_invoice_detail(invoice.id);
+                                tracing::info!(
+                                    "Created invoice {} from consultation {}",
+                                    invoice.id,
+                                    consultation_id
+                                );
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to create invoice from consultation {}: {}",
+                                    consultation_id,
+                                    e
+                                );
+                                app.set_status_error(format!(
+                                    "Failed to create invoice from signed consultation: {}",
+                                    e
+                                ));
+                            }
+                        }
+                    } else {
+                        tracing::warn!(
+                            "Billing service not wired; skipping invoice creation for consultation {}",
+                            consultation_id
+                        );
+                        app.set_status_error(
+                            "Billing service not yet wired; invoice creation deferred",
+                        );
                     }
                 }
             }

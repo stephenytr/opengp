@@ -359,6 +359,11 @@ impl App {
             return self.handle_clinical_keys(key);
         }
 
+        #[cfg(feature = "billing")]
+        if self.tab_bar.selected() == Tab::Billing {
+            return self.handle_billing_keys(key);
+        }
+
         Action::Unknown
     }
 
