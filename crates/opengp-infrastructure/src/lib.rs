@@ -12,3 +12,5 @@ pub use infrastructure::auth;
 pub use infrastructure::crypto;
 pub use infrastructure::database;
 pub use infrastructure::fixtures;
+#[cfg(feature = "billing")]
+pub use infrastructure::mbs;

@@ -10,6 +10,7 @@ rust-version.workspace = true
 [features]
 default = ["postgres"]
 postgres = ["sqlx/postgres"]
+billing = ["opengp-domain/billing"]
 immunisation = ["opengp-domain/immunisation"]
 prescription = ["opengp-domain/prescription"]
 
@@ -34,6 +35,7 @@ hex.workspace = true
 bcrypt.workspace = true
 dotenvy.workspace = true
 fake.workspace = true
+quick-xml = { workspace = true, features = ["serialize"] }
 
 [dependencies.opengp-domain]
 path = "../opengp-domain"
