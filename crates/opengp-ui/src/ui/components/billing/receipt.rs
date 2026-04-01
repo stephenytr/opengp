@@ -4,7 +4,7 @@ use opengp_config::PracticeConfig;
 use opengp_domain::domain::billing::{Invoice, InvoiceItem, Payment};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Row, Table, Widget};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Row, Table};
 use ratatui::Frame;
 
 #[derive(Debug, Clone)]

@@ -7,8 +7,8 @@ use uuid::Uuid;
 
 use crate::infrastructure::database::sqlx_to_repository_error;
 use opengp_domain::domain::billing::{
-    BillingRepository, BillingType, ClaimStatus, ClaimType, Invoice, InvoiceItem, InvoiceStatus,
-    MBSItem, MedicareClaim, Payment, PaymentMethod, RepositoryError,
+    BillingRepository, ClaimStatus, Invoice, InvoiceItem, InvoiceStatus, MBSItem, MedicareClaim,
+    Payment, RepositoryError,
 };
 
 #[derive(Debug, FromRow)]
