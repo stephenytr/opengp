@@ -11,6 +11,9 @@ pub mod payment_form;
 pub mod payment_list;
 
 #[cfg(feature = "billing")]
+pub mod receipt;
+
+#[cfg(feature = "billing")]
 pub mod state;
 
 #[cfg(feature = "billing")]
@@ -24,6 +27,9 @@ pub use payment_form::{PaymentForm, PaymentFormAction};
 
 #[cfg(feature = "billing")]
 pub use payment_list::{PaymentList, PaymentListAction};
+
+#[cfg(feature = "billing")]
+pub use receipt::{ReceiptAction, ReceiptPopup};
 
 #[cfg(feature = "billing")]
 pub use state::{BillingState, BillingView};
