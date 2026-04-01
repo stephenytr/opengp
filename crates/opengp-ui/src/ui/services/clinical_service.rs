@@ -2,47 +2,17 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
+use super::shared::{ToUiError, UiResult};
 use opengp_domain::domain::clinical::{
     Allergy, ClinicalService, ConditionStatus, Consultation, FamilyHistory, MedicalHistory,
     NewAllergyData, NewConsultationData, NewFamilyHistoryData, NewMedicalHistoryData,
-    NewVitalSignsData, ServiceError as DomainServiceError, Severity, SocialHistory,
-    UpdateSocialHistoryData, VitalSigns,
+    NewVitalSignsData, Severity, SocialHistory, UpdateSocialHistoryData, VitalSigns,
 };
 
-/// Result type used by clinical UI services.
-pub type UiResult<T> = Result<T, UiServiceError>;
-
-/// Errors that can occur when calling clinical UI services.
-#[derive(Debug)]
-pub enum UiServiceError {
-    /// Requested entity was not found.
-    NotFound(String),
-    /// Validation failure for user supplied data.
-    Validation(String),
-    /// Underlying repository or domain level failure.
-    Repository(String),
-    /// Any other unexpected error.
-    Unknown(String),
-}
-
-impl std::fmt::Display for UiServiceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UiServiceError::NotFound(msg) => write!(f, "Not found: {}", msg),
-            UiServiceError::Validation(msg) => write!(f, "Validation error: {}", msg),
-            UiServiceError::Repository(msg) => write!(f, "Repository error: {}", msg),
-            UiServiceError::Unknown(msg) => write!(f, "Error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for UiServiceError {}
-
-impl From<DomainServiceError> for UiServiceError {
-    fn from(err: DomainServiceError) -> Self {
-        UiServiceError::Repository(err.to_string())
-    }
-}
+#[cfg(test)]
+use super::shared::UiServiceError;
+#[cfg(test)]
+use opengp_domain::domain::clinical::ServiceError as DomainServiceError;
 
 /// UI facing wrapper around the clinical domain service.
 pub struct ClinicalUiService {
@@ -60,7 +30,7 @@ impl ClinicalUiService {
         self.service
             .list_patient_consultations(patient_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Retrieves a single consultation by id.
@@ -68,7 +38,7 @@ impl ClinicalUiService {
         self.service
             .find_consultation(id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Creates a new consultation for the given patient and practitioner.
@@ -90,7 +60,7 @@ impl ClinicalUiService {
         self.service
             .create_consultation(data, user_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Updates the clinical notes and reason fields for a consultation.
@@ -111,7 +81,7 @@ impl ClinicalUiService {
                 user_id,
             )
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Signs a consultation to indicate completion.
@@ -119,7 +89,7 @@ impl ClinicalUiService {
         self.service
             .sign_consultation(consultation_id, user_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Lists allergies for a patient, optionally filtering to active only.
@@ -131,7 +101,7 @@ impl ClinicalUiService {
         self.service
             .list_patient_allergies(patient_id, active_only)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -158,7 +128,7 @@ impl ClinicalUiService {
         self.service
             .add_allergy(data, user_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Marks an allergy as inactive.
@@ -166,7 +136,7 @@ impl ClinicalUiService {
         self.service
             .deactivate_allergy(allergy_id, user_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Lists medical history entries for a patient.
@@ -178,7 +148,7 @@ impl ClinicalUiService {
         self.service
             .list_medical_history(patient_id, active_only)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Adds a new medical history entry for a patient.
@@ -202,7 +172,7 @@ impl ClinicalUiService {
         self.service
             .add_medical_history(data, user_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Updates the status field of a medical history entry.
@@ -215,7 +185,7 @@ impl ClinicalUiService {
         self.service
             .update_condition_status(history_id, status, user_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -250,7 +220,7 @@ impl ClinicalUiService {
         self.service
             .record_vital_signs(data, user_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Gets the most recent vital signs for a patient, if any.
@@ -258,7 +228,7 @@ impl ClinicalUiService {
         self.service
             .get_latest_vital_signs(patient_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Lists historical vital sign entries for a patient.
@@ -270,7 +240,7 @@ impl ClinicalUiService {
         self.service
             .list_vital_signs_history(patient_id, limit)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Retrieves the social history record for a patient, if present.
@@ -278,7 +248,7 @@ impl ClinicalUiService {
         self.service
             .get_social_history(patient_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -312,14 +282,14 @@ impl ClinicalUiService {
         self.service
             .update_social_history(patient_id, data, user_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     pub async fn list_family_history(&self, patient_id: Uuid) -> UiResult<Vec<FamilyHistory>> {
         self.service
             .list_family_history(patient_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     pub async fn add_family_history(
@@ -341,14 +311,14 @@ impl ClinicalUiService {
         self.service
             .add_family_history(data, user_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     pub async fn delete_family_history(&self, history_id: Uuid, user_id: Uuid) -> UiResult<()> {
         self.service
             .delete_family_history(history_id, user_id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 }
 
@@ -391,7 +361,7 @@ mod tests {
     fn test_from_domain_service_error() {
         let patient_id = uuid::Uuid::new_v4();
         let domain_err = DomainServiceError::PatientNotFound(patient_id);
-        let ui_err: UiServiceError = domain_err.into();
+        let ui_err = domain_err.to_ui_repository_error();
         match ui_err {
             UiServiceError::Repository(msg) => {
                 assert!(msg.contains("Patient not found"));

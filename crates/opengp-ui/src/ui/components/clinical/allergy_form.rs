@@ -13,9 +13,9 @@ use uuid::Uuid;
 use crate::ui::shared::{FormAction, FormMode};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    format_date, parse_date, DatePickerPopup, DropdownOption, DropdownWidget, DynamicForm,
-    DynamicFormMeta, FormField, FormFieldMeta, FormNavigation, FormState, FormValidator,
-    HeightMode, TextareaState,
+    format_date, impl_form_field_wrapper, parse_date, DatePickerPopup, DropdownOption,
+    DropdownWidget, DynamicForm, DynamicFormMeta, FormField, FormFieldMeta, FormNavigation,
+    FormState, FormValidator, HeightMode, TextareaState,
 };
 
 const FIELD_ALLERGEN: &str = "allergen";
@@ -41,35 +41,7 @@ pub enum AllergyFormField {
     Notes,
 }
 
-impl AllergyFormField {
-    pub fn all() -> Vec<AllergyFormField> {
-        <Self as FormField>::all()
-    }
-
-    pub fn label(&self) -> &'static str {
-        <Self as FormField>::label(self)
-    }
-
-    pub fn id(&self) -> &'static str {
-        <Self as FormField>::id(self)
-    }
-
-    pub fn from_id(id: &str) -> Option<Self> {
-        <Self as FormField>::from_id(id)
-    }
-
-    pub fn is_required(&self) -> bool {
-        <Self as FormField>::is_required(self)
-    }
-
-    pub fn is_textarea(&self) -> bool {
-        <Self as FormField>::is_textarea(self)
-    }
-
-    pub fn is_dropdown(&self) -> bool {
-        <Self as FormField>::is_dropdown(self)
-    }
-}
+impl_form_field_wrapper!(AllergyFormField, opengp_config::forms::FieldDefinition);
 
 impl FormField for AllergyFormField {
     fn all() -> Vec<Self> {

@@ -6,48 +6,14 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
+use super::shared::{ToUiError, UiResult, UiServiceError};
 use crate::ui::view_models::PatientListItem;
 use opengp_domain::domain::patient::{
-    NewPatientData, Patient, PatientService, RepositoryError, UpdatePatientData,
+    NewPatientData, Patient, PatientService, UpdatePatientData,
 };
 
 #[cfg(test)]
 use opengp_domain::domain::patient::Address;
-
-/// Result type for UI operations
-pub type UiResult<T> = Result<T, UiServiceError>;
-
-/// UI Service errors
-#[derive(Debug)]
-pub enum UiServiceError {
-    /// Not found
-    NotFound(Uuid),
-    /// Validation error
-    Validation(String),
-    /// Repository error
-    Repository(String),
-    /// Unknown error
-    Unknown(String),
-}
-
-impl std::fmt::Display for UiServiceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UiServiceError::NotFound(id) => write!(f, "Patient not found: {}", id),
-            UiServiceError::Validation(msg) => write!(f, "Validation error: {}", msg),
-            UiServiceError::Repository(msg) => write!(f, "Repository error: {}", msg),
-            UiServiceError::Unknown(msg) => write!(f, "Error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for UiServiceError {}
-
-impl From<RepositoryError> for UiServiceError {
-    fn from(err: RepositoryError) -> Self {
-        UiServiceError::Repository(err.to_string())
-    }
-}
 
 /// Patient UI Service - bridges UI to domain layer
 pub struct PatientUiService {
@@ -66,7 +32,7 @@ impl PatientUiService {
         self.service
             .list_active_patients()
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// List all active patients as view items
@@ -80,7 +46,7 @@ impl PatientUiService {
         self.service
             .search_patients(query)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Get a patient by ID
@@ -88,8 +54,8 @@ impl PatientUiService {
         self.service
             .find_patient(id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))?
-            .ok_or(UiServiceError::NotFound(id))
+            .map_err(|e| e.to_ui_repository_error())?
+            .ok_or(UiServiceError::NotFound(format!("Patient not found: {}", id)))
     }
 
     /// Create a new patient
@@ -97,7 +63,7 @@ impl PatientUiService {
         self.service
             .register_patient(data)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Update an existing patient
@@ -106,14 +72,14 @@ impl PatientUiService {
             .service
             .find_patient(id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))?
-            .ok_or(UiServiceError::NotFound(id))?
+            .map_err(|e| e.to_ui_repository_error())?
+            .ok_or(UiServiceError::NotFound(format!("Patient not found: {}", id)))?
             .version;
 
         self.service
             .update_patient(id, data, expected_version)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Deactivate (soft delete) a patient
@@ -122,8 +88,8 @@ impl PatientUiService {
         self.service
             .find_patient(id)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))?
-            .ok_or(UiServiceError::NotFound(id))?;
+            .map_err(|e| e.to_ui_repository_error())?
+            .ok_or(UiServiceError::NotFound(format!("Patient not found: {}", id)))?;
 
         // TODO: Implement deactivate in repository
         // For now, we'll just return Ok
@@ -230,7 +196,10 @@ mod tests {
 
         assert!(result.is_err());
         match result {
-            Err(UiServiceError::NotFound(id)) => assert_eq!(id, non_existent_id),
+            Err(UiServiceError::NotFound(msg)) => {
+                assert!(msg.contains("Patient not found"));
+                assert!(msg.contains(&non_existent_id.to_string()));
+            }
             _ => panic!("Expected NotFound error"),
         }
     }
@@ -253,7 +222,7 @@ mod tests {
     async fn test_ui_service_error_display_formatting() {
         let id = Uuid::new_v4();
 
-        let not_found_err = UiServiceError::NotFound(id);
+        let not_found_err = UiServiceError::NotFound(format!("Patient not found: {}", id));
         assert!(not_found_err.to_string().contains("Patient not found"));
         assert!(not_found_err.to_string().contains(&id.to_string()));
 

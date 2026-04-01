@@ -6,7 +6,9 @@
 pub mod appointment_service;
 pub mod clinical_service;
 pub mod patient_service;
+pub mod shared;
 
 pub use appointment_service::AppointmentUiService;
 pub use clinical_service::ClinicalUiService;
 pub use patient_service::PatientUiService;
+pub use shared::{ToUiError, UiResult, UiServiceError};

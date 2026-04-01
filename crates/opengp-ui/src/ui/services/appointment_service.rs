@@ -7,42 +7,18 @@ use std::sync::Arc;
 use chrono::{Datelike, NaiveDate, TimeZone, Utc, Weekday};
 
 use chrono::NaiveTime;
+use super::shared::{ToUiError, UiResult};
 use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentRepository, AppointmentSearchCriteria, AppointmentService,
     AvailabilityService, CalendarAppointment, CalendarDayView, NewAppointmentData,
     PractitionerSchedule,
 };
-use opengp_domain::domain::error::RepositoryError;
 use opengp_domain::domain::user::{Practitioner, PractitionerRepository, WorkingHoursRepository};
 
-/// Result type for UI operations
-pub type UiResult<T> = Result<T, UiServiceError>;
-
-/// UI Service errors
-#[derive(Debug)]
-pub enum UiServiceError {
-    /// Repository error
-    Repository(String),
-    /// Unknown error
-    Unknown(String),
-}
-
-impl std::fmt::Display for UiServiceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UiServiceError::Repository(msg) => write!(f, "Repository error: {}", msg),
-            UiServiceError::Unknown(msg) => write!(f, "Error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for UiServiceError {}
-
-impl From<RepositoryError> for UiServiceError {
-    fn from(err: RepositoryError) -> Self {
-        UiServiceError::Repository(err.to_string())
-    }
-}
+#[cfg(test)]
+use super::shared::UiServiceError;
+#[cfg(test)]
+use opengp_domain::domain::error::RepositoryError;
 
 /// Appointment UI Service - bridges UI to domain layer
 pub struct AppointmentUiService {
@@ -91,7 +67,7 @@ impl AppointmentUiService {
             .create_appointment(data, user_id)
             .await
             .map(|_| ())
-            .map_err(|e| UiServiceError::Unknown(e.to_string()))
+            .map_err(|e| e.to_ui_error())
     }
 
     /// Lists all active practitioners.
@@ -99,7 +75,7 @@ impl AppointmentUiService {
         self.practitioner_repo
             .list_active()
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))
+            .map_err(|e| e.to_ui_repository_error())
     }
 
     /// Get schedule for a specific date
@@ -133,7 +109,7 @@ impl AppointmentUiService {
             .calendar_query
             .find_calendar_appointments(&criteria)
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))?;
+            .map_err(|e| e.to_ui_repository_error())?;
 
         // Group appointments by practitioner
         let mut appointments_by_practitioner: std::collections::HashMap<
@@ -153,7 +129,7 @@ impl AppointmentUiService {
             .practitioner_repo
             .list_active()
             .await
-            .map_err(|e| UiServiceError::Repository(e.to_string()))?;
+            .map_err(|e| e.to_ui_repository_error())?;
 
         let mut schedules: Vec<PractitionerSchedule> = Vec::new();
         for p in practitioners {
@@ -217,7 +193,7 @@ impl AppointmentUiService {
             .mark_arrived(appointment_id, user_id)
             .await
             .map(|_| ())
-            .map_err(|e| UiServiceError::Unknown(e.to_string()))
+            .map_err(|e| e.to_ui_error())
     }
 
     /// Marks an appointment as in progress.
@@ -230,7 +206,7 @@ impl AppointmentUiService {
             .mark_in_progress(appointment_id, user_id)
             .await
             .map(|_| ())
-            .map_err(|e| UiServiceError::Unknown(e.to_string()))
+            .map_err(|e| e.to_ui_error())
     }
 
     /// Marks an appointment as completed.
@@ -243,7 +219,7 @@ impl AppointmentUiService {
             .mark_completed(appointment_id, user_id)
             .await
             .map(|_| ())
-            .map_err(|e| UiServiceError::Unknown(e.to_string()))
+            .map_err(|e| e.to_ui_error())
     }
 
     /// Returns the available time slots for a practitioner on a given date.
@@ -256,7 +232,7 @@ impl AppointmentUiService {
         self.availability_service
             .get_available_slots(practitioner_id, date, duration as i64)
             .await
-            .map_err(|e| UiServiceError::Unknown(e.to_string()))
+            .map_err(|e| e.to_ui_error())
     }
 }
 
@@ -279,7 +255,7 @@ mod tests {
     #[test]
     fn test_ui_service_error_from_repository_error() {
         let repo_err = RepositoryError::Database("connection lost".to_string());
-        let ui_err: UiServiceError = repo_err.into();
+        let ui_err = repo_err.to_ui_repository_error();
         match ui_err {
             UiServiceError::Repository(msg) => {
                 assert!(msg.contains("connection lost"));

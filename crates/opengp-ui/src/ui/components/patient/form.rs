@@ -24,9 +24,9 @@ use crate::ui::shared::FormAction;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
 use crate::ui::widgets::{
-    format_date, parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption,
-    DropdownWidget, FormField as FormFieldTrait, FormFieldMeta, FormNavigation, FormState,
-    FormValidator, HeightMode, TextareaState, TextareaWidget,
+    format_date, impl_form_field_wrapper, parse_date, DatePickerAction, DatePickerPopup,
+    DropdownAction, DropdownOption, DropdownWidget, FormField as FormFieldTrait, FormFieldMeta,
+    FormNavigation, FormState, FormValidator, HeightMode, TextareaState, TextareaWidget,
 };
 
 pub use crate::ui::shared::FormMode;
@@ -120,35 +120,7 @@ pub enum PatientFormField {
     AtsiStatus,
 }
 
-impl PatientFormField {
-    pub fn all() -> Vec<PatientFormField> {
-        <Self as FormFieldTrait>::all()
-    }
-
-    pub fn label(&self) -> &'static str {
-        <Self as FormFieldTrait>::label(self)
-    }
-
-    pub fn id(&self) -> &'static str {
-        <Self as FormFieldTrait>::id(self)
-    }
-
-    pub fn from_id(id: &str) -> Option<Self> {
-        <Self as FormFieldTrait>::from_id(id)
-    }
-
-    pub fn is_required(&self) -> bool {
-        <Self as FormFieldTrait>::is_required(self)
-    }
-
-    pub fn is_textarea(&self) -> bool {
-        <Self as FormFieldTrait>::is_textarea(self)
-    }
-
-    pub fn is_dropdown(&self) -> bool {
-        <Self as FormFieldTrait>::is_dropdown(self)
-    }
-}
+impl_form_field_wrapper!(PatientFormField, FieldDefinition);
 
 impl FormFieldTrait for PatientFormField {
     fn all() -> Vec<Self> {

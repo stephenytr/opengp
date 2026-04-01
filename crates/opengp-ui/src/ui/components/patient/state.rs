@@ -4,6 +4,8 @@
 
 use opengp_domain::domain::patient::Patient;
 
+use crate::ui::components::shared::PaginatedState;
+
 /// View mode for patient tab
 #[derive(Debug, Clone, Default)]
 #[allow(clippy::large_enum_variant)]
@@ -22,14 +24,7 @@ pub enum PatientView {
 pub struct PatientState {
     /// Current view mode
     pub view: PatientView,
-    /// Current page (for pagination)
-    pub page: usize,
-    /// Page size based on terminal height
-    pub page_size: usize,
-    /// Whether data is loading
-    pub loading: bool,
-    /// Error message if any
-    pub error: Option<String>,
+    pub pagination: PaginatedState,
 }
 
 impl PatientState {
@@ -40,11 +35,7 @@ impl PatientState {
 
     /// Set page size based on terminal height
     pub fn set_page_size(&mut self, height: u16) {
-        // Subtract for header/status bar/ borders
-        self.page_size = height.saturating_sub(6) as usize;
-        if self.page_size < 5 {
-            self.page_size = 5;
-        }
+        self.pagination.set_page_size(height as usize);
     }
 
     /// Check if showing list
@@ -74,45 +65,42 @@ impl PatientState {
 
     /// Go to next page
     pub fn next_page(&mut self) {
-        self.page += 1;
+        self.pagination.page += 1;
     }
 
     /// Go to previous page
     pub fn prev_page(&mut self) {
-        self.page = self.page.saturating_sub(1);
+        self.pagination.prev_page();
     }
 
     /// Go to specific page
     pub fn go_to_page(&mut self, page: usize) {
-        self.page = page;
+        self.pagination.page = page;
     }
 
     /// Calculate total pages
     pub fn total_pages(&self, total_items: usize) -> usize {
-        if total_items == 0 {
-            return 1;
-        }
-        total_items.div_ceil(self.page_size)
+        self.pagination.total_pages(total_items)
     }
 
     /// Get page offset
     pub fn page_offset(&self) -> usize {
-        self.page * self.page_size
+        self.pagination.page_offset()
     }
 
     /// Set loading state
     pub fn set_loading(&mut self, loading: bool) {
-        self.loading = loading;
+        self.pagination.loading = loading;
     }
 
     /// Set error
     pub fn set_error(&mut self, error: Option<String>) {
-        self.error = error;
+        self.pagination.error = error;
     }
 
     /// Clear error
     pub fn clear_error(&mut self) {
-        self.error = None;
+        self.pagination.error = None;
     }
 }
 
@@ -125,8 +113,8 @@ mod tests {
         let state = PatientState::new();
         assert!(state.is_list_view());
         assert!(!state.is_form_view());
-        assert!(!state.loading);
-        assert!(state.error.is_none());
+        assert!(!state.pagination.loading);
+        assert!(state.pagination.error.is_none());
     }
 
     #[test]
@@ -134,10 +122,10 @@ mod tests {
         let mut state = PatientState::new();
         // height - 6 = page_size (with minimum of 5)
         state.set_page_size(24);
-        assert_eq!(state.page_size, 18); // 24 - 6
+        assert_eq!(state.pagination.page_size, 18); // 24 - 6
 
         state.set_page_size(10);
-        assert_eq!(state.page_size, 5); // 10 - 6 = 4, clamped to minimum 5
+        assert_eq!(state.pagination.page_size, 5); // 10 - 6 = 4, clamped to minimum 5
     }
 
     #[test]

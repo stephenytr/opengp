@@ -6,5 +6,6 @@ pub mod appointment;
 pub mod clinical;
 pub mod help;
 pub mod patient;
+pub mod shared;
 pub mod status_bar;
 pub mod tabs;
