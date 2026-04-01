@@ -14,17 +14,28 @@ use opengp_ui::ui::app::App;
 use opengp_ui::ui::app::PendingBillingSaveData;
 #[cfg(feature = "billing")]
 use opengp_ui::ui::services::BillingUiService;
+#[cfg(feature = "billing")]
+use opengp_domain::domain::billing::{BillingRepository, BillingService, BillingType};
+#[cfg(feature = "billing")]
+use opengp_domain::domain::clinical::ConsultationRepository;
+#[cfg(feature = "billing")]
+use opengp_infrastructure::infrastructure::crypto::EncryptionService;
+#[cfg(feature = "billing")]
+use opengp_infrastructure::infrastructure::database::{create_pool, DatabaseConfig};
+#[cfg(feature = "billing")]
+use opengp_infrastructure::infrastructure::database::repositories::{
+    SqlxBillingRepository, SqlxClinicalRepository,
+};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-#[cfg(feature = "billing")]
-use opengp_domain::domain::billing::BillingType;
-
 use opengp_config::CalendarConfig;
 use opengp_config::Config;
+#[cfg(feature = "billing")]
+use opengp_config::{load_practice_config, PracticeConfig};
 use opengp_ui::ui::theme::{ColorPalette, Theme};
 
 mod conversions;
@@ -50,6 +61,12 @@ async fn main() -> Result<()> {
         config.app.calendar,
         config.app.ui,
         config.theme,
+        #[cfg(feature = "billing")]
+        load_practice_config()?,
+        #[cfg(feature = "billing")]
+        config.app.api_server.database,
+        #[cfg(feature = "billing")]
+        config.encryption_key,
         config.healthcare,
         config.patient,
         config.allergies,
@@ -68,6 +85,9 @@ async fn run_tui(
     calendar_config: CalendarConfig,
     ui_config: opengp_config::UiConfig,
     theme_config: opengp_config::ThemeConfig,
+    #[cfg(feature = "billing")] practice_config: PracticeConfig,
+    #[cfg(feature = "billing")] database_config: DatabaseConfig,
+    #[cfg(feature = "billing")] encryption_key: String,
     healthcare_config: opengp_config::healthcare::HealthcareConfig,
     patient_config: opengp_config::PatientConfig,
     allergy_config: opengp_config::AllergyConfig,
@@ -89,14 +109,45 @@ async fn run_tui(
     };
     theme.colors = ColorPalette::from_config(palette_config);
 
-    let mut app = App::new(Some(api_client.clone()), calendar_config.clone(), theme, healthcare_config, patient_config, allergy_config, clinical_config, social_history_config);
+    #[cfg(feature = "billing")]
+    let billing_service = {
+        let database_pool = create_pool(&database_config).await?;
+        let pool = database_pool.as_postgres().clone();
+
+        let encryption_service = Arc::new(
+            EncryptionService::new_with_key(&encryption_key)
+                .map_err(|err| color_eyre::eyre::eyre!(err.to_string()))?,
+        );
+
+        let billing_repo: Arc<dyn BillingRepository> =
+            Arc::new(SqlxBillingRepository::new(pool.clone()));
+        let consultation_repo: Arc<dyn ConsultationRepository> = Arc::new(
+            SqlxClinicalRepository::new(pool, Arc::clone(&encryption_service)),
+        );
+
+        let billing_domain_service =
+            BillingService::new(Arc::clone(&billing_repo), consultation_repo);
+        Some(Arc::new(BillingUiService::new(Arc::new(billing_domain_service))))
+    };
+
+    let mut app = App::new(
+        Some(api_client.clone()),
+        calendar_config.clone(),
+        theme,
+        healthcare_config,
+        patient_config,
+        allergy_config,
+        clinical_config,
+        social_history_config,
+        #[cfg(feature = "billing")]
+        billing_service,
+        #[cfg(feature = "billing")]
+        practice_config,
+    );
     app.set_authenticated(has_session_token);
     if has_session_token {
         app.request_refresh_patients();
     }
-
-    #[cfg(feature = "billing")]
-    let billing_service: Option<BillingUiService> = None;
 
     loop {
         app.poll_api_tasks().await;
@@ -503,7 +554,7 @@ async fn run_tui(
                     mbs_items,
                     billing_type,
                 } => {
-                    if let Some(service) = billing_service.as_ref() {
+                    if let Some(service) = app.billing_ui_service() {
                         match service
                             .create_invoice(
                                 consultation_id,

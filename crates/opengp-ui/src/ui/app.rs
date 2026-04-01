@@ -20,6 +20,8 @@ use opengp_domain::domain::billing::BillingType;
 
 #[cfg(feature = "billing")]
 use crate::ui::components::billing::BillingState;
+#[cfg(feature = "billing")]
+use crate::ui::services::BillingUiService;
 
 mod event_handler;
 mod keybinds;
@@ -98,6 +100,10 @@ pub struct App {
     clinical_state: ClinicalState,
     #[cfg(feature = "billing")]
     billing_state: BillingState,
+    #[cfg(feature = "billing")]
+    billing_ui_service: Option<Arc<BillingUiService>>,
+    #[cfg(feature = "billing")]
+    practice_config: opengp_config::PracticeConfig,
     healthcare_config: opengp_config::healthcare::HealthcareConfig,
     patient_config: opengp_config::PatientConfig,
     api_client: Option<Arc<crate::api::ApiClient>>,
@@ -198,6 +204,8 @@ impl App {
         allergy_config: opengp_config::AllergyConfig,
         clinical_config: opengp_config::ClinicalConfig,
         social_history_config: opengp_config::SocialHistoryConfig,
+        #[cfg(feature = "billing")] billing_ui_service: Option<Arc<BillingUiService>>,
+        #[cfg(feature = "billing")] practice_config: opengp_config::PracticeConfig,
     ) -> Self {
         let mut app = Self {
             theme: theme.clone(),
@@ -230,6 +238,10 @@ impl App {
             clinical_state: ClinicalState::with_theme(theme.clone(), healthcare_config.clone(), allergy_config, clinical_config, social_history_config.clone()),
             #[cfg(feature = "billing")]
             billing_state: BillingState::new(),
+            #[cfg(feature = "billing")]
+            billing_ui_service,
+            #[cfg(feature = "billing")]
+            practice_config,
             healthcare_config,
             patient_config,
             api_client,
@@ -274,6 +286,11 @@ impl App {
 
     pub fn should_quit(&self) -> bool {
         self.should_quit
+    }
+
+    #[cfg(feature = "billing")]
+    pub fn billing_ui_service(&self) -> Option<Arc<BillingUiService>> {
+        self.billing_ui_service.clone()
     }
 
     pub fn is_authenticated(&self) -> bool {
@@ -384,7 +401,20 @@ impl App {
 
 impl Default for App {
     fn default() -> Self {
-        Self::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default())
+        Self::new(
+            None,
+            CalendarConfig::default(),
+            Theme::dark(),
+            opengp_config::healthcare::HealthcareConfig::default(),
+            opengp_config::PatientConfig::default(),
+            opengp_config::AllergyConfig::default(),
+            opengp_config::ClinicalConfig::default(),
+            opengp_config::SocialHistoryConfig::default(),
+            #[cfg(feature = "billing")]
+            None,
+            #[cfg(feature = "billing")]
+            opengp_config::PracticeConfig::default(),
+        )
     }
 }
 
