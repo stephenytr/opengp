@@ -18,7 +18,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use opengp_config::CalendarConfig;
 use opengp_config::Config;
-use opengp_ui::ui::theme::Theme;
+use opengp_ui::ui::theme::{ColorPalette, Theme};
 
 mod conversions;
 
@@ -28,19 +28,28 @@ async fn main() -> Result<()> {
 
     let config = Config::from_env()?;
 
-    init_logging(&config.log_level);
+    init_logging(&config.app.logging.level, &config.app.logging.log_file);
 
     tracing::info!("Starting OpenGP");
 
-    let api_base_url = std::env::var("API_BASE_URL")
-        .or_else(|_| std::env::var("OPENGP_API_BASE_URL"))
-        .unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
+    let api_base_url = config.app.api_client.base_url.clone();
     let api_client = Arc::new(ApiClient::new(api_base_url));
     if let Ok(token) = std::env::var("API_SESSION_TOKEN") {
         api_client.set_session_token(Some(token)).await;
     }
 
-    run_tui(api_client, config.calendar, config.ui, config.healthcare).await?;
+    run_tui(
+        api_client,
+        config.app.calendar,
+        config.app.ui,
+        config.theme,
+        config.healthcare,
+        config.patient,
+        config.allergies,
+        config.clinical,
+        config.social_history,
+    )
+    .await?;
 
     tracing::info!("OpenGP shutdown complete");
 
@@ -51,7 +60,12 @@ async fn run_tui(
     api_client: Arc<ApiClient>,
     calendar_config: CalendarConfig,
     ui_config: opengp_config::UiConfig,
+    theme_config: opengp_config::ThemeConfig,
     healthcare_config: opengp_config::healthcare::HealthcareConfig,
+    patient_config: opengp_config::PatientConfig,
+    allergy_config: opengp_config::AllergyConfig,
+    clinical_config: opengp_config::ClinicalConfig,
+    social_history_config: opengp_config::SocialHistoryConfig,
 ) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -61,13 +75,14 @@ async fn run_tui(
 
     let has_session_token = api_client.current_session_token().await.is_some();
 
-    let theme = match ui_config.theme.as_str() {
-        "light" => Theme::light(),
-        "high_contrast" => Theme::high_contrast(),
-        _ => Theme::dark(),
+    let (mut theme, palette_config) = match ui_config.theme.as_str() {
+        "light" => (Theme::light(), &theme_config.light),
+        "high_contrast" => (Theme::high_contrast(), &theme_config.high_contrast),
+        _ => (Theme::dark(), &theme_config.dark),
     };
+    theme.colors = ColorPalette::from_config(palette_config);
 
-    let mut app = App::new(Some(api_client.clone()), calendar_config.clone(), theme, healthcare_config);
+    let mut app = App::new(Some(api_client.clone()), calendar_config.clone(), theme, healthcare_config, patient_config, allergy_config, clinical_config, social_history_config);
     app.set_authenticated(has_session_token);
     if has_session_token {
         app.request_refresh_patients();
@@ -510,7 +525,7 @@ async fn run_tui(
             app.clinical_state_mut().set_loading(false);
         }
 
-        if crossterm::event::poll(std::time::Duration::from_millis(16))? {
+        if crossterm::event::poll(std::time::Duration::from_millis(ui_config.tick_rate_ms))? {
             if let Ok(event) = crossterm::event::read() {
                 match event {
                     Event::Key(key) => {
@@ -572,15 +587,17 @@ fn compute_booked_slots(
         .collect()
 }
 
-fn init_logging(level: &str) {
+fn init_logging(level: &str, log_file_path: &str) {
     let log_level = level.parse().unwrap_or(tracing::Level::INFO);
 
-    std::fs::create_dir_all("logs").ok();
+    if let Some(parent) = std::path::Path::new(log_file_path).parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
 
     let log_file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open("logs/opengp.log")
+        .open(log_file_path)
         .expect("Failed to open log file");
 
     tracing_subscriber::registry()

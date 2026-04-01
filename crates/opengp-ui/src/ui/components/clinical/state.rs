@@ -6,7 +6,9 @@ use crate::ui::components::clinical::{
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientListItem;
 use crate::ui::widgets::SearchableListState;
-use opengp_config::healthcare::HealthcareConfig;
+use opengp_config::{
+    healthcare::HealthcareConfig, AllergyConfig, ClinicalConfig, SocialHistoryConfig,
+};
 use opengp_domain::domain::clinical::{
     Allergy, Consultation, FamilyHistory, MedicalHistory, SocialHistory, VitalSigns,
 };
@@ -56,6 +58,9 @@ pub struct ClinicalState {
     pub page_size: usize,
     pub theme: Theme,
     pub healthcare_config: HealthcareConfig,
+    pub allergy_config: AllergyConfig,
+    pub clinical_config: ClinicalConfig,
+    pub social_history_config: opengp_config::SocialHistoryConfig,
     pub allergy_form: Option<AllergyForm>,
     pub consultation_form: Option<ConsultationForm>,
     pub medical_history_form: Option<MedicalHistoryForm>,
@@ -78,11 +83,29 @@ pub struct ClinicalState {
 }
 
 impl ClinicalState {
-    pub fn new(theme: Theme, healthcare_config: HealthcareConfig) -> Self {
-        Self::with_theme(theme, healthcare_config)
+    pub fn new(
+        theme: Theme,
+        healthcare_config: HealthcareConfig,
+        allergy_config: AllergyConfig,
+        clinical_config: ClinicalConfig,
+        social_history_config: SocialHistoryConfig,
+    ) -> Self {
+        Self::with_theme(
+            theme,
+            healthcare_config,
+            allergy_config,
+            clinical_config,
+            social_history_config,
+        )
     }
 
-    pub fn with_theme(theme: Theme, healthcare_config: HealthcareConfig) -> Self {
+    pub fn with_theme(
+        theme: Theme,
+        healthcare_config: HealthcareConfig,
+        allergy_config: AllergyConfig,
+        clinical_config: ClinicalConfig,
+        social_history_config: SocialHistoryConfig,
+    ) -> Self {
         Self {
             view: ClinicalView::PatientSummary,
             form_view: ClinicalFormView::None,
@@ -100,6 +123,9 @@ impl ClinicalState {
             page_size: 20,
             theme: theme.clone(),
             healthcare_config,
+            allergy_config,
+            clinical_config,
+            social_history_config,
             allergy_form: None,
             consultation_form: None,
             medical_history_form: None,
@@ -157,12 +183,15 @@ impl ClinicalState {
     }
 
     pub fn open_allergy_form(&mut self) {
-        self.allergy_form = Some(AllergyForm::new(self.theme.clone()));
+        self.allergy_form = Some(AllergyForm::new(self.theme.clone(), &self.allergy_config));
         self.form_view = ClinicalFormView::AllergyForm;
     }
 
     pub fn open_medical_history_form(&mut self) {
-        self.medical_history_form = Some(MedicalHistoryForm::new(self.theme.clone()));
+        self.medical_history_form = Some(MedicalHistoryForm::new(
+            &self.clinical_config,
+            self.theme.clone(),
+        ));
         self.form_view = ClinicalFormView::MedicalHistoryForm;
     }
 
@@ -180,7 +209,10 @@ impl ClinicalState {
     }
 
     pub fn open_social_history_editing(&mut self) {
-        self.social_history_component = Some(SocialHistoryComponent::new(self.theme.clone()));
+        self.social_history_component = Some(SocialHistoryComponent::new(
+            self.theme.clone(),
+            &self.social_history_config,
+        ));
         self.social_history_editing = true;
     }
 
@@ -190,7 +222,10 @@ impl ClinicalState {
     }
 
     pub fn open_social_history_form(&mut self) {
-        self.social_history_form = Some(SocialHistoryComponent::new(self.theme.clone()));
+        self.social_history_form = Some(SocialHistoryComponent::new(
+            self.theme.clone(),
+            &self.social_history_config,
+        ));
         self.form_view = ClinicalFormView::SocialHistoryForm;
     }
 
@@ -405,7 +440,13 @@ mod tests {
 
     // Helper to create a test state
     fn test_state() -> ClinicalState {
-        ClinicalState::with_theme(Theme::dark(), HealthcareConfig::default())
+        ClinicalState::with_theme(
+            Theme::dark(),
+            HealthcareConfig::default(),
+            AllergyConfig::default(),
+            ClinicalConfig::default(),
+            SocialHistoryConfig::default(),
+        )
     }
 
     // Test 1: View cycling forward

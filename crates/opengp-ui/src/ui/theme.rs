@@ -2,6 +2,7 @@
 //!
 //! Global theme configuration with color palettes and predefined themes.
 
+use opengp_config::ColorPalette as ThemeThemePalette;
 use ratatui::style::Color;
 
 /// Color palette for OpenGP TUI
@@ -66,6 +67,36 @@ impl Default for ColorPalette {
 }
 
 impl ColorPalette {
+    pub fn from_config(config: &ThemeThemePalette) -> Self {
+        Self {
+            primary: parse_color(&config.primary),
+            secondary: parse_color(&config.secondary),
+            background: parse_color(&config.background),
+            foreground: parse_color(&config.foreground),
+            error: parse_color(&config.error),
+            success: parse_color(&config.success),
+            warning: parse_color(&config.warning),
+            info: parse_color(&config.info),
+            border: parse_color(&config.border),
+            selected: parse_color(&config.selected),
+            highlight: parse_color(&config.highlight),
+            disabled: parse_color(&config.disabled),
+            scrollbar_bg: parse_color(&config.scrollbar_bg),
+            scrollbar_thumb: parse_color(&config.scrollbar_thumb),
+            appointment_scheduled: parse_color(&config.appointment_scheduled),
+            appointment_confirmed: parse_color(&config.appointment_confirmed),
+            appointment_arrived: parse_color(&config.appointment_arrived),
+            appointment_in_progress: parse_color(&config.appointment_in_progress),
+            appointment_completed: parse_color(&config.appointment_completed),
+            appointment_cancelled: parse_color(&config.appointment_cancelled),
+            appointment_dna: parse_color(&config.appointment_dna),
+            appointment_rescheduled: parse_color(&config.appointment_rescheduled),
+            background_dark: parse_color(&config.background_dark),
+            text_dim: parse_color(&config.text_dim),
+            text_secondary: parse_color(&config.text_secondary),
+        }
+    }
+
     /// Dark theme color palette (default)
     pub fn dark() -> Self {
         Self {
@@ -161,6 +192,60 @@ impl ColorPalette {
             text_secondary: Color::White,
         }
     }
+}
+
+fn parse_color(value: &str) -> Color {
+    let value = value.trim();
+
+    if let Some(color) = parse_rgb_color(value) {
+        return color;
+    }
+
+    if let Some(color) = parse_indexed_color(value) {
+        return color;
+    }
+
+    match value {
+        "Reset" => Color::Reset,
+        "Black" => Color::Black,
+        "Red" => Color::Red,
+        "Green" => Color::Green,
+        "Yellow" => Color::Yellow,
+        "Blue" => Color::Blue,
+        "Magenta" => Color::Magenta,
+        "Cyan" => Color::Cyan,
+        "Gray" => Color::Gray,
+        "DarkGray" => Color::DarkGray,
+        "LightRed" => Color::LightRed,
+        "LightGreen" => Color::LightGreen,
+        "LightYellow" => Color::LightYellow,
+        "LightBlue" => Color::LightBlue,
+        "LightMagenta" => Color::LightMagenta,
+        "LightCyan" => Color::LightCyan,
+        "White" => Color::White,
+        _ => Color::Reset,
+    }
+}
+
+fn parse_rgb_color(value: &str) -> Option<Color> {
+    let inner = value.strip_prefix("Rgb(")?.strip_suffix(')')?;
+    let mut components = inner.split(',').map(str::trim);
+
+    let r = components.next()?.parse::<u8>().ok()?;
+    let g = components.next()?.parse::<u8>().ok()?;
+    let b = components.next()?.parse::<u8>().ok()?;
+
+    if components.next().is_some() {
+        return None;
+    }
+
+    Some(Color::Rgb(r, g, b))
+}
+
+fn parse_indexed_color(value: &str) -> Option<Color> {
+    let inner = value.strip_prefix("Indexed(")?.strip_suffix(')')?;
+    let idx = inner.trim().parse::<u8>().ok()?;
+    Some(Color::Indexed(idx))
 }
 
 /// Font configuration for the TUI

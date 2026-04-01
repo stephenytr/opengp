@@ -7,7 +7,7 @@ use crate::ui::widgets::{
     LoadingState, ScrollableFormState, TextareaState, TextareaWidget,
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use opengp_config::forms::ValidationRules;
+use opengp_config::{forms::ValidationRules, SocialHistoryConfig};
 use opengp_domain::domain::clinical::{AlcoholStatus, ExerciseFrequency, SmokingStatus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -159,7 +159,7 @@ pub enum SocialHistoryAction {
 }
 
 impl SocialHistoryComponent {
-    pub fn new(theme: Theme) -> Self {
+    pub fn new(theme: Theme, config: &SocialHistoryConfig) -> Self {
         let field_ids: Vec<String> = SocialHistoryField::all()
             .iter()
             .map(|field| field.id().to_string())
@@ -182,7 +182,7 @@ impl SocialHistoryComponent {
             field_ids,
             errors: HashMap::new(),
             textareas,
-            dropdowns: build_dropdowns(theme),
+            dropdowns: build_dropdowns(theme, config),
             validator: build_validator(),
             scroll: ScrollableFormState::new(),
         }
@@ -593,27 +593,38 @@ fn make_textarea_state(field: SocialHistoryField, value: Option<String>) -> Text
     state
 }
 
-fn build_dropdowns(theme: Theme) -> HashMap<String, DropdownWidget> {
+fn build_dropdowns(theme: Theme, config: &SocialHistoryConfig) -> HashMap<String, DropdownWidget> {
     let mut dropdowns = HashMap::new();
 
-    let smoking_options = vec![
-        DropdownOption::new("NeverSmoked", "Never smoked"),
-        DropdownOption::new("CurrentSmoker", "Current smoker"),
-        DropdownOption::new("ExSmoker", "Ex-smoker"),
-    ];
-    let alcohol_options = vec![
-        DropdownOption::new("None", "None"),
-        DropdownOption::new("Occasional", "Occasional"),
-        DropdownOption::new("Moderate", "Moderate"),
-        DropdownOption::new("Heavy", "Heavy"),
-    ];
-    let exercise_options = vec![
-        DropdownOption::new("None", "None"),
-        DropdownOption::new("Rarely", "Rarely"),
-        DropdownOption::new("OnceOrTwicePerWeek", "1-2/week"),
-        DropdownOption::new("ThreeToFiveTimes", "3-5/week"),
-        DropdownOption::new("Daily", "Daily"),
-    ];
+    // Build smoking options from config, filtering to enabled only
+    let smoking_options: Vec<DropdownOption> = config
+        .smoking_status
+        .iter()
+        .filter(|(_, opt)| opt.enabled)
+        .map(|(key, opt): (&String, &opengp_config::EnumOption)| {
+            DropdownOption::new(key.clone(), opt.label.clone())
+        })
+        .collect();
+
+    // Build alcohol options from config, filtering to enabled only
+    let alcohol_options: Vec<DropdownOption> = config
+        .alcohol_status
+        .iter()
+        .filter(|(_, opt)| opt.enabled)
+        .map(|(key, opt): (&String, &opengp_config::EnumOption)| {
+            DropdownOption::new(key.clone(), opt.label.clone())
+        })
+        .collect();
+
+    // Build exercise options from config, filtering to enabled only
+    let exercise_options: Vec<DropdownOption> = config
+        .exercise_frequency
+        .iter()
+        .filter(|(_, opt)| opt.enabled)
+        .map(|(key, opt): (&String, &opengp_config::EnumOption)| {
+            DropdownOption::new(key.clone(), opt.label.clone())
+        })
+        .collect();
 
     let mut smoking_dropdown = DropdownWidget::new("Smoking", smoking_options, theme.clone());
     smoking_dropdown.set_value("NeverSmoked");
@@ -916,7 +927,8 @@ mod tests {
     #[test]
     fn test_component_construction_with_theme() {
         let theme = Theme::dark();
-        let component = SocialHistoryComponent::new(theme.clone());
+        let config = SocialHistoryConfig::default();
+        let component = SocialHistoryComponent::new(theme.clone(), &config);
 
         assert!(!component.is_editing);
         assert!(component.social_history.is_none());
@@ -927,14 +939,14 @@ mod tests {
     #[test]
     fn test_form_state_field_values() {
         let theme = Theme::dark();
-        let mut component = SocialHistoryComponent::new(theme);
+        let mut component = SocialHistoryComponent::new(theme, &SocialHistoryConfig::default());
 
-        // Test getting default field values
+        // Test getting default field values (config-driven forms start with placeholder)
         let smoking_val = component.get_field_value(&SocialHistoryField::SmokingStatus);
-        assert_eq!(smoking_val, "Never smoked");
+        assert_eq!(smoking_val, "Select...");
 
         let alcohol_val = component.get_field_value(&SocialHistoryField::AlcoholStatus);
-        assert_eq!(alcohol_val, "None");
+        assert_eq!(alcohol_val, "Select...");
 
         let occupation_val = component.get_field_value(&SocialHistoryField::Occupation);
         assert_eq!(occupation_val, "");
@@ -948,7 +960,7 @@ mod tests {
     #[test]
     fn test_editing_mode_toggle() {
         let theme = Theme::dark();
-        let mut component = SocialHistoryComponent::new(theme);
+        let mut component = SocialHistoryComponent::new(theme, &SocialHistoryConfig::default());
 
         assert!(!component.is_editing);
 
@@ -965,7 +977,7 @@ mod tests {
     #[test]
     fn test_key_handling_tab_navigation() {
         let theme = Theme::dark();
-        let mut component = SocialHistoryComponent::new(theme);
+        let mut component = SocialHistoryComponent::new(theme, &SocialHistoryConfig::default());
 
         component.start_editing();
         assert_eq!(component.focused_field, SocialHistoryField::SmokingStatus);
@@ -989,7 +1001,7 @@ mod tests {
     #[test]
     fn test_key_handling_escape_cancels_editing() {
         let theme = Theme::dark();
-        let mut component = SocialHistoryComponent::new(theme);
+        let mut component = SocialHistoryComponent::new(theme, &SocialHistoryConfig::default());
 
         component.start_editing();
         assert!(component.is_editing);
@@ -1003,7 +1015,7 @@ mod tests {
     #[test]
     fn test_key_handling_ctrl_s_saves() {
         let theme = Theme::dark();
-        let mut component = SocialHistoryComponent::new(theme);
+        let mut component = SocialHistoryComponent::new(theme, &SocialHistoryConfig::default());
 
         component.start_editing();
 
@@ -1015,7 +1027,7 @@ mod tests {
     #[test]
     fn test_data_conversion_to_social_history() {
         let theme = Theme::dark();
-        let mut component = SocialHistoryComponent::new(theme);
+        let mut component = SocialHistoryComponent::new(theme, &SocialHistoryConfig::default());
 
         // Set some field values
         component.set_field_value(&SocialHistoryField::Occupation, "Engineer".to_string());
@@ -1037,7 +1049,7 @@ mod tests {
     #[test]
     fn test_start_editing_populates_fields_from_data() {
         let theme = Theme::dark();
-        let mut component = SocialHistoryComponent::new(theme);
+        let mut component = SocialHistoryComponent::new(theme, &SocialHistoryConfig::default());
 
         // Set initial data
         let data = SocialHistoryData {
@@ -1078,7 +1090,7 @@ mod tests {
     #[test]
     fn test_loading_state() {
         let theme = Theme::dark();
-        let mut component = SocialHistoryComponent::new(theme);
+        let mut component = SocialHistoryComponent::new(theme, &SocialHistoryConfig::default());
 
         assert!(!component.is_loading());
 

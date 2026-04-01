@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use chrono::NaiveDate;
 use opengp_config::forms::ValidationRules;
+use opengp_config::AllergyConfig;
 use opengp_domain::domain::clinical::{Allergy, AllergyType, Severity};
 use uuid::Uuid;
 
@@ -159,18 +160,29 @@ impl Clone for AllergyForm {
 }
 
 impl AllergyForm {
-    pub fn new(theme: Theme) -> Self {
-        let allergy_type_options = vec![
-            DropdownOption::new("Drug", "Drug"),
-            DropdownOption::new("Food", "Food"),
-            DropdownOption::new("Environmental", "Environmental"),
-            DropdownOption::new("Other", "Other"),
-        ];
-        let severity_options = vec![
-            DropdownOption::new("Mild", "Mild"),
-            DropdownOption::new("Moderate", "Moderate"),
-            DropdownOption::new("Severe", "Severe"),
-        ];
+    pub fn new(theme: Theme, allergy_config: &AllergyConfig) -> Self {
+        // Build allergy type options from config, filtering to enabled only
+        let allergy_type_options: Vec<DropdownOption> = allergy_config
+            .allergy_types
+            .iter()
+            .filter(|(_, option)| option.enabled)
+            .map(|(key, option)| DropdownOption::new(key, &option.label))
+            .collect();
+
+        let severity_options: Vec<DropdownOption> = allergy_config
+            .severities
+            .iter()
+            .filter(|(_, option)| option.enabled)
+            .map(|(key, option)| DropdownOption::new(key, &option.label))
+            .collect();
+
+        // Build severity options from config, filtering to enabled only
+        let severity_options: Vec<DropdownOption> = allergy_config
+            .severities
+            .iter()
+            .filter(|(_, option)| option.enabled)
+            .map(|(key, option)| DropdownOption::new(key, &option.label))
+            .collect();
 
         let form_state = FormState::new(theme.clone(), AllergyFormField::Allergen);
 
@@ -216,8 +228,8 @@ impl AllergyForm {
         form
     }
 
-    pub fn from_allergy(allergy: Allergy, theme: Theme) -> Self {
-        let mut form = Self::new(theme);
+    pub fn from_allergy(allergy: Allergy, theme: Theme, allergy_config: &AllergyConfig) -> Self {
+        let mut form = Self::new(theme, allergy_config);
         form.form_state.mode = FormMode::Edit(allergy.id);
 
         form.set_value(AllergyFormField::Allergen, allergy.allergen);

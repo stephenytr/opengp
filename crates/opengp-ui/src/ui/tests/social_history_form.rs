@@ -9,7 +9,9 @@
 use crate::ui::components::clinical::state::{ClinicalFormView, ClinicalState};
 use crate::ui::theme::Theme;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use opengp_config::healthcare::HealthcareConfig;
+use opengp_config::{
+    healthcare::HealthcareConfig, AllergyConfig, ClinicalConfig, SocialHistoryConfig,
+};
 
 /// Test that ClinicalState can open Social History through form workflow
 /// This verifies the state has proper methods to open Social History through
@@ -17,7 +19,13 @@ use opengp_config::healthcare::HealthcareConfig;
 #[test]
 fn clinical_state_opens_social_history_via_form_context() {
     let theme = Theme::dark();
-    let mut state = ClinicalState::new(theme, HealthcareConfig::default());
+    let mut state = ClinicalState::new(
+        theme,
+        HealthcareConfig::default(),
+        AllergyConfig::default(),
+        ClinicalConfig::default(),
+        SocialHistoryConfig::default(),
+    );
 
     // The state should have a method to open Social History as a form
     // Using the same pattern as other forms (open_allergy_form, etc.)
@@ -34,7 +42,13 @@ fn clinical_state_opens_social_history_via_form_context() {
 #[test]
 fn clinical_state_closes_social_history_via_form_context() {
     let theme = Theme::dark();
-    let mut state = ClinicalState::new(theme, HealthcareConfig::default());
+    let mut state = ClinicalState::new(
+        theme,
+        HealthcareConfig::default(),
+        AllergyConfig::default(),
+        ClinicalConfig::default(),
+        SocialHistoryConfig::default(),
+    );
 
     // Open then close using form methods
     state.open_social_history_form();
@@ -49,7 +63,13 @@ fn clinical_state_closes_social_history_via_form_context() {
 #[test]
 fn clinical_state_has_social_history_form_field() {
     let theme = Theme::dark();
-    let mut state = ClinicalState::new(theme, HealthcareConfig::default());
+    let mut state = ClinicalState::new(
+        theme,
+        HealthcareConfig::default(),
+        AllergyConfig::default(),
+        ClinicalConfig::default(),
+        SocialHistoryConfig::default(),
+    );
 
     // The state should have a social_history_form field like allergy_form
     state.open_social_history_form();
@@ -66,7 +86,13 @@ fn clinical_state_has_social_history_form_field() {
 #[test]
 fn social_history_single_lifecycle_source() {
     let theme = Theme::dark();
-    let mut state = ClinicalState::new(theme, HealthcareConfig::default());
+    let mut state = ClinicalState::new(
+        theme,
+        HealthcareConfig::default(),
+        AllergyConfig::default(),
+        ClinicalConfig::default(),
+        SocialHistoryConfig::default(),
+    );
 
     // Opening via form workflow should set form_view
     state.open_social_history_form();
@@ -83,7 +109,13 @@ fn social_history_single_lifecycle_source() {
 #[test]
 fn close_form_closes_social_history() {
     let theme = Theme::dark();
-    let mut state = ClinicalState::new(theme, HealthcareConfig::default());
+    let mut state = ClinicalState::new(
+        theme,
+        HealthcareConfig::default(),
+        AllergyConfig::default(),
+        ClinicalConfig::default(),
+        SocialHistoryConfig::default(),
+    );
 
     state.open_social_history_form();
     assert!(state.is_form_open());
@@ -102,7 +134,13 @@ fn close_form_closes_social_history() {
 #[test]
 fn clinical_form_view_includes_social_history() {
     let theme = Theme::dark();
-    let mut state = ClinicalState::new(theme, HealthcareConfig::default());
+    let mut state = ClinicalState::new(
+        theme,
+        HealthcareConfig::default(),
+        AllergyConfig::default(),
+        ClinicalConfig::default(),
+        SocialHistoryConfig::default(),
+    );
 
     // Open Social History - should set form_view to something other than None
     state.open_social_history_form();

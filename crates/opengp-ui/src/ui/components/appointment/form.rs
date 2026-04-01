@@ -24,6 +24,7 @@ use crate::ui::widgets::{
     TextareaWidget, TimePickerAction, TimePickerPopup,
 };
 use opengp_config::healthcare::HealthcareConfig;
+use opengp_config::{AppointmentConfig, AppointmentTypeOption};
 use opengp_domain::domain::appointment::{
     Appointment, AppointmentType, NewAppointmentData, UpdateAppointmentData,
 };
@@ -199,12 +200,29 @@ pub struct AppointmentForm {
     saving: bool,
     theme: Theme,
     healthcare_config: HealthcareConfig,
+    appointment_config: AppointmentConfig,
     scroll: ScrollableFormState,
     patient_picker: SearchableListState<PatientListItem>,
     practitioner_picker: SearchableListState<PractitionerViewItem>,
     date_picker: DatePickerPopup,
     time_picker: TimePickerPopup,
 }
+
+const APPOINTMENT_TYPE_ORDER: [AppointmentType; 13] = [
+    AppointmentType::Standard,
+    AppointmentType::Long,
+    AppointmentType::Brief,
+    AppointmentType::NewPatient,
+    AppointmentType::HealthAssessment,
+    AppointmentType::ChronicDiseaseReview,
+    AppointmentType::MentalHealthPlan,
+    AppointmentType::Immunisation,
+    AppointmentType::Procedure,
+    AppointmentType::Telephone,
+    AppointmentType::Telehealth,
+    AppointmentType::HomeVisit,
+    AppointmentType::Emergency,
+];
 
 impl Clone for AppointmentForm {
     fn clone(&self) -> Self {
@@ -219,6 +237,7 @@ impl Clone for AppointmentForm {
             saving: self.saving,
             theme: self.theme.clone(),
             healthcare_config: self.healthcare_config.clone(),
+            appointment_config: self.appointment_config.clone(),
             scroll: self.scroll.clone(),
             patient_picker: self.patient_picker.clone(),
             practitioner_picker: self.practitioner_picker.clone(),
@@ -229,62 +248,86 @@ impl Clone for AppointmentForm {
 }
 
 impl AppointmentForm {
+    fn appointment_type_config_key(apt_type: AppointmentType) -> &'static str {
+        match apt_type {
+            AppointmentType::Standard => "standard",
+            AppointmentType::Long => "long",
+            AppointmentType::Brief => "brief",
+            AppointmentType::NewPatient => "new_patient",
+            AppointmentType::HealthAssessment => "health_assessment",
+            AppointmentType::ChronicDiseaseReview => "chronic_disease_review",
+            AppointmentType::MentalHealthPlan => "mental_health_plan",
+            AppointmentType::Immunisation => "immunisation",
+            AppointmentType::Procedure => "procedure",
+            AppointmentType::Telephone => "telephone",
+            AppointmentType::Telehealth => "telehealth",
+            AppointmentType::HomeVisit => "home_visit",
+            AppointmentType::Emergency => "emergency",
+        }
+    }
+
+    fn option_for_type<'a>(
+        config: &'a AppointmentConfig,
+        apt_type: AppointmentType,
+    ) -> Option<&'a AppointmentTypeOption> {
+        config
+            .types
+            .get(Self::appointment_type_config_key(apt_type))
+            .filter(|option| option.enabled)
+    }
+
+    fn duration_for_type_from_config(config: &AppointmentConfig, apt_type: AppointmentType) -> u32 {
+        Self::option_for_type(config, apt_type)
+            .map(|option| option.duration_minutes)
+            .unwrap_or_else(|| apt_type.default_duration_minutes() as u32)
+    }
+
+    fn duration_for_type(&self, apt_type: AppointmentType) -> u32 {
+        Self::duration_for_type_from_config(&self.appointment_config, apt_type)
+    }
+
+    fn build_type_options(config: &AppointmentConfig) -> Vec<DropdownOption> {
+        let mut options = Vec::new();
+
+        for apt_type in APPOINTMENT_TYPE_ORDER {
+            if let Some(option) = Self::option_for_type(config, apt_type) {
+                options.push(DropdownOption::new(
+                    apt_type.to_string(),
+                    format!("{} ({} min)", option.label, option.duration_minutes),
+                ));
+            }
+        }
+
+        if options.is_empty() {
+            for apt_type in APPOINTMENT_TYPE_ORDER {
+                options.push(DropdownOption::new(
+                    apt_type.to_string(),
+                    format!("{} ({} min)", apt_type, apt_type.default_duration_minutes()),
+                ));
+            }
+        }
+
+        options
+    }
+
     pub fn new(theme: Theme, healthcare_config: HealthcareConfig) -> Self {
-        let type_options = vec![
-            DropdownOption::new(
-                "Standard",
-                format!(
-                    "Standard ({} min)",
-                    healthcare_config
-                        .appointment_durations
-                        .get("Standard")
-                        .copied()
-                        .unwrap_or(15)
-                ),
-            ),
-            DropdownOption::new(
-                "Long",
-                format!(
-                    "Long ({} min)",
-                    healthcare_config
-                        .appointment_durations
-                        .get("Long")
-                        .copied()
-                        .unwrap_or(30)
-                ),
-            ),
-            DropdownOption::new(
-                "Brief",
-                format!(
-                    "Brief ({} min)",
-                    healthcare_config
-                        .appointment_durations
-                        .get("Brief")
-                        .copied()
-                        .unwrap_or(10)
-                ),
-            ),
-            DropdownOption::new(
-                "NewPatient",
-                format!(
-                    "New Patient ({} min)",
-                    healthcare_config
-                        .appointment_durations
-                        .get("NewPatient")
-                        .copied()
-                        .unwrap_or(45)
-                ),
-            ),
-            DropdownOption::new("HealthAssessment", "Health Assessment"),
-            DropdownOption::new("ChronicDiseaseReview", "Chronic Disease Review"),
-            DropdownOption::new("MentalHealthPlan", "Mental Health Plan"),
-            DropdownOption::new("Immunisation", "Immunisation"),
-            DropdownOption::new("Procedure", "Procedure"),
-            DropdownOption::new("Telephone", "Telephone"),
-            DropdownOption::new("Telehealth", "Telehealth"),
-            DropdownOption::new("HomeVisit", "Home Visit"),
-            DropdownOption::new("Emergency", "Emergency"),
-        ];
+        let appointment_config = opengp_config::load_appointment_config().unwrap_or_default();
+        let type_options = Self::build_type_options(&appointment_config);
+        let default_appointment_type =
+            if type_options.iter().any(|option| option.value == "Standard") {
+                "Standard".to_string()
+            } else {
+                type_options
+                    .first()
+                    .map(|option| option.value.clone())
+                    .unwrap_or_else(|| "Standard".to_string())
+            };
+        let mut data = AppointmentFormData::empty();
+        data.appointment_type = default_appointment_type.clone();
+        if let Ok(apt_type) = default_appointment_type.parse::<AppointmentType>() {
+            data.duration =
+                Self::duration_for_type_from_config(&appointment_config, apt_type).to_string();
+        }
 
         let field_ids: Vec<String> = AppointmentFormField::all()
             .into_iter()
@@ -312,7 +355,7 @@ impl AppointmentForm {
         let mut dropdowns = HashMap::new();
         let mut appointment_type_dropdown =
             DropdownWidget::new("Type *", type_options, theme.clone());
-        appointment_type_dropdown.set_value("Standard");
+        appointment_type_dropdown.set_value(&default_appointment_type);
         dropdowns.insert(
             FIELD_APPOINTMENT_TYPE.to_string(),
             appointment_type_dropdown,
@@ -320,7 +363,7 @@ impl AppointmentForm {
 
         Self {
             mode: FormMode::Create,
-            data: AppointmentFormData::empty(),
+            data,
             errors: HashMap::new(),
             focused_field: FIELD_PATIENT.to_string(),
             field_ids,
@@ -329,6 +372,7 @@ impl AppointmentForm {
             saving: false,
             theme: theme.clone(),
             healthcare_config,
+            appointment_config,
             scroll: ScrollableFormState::new(),
             patient_picker: SearchableListState::new(Vec::new()),
             practitioner_picker: SearchableListState::new(Vec::new()),
@@ -486,12 +530,7 @@ impl AppointmentForm {
             }
             FIELD_APPOINTMENT_TYPE => {
                 if let Ok(apt_type) = value.parse::<AppointmentType>() {
-                    let default_mins = self
-                        .healthcare_config
-                        .appointment_durations
-                        .get(&value)
-                        .copied()
-                        .unwrap_or_else(|| apt_type.default_duration_minutes() as u32);
+                    let default_mins = self.duration_for_type(apt_type);
                     self.data.duration = default_mins.to_string();
                 }
                 if let Some(dropdown) = self.dropdowns.get_mut(FIELD_APPOINTMENT_TYPE) {
@@ -797,14 +836,7 @@ impl AppointmentForm {
                                 .and_then(|dropdown| dropdown.selected_value())
                             {
                                 if let Ok(apt_type) = value.parse::<AppointmentType>() {
-                                    let default_mins: i64 =
-                                        self.healthcare_config
-                                            .appointment_durations
-                                            .get(value)
-                                            .copied()
-                                            .unwrap_or_else(|| {
-                                                apt_type.default_duration_minutes() as u32
-                                            }) as i64;
+                                    let default_mins = self.duration_for_type(apt_type) as i64;
                                     self.data.duration = default_mins.to_string();
                                 }
                                 self.data.appointment_type = value.to_string();

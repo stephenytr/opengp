@@ -19,6 +19,7 @@ use opengp_domain::domain::user::{
     AuthService, PasswordError, PasswordHasher, RepositoryError as UserRepositoryError,
     SessionRepository, UserRepository, WorkingHours, WorkingHoursRepository,
 };
+use opengp_config::Config;
 #[cfg(test)]
 use opengp_domain::domain::user::{Permission, Role, User};
 use opengp_infrastructure::infrastructure::crypto::password::BcryptPasswordHasher;
@@ -33,7 +34,7 @@ use sqlx::PgPool;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::{ApiConfig, ApiError};
+use crate::ApiError;
 
 #[derive(Clone)]
 pub struct ApiServices {
@@ -47,11 +48,13 @@ pub struct ApiServices {
 }
 
 impl ApiServices {
-    pub async fn new(config: &ApiConfig, pool: &PgPool) -> Result<Self, ApiError> {
+    pub async fn new(config: &Config, pool: &PgPool) -> Result<Self, ApiError> {
         let encryption_service = Arc::new(
             EncryptionService::new_with_key(&config.encryption_key)
                 .map_err(|e| ApiError::EncryptionInit(e.to_string()))?,
         );
+
+        let session_timeout_minutes = ((config.app.session.timeout_secs / 60) as i64).max(1);
 
         let password_hasher: Arc<dyn PasswordHasher> = Arc::new(BcryptPasswordHasher::new());
         let user_repository = build_user_repository(pool, password_hasher.clone());
@@ -61,7 +64,7 @@ impl ApiServices {
             user_repository.clone(),
             password_hasher,
             session_repository,
-            config.session_timeout_minutes,
+            session_timeout_minutes,
         ));
 
         let patient_repository: Arc<dyn PatientRepository> = Arc::new(

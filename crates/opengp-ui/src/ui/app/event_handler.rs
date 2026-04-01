@@ -181,6 +181,7 @@ impl App {
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
                         self.patient_form = Some(crate::ui::components::patient::PatientForm::new(
                             self.theme.clone(),
+                            &self.patient_config,
                         ));
                         self.current_context = KeyContext::PatientForm;
                     }

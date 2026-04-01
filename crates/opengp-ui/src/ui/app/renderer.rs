@@ -332,7 +332,10 @@ impl App {
                 frame.render_widget(self.clinical_state.vitals_list.clone(), area);
             }
             crate::ui::components::clinical::ClinicalView::SocialHistory => {
-                let mut component = SocialHistoryComponent::new(self.theme.clone());
+                let mut component = SocialHistoryComponent::new(
+                    self.theme.clone(),
+                    &self.clinical_state.social_history_config,
+                );
                 component.loading = self.clinical_state.loading;
                 if let Some(ref sh) = self.clinical_state.social_history {
                     component.social_history = Some(

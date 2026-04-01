@@ -14,11 +14,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("⚠️  WARNING: This will DELETE ALL patients and reseed with fresh data!\n");
 
     let config = Config::from_env()?;
-    let pool = create_pool(&config.database).await?;
+    let pool = create_pool(&config.app.api_server.database).await?;
     run_migrations(&pool).await?;
     let pool = pool.as_postgres().clone();
 
-    println!("Database: {}\n", config.database.url);
+    println!("Database: {}\n", config.app.api_server.database.url);
 
     let crypto = Arc::new(EncryptionService::new()?);
     let patient_repository = Arc::new(SqlxPatientRepository::new(pool.clone(), crypto));

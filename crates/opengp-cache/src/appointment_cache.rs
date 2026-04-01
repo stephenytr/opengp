@@ -5,10 +5,6 @@ use crate::error::CacheError;
 use crate::service::CacheServiceImpl;
 use opengp_domain::domain::appointment::CalendarAppointment;
 
-/// TTL for appointment slot caching: 120 seconds (2 minutes)
-#[allow(dead_code)]
-const APPOINTMENT_CACHE_TTL_SECS: u64 = 120;
-
 /// Get appointment slots from cache for a specific practice and date
 ///
 /// # Arguments
@@ -50,6 +46,15 @@ pub async fn set_appointment_slots(
 ) -> Result<(), CacheError> {
     let key = format!("appt:{}:{}", prac_id, date);
     cache.set(&key, &slots.to_vec(), Some(ttl)).await
+}
+
+pub async fn set_appointment_slots_default_ttl(
+    cache: &CacheServiceImpl,
+    prac_id: Uuid,
+    date: NaiveDate,
+    slots: &[CalendarAppointment],
+) -> Result<(), CacheError> {
+    set_appointment_slots(cache, prac_id, date, slots, cache.appointment_ttl_secs()).await
 }
 
 /// Invalidate cached appointment slots for a specific practice and date
@@ -104,6 +109,7 @@ mod tests {
             appointment_type: opengp_domain::domain::appointment::AppointmentType::Standard,
             status: opengp_domain::domain::appointment::AppointmentStatus::Scheduled,
             is_urgent: false,
+            is_overlapping: false,
             slot_span: 1,
             reason: Some("Test appointment".to_string()),
             notes: None,
@@ -129,11 +135,6 @@ mod tests {
         assert!(pattern.starts_with("appt:"));
         assert!(pattern.contains(prac_id.to_string().as_str()));
         assert!(pattern.ends_with(":*"));
-    }
-
-    #[test]
-    fn test_cache_ttl_constant() {
-        assert_eq!(APPOINTMENT_CACHE_TTL_SECS, 120);
     }
 
     #[test]

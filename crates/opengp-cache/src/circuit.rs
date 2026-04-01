@@ -1,6 +1,8 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::service::CacheCircuitBreakerConfig;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CircuitState {
     Closed,
@@ -24,6 +26,13 @@ pub struct CircuitBreaker {
 impl CircuitBreaker {
     pub fn new() -> Self {
         Self::with_config(5, Duration::from_secs(30))
+    }
+
+    pub fn from_config(config: &CacheCircuitBreakerConfig) -> Self {
+        Self::with_config(
+            config.failure_threshold,
+            Duration::from_secs(config.open_duration_secs),
+        )
     }
 
     pub fn with_config(failure_threshold: u32, open_duration: Duration) -> Self {

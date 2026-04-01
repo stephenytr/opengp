@@ -1,9 +1,11 @@
 use super::*;
+use opengp_config::{load_allergy_config, AllergyConfig};
 
 #[test]
 fn test_allergy_form_creation() {
     let theme = Theme::dark();
-    let form = AllergyForm::new(theme);
+    let config = load_allergy_config().unwrap();
+    let form = AllergyForm::new(theme, &config);
 
     assert_eq!(form.focused_field(), AllergyFormField::Allergen);
     assert!(!form.is_valid);
@@ -13,7 +15,8 @@ fn test_allergy_form_creation() {
 #[test]
 fn test_allergy_form_validation_required_fields() {
     let theme = Theme::dark();
-    let mut form = AllergyForm::new(theme);
+    let config = load_allergy_config().unwrap();
+    let mut form = AllergyForm::new(theme, &config);
 
     form.validate();
     assert!(!form.is_valid);
@@ -25,11 +28,12 @@ fn test_allergy_form_validation_required_fields() {
 #[test]
 fn test_allergy_form_validation_passes_when_required_filled() {
     let theme = Theme::dark();
-    let mut form = AllergyForm::new(theme);
+    let config = load_allergy_config().unwrap();
+    let mut form = AllergyForm::new(theme, &config);
 
     form.set_value(AllergyFormField::Allergen, "Penicillin".to_string());
-    form.set_value(AllergyFormField::AllergyType, "Drug".to_string());
-    form.set_value(AllergyFormField::Severity, "Severe".to_string());
+    form.set_value(AllergyFormField::AllergyType, "drug".to_string());
+    form.set_value(AllergyFormField::Severity, "severe".to_string());
 
     let valid = form.validate();
     assert!(valid);
@@ -39,7 +43,8 @@ fn test_allergy_form_validation_passes_when_required_filled() {
 #[test]
 fn test_allergy_form_field_navigation() {
     let theme = Theme::dark();
-    let mut form = AllergyForm::new(theme);
+    let config = load_allergy_config().unwrap();
+    let mut form = AllergyForm::new(theme, &config);
 
     assert_eq!(form.focused_field(), AllergyFormField::Allergen);
     form.next_field();
@@ -53,7 +58,8 @@ fn test_allergy_form_field_navigation() {
 #[test]
 fn test_allergy_form_onset_date_validation() {
     let theme = Theme::dark();
-    let mut form = AllergyForm::new(theme);
+    let config = AllergyConfig::default();
+    let mut form = AllergyForm::new(theme, &config);
 
     form.set_value(AllergyFormField::OnsetDate, "not-a-date".to_string());
     assert!(form.error(AllergyFormField::OnsetDate).is_some());
@@ -78,7 +84,8 @@ fn test_allergy_form_textarea_fields_accept_input() {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     let theme = Theme::dark();
-    let mut form = AllergyForm::new(theme);
+    let config = AllergyConfig::default();
+    let mut form = AllergyForm::new(theme, &config);
 
     let key = KeyEvent::new(KeyCode::Char('P'), KeyModifiers::NONE);
     let action = form.handle_key(key);
@@ -93,7 +100,8 @@ fn test_allergy_form_textarea_fields_accept_input() {
 #[test]
 fn test_allergy_form_get_value_uses_textarea() {
     let theme = Theme::dark();
-    let mut form = AllergyForm::new(theme);
+    let config = AllergyConfig::default();
+    let mut form = AllergyForm::new(theme, &config);
 
     form.set_value(AllergyFormField::Allergen, "Penicillin".to_string());
     form.set_value(AllergyFormField::Reaction, "Rash".to_string());

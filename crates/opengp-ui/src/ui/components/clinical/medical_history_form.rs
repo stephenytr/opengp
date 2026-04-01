@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use opengp_config::forms::ValidationRules;
+use opengp_config::ClinicalConfig;
 use opengp_domain::domain::clinical::{ConditionStatus, MedicalHistory, Severity};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -123,7 +124,7 @@ pub enum MedicalHistoryFormAction {
 }
 
 impl MedicalHistoryForm {
-    pub fn new(theme: Theme) -> Self {
+    pub fn new(config: &ClinicalConfig, theme: Theme) -> Self {
         let mut state = FormState::new(theme.clone(), MedicalHistoryFormField::Condition);
         state.textareas.insert(
             FIELD_CONDITION.to_string(),
@@ -137,7 +138,7 @@ impl MedicalHistoryForm {
             FIELD_NOTES.to_string(),
             make_textarea_state(MedicalHistoryFormField::Notes, None),
         );
-        state.dropdowns = build_dropdowns(theme);
+        state.dropdowns = build_dropdowns(config, theme);
         Self {
             state,
             validator: build_validator(),
@@ -473,33 +474,31 @@ impl Widget for MedicalHistoryForm {
     }
 }
 
-fn build_dropdowns(theme: Theme) -> HashMap<String, DropdownWidget> {
+fn build_dropdowns(config: &ClinicalConfig, theme: Theme) -> HashMap<String, DropdownWidget> {
     let mut dropdowns = HashMap::new();
+
+    let status_options: Vec<DropdownOption> = config
+        .condition_status
+        .iter()
+        .filter(|(_, opt)| opt.enabled)
+        .map(|(key, opt)| DropdownOption::new(key, &opt.label))
+        .collect();
+
     dropdowns.insert(
         FIELD_STATUS.to_string(),
-        DropdownWidget::new(
-            "Status *",
-            vec![
-                DropdownOption::new("Active", "Active"),
-                DropdownOption::new("Resolved", "Resolved"),
-                DropdownOption::new("Chronic", "Chronic"),
-                DropdownOption::new("Recurring", "Recurring"),
-                DropdownOption::new("InRemission", "InRemission"),
-            ],
-            theme.clone(),
-        ),
+        DropdownWidget::new("Status *", status_options, theme.clone()),
     );
+
+    let severity_options: Vec<DropdownOption> = config
+        .severity
+        .iter()
+        .filter(|(_, opt)| opt.enabled)
+        .map(|(key, opt)| DropdownOption::new(key, &opt.label))
+        .collect();
+
     dropdowns.insert(
         FIELD_SEVERITY.to_string(),
-        DropdownWidget::new(
-            "Severity",
-            vec![
-                DropdownOption::new("Mild", "Mild"),
-                DropdownOption::new("Moderate", "Moderate"),
-                DropdownOption::new("Severe", "Severe"),
-            ],
-            theme,
-        ),
+        DropdownWidget::new("Severity", severity_options, theme),
     );
     dropdowns
 }

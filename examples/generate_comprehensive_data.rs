@@ -11,7 +11,7 @@ use opengp::infrastructure::fixtures::{
     AppointmentGenerator, AppointmentGeneratorConfig, ClinicalDataGeneratorConfig,
     ComprehensivePatientGenerator, ComprehensivePatientGeneratorConfig, PatientGeneratorConfig,
 };
-use opengp_api::ApiConfig;
+use opengp_config::Config;
 use opengp_domain::domain::appointment::Appointment;
 use opengp_domain::domain::clinical::{
     AlcoholStatus, Allergy, Consultation, ExerciseFrequency, MedicalHistory, SmokingStatus,
@@ -63,18 +63,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   OpenGP Comprehensive PostgreSQL Data Generator");
     println!("═══════════════════════════════════════════════════════════\n");
 
-    let api_config = ApiConfig::from_env()?;
-    let db_url = api_config.database_url.clone();
+    let config = Config::from_env()?;
+    let db_url = config.app.api_server.database.url.clone();
     println!("Connecting to PostgreSQL via API_DATABASE_URL...");
 
     let connect_options = PgConnectOptions::from_str(&db_url)
         .map_err(|e| format!("Invalid API_DATABASE_URL: {e}"))?;
 
     let pool = PgPoolOptions::new()
-        .max_connections(api_config.database_max_connections)
-        .min_connections(api_config.database_min_connections)
-        .acquire_timeout(Duration::from_secs(api_config.connect_timeout_secs))
-        .idle_timeout(Duration::from_secs(api_config.idle_timeout_secs))
+        .max_connections(config.app.api_server.database.max_connections)
+        .min_connections(config.app.api_server.database.min_connections)
+        .acquire_timeout(Duration::from_secs(config.app.api_server.database.connect_timeout_secs))
+        .idle_timeout(Duration::from_secs(config.app.api_server.database.idle_timeout_secs))
         .connect_with(connect_options)
         .await?;
 

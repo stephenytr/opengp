@@ -5,6 +5,56 @@ use crate::stampede::StampedeGuard;
 use deadpool_redis::redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
+use std::time::Duration;
+
+#[derive(Debug, Clone)]
+pub struct CacheCircuitBreakerConfig {
+    pub failure_threshold: u32,
+    pub open_duration_secs: u64,
+}
+
+impl Default for CacheCircuitBreakerConfig {
+    fn default() -> Self {
+        Self {
+            failure_threshold: 5,
+            open_duration_secs: 30,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CacheStampedeConfig {
+    pub default_ttl_secs: u64,
+    pub retry_attempts: u32,
+    pub retry_delay_ms: u64,
+}
+
+impl Default for CacheStampedeConfig {
+    fn default() -> Self {
+        Self {
+            default_ttl_secs: 5,
+            retry_attempts: 3,
+            retry_delay_ms: 100,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CacheEntityTtlConfig {
+    pub patient_secs: u64,
+    pub search_secs: u64,
+    pub appointment_secs: u64,
+}
+
+impl Default for CacheEntityTtlConfig {
+    fn default() -> Self {
+        Self {
+            patient_secs: 900,
+            search_secs: 300,
+            appointment_secs: 120,
+        }
+    }
+}
 
 /// Cache configuration
 #[derive(Debug, Clone)]
@@ -12,6 +62,9 @@ pub struct CacheConfig {
     pub enabled: bool,
     pub default_ttl_secs: u64,
     pub key_prefix: String,
+    pub circuit_breaker: CacheCircuitBreakerConfig,
+    pub stampede: CacheStampedeConfig,
+    pub entity_ttl: CacheEntityTtlConfig,
 }
 
 impl CacheConfig {
@@ -20,6 +73,31 @@ impl CacheConfig {
             enabled: redis_config.url.is_some(),
             default_ttl_secs: redis_config.ttl_default_secs,
             key_prefix: "opengp".to_string(),
+            circuit_breaker: CacheCircuitBreakerConfig::default(),
+            stampede: CacheStampedeConfig::default(),
+            entity_ttl: CacheEntityTtlConfig::default(),
+        }
+    }
+
+    pub fn from_app_config(app: &opengp_config::AppConfig) -> Self {
+        Self {
+            enabled: true,
+            default_ttl_secs: app.cache.default_ttl_secs,
+            key_prefix: app.cache.key_prefix.clone(),
+            circuit_breaker: CacheCircuitBreakerConfig {
+                failure_threshold: app.cache.circuit_breaker.failure_threshold,
+                open_duration_secs: app.cache.circuit_breaker.open_duration_secs,
+            },
+            stampede: CacheStampedeConfig {
+                default_ttl_secs: app.cache.stampede.default_ttl_secs,
+                retry_attempts: app.cache.stampede.retry_attempts,
+                retry_delay_ms: app.cache.stampede.retry_delay_ms,
+            },
+            entity_ttl: CacheEntityTtlConfig {
+                patient_secs: app.cache.entity_ttl.patient_secs,
+                search_secs: app.cache.entity_ttl.search_secs,
+                appointment_secs: app.cache.entity_ttl.appointment_secs,
+            },
         }
     }
 }
@@ -30,6 +108,9 @@ impl Default for CacheConfig {
             enabled: false,
             default_ttl_secs: 3600,
             key_prefix: "opengp".to_string(),
+            circuit_breaker: CacheCircuitBreakerConfig::default(),
+            stampede: CacheStampedeConfig::default(),
+            entity_ttl: CacheEntityTtlConfig::default(),
         }
     }
 }
@@ -49,6 +130,30 @@ impl CacheServiceImpl {
             config,
             circuit_breaker,
         }
+    }
+
+    pub fn stampede_lock_ttl(&self) -> Duration {
+        Duration::from_secs(self.config.stampede.default_ttl_secs)
+    }
+
+    pub fn stampede_retry_attempts(&self) -> u32 {
+        self.config.stampede.retry_attempts
+    }
+
+    pub fn stampede_retry_delay(&self) -> Duration {
+        Duration::from_millis(self.config.stampede.retry_delay_ms)
+    }
+
+    pub fn patient_ttl_secs(&self) -> u64 {
+        self.config.entity_ttl.patient_secs
+    }
+
+    pub fn search_ttl_secs(&self) -> u64 {
+        self.config.entity_ttl.search_secs
+    }
+
+    pub fn appointment_ttl_secs(&self) -> u64 {
+        self.config.entity_ttl.appointment_secs
     }
 
     /// Get a value from cache, deserializing from JSON
@@ -248,7 +353,7 @@ impl CacheServiceImpl {
         }
 
         let full_key = self.build_key(key);
-        let guard = StampedeGuard::new(&full_key, StampedeGuard::default_ttl());
+        let guard = StampedeGuard::new(&full_key, self.stampede_lock_ttl());
 
         let lock_acquired = self.try_acquire_stampede_lock(&guard).await?;
 
@@ -264,8 +369,8 @@ impl CacheServiceImpl {
             return result;
         }
 
-        for _ in 0..StampedeGuard::RETRY_ATTEMPTS {
-            tokio::time::sleep(StampedeGuard::RETRY_DELAY).await;
+        for _ in 0..self.stampede_retry_attempts() {
+            tokio::time::sleep(self.stampede_retry_delay()).await;
             if let Some(cached) = self.get::<T>(key).await? {
                 return Ok(cached);
             }
