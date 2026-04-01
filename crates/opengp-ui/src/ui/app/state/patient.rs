@@ -30,7 +30,11 @@ impl App {
     }
 
     pub fn open_patient_form(&mut self, patient: opengp_domain::domain::patient::Patient) {
-        self.patient_form = Some(PatientForm::from_patient(patient, self.theme.clone()));
+        self.patient_form = Some(PatientForm::from_patient(
+            patient,
+            self.theme.clone(),
+            &self.patient_config,
+        ));
         self.current_context = KeyContext::PatientForm;
     }
 

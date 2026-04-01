@@ -1,7 +1,8 @@
 use axum::body::{to_bytes, Body};
 use axum::http::{header, Request, StatusCode};
 use chrono::Utc;
-use opengp_api::{router, ApiConfig, ApiState};
+use opengp_api::{router, ApiState};
+use opengp_config::Config;
 use opengp_domain::domain::api::{
     ApiErrorResponse, LoginResponse, PaginatedResponse, PatientResponse,
 };
@@ -11,9 +12,9 @@ use sqlx::PgPool;
 use tower::util::ServiceExt;
 use uuid::Uuid;
 
-fn test_config() -> ApiConfig {
-    let mut config = ApiConfig::from_env().expect("test config should load from environment");
-    config.log_level = "warn".to_string();
+fn test_config() -> Config {
+    let mut config = Config::from_env().expect("test config should load from environment");
+    config.app.logging.level = "warn".to_string();
     config
 }
 

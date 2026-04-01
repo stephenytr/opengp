@@ -1,7 +1,6 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 
-mod config;
 mod error;
 mod migrations;
 mod routes;
@@ -9,22 +8,25 @@ mod services;
 mod state;
 
 use color_eyre::Result;
+use opengp_config::Config;
 use tokio::net::TcpListener;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-pub use config::ApiConfig;
 pub use error::ApiError;
 pub use routes::router;
 pub use state::ApiState;
 
 pub async fn run() -> Result<()> {
-    let config = ApiConfig::from_env()?;
-    init_tracing(&config.log_level);
+    let config = Config::from_env()?;
+    init_tracing(&config.app.logging.level);
 
     let state = ApiState::new(config).await?;
     let app = routes::router(state.clone());
-    let bind_addr = state.config.bind_address();
+    let bind_addr = format!(
+        "{}:{}",
+        state.config.app.api_server.host, state.config.app.api_server.port
+    );
 
     let listener = TcpListener::bind(&bind_addr).await?;
     info!("opengp-api listening on {}", bind_addr);

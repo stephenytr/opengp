@@ -13,7 +13,7 @@ pub mod stampede;
 
 pub use appointment_cache::{
     get_appointment_slots, invalidate_all_practice_appointments, invalidate_appointment_slots,
-    set_appointment_slots,
+    set_appointment_slots, set_appointment_slots_default_ttl,
 };
 pub use circuit::{CircuitBreaker, CircuitState};
 pub use error::CacheError;

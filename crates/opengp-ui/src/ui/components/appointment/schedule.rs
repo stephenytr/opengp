@@ -8,6 +8,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
@@ -70,12 +71,63 @@ pub struct Schedule {
     pub focused: bool,
     /// Calendar configuration
     config: CalendarConfig,
+    appointment_abbreviations: HashMap<String, String>,
     /// Height of the inner render area (excluding borders), updated each frame.
     /// Used to compute how many slots are visible so the viewport can auto-scroll.
     last_inner_height: u16,
 }
 
 impl Schedule {
+    fn appointment_type_config_key(apt_type: AppointmentType) -> &'static str {
+        match apt_type {
+            AppointmentType::Standard => "standard",
+            AppointmentType::Long => "long",
+            AppointmentType::Brief => "brief",
+            AppointmentType::NewPatient => "new_patient",
+            AppointmentType::HealthAssessment => "health_assessment",
+            AppointmentType::ChronicDiseaseReview => "chronic_disease_review",
+            AppointmentType::MentalHealthPlan => "mental_health_plan",
+            AppointmentType::Immunisation => "immunisation",
+            AppointmentType::Procedure => "procedure",
+            AppointmentType::Telephone => "telephone",
+            AppointmentType::Telehealth => "telehealth",
+            AppointmentType::HomeVisit => "home_visit",
+            AppointmentType::Emergency => "emergency",
+        }
+    }
+
+    fn load_appointment_abbreviations() -> HashMap<String, String> {
+        let mut abbreviations = HashMap::new();
+
+        if let Ok(appointment_config) = opengp_config::load_appointment_config() {
+            for apt_type in [
+                AppointmentType::Standard,
+                AppointmentType::Long,
+                AppointmentType::Brief,
+                AppointmentType::NewPatient,
+                AppointmentType::HealthAssessment,
+                AppointmentType::ChronicDiseaseReview,
+                AppointmentType::MentalHealthPlan,
+                AppointmentType::Immunisation,
+                AppointmentType::Procedure,
+                AppointmentType::Telephone,
+                AppointmentType::Telehealth,
+                AppointmentType::HomeVisit,
+                AppointmentType::Emergency,
+            ] {
+                if let Some(option) = appointment_config
+                    .types
+                    .get(Self::appointment_type_config_key(apt_type))
+                    .filter(|option| option.enabled)
+                {
+                    abbreviations.insert(apt_type.to_string(), option.abbreviation.clone());
+                }
+            }
+        }
+
+        abbreviations
+    }
+
     /// Create a new schedule component with the given theme and calendar configuration.
     pub fn new(theme: Theme, config: CalendarConfig) -> Self {
         Self {
@@ -88,6 +140,7 @@ impl Schedule {
             theme,
             focused: false,
             config,
+            appointment_abbreviations: Self::load_appointment_abbreviations(),
             last_inner_height: 0,
         }
     }
@@ -455,7 +508,10 @@ impl Schedule {
     }
 
     fn get_abbreviation(&self, apt_type: &AppointmentType) -> String {
-        self.config.get_abbreviation(&apt_type.to_string())
+        self.appointment_abbreviations
+            .get(&apt_type.to_string())
+            .cloned()
+            .unwrap_or_else(|| self.config.get_abbreviation(&apt_type.to_string()))
     }
 
     /// Render the time column on the left side.

@@ -21,6 +21,12 @@ max_hour = 22
 viewport_start_hour = 8
 viewport_end_hour = 18
 
+[calendar.appointment_type_abbreviations]
+consultation = "CON"
+follow_up = "FUP"
+procedure = "PROC"
+telehealth = "TEL"
+
 [api_client]
 base_url = "http://127.0.0.1:8080"
 

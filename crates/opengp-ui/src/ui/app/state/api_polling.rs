@@ -654,6 +654,10 @@ mod tests {
             opengp_config::CalendarConfig::default(),
             crate::ui::theme::Theme::dark(),
             opengp_config::healthcare::HealthcareConfig::default(),
+            opengp_config::PatientConfig::default(),
+            opengp_config::AllergyConfig::default(),
+            opengp_config::ClinicalConfig::default(),
+            opengp_config::SocialHistoryConfig::default(),
         )
     }
 

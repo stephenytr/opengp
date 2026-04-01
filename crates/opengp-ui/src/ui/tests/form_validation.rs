@@ -5,7 +5,7 @@ use crate::ui::Theme;
 #[test]
 fn patient_form_required_field_validation() {
     let theme = Theme::dark();
-    let mut form = PatientForm::new(theme);
+    let mut form = PatientForm::new(theme, &opengp_config::PatientConfig::default());
 
     form.set_value(PatientFormField::DateOfBirth, "01/01/1990".to_string());
     form.set_value(PatientFormField::Gender, "Male".to_string());
@@ -24,7 +24,7 @@ fn patient_form_required_field_validation() {
 #[test]
 fn patient_form_invalid_email_format_detection() {
     let theme = Theme::dark();
-    let mut form = PatientForm::new(theme);
+    let mut form = PatientForm::new(theme, &opengp_config::PatientConfig::default());
 
     form.set_value(PatientFormField::Email, "invalid-email".to_string());
 
@@ -37,7 +37,7 @@ fn patient_form_invalid_email_format_detection() {
 #[test]
 fn patient_form_phone_number_validation() {
     let theme = Theme::dark();
-    let mut form = PatientForm::new(theme);
+    let mut form = PatientForm::new(theme, &opengp_config::PatientConfig::default());
 
     form.set_value(PatientFormField::PhoneMobile, "12345".to_string());
     assert_eq!(

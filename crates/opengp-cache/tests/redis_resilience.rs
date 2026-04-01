@@ -115,6 +115,9 @@ async fn test_cache_stampede_prevention() {
             enabled: true,
             default_ttl_secs: 3600,
             key_prefix: "opengp-test".to_string(),
+            circuit_breaker: Default::default(),
+            stampede: Default::default(),
+            entity_ttl: Default::default(),
         },
         CircuitBreaker::with_config(10, Duration::from_secs(30)),
     );
@@ -265,6 +268,9 @@ async fn test_cache_invalidation_chain() {
             enabled: true,
             default_ttl_secs: 3600,
             key_prefix: "opengp-test-inv".to_string(),
+            circuit_breaker: Default::default(),
+            stampede: Default::default(),
+            entity_ttl: Default::default(),
         },
         CircuitBreaker::default(),
     );
@@ -349,6 +355,9 @@ async fn test_cache_invalidation_pattern() {
             enabled: true,
             default_ttl_secs: 3600,
             key_prefix: "opengp-pattern".to_string(),
+            circuit_breaker: Default::default(),
+            stampede: Default::default(),
+            entity_ttl: Default::default(),
         },
         CircuitBreaker::default(),
     );
@@ -384,5 +393,4 @@ async fn test_cache_invalidation_pattern() {
         assert!(cached.is_none(), "Patient {} should be gone", i);
     }
 }
-
 

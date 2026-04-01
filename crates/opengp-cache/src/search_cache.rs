@@ -9,9 +9,6 @@ use sha2::{Digest, Sha256};
 use crate::error::CacheError;
 use crate::service::CacheServiceImpl;
 
-/// Default TTL for cached search results (5 minutes)
-const SEARCH_CACHE_TTL: u64 = 300;
-
 /// Compute SHA256 hash of a search query
 fn hash_query(query: &str) -> String {
     let mut hasher = Sha256::new();
@@ -96,7 +93,7 @@ pub async fn set_search_results_default_ttl(
     query_hash: &str,
     results: &[Patient],
 ) -> Result<(), CacheError> {
-    set_search_results(cache, query_hash, results, SEARCH_CACHE_TTL).await
+    set_search_results(cache, query_hash, results, cache.search_ttl_secs()).await
 }
 
 /// Set cached search results by query string (hashes the query)
@@ -158,8 +155,4 @@ mod tests {
         assert_eq!(key, "search:abc123");
     }
 
-    #[test]
-    fn test_search_cache_ttl_constant() {
-        assert_eq!(SEARCH_CACHE_TTL, 300);
-    }
 }

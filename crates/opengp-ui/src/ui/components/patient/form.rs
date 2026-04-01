@@ -5,8 +5,9 @@
 use std::collections::HashMap;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
-use opengp_config::forms::{
-    FieldDefinition, FieldType as ConfigFieldType, FormConfig, ValidationRules,
+use opengp_config::{
+    forms::{FieldDefinition, FieldType as ConfigFieldType, FormConfig, ValidationRules},
+    PatientConfig,
 };
 use opengp_domain::domain::patient::{
     Address, EmergencyContact, Ihi, MedicareNumber, NewPatientData, Patient, PhoneNumber,
@@ -399,8 +400,8 @@ impl crate::ui::widgets::DynamicForm for PatientForm {
 }
 
 impl PatientForm {
-    pub fn new(theme: Theme) -> Self {
-        let field_definitions = load_patient_field_definitions();
+    pub fn new(theme: Theme, patient_config: &opengp_config::PatientConfig) -> Self {
+        let field_definitions = load_patient_field_definitions(patient_config);
         let field_ids: Vec<String> = field_definitions
             .iter()
             .filter(|field| field.visible && field.navigable)
@@ -464,13 +465,17 @@ impl PatientForm {
         form
     }
 
-    pub fn from_patient(patient: Patient, theme: Theme) -> Self {
+    pub fn from_patient(
+        patient: Patient,
+        theme: Theme,
+        patient_config: &opengp_config::PatientConfig,
+    ) -> Self {
         let gender = patient.gender;
         let concession_type = patient.concession_type;
         let atsi_status = patient.aboriginal_torres_strait_islander;
         let interpreter_required = patient.interpreter_required;
 
-        let mut form = Self::new(theme);
+        let mut form = Self::new(theme, patient_config);
         form.mode = FormMode::Edit(patient.id);
         form.form_state.mode = FormMode::Edit(patient.id);
 
@@ -1097,17 +1102,21 @@ impl PatientForm {
     }
 }
 
-fn load_patient_field_definitions() -> Vec<FieldDefinition> {
+fn load_patient_field_definitions(
+    patient_config: &opengp_config::PatientConfig,
+) -> Vec<FieldDefinition> {
     if let Ok(config) = FormConfig::load() {
         if let Some(form) = config.forms.get("patient") {
             return form.fields.clone();
         }
     }
 
-    fallback_patient_field_definitions()
+    fallback_patient_field_definitions(patient_config)
 }
 
-fn fallback_patient_field_definitions() -> Vec<FieldDefinition> {
+fn fallback_patient_field_definitions(
+    patient_config: &opengp_config::PatientConfig,
+) -> Vec<FieldDefinition> {
     PatientFormField::all()
         .into_iter()
         .map(|field| {
@@ -1161,42 +1170,24 @@ fn fallback_patient_field_definitions() -> Vec<FieldDefinition> {
 
             if field.is_dropdown() {
                 definition.options = match field {
-                    PatientFormField::Gender => vec![
-                        opengp_config::forms::SelectOption {
-                            value: "Male".to_string(),
-                            label: "Male".to_string(),
-                        },
-                        opengp_config::forms::SelectOption {
-                            value: "Female".to_string(),
-                            label: "Female".to_string(),
-                        },
-                        opengp_config::forms::SelectOption {
-                            value: "Other".to_string(),
-                            label: "Other".to_string(),
-                        },
-                        opengp_config::forms::SelectOption {
-                            value: "PreferNotToSay".to_string(),
-                            label: "Prefer not to say".to_string(),
-                        },
-                    ],
-                    PatientFormField::ConcessionType => vec![
-                        opengp_config::forms::SelectOption {
-                            value: "DVA".to_string(),
-                            label: "DVA".to_string(),
-                        },
-                        opengp_config::forms::SelectOption {
-                            value: "Pensioner".to_string(),
-                            label: "Pensioner".to_string(),
-                        },
-                        opengp_config::forms::SelectOption {
-                            value: "HealthcareCard".to_string(),
-                            label: "Healthcare Card".to_string(),
-                        },
-                        opengp_config::forms::SelectOption {
-                            value: "SafetyNetCard".to_string(),
-                            label: "Safety Net Card".to_string(),
-                        },
-                    ],
+                    PatientFormField::Gender => patient_config
+                        .gender
+                        .iter()
+                        .filter(|(_, opt)| opt.enabled)
+                        .map(|(value, opt)| opengp_config::forms::SelectOption {
+                            value: value.clone(),
+                            label: opt.label.clone(),
+                        })
+                        .collect(),
+                    PatientFormField::ConcessionType => patient_config
+                        .concession_type
+                        .iter()
+                        .filter(|(_, opt)| opt.enabled)
+                        .map(|(value, opt)| opengp_config::forms::SelectOption {
+                            value: value.clone(),
+                            label: opt.label.clone(),
+                        })
+                        .collect(),
                     PatientFormField::InterpreterRequired => vec![
                         opengp_config::forms::SelectOption {
                             value: "Yes".to_string(),
@@ -1207,28 +1198,15 @@ fn fallback_patient_field_definitions() -> Vec<FieldDefinition> {
                             label: "No".to_string(),
                         },
                     ],
-                    PatientFormField::AtsiStatus => vec![
-                        opengp_config::forms::SelectOption {
-                            value: "AboriginalNotTorresStrait".to_string(),
-                            label: "Aboriginal (not Torres Strait)".to_string(),
-                        },
-                        opengp_config::forms::SelectOption {
-                            value: "TorresStraitNotAboriginal".to_string(),
-                            label: "Torres Strait (not Aboriginal)".to_string(),
-                        },
-                        opengp_config::forms::SelectOption {
-                            value: "BothAboriginalAndTorresStrait".to_string(),
-                            label: "Both Aboriginal and Torres Strait".to_string(),
-                        },
-                        opengp_config::forms::SelectOption {
-                            value: "NeitherAboriginalNorTorresStrait".to_string(),
-                            label: "Neither Aboriginal nor Torres Strait".to_string(),
-                        },
-                        opengp_config::forms::SelectOption {
-                            value: "NotStated".to_string(),
-                            label: "Not stated".to_string(),
-                        },
-                    ],
+                    PatientFormField::AtsiStatus => patient_config
+                        .atsi_status
+                        .iter()
+                        .filter(|(_, opt)| opt.enabled)
+                        .map(|(value, opt)| opengp_config::forms::SelectOption {
+                            value: value.clone(),
+                            label: opt.label.clone(),
+                        })
+                        .collect(),
                     _ => vec![],
                 };
             }
@@ -1430,7 +1408,7 @@ mod tests {
     #[test]
     fn test_form_creation() {
         let theme = Theme::dark();
-        let form = PatientForm::new(theme);
+        let form = PatientForm::new(theme, &PatientConfig::default());
 
         assert!(!form.is_edit_mode());
         assert_eq!(form.focused_field(), PatientFormField::FirstName);
@@ -1440,7 +1418,7 @@ mod tests {
     #[test]
     fn test_form_validation_required() {
         let theme = Theme::dark();
-        let mut form = PatientForm::new(theme);
+        let mut form = PatientForm::new(theme, &PatientConfig::default());
 
         FormNavigation::validate(&mut form);
         assert!(form.has_errors());
@@ -1451,7 +1429,7 @@ mod tests {
     #[test]
     fn test_form_validation_email() {
         let theme = Theme::dark();
-        let mut form = PatientForm::new(theme);
+        let mut form = PatientForm::new(theme, &PatientConfig::default());
 
         form.set_value(PatientFormField::Email, "invalid".to_string());
         FormNavigation::validate(&mut form);
@@ -1465,7 +1443,7 @@ mod tests {
     #[test]
     fn test_text_fields_use_textarea_state() {
         let theme = Theme::dark();
-        let mut form = PatientForm::new(theme);
+        let mut form = PatientForm::new(theme, &PatientConfig::default());
 
         form.set_value(PatientFormField::FirstName, "Alice".to_string());
         assert_eq!(form.get_value(PatientFormField::FirstName), "Alice");
@@ -1482,7 +1460,7 @@ mod tests {
     #[test]
     fn test_dynamic_form_string_access() {
         let theme = Theme::dark();
-        let mut form = PatientForm::new(theme);
+        let mut form = PatientForm::new(theme, &PatientConfig::default());
 
         <PatientForm as crate::ui::widgets::DynamicForm>::set_value(
             &mut form,
@@ -1501,7 +1479,7 @@ mod tests {
         use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
         let theme = Theme::dark();
-        let mut form = PatientForm::new(theme);
+        let mut form = PatientForm::new(theme, &PatientConfig::default());
         form.focused_field = FIELD_FIRST_NAME.to_string();
 
         let key = KeyEvent::new(KeyCode::Char('J'), KeyModifiers::NONE);
@@ -1515,7 +1493,7 @@ mod tests {
         use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
         let theme = Theme::dark();
-        let mut form = PatientForm::new(theme);
+        let mut form = PatientForm::new(theme, &PatientConfig::default());
         assert_eq!(form.focused_field(), PatientFormField::FirstName);
 
         let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
@@ -1526,7 +1504,7 @@ mod tests {
     #[test]
     fn test_single_line_height_mode() {
         let theme = Theme::dark();
-        let form = PatientForm::new(theme);
+        let form = PatientForm::new(theme, &PatientConfig::default());
 
         assert_eq!(
             form.form_state
@@ -1565,7 +1543,7 @@ mod tests {
     #[test]
     fn test_error_synced_to_textarea_state() {
         let theme = Theme::dark();
-        let mut form = PatientForm::new(theme);
+        let mut form = PatientForm::new(theme, &PatientConfig::default());
 
         FormNavigation::validate(&mut form);
         assert!(form
@@ -1587,7 +1565,7 @@ mod tests {
     #[test]
     fn test_to_new_patient_data_valid() {
         let theme = Theme::dark();
-        let mut form = PatientForm::new(theme);
+        let mut form = PatientForm::new(theme, &PatientConfig::default());
 
         form.set_value(PatientFormField::FirstName, "Alice".to_string());
         form.set_value(PatientFormField::LastName, "Smith".to_string());
@@ -1607,7 +1585,7 @@ mod tests {
     #[test]
     fn test_to_new_patient_data_invalid_returns_none() {
         let theme = Theme::dark();
-        let mut form = PatientForm::new(theme);
+        let mut form = PatientForm::new(theme, &PatientConfig::default());
 
         form.set_value(PatientFormField::FirstName, "Alice".to_string());
         form.set_value(PatientFormField::LastName, "".to_string());

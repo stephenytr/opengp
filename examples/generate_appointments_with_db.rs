@@ -19,11 +19,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("==========================================\n");
 
     let config = Config::from_env()?;
-    let pool = create_pool(&config.database).await?;
+    let pool = create_pool(&config.app.api_server.database).await?;
     run_migrations(&pool).await?;
     let pool = pool.as_postgres().clone();
 
-    println!("Database connected: {}\n", config.database.url);
+    println!("Database connected: {}\n", config.app.api_server.database.url);
 
     let crypto = Arc::new(EncryptionService::new()?);
     let patient_repo = Arc::new(SqlxPatientRepository::new(pool.clone(), crypto));

@@ -9,9 +9,6 @@ use uuid::Uuid;
 use crate::error::CacheError;
 use crate::service::CacheServiceImpl;
 
-/// Default TTL for cached patient data (15 minutes)
-const PATIENT_CACHE_TTL: u64 = 900;
-
 /// Build a cache key for a patient by ID
 fn patient_cache_key(id: Uuid) -> String {
     format!("patient:{}", id)
@@ -67,7 +64,7 @@ pub async fn set_patient_default_ttl(
     cache: &CacheServiceImpl,
     patient: &Patient,
 ) -> Result<(), CacheError> {
-    set_patient(cache, patient, PATIENT_CACHE_TTL).await
+    set_patient(cache, patient, cache.patient_ttl_secs()).await
 }
 
 /// Invalidate (delete) a patient from cache
@@ -113,8 +110,4 @@ mod tests {
         assert_eq!(key, format!("patient:{}", id));
     }
 
-    #[test]
-    fn test_patient_cache_ttl_constant() {
-        assert_eq!(PATIENT_CACHE_TTL, 900);
-    }
 }

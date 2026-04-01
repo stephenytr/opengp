@@ -39,13 +39,13 @@ impl AllergyForm {
         if field_id == FIELD_ALLERGY_TYPE
             && errors.iter().any(|error| error == "This field is required")
         {
-            errors = vec!["Allergy type is required (Drug/Food/Environmental/Other)".to_string()];
+            errors = vec!["Allergy type is required".to_string()];
         }
 
         if field_id == FIELD_SEVERITY
             && errors.iter().any(|error| error == "This field is required")
         {
-            errors = vec!["Severity is required (Mild/Moderate/Severe)".to_string()];
+            errors = vec!["Severity is required".to_string()];
         }
 
         if field_id == FIELD_ONSET_DATE && !value.trim().is_empty() && parse_date(&value).is_none()

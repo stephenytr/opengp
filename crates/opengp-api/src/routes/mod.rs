@@ -190,30 +190,16 @@ mod tests {
     use opengp_domain::domain::api::LoginResponse;
     use opengp_domain::domain::audit::{AuditAction, AuditEmitter, AuditEmitterError, AuditEntry};
     use opengp_domain::domain::user::Session;
+    use opengp_config::Config;
     use tokio::sync::RwLock;
     use tower::util::ServiceExt;
-
-    use crate::ApiConfig;
 
     use super::*;
 
     #[tokio::test]
     #[ignore] // Requires PostgreSQL database connection
     async fn health_endpoint_returns_ok_with_state_extraction() {
-        let config = ApiConfig {
-            host: "127.0.0.1".to_string(),
-            port: 8080,
-            database_url: "postgres://postgres:postgres@127.0.0.1:5432/opengp".to_string(),
-            patient_database_url: None,
-            database_max_connections: 10,
-            database_min_connections: 2,
-            connect_timeout_secs: 30,
-            idle_timeout_secs: 600,
-            encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
-                .to_string(),
-            session_timeout_minutes: 480,
-            log_level: "info".to_string(),
-        };
+        let config = test_config();
 
         let state = ApiState::new(config)
             .await
@@ -236,20 +222,7 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requires PostgreSQL database connection
     async fn health_endpoint_returns_json_with_status_and_uptime() {
-        let config = ApiConfig {
-            host: "127.0.0.1".to_string(),
-            port: 8080,
-            database_url: "postgres://postgres:postgres@127.0.0.1:5432/opengp".to_string(),
-            patient_database_url: None,
-            database_max_connections: 10,
-            database_min_connections: 2,
-            connect_timeout_secs: 30,
-            idle_timeout_secs: 600,
-            encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
-                .to_string(),
-            session_timeout_minutes: 480,
-            log_level: "info".to_string(),
-        };
+        let config = test_config();
 
         let state = ApiState::new(config)
             .await
@@ -279,20 +252,7 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requires PostgreSQL database connection
     async fn metrics_endpoint_returns_json_with_counters() {
-        let config = ApiConfig {
-            host: "127.0.0.1".to_string(),
-            port: 8080,
-            database_url: "postgres://postgres:postgres@127.0.0.1:5432/opengp".to_string(),
-            patient_database_url: None,
-            database_max_connections: 10,
-            database_min_connections: 2,
-            connect_timeout_secs: 30,
-            idle_timeout_secs: 600,
-            encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
-                .to_string(),
-            session_timeout_minutes: 480,
-            log_level: "info".to_string(),
-        };
+        let config = test_config();
 
         let state = ApiState::new(config)
             .await
@@ -1557,21 +1517,21 @@ mod tests {
         )
     }
 
-    fn test_config() -> ApiConfig {
-        ApiConfig {
-            host: "127.0.0.1".to_string(),
-            port: 8080,
-            database_url: "postgres://postgres:postgres@127.0.0.1:5432/opengp".to_string(),
-            patient_database_url: None,
-            database_max_connections: 10,
-            database_min_connections: 2,
-            connect_timeout_secs: 30,
-            idle_timeout_secs: 600,
-            encryption_key: "0000000000000000000000000000000000000000000000000000000000000000"
-                .to_string(),
-            session_timeout_minutes: 480,
-            log_level: "info".to_string(),
-        }
+    fn test_config() -> Config {
+        let mut config = Config::default();
+        config.app.api_server.host = "127.0.0.1".to_string();
+        config.app.api_server.port = 8080;
+        config.app.api_server.database.url =
+            "postgres://postgres:postgres@127.0.0.1:5432/opengp".to_string();
+        config.app.api_server.database.max_connections = 10;
+        config.app.api_server.database.min_connections = 2;
+        config.app.api_server.database.connect_timeout_secs = 30;
+        config.app.api_server.database.idle_timeout_secs = 600;
+        config.app.session.timeout_secs = 480 * 60;
+        config.app.logging.level = "info".to_string();
+        config.encryption_key =
+            "0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        config
     }
 
     #[tokio::test]
