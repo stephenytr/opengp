@@ -87,7 +87,7 @@ mod tests {
         BillingType, ClaimType, InvoiceItem, InvoiceStatus, MBSItem, PaymentMethod, RepositoryError,
     };
     use async_trait::async_trait;
-    use chrono::{NaiveDate, Utc};
+    use chrono::{DateTime, NaiveDate, Utc};
 
     struct MockBillingRepository {
         invoices: Vec<Invoice>,
@@ -116,12 +116,35 @@ mod tests {
                 .collect())
         }
 
+        async fn find_invoices_by_date_range(
+            &self,
+            _start: DateTime<Utc>,
+            _end: DateTime<Utc>,
+        ) -> Result<Vec<Invoice>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn find_invoices_by_status(
+            &self,
+            _status: InvoiceStatus,
+        ) -> Result<Vec<Invoice>, RepositoryError> {
+            Ok(vec![])
+        }
+
         async fn create_invoice(&self, invoice: Invoice) -> Result<Invoice, RepositoryError> {
             Ok(invoice)
         }
 
         async fn update_invoice(&self, invoice: Invoice) -> Result<Invoice, RepositoryError> {
             Ok(invoice)
+        }
+
+        async fn update_invoice_status(
+            &self,
+            _id: Uuid,
+            _status: InvoiceStatus,
+        ) -> Result<(), RepositoryError> {
+            Ok(())
         }
 
         async fn find_claim_by_id(
@@ -150,8 +173,64 @@ mod tests {
                 .collect())
         }
 
+        async fn find_claims_by_patient(
+            &self,
+            _patient_id: Uuid,
+        ) -> Result<Vec<MedicareClaim>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn find_claims_by_date_range(
+            &self,
+            _start: DateTime<Utc>,
+            _end: DateTime<Utc>,
+        ) -> Result<Vec<MedicareClaim>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn update_claim_status(
+            &self,
+            _id: Uuid,
+            _status: ClaimStatus,
+        ) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+
         async fn record_payment(&self, payment: Payment) -> Result<Payment, RepositoryError> {
             Ok(payment)
+        }
+
+        async fn find_payments_by_invoice(
+            &self,
+            _invoice_id: Uuid,
+        ) -> Result<Vec<Payment>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn find_payments_by_patient(
+            &self,
+            _patient_id: Uuid,
+        ) -> Result<Vec<Payment>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn find_payments_by_date_range(
+            &self,
+            _start: DateTime<Utc>,
+            _end: DateTime<Utc>,
+        ) -> Result<Vec<Payment>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn find_invoice_items(
+            &self,
+            _invoice_id: Uuid,
+        ) -> Result<Vec<InvoiceItem>, RepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn next_invoice_number(&self, year: i32) -> Result<String, RepositoryError> {
+            Ok(format!("INV-{}-00001", year))
         }
     }
 
