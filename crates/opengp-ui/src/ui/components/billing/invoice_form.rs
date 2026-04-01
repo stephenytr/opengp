@@ -1,6 +1,6 @@
 #![cfg(feature = "billing")]
 
-use opengp_domain::domain::billing::BillingType;
+use opengp_domain::domain::billing::{BillingType, InvoiceStatus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Modifier, Style};
@@ -25,6 +25,7 @@ pub struct InvoiceForm {
     pub items: Vec<InvoiceItemDraft>,
     pub focused_field: usize,
     pub error: Option<String>,
+    pub invoice_status: Option<InvoiceStatus>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -46,6 +47,7 @@ impl Default for InvoiceForm {
             items: vec![InvoiceItemDraft::default()],
             focused_field: 0,
             error: None,
+            invoice_status: None,
         }
     }
 }
@@ -67,11 +69,21 @@ impl InvoiceForm {
         Self::default()
     }
 
+    pub fn is_editable(&self) -> bool {
+        matches!(self.invoice_status, None | Some(InvoiceStatus::Draft))
+    }
+
     pub fn add_item(&mut self) {
+        if !self.is_editable() {
+            return;
+        }
         self.items.push(InvoiceItemDraft::default());
     }
 
     pub fn remove_item(&mut self, index: usize) {
+        if !self.is_editable() {
+            return;
+        }
         if self.items.len() <= 1 {
             return;
         }
