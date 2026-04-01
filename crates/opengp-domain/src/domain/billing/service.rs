@@ -176,6 +176,7 @@ mod tests {
                 quantity: 1,
                 unit_price: 89.0,
                 amount: 89.0,
+                is_gst_free: true,
             }],
             subtotal: 0.0,
             gst_amount: 0.0,
@@ -244,8 +245,63 @@ mod tests {
         assert!(result.is_ok());
         let invoice = result.expect("invoice should be created");
         assert_eq!(invoice.subtotal, 89.0);
-        assert_eq!(invoice.gst_amount, 8.9);
-        assert_eq!(invoice.total_amount, 97.9);
+        assert_eq!(invoice.gst_amount, 0.0);
+        assert_eq!(invoice.total_amount, 89.0);
+    }
+
+    #[tokio::test]
+    async fn test_mixed_invoice_gst() {
+        let service = new_service(vec![], vec![]);
+        let now = Utc::now();
+        let invoice = Invoice {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            practitioner_id: Uuid::new_v4(),
+            consultation_id: None,
+            invoice_number: "INV-1002".to_string(),
+            invoice_date: now.date_naive(),
+            due_date: Some(now.date_naive()),
+            items: vec![
+                InvoiceItem {
+                    id: Uuid::new_v4(),
+                    description: "Medical consultation".to_string(),
+                    item_code: Some("23".to_string()),
+                    quantity: 1,
+                    unit_price: 89.0,
+                    amount: 89.0,
+                    is_gst_free: true,
+                },
+                InvoiceItem {
+                    id: Uuid::new_v4(),
+                    description: "Supplies".to_string(),
+                    item_code: Some("SUPP-001".to_string()),
+                    quantity: 1,
+                    unit_price: 100.0,
+                    amount: 100.0,
+                    is_gst_free: false,
+                },
+            ],
+            subtotal: 0.0,
+            gst_amount: 0.0,
+            total_amount: 0.0,
+            amount_paid: 0.0,
+            amount_outstanding: 0.0,
+            status: InvoiceStatus::Issued,
+            billing_type: BillingType::PrivateBilling,
+            notes: None,
+            created_at: now,
+            updated_at: now,
+            created_by: Uuid::new_v4(),
+            updated_by: None,
+        };
+
+        let result = service.create_invoice(invoice).await;
+
+        assert!(result.is_ok());
+        let invoice = result.expect("invoice should be created");
+        assert_eq!(invoice.subtotal, 189.0);
+        assert_eq!(invoice.gst_amount, 10.0);
+        assert_eq!(invoice.total_amount, 199.0);
     }
 
     #[tokio::test]

@@ -36,9 +36,16 @@ pub struct Invoice {
 
 impl Invoice {
     /// Recalculate invoice totals including GST, based on the current item list.
+    /// GST is only applied to items where is_gst_free is false.
     pub fn calculate_totals(&mut self) {
         self.subtotal = self.items.iter().map(|item| item.amount).sum();
-        self.gst_amount = self.subtotal * 0.1;
+        let taxable_amount: f64 = self
+            .items
+            .iter()
+            .filter(|item| !item.is_gst_free)
+            .map(|item| item.amount)
+            .sum();
+        self.gst_amount = taxable_amount * 0.1;
         self.total_amount = self.subtotal + self.gst_amount;
         self.amount_outstanding = self.total_amount - self.amount_paid;
     }
@@ -67,6 +74,8 @@ pub struct InvoiceItem {
     pub quantity: u32,
     pub unit_price: f64,
     pub amount: f64,
+    /// Whether this item is GST-free. Medical services are GST-free under Tax Act Section 38-7.
+    pub is_gst_free: bool,
 }
 
 /// Status of an invoice throughout the billing lifecycle.
