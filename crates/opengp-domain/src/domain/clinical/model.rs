@@ -25,6 +25,9 @@ pub struct Consultation {
     pub signed_at: Option<DateTime<Utc>>,
     pub signed_by: Option<Uuid>,
 
+    pub consultation_started_at: Option<DateTime<Utc>>,
+    pub consultation_ended_at: Option<DateTime<Utc>>,
+
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub version: i32,
@@ -36,7 +39,8 @@ impl Consultation {
     /// Create a new consultation for a patient and practitioner.
     ///
     /// The consultation date is initialised to the current UTC time
-    /// and the record starts in an unsigned state.
+    /// and the record starts in an unsigned state. Timer fields are
+    /// initialized to None.
     pub fn new(
         patient_id: Uuid,
         practitioner_id: Uuid,
@@ -54,6 +58,8 @@ impl Consultation {
             is_signed: false,
             signed_at: None,
             signed_by: None,
+            consultation_started_at: None,
+            consultation_ended_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             version: 1,
@@ -73,6 +79,39 @@ impl Consultation {
         self.signed_by = Some(user_id);
         self.updated_at = Utc::now();
         self.updated_by = Some(user_id);
+    }
+
+    /// Start the consultation timer.
+    ///
+    /// Sets `consultation_started_at` to the current UTC time and clears
+    /// any previous end time.
+    pub fn start_timer(&mut self) {
+        self.consultation_started_at = Some(Utc::now());
+        self.consultation_ended_at = None;
+    }
+
+    /// Stop the consultation timer.
+    ///
+    /// Sets `consultation_ended_at` to the current UTC time and returns
+    /// the duration in minutes if the timer was started. Returns `None`
+    /// if the timer was never started.
+    pub fn stop_timer(&mut self) -> Option<i64> {
+        self.consultation_ended_at = Some(Utc::now());
+        self.duration_minutes()
+    }
+
+    /// Calculate the duration of the consultation in minutes.
+    ///
+    /// Returns `Some(minutes)` if both start and end times are present,
+    /// otherwise returns `None`.
+    pub fn duration_minutes(&self) -> Option<i64> {
+        match (self.consultation_started_at, self.consultation_ended_at) {
+            (Some(start), Some(end)) => {
+                let duration = end.signed_duration_since(start);
+                Some(duration.num_minutes())
+            }
+            _ => None,
+        }
     }
 }
 
@@ -291,4 +330,90 @@ pub struct FamilyHistory {
 
     pub created_at: DateTime<Utc>,
     pub created_by: Uuid,
+}
+
+/// Suggest an MBS consultation level based on duration in minutes.
+///
+/// Maps consultation duration to Australian MBS item numbers:
+/// - < 10 min: Level A (item "3")
+/// - 6-20 min: Level B (item "23")
+/// - 20-40 min: Level C (item "36")
+/// - > 40 min: Level D (item "44")
+pub fn suggest_mbs_level(duration_minutes: i64) -> &'static str {
+    match duration_minutes {
+        0..=9 => "3",    // Level A
+        10..=20 => "23", // Level B
+        21..=40 => "36", // Level C
+        _ => "44",       // Level D
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_timer_start_stop() {
+        let user_id = Uuid::new_v4();
+        let mut consultation = Consultation::new(Uuid::new_v4(), Uuid::new_v4(), None, user_id);
+
+        // Initially no timer
+        assert!(consultation.duration_minutes().is_none());
+
+        // Start timer
+        consultation.start_timer();
+        assert!(consultation.consultation_started_at.is_some());
+        assert!(consultation.consultation_ended_at.is_none());
+
+        // Stop timer
+        let duration = consultation.stop_timer();
+        assert!(duration.is_some());
+        assert!(duration.unwrap() >= 0);
+        assert!(consultation.consultation_ended_at.is_some());
+    }
+
+    #[test]
+    fn test_duration_minutes_none_if_not_started() {
+        let user_id = Uuid::new_v4();
+        let consultation = Consultation::new(Uuid::new_v4(), Uuid::new_v4(), None, user_id);
+
+        assert!(consultation.duration_minutes().is_none());
+    }
+
+    #[test]
+    fn test_duration_minutes_none_if_only_started() {
+        let user_id = Uuid::new_v4();
+        let mut consultation = Consultation::new(Uuid::new_v4(), Uuid::new_v4(), None, user_id);
+
+        consultation.start_timer();
+        assert!(consultation.duration_minutes().is_none());
+    }
+
+    #[test]
+    fn test_suggest_mbs_level_level_a() {
+        assert_eq!(suggest_mbs_level(5), "3");
+        assert_eq!(suggest_mbs_level(9), "3");
+        assert_eq!(suggest_mbs_level(0), "3");
+    }
+
+    #[test]
+    fn test_suggest_mbs_level_level_b() {
+        assert_eq!(suggest_mbs_level(10), "23");
+        assert_eq!(suggest_mbs_level(15), "23");
+        assert_eq!(suggest_mbs_level(20), "23");
+    }
+
+    #[test]
+    fn test_suggest_mbs_level_level_c() {
+        assert_eq!(suggest_mbs_level(21), "36");
+        assert_eq!(suggest_mbs_level(30), "36");
+        assert_eq!(suggest_mbs_level(40), "36");
+    }
+
+    #[test]
+    fn test_suggest_mbs_level_level_d() {
+        assert_eq!(suggest_mbs_level(41), "44");
+        assert_eq!(suggest_mbs_level(45), "44");
+        assert_eq!(suggest_mbs_level(100), "44");
+    }
 }
