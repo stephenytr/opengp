@@ -352,6 +352,45 @@ pub struct ThemeConfig {
     pub high_contrast: ColorPalette,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProviderConfig {
+    pub provider_number: String,
+    pub specialty: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PracticeProfile {
+    pub name: String,
+    pub abn: String,
+    pub accreditation_number: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PracticeContact {
+    pub phone: String,
+    pub email: String,
+    pub address: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PracticeBanking {
+    pub bsb: String,
+    pub account_number: String,
+    pub account_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PracticeConfig {
+    #[serde(default)]
+    pub profile: PracticeProfile,
+    #[serde(default)]
+    pub contact: PracticeContact,
+    #[serde(default)]
+    pub providers: HashMap<String, ProviderConfig>,
+    #[serde(default)]
+    pub banking: PracticeBanking,
+}
+
 impl Default for ColorPalette {
     fn default() -> Self {
         Self {
@@ -1202,6 +1241,34 @@ pub fn load_theme_config() -> Result<ThemeConfig, ConfigError> {
     Ok(config)
 }
 
+pub fn load_practice_config() -> Result<PracticeConfig, ConfigError> {
+    let defaults = include_str!("practice.toml");
+    let config: PracticeConfig = toml::from_str(defaults).map_err(|e| {
+        ConfigError::Invalid(format!("failed to parse practice.toml defaults: {e}"))
+    })?;
+
+    if let Ok(path) = std::env::var("PRACTICE_CONFIG_PATH") {
+        match std::fs::read_to_string(&path) {
+            Ok(content) => {
+                let overrides: PracticeConfig = toml::from_str(&content).map_err(|e| {
+                    ConfigError::Invalid(format!(
+                        "failed to parse PRACTICE_CONFIG_PATH overrides: {e}"
+                    ))
+                })?;
+                return Ok(overrides);
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(config),
+            Err(err) => {
+                return Err(ConfigError::Invalid(format!(
+                    "failed to read PRACTICE_CONFIG_PATH: {err}"
+                )))
+            }
+        }
+    }
+
+    Ok(config)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub app: AppConfig,
@@ -1211,6 +1278,7 @@ pub struct Config {
     pub social_history: SocialHistoryConfig,
     pub patient: PatientConfig,
     pub theme: ThemeConfig,
+    pub practice: PracticeConfig,
     pub healthcare: HealthcareConfig,
     pub forms: FormConfig,
     pub encryption_key: String,
@@ -1228,6 +1296,7 @@ impl Config {
             social_history: load_social_history_config()?,
             patient: load_patient_config()?,
             theme: load_theme_config()?,
+            practice: load_practice_config()?,
             healthcare: HealthcareConfig::load()?,
             forms: FormConfig::load()?,
             encryption_key: std::env::var("ENCRYPTION_KEY")
@@ -1246,6 +1315,7 @@ impl Default for Config {
             social_history: SocialHistoryConfig::default(),
             patient: PatientConfig::default(),
             theme: ThemeConfig::default(),
+            practice: PracticeConfig::default(),
             healthcare: HealthcareConfig::default(),
             forms: FormConfig::default(),
             encryption_key: String::new(),
@@ -1295,6 +1365,7 @@ mod tests {
                 ("SOCIAL_HISTORY_CONFIG_PATH", None::<&str>),
                 ("PATIENT_CONFIG_PATH", None::<&str>),
                 ("THEME_CONFIG_PATH", None::<&str>),
+                ("PRACTICE_CONFIG_PATH", None::<&str>),
             ],
             || {
                 assert!(load_app_config().is_ok());
@@ -1304,6 +1375,7 @@ mod tests {
                 assert!(load_social_history_config().is_ok());
                 assert!(load_patient_config().is_ok());
                 assert!(load_theme_config().is_ok());
+                assert!(load_practice_config().is_ok());
             },
         );
     }
@@ -1337,6 +1409,7 @@ mod tests {
         assert!(config.clinical.condition_status.is_empty());
         assert!(config.social_history.smoking_status.is_empty());
         assert!(config.patient.gender.is_empty());
+        assert!(config.practice.profile.name.is_empty());
     }
 
     #[test]
@@ -1351,6 +1424,7 @@ mod tests {
                 ("SOCIAL_HISTORY_CONFIG_PATH", None::<&str>),
                 ("PATIENT_CONFIG_PATH", None::<&str>),
                 ("THEME_CONFIG_PATH", None::<&str>),
+                ("PRACTICE_CONFIG_PATH", None::<&str>),
                 ("HEALTHCARE_CONFIG_PATH", None::<&str>),
                 ("FORMS_CONFIG_PATH", None::<&str>),
             ],
