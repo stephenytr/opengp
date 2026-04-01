@@ -21,6 +21,7 @@ rand = "0.8"
 hex = "0.4"
 utoipa = { version = "5", features = ["chrono", "uuid"] }
 sqlx.workspace = true
+serde_json = "1"
 
 [features]
 billing = []
@@ -31,4 +32,3 @@ prescription = []
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util", "macros"] }
-serde_json = "1"
