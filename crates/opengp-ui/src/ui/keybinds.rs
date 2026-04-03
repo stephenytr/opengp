@@ -140,6 +140,8 @@ pub enum Action {
     SelectAppointment,
     /// Create new appointment
     NewAppointment,
+    /// Mark selected appointment as No Show
+    MarkNoShow,
 
     // Form actions
     /// Move to next field
@@ -468,9 +470,9 @@ impl KeybindRegistry {
         // Schedule keybinds
         self.register(Keybind {
             key: KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
-            action: Action::NewAppointment,
+            action: Action::MarkNoShow,
             context: KeyContext::Schedule,
-            description: "Create new appointment",
+            description: "Mark selected appointment as No Show",
         });
         // Schedule: Toggle practitioner column visibility
         self.register(Keybind {

@@ -84,6 +84,11 @@ impl App {
                         self.pending_appointment_status_transition =
                             Some((appointment_id, AppointmentStatusTransition::MarkCompleted));
                     }
+                    AppointmentDetailModalAction::MarkNoShow => {
+                        let appointment_id = modal.appointment_id();
+                        self.pending_appointment_status_transition =
+                            Some((appointment_id, AppointmentStatusTransition::MarkNoShow));
+                    }
                 }
                 return Action::Enter;
             }

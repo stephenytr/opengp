@@ -25,6 +25,8 @@ pub enum AppointmentDetailModalAction {
     MarkInProgress,
     /// Mark appointment as completed
     MarkCompleted,
+    /// Mark appointment as no show
+    MarkNoShow,
 }
 
 /// Appointment detail modal widget.
@@ -193,6 +195,9 @@ impl AppointmentDetailModal {
         if self.can_mark_completed() {
             count += 1;
         }
+        if self.can_mark_no_show() {
+            count += 1;
+        }
         count
     }
 
@@ -214,6 +219,12 @@ impl AppointmentDetailModal {
         matches!(self.appointment.status, InProgress)
     }
 
+    /// Check if can transition to NoShow
+    fn can_mark_no_show(&self) -> bool {
+        use AppointmentStatus::*;
+        matches!(self.appointment.status, Scheduled | Confirmed | Arrived)
+    }
+
     /// Get the button index for each action
     fn get_button_index(&self) -> std::collections::HashMap<usize, AppointmentDetailModalAction> {
         let mut map = std::collections::HashMap::new();
@@ -230,6 +241,10 @@ impl AppointmentDetailModal {
         }
         if self.can_mark_completed() {
             map.insert(idx, AppointmentDetailModalAction::MarkCompleted);
+            idx += 1;
+        }
+        if self.can_mark_no_show() {
+            map.insert(idx, AppointmentDetailModalAction::MarkNoShow);
             idx += 1;
         }
         map.insert(idx, AppointmentDetailModalAction::ViewClinicalNotes);

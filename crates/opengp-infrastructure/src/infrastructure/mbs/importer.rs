@@ -3,7 +3,7 @@ use std::io::BufReader;
 use std::path::Path;
 
 use opengp_domain::domain::billing::{MbsImportResult, MbsItem};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow, PgPool};
 use thiserror::Error;
 
 use super::xml_parser::{parse_mbs_xml_reader, MbsXmlParseError};
@@ -41,8 +41,8 @@ struct MbsItemRow {
     emsn_cap: Option<String>,
     emsn_maximum_cap: Option<f64>,
     emsn_percentage_cap: Option<f64>,
-    is_gst_free: i64,
-    is_active: i64,
+    is_gst_free: bool,
+    is_active: bool,
     imported_at: String,
 }
 
@@ -70,19 +70,19 @@ impl MbsItemRow {
             emsn_cap: self.emsn_cap,
             emsn_maximum_cap: self.emsn_maximum_cap,
             emsn_percentage_cap: self.emsn_percentage_cap,
-            is_gst_free: self.is_gst_free != 0,
-            is_active: self.is_active != 0,
+            is_gst_free: self.is_gst_free,
+            is_active: self.is_active,
             imported_at: self.imported_at,
         }
     }
 }
 
 pub struct SqlxMbsRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl SqlxMbsRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
@@ -99,7 +99,7 @@ impl SqlxMbsRepository {
 
         for item in &items {
             let existing = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(1) FROM mbs_items WHERE item_num = ?",
+                "SELECT COUNT(1) FROM mbs_items WHERE item_num = $1",
             )
             .bind(item.item_num)
             .fetch_one(&mut *tx)
@@ -111,7 +111,7 @@ impl SqlxMbsRepository {
 
             sqlx::query(
                 r#"
-                INSERT OR REPLACE INTO mbs_items (
+                INSERT INTO mbs_items (
                     item_num, sub_item_num, item_start_date, item_end_date,
                     category, group_code, sub_group, sub_heading,
                     item_type, fee_type, provider_type,
@@ -119,7 +119,31 @@ impl SqlxMbsRepository {
                     derived_fee, description, description_start_date,
                     emsn_cap, emsn_maximum_cap, emsn_percentage_cap,
                     is_gst_free, is_active, imported_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+                ON CONFLICT (item_num) DO UPDATE SET
+                  sub_item_num = EXCLUDED.sub_item_num,
+                  item_start_date = EXCLUDED.item_start_date,
+                  item_end_date = EXCLUDED.item_end_date,
+                  category = EXCLUDED.category,
+                  group_code = EXCLUDED.group_code,
+                  sub_group = EXCLUDED.sub_group,
+                  sub_heading = EXCLUDED.sub_heading,
+                  item_type = EXCLUDED.item_type,
+                  fee_type = EXCLUDED.fee_type,
+                  provider_type = EXCLUDED.provider_type,
+                  schedule_fee = EXCLUDED.schedule_fee,
+                  benefit_75 = EXCLUDED.benefit_75,
+                  benefit_85 = EXCLUDED.benefit_85,
+                  benefit_100 = EXCLUDED.benefit_100,
+                  derived_fee = EXCLUDED.derived_fee,
+                  description = EXCLUDED.description,
+                  description_start_date = EXCLUDED.description_start_date,
+                  emsn_cap = EXCLUDED.emsn_cap,
+                  emsn_maximum_cap = EXCLUDED.emsn_maximum_cap,
+                  emsn_percentage_cap = EXCLUDED.emsn_percentage_cap,
+                  is_gst_free = EXCLUDED.is_gst_free,
+                  is_active = EXCLUDED.is_active,
+                  imported_at = EXCLUDED.imported_at
                 "#,
             )
             .bind(item.item_num)
@@ -143,8 +167,8 @@ impl SqlxMbsRepository {
             .bind(item.emsn_cap.as_deref())
             .bind(item.emsn_maximum_cap)
             .bind(item.emsn_percentage_cap)
-            .bind(if item.is_gst_free { 1 } else { 0 })
-            .bind(if item.is_active { 1 } else { 0 })
+            .bind(item.is_gst_free)
+            .bind(item.is_active)
             .bind(item.imported_at.as_str())
             .execute(&mut *tx)
             .await?;
@@ -172,7 +196,7 @@ impl SqlxMbsRepository {
                 emsn_cap, emsn_maximum_cap, emsn_percentage_cap,
                 is_gst_free, is_active, imported_at
             FROM mbs_items
-            WHERE item_num = ?
+            WHERE item_num = $1
             "#,
         )
         .bind(item_num)
@@ -196,9 +220,9 @@ impl SqlxMbsRepository {
                 emsn_cap, emsn_maximum_cap, emsn_percentage_cap,
                 is_gst_free, is_active, imported_at
             FROM mbs_items
-            WHERE is_active = 1 AND (CAST(item_num AS TEXT) LIKE ? OR description LIKE ?)
+            WHERE is_active = true AND (item_num::text LIKE $1 OR description LIKE $2)
             ORDER BY item_num
-            LIMIT ?
+            LIMIT $3
             "#,
         )
         .bind(&pattern)
@@ -222,7 +246,7 @@ impl SqlxMbsRepository {
                 emsn_cap, emsn_maximum_cap, emsn_percentage_cap,
                 is_gst_free, is_active, imported_at
             FROM mbs_items
-            WHERE is_active = 1
+            WHERE is_active = true
             ORDER BY item_num
             "#,
         )
@@ -233,7 +257,7 @@ impl SqlxMbsRepository {
     }
 
     pub async fn count(&self) -> Result<i64, MbsImportError> {
-        let total = sqlx::query_scalar::<_, i64>("SELECT COUNT(1) FROM mbs_items WHERE is_active = 1")
+        let total = sqlx::query_scalar::<_, i64>("SELECT COUNT(1) FROM mbs_items WHERE is_active = true")
             .fetch_one(&self.pool)
             .await?;
 

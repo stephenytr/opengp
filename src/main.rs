@@ -271,6 +271,11 @@ async fn run_tui(
                         .update_appointment_status(appointment_id, "completed")
                         .await
                 }
+                opengp_ui::ui::app::AppointmentStatusTransition::MarkNoShow => {
+                    api_client
+                        .update_appointment_status(appointment_id, "no_show")
+                        .await
+                }
             };
             match result {
                 Ok(_) => {

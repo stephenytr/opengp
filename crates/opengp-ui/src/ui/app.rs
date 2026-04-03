@@ -184,6 +184,7 @@ pub enum AppointmentStatusTransition {
     MarkArrived,
     MarkInProgress,
     MarkCompleted,
+    MarkNoShow,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
