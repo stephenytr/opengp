@@ -257,7 +257,7 @@ mod tests {
     use crate::domain::billing::{
         BillingType, ClaimType, InvoiceItem, InvoiceStatus, MBSItem, RepositoryError,
     };
-    use crate::domain::clinical::{Consultation, RepositoryError as ClinicalRepositoryError};
+    use crate::domain::clinical::{Consultation, RepositoryError as ClinicalRepositoryError, TimerState};
     use async_trait::async_trait;
     use chrono::{DateTime, NaiveDate, Utc};
     use std::sync::Mutex;
@@ -484,6 +484,18 @@ mod tests {
 
         async fn sign(&self, _id: Uuid, _user_id: Uuid) -> Result<(), ClinicalRepositoryError> {
             Ok(())
+        }
+
+        async fn start_timer(&self, _id: Uuid) -> Result<(), ClinicalRepositoryError> {
+            Ok(())
+        }
+
+        async fn stop_timer(&self, _id: Uuid) -> Result<Option<i64>, ClinicalRepositoryError> {
+            Ok(None)
+        }
+
+        async fn get_timer_state(&self, _id: Uuid) -> Result<Option<TimerState>, ClinicalRepositoryError> {
+            Ok(None)
         }
     }
 

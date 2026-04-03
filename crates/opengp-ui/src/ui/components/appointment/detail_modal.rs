@@ -503,7 +503,12 @@ mod tests {
         assert!(!modal.is_clinical_focused());
 
         modal.next_button();
-        // Next is View Clinical Notes (index 2)
+        // Next is Mark No Show (index 2) - added for all valid statuses
+        assert!(!modal.is_close_focused());
+        assert!(!modal.is_clinical_focused());
+
+        modal.next_button();
+        // Next is View Clinical Notes (index 3)
         assert!(!modal.is_close_focused());
         assert!(modal.is_clinical_focused());
 
@@ -512,7 +517,7 @@ mod tests {
         assert!(modal.is_close_focused());
 
         modal.prev_button();
-        // Previous is View Clinical Notes (index 2)
+        // Previous is View Clinical Notes (index 3)
         assert!(!modal.is_close_focused());
         assert!(modal.is_clinical_focused());
     }

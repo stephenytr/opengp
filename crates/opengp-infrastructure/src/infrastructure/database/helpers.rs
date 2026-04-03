@@ -163,9 +163,7 @@ mod tests {
     fn test_uuid_to_bytes_returns_16_bytes() {
         let id = Uuid::new_v4();
         let bytes = uuid_to_bytes(&id);
-        #[cfg(all(feature = "sqlite", not(feature = "postgres")))]
-        assert_eq!(bytes.len(), 16);
-        #[cfg(feature = "postgres")]
+        // PostgreSQL: uuid_to_bytes is a no-op, returns the Uuid as-is
         assert_eq!(bytes, id);
     }
 
@@ -190,12 +188,7 @@ mod tests {
     fn test_uuid_to_bytes_known_uuid() {
         let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
         let bytes = uuid_to_bytes(&id);
-        #[cfg(all(feature = "sqlite", not(feature = "postgres")))]
-        {
-            assert_eq!(bytes.len(), 16);
-            assert_eq!(bytes, id.as_bytes());
-        }
-        #[cfg(feature = "postgres")]
+        // PostgreSQL: uuid_to_bytes is a no-op, returns the Uuid as-is
         assert_eq!(bytes, id);
     }
 
@@ -209,36 +202,6 @@ mod tests {
         let bytes = uuid_to_bytes(&original);
         let restored = bytes_to_uuid(&bytes).unwrap();
         assert_eq!(original, restored);
-    }
-
-    #[cfg(all(feature = "sqlite", not(feature = "postgres")))]
-    #[test]
-    fn test_bytes_to_uuid_invalid_length_too_short() {
-        let bytes = vec![1, 2, 3, 4, 5];
-        let result = bytes_to_uuid(&bytes);
-        assert!(result.is_err());
-        match result {
-            Err(RepositoryError::Base(BaseRepositoryError::ConstraintViolation(msg))) => {
-                assert!(msg.contains("Invalid UUID bytes"));
-            }
-            _ => panic!("Expected ConstraintViolation error"),
-        }
-    }
-
-    #[cfg(all(feature = "sqlite", not(feature = "postgres")))]
-    #[test]
-    fn test_bytes_to_uuid_invalid_length_too_long() {
-        let bytes = vec![1; 32];
-        let result = bytes_to_uuid(&bytes);
-        assert!(result.is_err());
-    }
-
-    #[cfg(all(feature = "sqlite", not(feature = "postgres")))]
-    #[test]
-    fn test_bytes_to_uuid_empty() {
-        let bytes: Vec<u8> = vec![];
-        let result = bytes_to_uuid(&bytes);
-        assert!(result.is_err());
     }
 
     #[test]

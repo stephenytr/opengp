@@ -844,7 +844,7 @@ impl ClinicalService {
 mod tests {
     use super::*;
     use crate::domain::audit::AuditEmitterError;
-    use crate::domain::clinical::RepositoryError;
+    use crate::domain::clinical::{RepositoryError, TimerState};
     use crate::domain::patient::{Address, Gender, Patient, PatientRepository};
     use async_trait::async_trait;
     use chrono::NaiveDate;
@@ -930,6 +930,18 @@ mod tests {
                 .expect("sign_calls lock poisoned")
                 .push(id);
             Ok(())
+        }
+
+        async fn start_timer(&self, _id: Uuid) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+
+        async fn stop_timer(&self, _id: Uuid) -> Result<Option<i64>, RepositoryError> {
+            Ok(None)
+        }
+
+        async fn get_timer_state(&self, _id: Uuid) -> Result<Option<TimerState>, RepositoryError> {
+            Ok(None)
         }
     }
 
