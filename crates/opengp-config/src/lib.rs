@@ -1288,8 +1288,22 @@ impl Config {
     pub fn from_env() -> Result<Self, ConfigError> {
         let _ = dotenvy::dotenv();
 
+        let mut app_config = load_app_config()?;
+
+        if let Ok(host) = std::env::var("API_HOST") {
+            app_config.api_server.host = host;
+        }
+        if let Ok(port_str) = std::env::var("API_PORT") {
+            if let Ok(port) = port_str.parse() {
+                app_config.api_server.port = port;
+            }
+        }
+        if let Ok(db_url) = std::env::var("API_DATABASE_URL") {
+            app_config.api_server.database.url = db_url;
+        }
+
         Ok(Self {
-            app: load_app_config()?,
+            app: app_config,
             allergies: load_allergy_config()?,
             appointments: load_appointment_config()?,
             clinical: load_clinical_config()?,
