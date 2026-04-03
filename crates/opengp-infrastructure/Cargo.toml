@@ -10,7 +10,6 @@ rust-version.workspace = true
 [features]
 default = ["postgres"]
 postgres = ["sqlx/postgres"]
-billing = ["opengp-domain/billing"]
 immunisation = ["opengp-domain/immunisation"]
 prescription = ["opengp-domain/prescription"]
 

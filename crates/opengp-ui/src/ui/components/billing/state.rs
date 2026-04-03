@@ -1,5 +1,3 @@
-#![cfg(feature = "billing")]
-
 use opengp_domain::domain::billing::{Invoice, MedicareClaim, Payment};
 use uuid::Uuid;
 

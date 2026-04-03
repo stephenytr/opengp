@@ -1,5 +1,3 @@
-#![cfg(feature = "billing")]
-
 use opengp_domain::domain::billing::Payment;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Rect};

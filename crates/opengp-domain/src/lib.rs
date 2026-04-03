@@ -7,7 +7,6 @@ pub mod domain;
 pub use domain::api;
 pub use domain::appointment;
 pub use domain::audit;
-#[cfg(feature = "billing")]
 pub use domain::billing;
 pub use domain::clinical;
 pub use domain::error;

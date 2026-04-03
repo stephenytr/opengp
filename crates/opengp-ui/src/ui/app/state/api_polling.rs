@@ -660,6 +660,8 @@ mod tests {
             opengp_config::AllergyConfig::default(),
             opengp_config::ClinicalConfig::default(),
             opengp_config::SocialHistoryConfig::default(),
+            None,
+            opengp_config::PracticeConfig::default(),
         )
     }
 

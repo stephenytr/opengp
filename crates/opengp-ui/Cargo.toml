@@ -8,7 +8,6 @@ authors.workspace = true
 rust-version.workspace = true
 
 [features]
-billing = ["opengp-domain/billing"]
 prescription = ["opengp-domain/prescription"]
 
 [dependencies]

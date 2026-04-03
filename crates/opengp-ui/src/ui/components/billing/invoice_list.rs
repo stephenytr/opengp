@@ -1,5 +1,3 @@
-#![cfg(feature = "billing")]
-
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use opengp_domain::domain::billing::{Invoice, InvoiceStatus};
 use ratatui::layout::{Constraint, Rect};

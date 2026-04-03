@@ -1,5 +1,3 @@
-#![cfg(feature = "billing")]
-
 use std::sync::Arc;
 
 use opengp_domain::domain::billing::{

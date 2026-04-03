@@ -1,5 +1,3 @@
-#![cfg(feature = "billing")]
-
 use opengp_config::PracticeConfig;
 use opengp_domain::domain::billing::{Invoice, InvoiceItem, Payment};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};

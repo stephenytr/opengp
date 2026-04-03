@@ -1,14 +1,11 @@
 use crate::ui::theme::Theme;
-#[cfg(feature = "billing")]
 use chrono::{Duration, Utc};
-#[cfg(feature = "billing")]
 use opengp_domain::domain::clinical::suggest_mbs_level;
 use opengp_domain::domain::clinical::Consultation;
 #[cfg(feature = "prescription")]
 use opengp_domain::domain::prescription::Prescription;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-#[cfg(feature = "billing")]
 use ratatui::style::Color;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
@@ -110,7 +107,6 @@ impl ConsultationDetail {
         }
     }
 
-    #[cfg(feature = "billing")]
     fn format_mm_ss(duration: Duration) -> String {
         let total_secs = duration.num_seconds().max(0);
         let mins = total_secs / 60;
@@ -118,7 +114,6 @@ impl ConsultationDetail {
         format!("{:02}:{:02}", mins, secs)
     }
 
-    #[cfg(feature = "billing")]
     fn mbs_label(item: &str) -> &'static str {
         match item {
             "3" => "Level A",
@@ -246,136 +241,133 @@ impl Widget for ConsultationDetail {
             y += 1;
         }
 
-        #[cfg(feature = "billing")]
-        {
-            if y < inner.y + inner.height - 4 {
-                y += 1;
-                buf.set_string(
-                    inner.x + 1,
-                    y,
-                    " Consultation Timer ",
-                    Style::default()
-                        .fg(self.theme.colors.primary)
-                        .add_modifier(Modifier::BOLD),
-                );
-                y += 1;
-            }
+        if y < inner.y + inner.height - 4 {
+            y += 1;
+            buf.set_string(
+                inner.x + 1,
+                y,
+                " Consultation Timer ",
+                Style::default()
+                    .fg(self.theme.colors.primary)
+                    .add_modifier(Modifier::BOLD),
+            );
+            y += 1;
+        }
 
-            if let Some(ref consultation) = self.consultation {
-                let start = consultation.consultation_started_at;
-                let end = consultation.consultation_ended_at;
+        if let Some(ref consultation) = self.consultation {
+            let start = consultation.consultation_started_at;
+            let end = consultation.consultation_ended_at;
 
-                match (start, end) {
-                    (Some(started_at), None) => {
-                        let duration = Utc::now().signed_duration_since(started_at);
-                        let timer_text = Self::format_mm_ss(duration);
+            match (start, end) {
+                (Some(started_at), None) => {
+                    let duration = Utc::now().signed_duration_since(started_at);
+                    let timer_text = Self::format_mm_ss(duration);
 
-                        if y < inner.y + inner.height - 4 {
-                            buf.set_string(
-                                inner.x + 1,
-                                y,
-                                "Timer:",
-                                Style::default()
-                                    .fg(self.theme.colors.foreground)
-                                    .add_modifier(Modifier::BOLD),
-                            );
-                            buf.set_string(
-                                value_x,
-                                y,
-                                format!("● Running {}", timer_text),
-                                Style::default().fg(Color::Green),
-                            );
-                            y += 1;
-                        }
-
-                        if y < inner.y + inner.height - 4 {
-                            buf.set_string(
-                                value_x,
-                                y,
-                                "Stop Timer [t]",
-                                Style::default().fg(Color::Green),
-                            );
-                            y += 1;
-                        }
-
-                        if y < inner.y + inner.height - 4 {
-                            let minutes = duration.num_minutes().max(0);
-                            let item = suggest_mbs_level(minutes);
-                            let level = Self::mbs_label(item);
-                            let suggestion = format!("Suggested MBS: Item {} ({})", item, level);
-                            buf.set_string(
-                                value_x,
-                                y,
-                                suggestion,
-                                Style::default().fg(self.theme.colors.info),
-                            );
-                            y += 1;
-                        }
+                    if y < inner.y + inner.height - 4 {
+                        buf.set_string(
+                            inner.x + 1,
+                            y,
+                            "Timer:",
+                            Style::default()
+                                .fg(self.theme.colors.foreground)
+                                .add_modifier(Modifier::BOLD),
+                        );
+                        buf.set_string(
+                            value_x,
+                            y,
+                            format!("● Running {}", timer_text),
+                            Style::default().fg(Color::Green),
+                        );
+                        y += 1;
                     }
-                    (Some(started_at), Some(ended_at)) => {
-                        let duration = ended_at.signed_duration_since(started_at);
-                        let timer_text = Self::format_mm_ss(duration);
 
-                        if y < inner.y + inner.height - 4 {
-                            buf.set_string(
-                                inner.x + 1,
-                                y,
-                                "Timer:",
-                                Style::default()
-                                    .fg(self.theme.colors.foreground)
-                                    .add_modifier(Modifier::BOLD),
-                            );
-                            buf.set_string(
-                                value_x,
-                                y,
-                                format!("{} (Timer stopped)", timer_text),
-                                Style::default().fg(self.theme.colors.disabled),
-                            );
-                            y += 1;
-                        }
-
-                        if y < inner.y + inner.height - 4 {
-                            let minutes = duration.num_minutes().max(0);
-                            let item = suggest_mbs_level(minutes);
-                            let level = Self::mbs_label(item);
-                            let suggestion = format!("Suggested MBS: Item {} ({})", item, level);
-                            buf.set_string(
-                                value_x,
-                                y,
-                                suggestion,
-                                Style::default().fg(self.theme.colors.info),
-                            );
-                            y += 1;
-                        }
+                    if y < inner.y + inner.height - 4 {
+                        buf.set_string(
+                            value_x,
+                            y,
+                            "Stop Timer [t]",
+                            Style::default().fg(Color::Green),
+                        );
+                        y += 1;
                     }
-                    _ => {
-                        if y < inner.y + inner.height - 4 {
-                            buf.set_string(
-                                inner.x + 1,
-                                y,
-                                "Timer:",
-                                Style::default()
-                                    .fg(self.theme.colors.foreground)
-                                    .add_modifier(Modifier::BOLD),
-                            );
-                            buf.set_string(
-                                value_x,
-                                y,
-                                "Not started",
-                                Style::default().fg(self.theme.colors.disabled),
-                            );
-                            y += 1;
-                        }
 
-                        if y < inner.y + inner.height - 4 {
-                            buf.set_string(
-                                value_x,
-                                y,
-                                "Start Timer [t]",
-                                Style::default().fg(self.theme.colors.foreground),
-                            );
-                            y += 1;
-                        }
+                    if y < inner.y + inner.height - 4 {
+                        let minutes = duration.num_minutes().max(0);
+                        let item = suggest_mbs_level(minutes);
+                        let level = Self::mbs_label(item);
+                        let suggestion = format!("Suggested MBS: Item {} ({})", item, level);
+                        buf.set_string(
+                            value_x,
+                            y,
+                            suggestion,
+                            Style::default().fg(self.theme.colors.info),
+                        );
+                        y += 1;
+                    }
+                }
+                (Some(started_at), Some(ended_at)) => {
+                    let duration = ended_at.signed_duration_since(started_at);
+                    let timer_text = Self::format_mm_ss(duration);
+
+                    if y < inner.y + inner.height - 4 {
+                        buf.set_string(
+                            inner.x + 1,
+                            y,
+                            "Timer:",
+                            Style::default()
+                                .fg(self.theme.colors.foreground)
+                                .add_modifier(Modifier::BOLD),
+                        );
+                        buf.set_string(
+                            value_x,
+                            y,
+                            format!("{} (Timer stopped)", timer_text),
+                            Style::default().fg(self.theme.colors.disabled),
+                        );
+                        y += 1;
+                    }
+
+                    if y < inner.y + inner.height - 4 {
+                        let minutes = duration.num_minutes().max(0);
+                        let item = suggest_mbs_level(minutes);
+                        let level = Self::mbs_label(item);
+                        let suggestion = format!("Suggested MBS: Item {} ({})", item, level);
+                        buf.set_string(
+                            value_x,
+                            y,
+                            suggestion,
+                            Style::default().fg(self.theme.colors.info),
+                        );
+                        y += 1;
+                    }
+                }
+                _ => {
+                    if y < inner.y + inner.height - 4 {
+                        buf.set_string(
+                            inner.x + 1,
+                            y,
+                            "Timer:",
+                            Style::default()
+                                .fg(self.theme.colors.foreground)
+                                .add_modifier(Modifier::BOLD),
+                        );
+                        buf.set_string(
+                            value_x,
+                            y,
+                            "Not started",
+                            Style::default().fg(self.theme.colors.disabled),
+                        );
+                        y += 1;
+                    }
+
+                    if y < inner.y + inner.height - 4 {
+                        buf.set_string(
+                            value_x,
+                            y,
+                            "Start Timer [t]",
+                            Style::default().fg(self.theme.colors.foreground),
+                        );
+                        y += 1;
                     }
                 }
             }

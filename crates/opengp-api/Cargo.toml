@@ -8,7 +8,6 @@ authors.workspace = true
 rust-version.workspace = true
 
 [features]
-billing = ["opengp-domain/billing", "opengp-infrastructure/billing"]
 
 [dependencies]
 axum = "0.8"

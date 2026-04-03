@@ -1,7 +1,6 @@
 pub mod api;
 pub mod appointment;
 pub mod audit;
-#[cfg(feature = "billing")]
 pub mod billing;
 pub mod clinical;
 pub mod error;

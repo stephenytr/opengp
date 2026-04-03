@@ -10,19 +10,12 @@ use opengp_domain::domain::api::{
 };
 use opengp_ui::api::ApiClient;
 use opengp_ui::ui::app::App;
-#[cfg(feature = "billing")]
 use opengp_ui::ui::app::PendingBillingSaveData;
-#[cfg(feature = "billing")]
 use opengp_ui::ui::services::BillingUiService;
-#[cfg(feature = "billing")]
 use opengp_domain::domain::billing::{BillingRepository, BillingService, BillingType};
-#[cfg(feature = "billing")]
 use opengp_domain::domain::clinical::ConsultationRepository;
-#[cfg(feature = "billing")]
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
-#[cfg(feature = "billing")]
 use opengp_infrastructure::infrastructure::database::{create_pool, DatabaseConfig};
-#[cfg(feature = "billing")]
 use opengp_infrastructure::infrastructure::database::repositories::{
     SqlxBillingRepository, SqlxClinicalRepository,
 };
@@ -34,7 +27,6 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use opengp_config::CalendarConfig;
 use opengp_config::Config;
-#[cfg(feature = "billing")]
 use opengp_config::{load_practice_config, PracticeConfig};
 use opengp_ui::ui::theme::{ColorPalette, Theme};
 
@@ -61,11 +53,8 @@ async fn main() -> Result<()> {
         config.app.calendar,
         config.app.ui,
         config.theme,
-        #[cfg(feature = "billing")]
         load_practice_config()?,
-        #[cfg(feature = "billing")]
         config.app.api_server.database,
-        #[cfg(feature = "billing")]
         config.encryption_key,
         config.healthcare,
         config.patient,
@@ -85,9 +74,9 @@ async fn run_tui(
     calendar_config: CalendarConfig,
     ui_config: opengp_config::UiConfig,
     theme_config: opengp_config::ThemeConfig,
-    #[cfg(feature = "billing")] practice_config: PracticeConfig,
-    #[cfg(feature = "billing")] database_config: DatabaseConfig,
-    #[cfg(feature = "billing")] encryption_key: String,
+    practice_config: PracticeConfig,
+    database_config: DatabaseConfig,
+    encryption_key: String,
     healthcare_config: opengp_config::healthcare::HealthcareConfig,
     patient_config: opengp_config::PatientConfig,
     allergy_config: opengp_config::AllergyConfig,
@@ -109,7 +98,6 @@ async fn run_tui(
     };
     theme.colors = ColorPalette::from_config(palette_config);
 
-    #[cfg(feature = "billing")]
     let billing_service = {
         let database_pool = create_pool(&database_config).await?;
         let pool = database_pool.as_postgres().clone();
@@ -139,9 +127,7 @@ async fn run_tui(
         allergy_config,
         clinical_config,
         social_history_config,
-        #[cfg(feature = "billing")]
         billing_service,
-        #[cfg(feature = "billing")]
         practice_config,
     );
     app.set_authenticated(has_session_token);
@@ -470,7 +456,6 @@ async fn run_tui(
                                 consultation.id,
                                 patient_id
                             );
-                            #[cfg(feature = "billing")]
                             if consultation.is_signed {
                                 app.set_pending_billing(PendingBillingSaveData::AwaitingMbsSelection {
                                     consultation_id: consultation.id,
@@ -536,7 +521,6 @@ async fn run_tui(
             }
         }
 
-        #[cfg(feature = "billing")]
         if let Some(pending) = app.take_pending_billing() {
             match pending {
                 PendingBillingSaveData::AwaitingMbsSelection {

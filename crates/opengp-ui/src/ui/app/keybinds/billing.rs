@@ -1,5 +1,3 @@
-#![cfg(feature = "billing")]
-
 use crate::ui::app::App;
 use crate::ui::components::billing::BillingView;
 use crate::ui::keybinds::Action;

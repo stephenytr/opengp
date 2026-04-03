@@ -1,5 +1,3 @@
-#![cfg(feature = "billing")]
-
 use opengp_domain::domain::billing::{ClaimStatus, MedicareClaim};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};

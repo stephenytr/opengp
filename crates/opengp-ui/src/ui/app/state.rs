@@ -1,6 +1,5 @@
 mod api_polling;
 mod appointment;
-#[cfg(feature = "billing")]
 mod billing;
 mod clinical;
 mod patient;

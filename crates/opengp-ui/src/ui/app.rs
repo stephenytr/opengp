@@ -15,12 +15,9 @@ use crate::ui::components::tabs::{Tab, TabBar};
 use crate::ui::keybinds::{KeyContext, KeybindRegistry};
 use crate::ui::theme::Theme;
 use opengp_config::CalendarConfig;
-#[cfg(feature = "billing")]
 use opengp_domain::domain::billing::BillingType;
 
-#[cfg(feature = "billing")]
 use crate::ui::components::billing::BillingState;
-#[cfg(feature = "billing")]
 use crate::ui::services::BillingUiService;
 
 mod event_handler;
@@ -95,14 +92,10 @@ pub struct App {
     pending_appointment_status_transition: Option<(uuid::Uuid, AppointmentStatusTransition)>,
     pending_clinical_patient_id: Option<uuid::Uuid>,
     pending_clinical_save_data: Option<PendingClinicalSaveData>,
-    #[cfg(feature = "billing")]
     pending_billing: Option<PendingBillingSaveData>,
     clinical_state: ClinicalState,
-    #[cfg(feature = "billing")]
     billing_state: BillingState,
-    #[cfg(feature = "billing")]
     billing_ui_service: Option<Arc<BillingUiService>>,
-    #[cfg(feature = "billing")]
     practice_config: opengp_config::PracticeConfig,
     healthcare_config: opengp_config::healthcare::HealthcareConfig,
     patient_config: opengp_config::PatientConfig,
@@ -166,7 +159,6 @@ pub enum PendingClinicalSaveData {
     },
 }
 
-#[cfg(feature = "billing")]
 pub enum PendingBillingSaveData {
     AwaitingMbsSelection {
         consultation_id: uuid::Uuid,
@@ -205,8 +197,8 @@ impl App {
         allergy_config: opengp_config::AllergyConfig,
         clinical_config: opengp_config::ClinicalConfig,
         social_history_config: opengp_config::SocialHistoryConfig,
-        #[cfg(feature = "billing")] billing_ui_service: Option<Arc<BillingUiService>>,
-        #[cfg(feature = "billing")] practice_config: opengp_config::PracticeConfig,
+        billing_ui_service: Option<Arc<BillingUiService>>,
+        practice_config: opengp_config::PracticeConfig,
     ) -> Self {
         let mut app = Self {
             theme: theme.clone(),
@@ -234,14 +226,10 @@ impl App {
             pending_appointment_status_transition: None,
             pending_clinical_patient_id: None,
             pending_clinical_save_data: None,
-            #[cfg(feature = "billing")]
             pending_billing: None,
             clinical_state: ClinicalState::with_theme(theme.clone(), healthcare_config.clone(), allergy_config, clinical_config, social_history_config.clone()),
-            #[cfg(feature = "billing")]
             billing_state: BillingState::new(),
-            #[cfg(feature = "billing")]
             billing_ui_service,
-            #[cfg(feature = "billing")]
             practice_config,
             healthcare_config,
             patient_config,
@@ -289,7 +277,6 @@ impl App {
         self.should_quit
     }
 
-    #[cfg(feature = "billing")]
     pub fn billing_ui_service(&self) -> Option<Arc<BillingUiService>> {
         self.billing_ui_service.clone()
     }
@@ -411,9 +398,7 @@ impl Default for App {
             opengp_config::AllergyConfig::default(),
             opengp_config::ClinicalConfig::default(),
             opengp_config::SocialHistoryConfig::default(),
-            #[cfg(feature = "billing")]
             None,
-            #[cfg(feature = "billing")]
             opengp_config::PracticeConfig::default(),
         )
     }
@@ -425,14 +410,14 @@ mod tests {
 
     #[test]
     fn test_app_creation() {
-        let app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default());
+        let app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, opengp_config::PracticeConfig::default());
         assert_eq!(app.current_tab(), Tab::Patient);
         assert!(!app.should_quit());
     }
 
     #[test]
     fn test_tab_switching() {
-        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, opengp_config::PracticeConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -444,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_help_toggle() {
-        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, opengp_config::PracticeConfig::default());
 
         assert!(!app.help_overlay.is_visible());
 
@@ -463,7 +448,7 @@ mod tests {
 
     #[test]
     fn test_quit() {
-        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, opengp_config::PracticeConfig::default());
 
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('q'),
@@ -476,7 +461,7 @@ mod tests {
 
     #[test]
     fn test_calendar_keybind_routing() {
-        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, opengp_config::PracticeConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -504,7 +489,7 @@ mod tests {
 
     #[test]
     fn test_calendar_enter_selects_date() {
-        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, opengp_config::PracticeConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -527,7 +512,7 @@ mod tests {
 
     #[test]
     fn test_schedule_keybind_routing() {
-        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, opengp_config::PracticeConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -559,7 +544,7 @@ mod tests {
 
     #[test]
     fn test_q_does_not_quit_on_appointment() {
-        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, opengp_config::PracticeConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -580,7 +565,7 @@ mod tests {
 
     #[test]
     fn test_ctrl_q_always_quits() {
-        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, opengp_config::PracticeConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -597,7 +582,7 @@ mod tests {
 
     #[test]
     fn test_schedule_escape_returns_to_calendar() {
-        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, opengp_config::PracticeConfig::default());
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::F(3),
             crossterm::event::KeyModifiers::NONE,
@@ -629,7 +614,7 @@ mod tests {
 
     #[test]
     fn test_patient_keybind_regression() {
-        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default());
+        let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, opengp_config::PracticeConfig::default());
         assert_eq!(app.current_tab(), Tab::Patient);
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('q'),

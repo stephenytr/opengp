@@ -1,5 +1,3 @@
-#![cfg(feature = "billing")]
-
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::{Block, Borders, Paragraph, Widget};

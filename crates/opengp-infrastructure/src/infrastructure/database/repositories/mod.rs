@@ -1,6 +1,5 @@
 pub mod appointment;
 pub mod audit;
-#[cfg(feature = "billing")]
 pub mod billing;
 pub mod clinical;
 pub mod patient;
@@ -12,7 +11,6 @@ pub mod working_hours;
 
 pub use appointment::SqlxAppointmentRepository;
 pub use audit::SqlxAuditRepository;
-#[cfg(feature = "billing")]
 pub use billing::SqlxBillingRepository;
 pub use clinical::{
     SqlxAllergyRepository, SqlxClinicalRepository, SqlxFamilyHistoryRepository,

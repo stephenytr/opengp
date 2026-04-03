@@ -370,48 +370,21 @@ impl App {
     }
 
     fn render_billing_tab(&mut self, frame: &mut Frame, area: Rect) {
-        #[cfg(feature = "billing")]
-        {
-            use crate::ui::components::billing::BillingView;
-            use ratatui::text::Text;
-            use ratatui::widgets::{Block, Borders, Paragraph};
-
-            let content = match self.billing_state.view {
-                BillingView::InvoiceDetail(id) => {
-                    format!("Billing\n\nInvoice detail\nInvoice ID: {id}")
-                }
-                BillingView::InvoiceList => {
-                    "Billing\n\nInvoice list\nAwaiting billing workflow actions".to_string()
-                }
-                BillingView::ClaimList => "Billing\n\nClaim list".to_string(),
-                BillingView::PaymentList => "Billing\n\nPayment list".to_string(),
-            };
-
-            let paragraph = Paragraph::new(Text::from(content))
-                .block(
-                    Block::default()
-                        .title(format!(" {} ", self.tab_bar.selected().name()))
-                        .borders(Borders::ALL)
-                        .border_style(
-                            ratatui::style::Style::default().fg(self.theme.colors.border),
-                        ),
-                )
-                .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
-                .alignment(ratatui::layout::Alignment::Center);
-
-            frame.render_widget(paragraph, area);
-            return;
-        }
-
-        #[cfg(not(feature = "billing"))]
+        use crate::ui::components::billing::BillingView;
         use ratatui::text::Text;
-        #[cfg(not(feature = "billing"))]
         use ratatui::widgets::{Block, Borders, Paragraph};
 
-        #[cfg(not(feature = "billing"))]
-        let content = "Billing\n\nInvoicing and payments\nMedicare claims";
+        let content = match self.billing_state.view {
+            BillingView::InvoiceDetail(id) => {
+                format!("Billing\n\nInvoice detail\nInvoice ID: {id}")
+            }
+            BillingView::InvoiceList => {
+                "Billing\n\nInvoice list\nAwaiting billing workflow actions".to_string()
+            }
+            BillingView::ClaimList => "Billing\n\nClaim list".to_string(),
+            BillingView::PaymentList => "Billing\n\nPayment list".to_string(),
+        };
 
-        #[cfg(not(feature = "billing"))]
         let paragraph = Paragraph::new(Text::from(content))
             .block(
                 Block::default()
@@ -422,7 +395,6 @@ impl App {
             .style(ratatui::style::Style::default().fg(self.theme.colors.foreground))
             .alignment(ratatui::layout::Alignment::Center);
 
-        #[cfg(not(feature = "billing"))]
         frame.render_widget(paragraph, area);
     }
 }
