@@ -397,6 +397,31 @@ impl App {
                     }
                     return Action::Enter;
                 }
+                KeyAction::ToggleTimer => {
+                    if self.clinical_state.view == ClinicalView::Consultations {
+                        if let Some(consultation_id) =
+                            self.clinical_state.consultation_list.selected_id()
+                        {
+                            if let Some(consultation) = self
+                                .clinical_state
+                                .consultations
+                                .iter_mut()
+                                .find(|c| c.id == consultation_id)
+                            {
+                                let is_running = consultation.consultation_started_at.is_some()
+                                    && consultation.consultation_ended_at.is_none();
+
+                                if is_running {
+                                    consultation.consultation_ended_at = Some(chrono::Utc::now());
+                                } else {
+                                    consultation.consultation_started_at = Some(chrono::Utc::now());
+                                    consultation.consultation_ended_at = None;
+                                }
+                            }
+                            return Action::Enter;
+                        }
+                    }
+                }
                 _ => {}
             }
         }

@@ -284,6 +284,57 @@ impl ConsultationRepository for MockConsultationRepository {
             ))
         }
     }
+
+    async fn start_timer(&self, id: Uuid) -> Result<(), ClinicalRepositoryError> {
+        let mut storage = self.storage.lock().await;
+        if let Some(consultation) = storage.iter_mut().find(|c| c.id == id) {
+            consultation.start_timer();
+            Ok(())
+        } else {
+            Err(ClinicalRepositoryError::Base(
+                opengp_domain::domain::error::RepositoryError::NotFound,
+            ))
+        }
+    }
+
+    async fn stop_timer(&self, id: Uuid) -> Result<Option<i64>, ClinicalRepositoryError> {
+        let mut storage = self.storage.lock().await;
+        if let Some(consultation) = storage.iter_mut().find(|c| c.id == id) {
+            Ok(consultation.stop_timer())
+        } else {
+            Err(ClinicalRepositoryError::Base(
+                opengp_domain::domain::error::RepositoryError::NotFound,
+            ))
+        }
+    }
+
+    async fn get_timer_state(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<opengp_domain::domain::clinical::TimerState>, ClinicalRepositoryError> {
+        let storage = self.storage.lock().await;
+        if let Some(consultation) = storage.iter().find(|c| c.id == id) {
+            Ok(consultation.consultation_started_at.map(|started_at| {
+                let duration = match consultation.consultation_ended_at {
+                    Some(ended_at) => {
+                        let duration = ended_at.signed_duration_since(started_at);
+                        Some(duration.num_minutes())
+                    }
+                    None => None,
+                };
+
+                opengp_domain::domain::clinical::TimerState {
+                    started_at,
+                    ended_at: consultation.consultation_ended_at,
+                    duration_minutes: duration,
+                }
+            }))
+        } else {
+            Err(ClinicalRepositoryError::Base(
+                opengp_domain::domain::error::RepositoryError::NotFound,
+            ))
+        }
+    }
 }
 
 impl MockAppointmentRepository {

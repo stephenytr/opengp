@@ -12,7 +12,7 @@ use opengp_domain::domain::clinical::RepositoryError;
 use opengp_domain::domain::clinical::{
     Allergy, AllergyRepository, AllergyType, ConditionStatus, Consultation, ConsultationRepository,
     FamilyHistory, FamilyHistoryRepository, MedicalHistory, MedicalHistoryRepository, Severity,
-    SocialHistory, SocialHistoryRepository, VitalSigns, VitalSignsRepository,
+    SocialHistory, SocialHistoryRepository, TimerState, VitalSigns, VitalSignsRepository,
 };
 use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
 
@@ -28,6 +28,8 @@ struct ConsultationRow {
     is_signed: bool,
     signed_at: Option<DateTime<Utc>>,
     signed_by: Option<Uuid>,
+    consultation_started_at: Option<DateTime<Utc>>,
+    consultation_ended_at: Option<DateTime<Utc>>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     version: i32,
@@ -61,8 +63,8 @@ impl ConsultationRow {
             is_signed: self.is_signed,
             signed_at: self.signed_at,
             signed_by: self.signed_by,
-            consultation_started_at: None,
-            consultation_ended_at: None,
+            consultation_started_at: self.consultation_started_at,
+            consultation_ended_at: self.consultation_ended_at,
             created_at: self.created_at,
             updated_at: self.updated_at,
             version: self.version,
@@ -97,6 +99,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
         SELECT 
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
+            consultation_started_at, consultation_ended_at,
             created_at, updated_at, version, created_by, updated_by
         FROM consultations
         WHERE id = $1
@@ -124,6 +127,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
         SELECT 
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
+            consultation_started_at, consultation_ended_at,
             created_at, updated_at, version, created_by, updated_by
         FROM consultations
         WHERE patient_id = $1
@@ -136,6 +140,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
         SELECT 
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
+            consultation_started_at, consultation_ended_at,
             created_at, updated_at, version, created_by, updated_by
         FROM consultations
         WHERE patient_id = $1
@@ -166,6 +171,7 @@ impl ConsultationRepository for SqlxClinicalRepository {
         SELECT 
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
+            consultation_started_at, consultation_ended_at,
             created_at, updated_at, version, created_by, updated_by
         FROM consultations
         WHERE patient_id = $1 AND consultation_date BETWEEN $2 AND $3
@@ -199,8 +205,9 @@ impl ConsultationRepository for SqlxClinicalRepository {
         INSERT INTO consultations (
             id, patient_id, practitioner_id, appointment_id,
             consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
+            consultation_started_at, consultation_ended_at,
             created_at, updated_at, version, created_by, updated_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         "#,
         )
         .bind(consultation.id)
@@ -213,6 +220,8 @@ impl ConsultationRepository for SqlxClinicalRepository {
         .bind(consultation.is_signed)
         .bind(consultation.signed_at)
         .bind(consultation.signed_by)
+        .bind(consultation.consultation_started_at)
+        .bind(consultation.consultation_ended_at)
         .bind(consultation.created_at)
         .bind(consultation.updated_at)
         .bind(consultation.version)
@@ -261,8 +270,9 @@ impl ConsultationRepository for SqlxClinicalRepository {
         SET 
             reason = $1, clinical_notes = $2,
             is_signed = $3, signed_at = $4, signed_by = $5,
-            updated_at = $6, updated_by = $7, version = $8
-        WHERE id = $9 AND version = $10
+            consultation_started_at = $6, consultation_ended_at = $7,
+            updated_at = $8, updated_by = $9, version = $10
+        WHERE id = $11 AND version = $12
         "#,
         )
         .bind(&consultation.reason)
@@ -270,6 +280,8 @@ impl ConsultationRepository for SqlxClinicalRepository {
         .bind(consultation.is_signed)
         .bind(consultation.signed_at)
         .bind(consultation.signed_by)
+        .bind(consultation.consultation_started_at)
+        .bind(consultation.consultation_ended_at)
         .bind(consultation.updated_at)
         .bind(consultation.updated_by)
         .bind(new_version)
@@ -314,6 +326,123 @@ impl ConsultationRepository for SqlxClinicalRepository {
         }
 
         Ok(())
+    }
+
+    async fn start_timer(&self, id: Uuid) -> Result<(), RepositoryError> {
+        let started_at = Utc::now();
+
+        let result = sqlx::query(
+            r#"
+        UPDATE consultations
+        SET consultation_started_at = $1, consultation_ended_at = NULL, updated_at = $2
+        WHERE id = $3
+        "#,
+        )
+        .bind(started_at)
+        .bind(started_at)
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(sqlx_to_clinical_error)?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::Base(BaseRepositoryError::NotFound));
+        }
+
+        Ok(())
+    }
+
+    async fn stop_timer(&self, id: Uuid) -> Result<Option<i64>, RepositoryError> {
+        let ended_at = Utc::now();
+
+        let consultation = sqlx::query_as::<_, ConsultationRow>(
+            r#"
+        SELECT 
+            id, patient_id, practitioner_id, appointment_id,
+            consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
+            consultation_started_at, consultation_ended_at,
+            created_at, updated_at, version, created_by, updated_by
+        FROM consultations
+        WHERE id = $1
+        "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(sqlx_to_clinical_error)?;
+
+        let row = match consultation {
+            Some(r) => r,
+            None => return Err(RepositoryError::Base(BaseRepositoryError::NotFound)),
+        };
+
+        let duration = match row.consultation_started_at {
+            Some(start) => {
+                let duration = ended_at.signed_duration_since(start);
+                Some(duration.num_minutes())
+            }
+            None => None,
+        };
+
+        let result = sqlx::query(
+            r#"
+        UPDATE consultations
+        SET consultation_ended_at = $1, updated_at = $2
+        WHERE id = $3
+        "#,
+        )
+        .bind(ended_at)
+        .bind(ended_at)
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(sqlx_to_clinical_error)?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::Base(BaseRepositoryError::NotFound));
+        }
+
+        Ok(duration)
+    }
+
+    async fn get_timer_state(&self, id: Uuid) -> Result<Option<TimerState>, RepositoryError> {
+        let row = sqlx::query_as::<_, ConsultationRow>(
+            r#"
+        SELECT 
+            id, patient_id, practitioner_id, appointment_id,
+            consultation_date, reason, clinical_notes, is_signed, signed_at, signed_by,
+            consultation_started_at, consultation_ended_at,
+            created_at, updated_at, version, created_by, updated_by
+        FROM consultations
+        WHERE id = $1
+        "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(sqlx_to_clinical_error)?;
+
+        match row {
+            Some(r) => match r.consultation_started_at {
+                Some(started_at) => {
+                    let duration = match r.consultation_ended_at {
+                        Some(ended_at) => {
+                            let duration = ended_at.signed_duration_since(started_at);
+                            Some(duration.num_minutes())
+                        }
+                        None => None,
+                    };
+
+                    Ok(Some(TimerState {
+                        started_at,
+                        ended_at: r.consultation_ended_at,
+                        duration_minutes: duration,
+                    }))
+                }
+                None => Ok(None),
+            },
+            None => Err(RepositoryError::Base(BaseRepositoryError::NotFound)),
+        }
     }
 }
 

@@ -967,22 +967,24 @@ mod tests {
             .get("patient_id")
             .and_then(|value| uuid::Uuid::parse_str(value).ok())
             .unwrap_or_else(uuid::Uuid::new_v4);
-        Json(PaginatedResponse {
-            data: vec![ConsultationResponse {
-                id: uuid::Uuid::new_v4(),
-                patient_id,
-                practitioner_id: uuid::Uuid::new_v4(),
-                appointment_id: None,
-                consultation_date: Utc::now(),
-                reason: Some("Follow-up".to_string()),
-                clinical_notes: Some("Doing well".to_string()),
-                is_signed: false,
-                version: 1,
-            }],
-            total: 1,
-            page: 1,
-            limit: 100,
-        })
+         Json(PaginatedResponse {
+             data: vec![ConsultationResponse {
+                 id: uuid::Uuid::new_v4(),
+                 patient_id,
+                 practitioner_id: uuid::Uuid::new_v4(),
+                 appointment_id: None,
+                 consultation_date: Utc::now(),
+                 reason: Some("Follow-up".to_string()),
+                 clinical_notes: Some("Doing well".to_string()),
+                 is_signed: false,
+                 version: 1,
+                 consultation_started_at: None,
+                 consultation_ended_at: None,
+             }],
+             total: 1,
+             page: 1,
+             limit: 100,
+         })
     }
 
     async fn login_success_handler(Json(_): Json<LoginRequest>) -> Json<LoginResponse> {

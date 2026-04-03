@@ -7,6 +7,13 @@ use super::model::{
     Allergy, Consultation, FamilyHistory, MedicalHistory, SocialHistory, VitalSigns,
 };
 
+/// Timer state information for a consultation
+pub struct TimerState {
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub duration_minutes: Option<i64>,
+}
+
 /// Repository trait for Consultation entities
 #[async_trait]
 pub trait ConsultationRepository: Send + Sync {
@@ -36,6 +43,15 @@ pub trait ConsultationRepository: Send + Sync {
 
     /// Sign a consultation (mark as finalized)
     async fn sign(&self, id: Uuid, user_id: Uuid) -> Result<(), RepositoryError>;
+
+    /// Start the consultation timer - sets consultation_started_at to now, clears ended_at
+    async fn start_timer(&self, id: Uuid) -> Result<(), RepositoryError>;
+
+    /// Stop the consultation timer - sets consultation_ended_at to now, returns duration in minutes
+    async fn stop_timer(&self, id: Uuid) -> Result<Option<i64>, RepositoryError>;
+
+    /// Get the current timer state for a consultation
+    async fn get_timer_state(&self, id: Uuid) -> Result<Option<TimerState>, RepositoryError>;
 }
 
 /// Repository trait for SocialHistory entities

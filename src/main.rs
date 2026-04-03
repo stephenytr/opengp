@@ -13,7 +13,7 @@ use opengp_ui::ui::app::App;
 use opengp_ui::ui::app::PendingBillingSaveData;
 use opengp_ui::ui::services::BillingUiService;
 use opengp_domain::domain::billing::{BillingRepository, BillingService, BillingType};
-use opengp_domain::domain::clinical::ConsultationRepository;
+use opengp_domain::domain::clinical::{ConsultationRepository, suggest_mbs_level};
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::{create_pool, DatabaseConfig};
 use opengp_infrastructure::infrastructure::database::repositories::{
@@ -525,18 +525,77 @@ async fn run_tui(
             match pending {
                 PendingBillingSaveData::AwaitingMbsSelection {
                     consultation_id,
-                    patient_id: _,
+                    patient_id,
                 } => {
-                    let selected_items = vec![("23".to_string(), 89.0, true)];
-                    app.set_pending_billing(PendingBillingSaveData::CreatingInvoice {
-                        consultation_id,
-                        mbs_items: selected_items,
-                        billing_type: BillingType::PrivateBilling,
-                    });
-                    tracing::info!(
-                        "Selected default MBS item 23 for consultation {}",
-                        consultation_id
-                    );
+                    // Fetch the consultation to get the timer duration
+                    match api_client
+                        .get_consultations(patient_id, 1, 100)
+                        .await
+                    {
+                        Ok(response) => {
+                            // Find the consultation with the matching ID
+                            if let Some(consultation_response) = response
+                                .data
+                                .iter()
+                                .find(|c| c.id == consultation_id)
+                            {
+                                // Calculate duration from consultation timer
+                                let duration_minutes = match (
+                                    consultation_response.consultation_started_at,
+                                    consultation_response.consultation_ended_at,
+                                ) {
+                                    (Some(start), Some(end)) => {
+                                        let duration = end.signed_duration_since(start);
+                                        duration.num_minutes()
+                                    }
+                                    _ => 0, // Default to 0 if timer not set
+                                };
+
+                                // Get the appropriate MBS item based on duration
+                                let mbs_item = suggest_mbs_level(duration_minutes);
+                                let selected_items =
+                                    vec![(mbs_item.to_string(), 89.0, true)];
+
+                                app.set_pending_billing(PendingBillingSaveData::CreatingInvoice {
+                                    consultation_id,
+                                    mbs_items: selected_items,
+                                    billing_type: BillingType::PrivateBilling,
+                                });
+                                tracing::info!(
+                                    "Selected MBS item {} (duration: {} minutes) for consultation {}",
+                                    mbs_item,
+                                    duration_minutes,
+                                    consultation_id
+                                );
+                            } else {
+                                // Consultation not found, fall back to default MBS item 23
+                                let selected_items = vec![("23".to_string(), 89.0, true)];
+                                app.set_pending_billing(PendingBillingSaveData::CreatingInvoice {
+                                    consultation_id,
+                                    mbs_items: selected_items,
+                                    billing_type: BillingType::PrivateBilling,
+                                });
+                                tracing::warn!(
+                                    "Consultation {} not found in API response; using default MBS item 23",
+                                    consultation_id
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            // API error, fall back to default MBS item 23
+                            let selected_items = vec![("23".to_string(), 89.0, true)];
+                            app.set_pending_billing(PendingBillingSaveData::CreatingInvoice {
+                                consultation_id,
+                                mbs_items: selected_items,
+                                billing_type: BillingType::PrivateBilling,
+                            });
+                            tracing::error!(
+                                "Failed to fetch consultations for patient {}: {}; using default MBS item 23",
+                                patient_id,
+                                e
+                            );
+                        }
+                    }
                 }
                 PendingBillingSaveData::CreatingInvoice {
                     consultation_id,

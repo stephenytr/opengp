@@ -16,7 +16,7 @@ use opengp_domain::domain::clinical::{
 use opengp_domain::domain::prescription::Prescription;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub enum ClinicalView {
     #[default]
     PatientSummary,

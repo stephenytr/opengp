@@ -222,6 +222,10 @@ pub struct ConsultationResponse {
     pub is_signed: bool,
     #[schema(example = 1)]
     pub version: i32,
+    #[schema(example = "2026-03-11T10:00:00Z")]
+    pub consultation_started_at: Option<DateTime<Utc>>,
+    #[schema(example = "2026-03-11T10:25:00Z")]
+    pub consultation_ended_at: Option<DateTime<Utc>>,
 }
 
 /// Request payload for `/api/v1/patients/{id}/allergies`.

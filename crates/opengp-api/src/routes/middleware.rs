@@ -768,6 +768,8 @@ pub(super) fn consultation_to_response(
         clinical_notes: consultation.clinical_notes,
         is_signed: consultation.is_signed,
         version: consultation.version,
+        consultation_started_at: consultation.consultation_started_at,
+        consultation_ended_at: consultation.consultation_ended_at,
     }
 }
 

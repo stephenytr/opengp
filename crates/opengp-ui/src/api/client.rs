@@ -1472,6 +1472,14 @@ mod tests {
             clinical_notes: Some("BP stable. Continue current ACE inhibitor dose.".to_string()),
             is_signed: false,
             version: 1,
+            consultation_started_at: Some(Utc
+                .with_ymd_and_hms(2026, 3, 11, 10, 0, 0)
+                .single()
+                .expect("valid datetime")),
+            consultation_ended_at: Some(Utc
+                .with_ymd_and_hms(2026, 3, 11, 10, 25, 0)
+                .single()
+                .expect("valid datetime")),
         }
     }
 

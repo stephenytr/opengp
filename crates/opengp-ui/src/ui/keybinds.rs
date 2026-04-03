@@ -96,6 +96,8 @@ pub enum Action {
     Submit,
     /// Clear input
     Clear,
+    /// Start/stop consultation timer
+    ToggleTimer,
 
     // Tab actions
     /// Switch to Patient tab
@@ -614,6 +616,12 @@ impl KeybindRegistry {
             action: Action::Save,
             context: KeyContext::Clinical,
             description: "Sign consultation",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
+            action: Action::ToggleTimer,
+            context: KeyContext::Clinical,
+            description: "Start/stop consultation timer",
         });
         self.register(Keybind {
             key: KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
