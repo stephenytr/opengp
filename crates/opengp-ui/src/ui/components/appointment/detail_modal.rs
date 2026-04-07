@@ -287,27 +287,33 @@ impl AppointmentDetailModal {
             return None;
         }
 
-        if self.focused_button == 1 && self.status_dropdown.is_open() {
-            if let Some(action) = self.status_dropdown.handle_key(key) {
-                match action {
-                    DropdownAction::Selected(_) => {
-                        return self.get_dropdown_action();
-                    }
-                    DropdownAction::Closed => {
-                        // Dropdown closed, stay on button 1 for next interaction
-                        return None;
-                    }
-                    DropdownAction::Opened => {
-                        // Dropdown opened, stay focused
-                        return None;
-                    }
-                    DropdownAction::FocusChanged => {
-                        // Focus changed within dropdown, stay focused
-                        return None;
+        if self.focused_button == 1 {
+            match key.code {
+                KeyCode::Enter
+                | KeyCode::Esc
+                | KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::Char('j')
+                | KeyCode::Char('k')
+                | KeyCode::Tab
+                | KeyCode::BackTab => {
+                    if let Some(action) = self.status_dropdown.handle_key(key) {
+                        return match action {
+                            DropdownAction::Selected(_) => self.get_dropdown_action(),
+                            DropdownAction::Closed => {
+                                if key.code == KeyCode::Tab {
+                                    self.next_button();
+                                } else if key.code == KeyCode::BackTab {
+                                    self.prev_button();
+                                }
+                                None
+                            }
+                            DropdownAction::Opened | DropdownAction::FocusChanged => None,
+                        };
                     }
                 }
+                _ => {}
             }
-            return None;
         }
 
         match key.code {
@@ -322,10 +328,6 @@ impl AppointmentDetailModal {
             }
             KeyCode::BackTab => {
                 self.prev_button();
-                None
-            }
-            KeyCode::Up | KeyCode::Down if self.focused_button == 1 => {
-                let _ = self.status_dropdown.handle_key(key);
                 None
             }
             KeyCode::Left | KeyCode::Up => {
@@ -493,6 +495,7 @@ impl Widget for AppointmentDetailModal {
 
         // Render each button
         let mut current_x = button_start_x;
+        let button_y = y;
         for (label, is_focused) in &buttons {
             let style = if *is_focused {
                 Style::default()
@@ -519,7 +522,7 @@ impl Widget for AppointmentDetailModal {
         if self.focused_button == 1 {
             let dropdown_width = 20u16;
             let dropdown_x = button_start_x + button_width + spacing;
-            let dropdown_y = y.saturating_sub(1);
+            let dropdown_y = button_y;
             let dropdown_area = Rect::new(dropdown_x, dropdown_y, dropdown_width, 3);
             let mut dropdown = self.status_dropdown.clone();
             dropdown.focused = true;
@@ -704,6 +707,22 @@ mod tests {
         let confirm_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
         let action = modal.handle_key(confirm_key);
         assert_eq!(action, Some(AppointmentDetailModalAction::MarkInProgress));
+    }
+
+    #[test]
+    fn test_tab_closes_open_dropdown_and_moves_focus() {
+        let mut modal = make_modal();
+        modal.next_button();
+        assert_eq!(modal.focused_button, 1);
+
+        let open_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
+        assert_eq!(modal.handle_key(open_key), None);
+        assert!(modal.status_dropdown.is_open());
+
+        let tab_key = KeyEvent::new(crossterm::event::KeyCode::Tab, KeyModifiers::empty());
+        assert_eq!(modal.handle_key(tab_key), None);
+        assert!(!modal.status_dropdown.is_open());
+        assert_eq!(modal.focused_button, 2);
     }
 
     #[test]
