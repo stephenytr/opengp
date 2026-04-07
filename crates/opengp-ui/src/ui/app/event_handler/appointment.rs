@@ -71,21 +71,25 @@ impl App {
                     }
                     AppointmentDetailModalAction::MarkArrived => {
                         let appointment_id = modal.appointment_id();
+                        self.appointment_detail_modal = None;
                         self.pending_appointment_status_transition =
                             Some((appointment_id, AppointmentStatusTransition::MarkArrived));
                     }
                     AppointmentDetailModalAction::MarkInProgress => {
                         let appointment_id = modal.appointment_id();
+                        self.appointment_detail_modal = None;
                         self.pending_appointment_status_transition =
                             Some((appointment_id, AppointmentStatusTransition::MarkInProgress));
                     }
                     AppointmentDetailModalAction::MarkCompleted => {
                         let appointment_id = modal.appointment_id();
+                        self.appointment_detail_modal = None;
                         self.pending_appointment_status_transition =
                             Some((appointment_id, AppointmentStatusTransition::MarkCompleted));
                     }
                     AppointmentDetailModalAction::MarkNoShow => {
                         let appointment_id = modal.appointment_id();
+                        self.appointment_detail_modal = None;
                         self.pending_appointment_status_transition =
                             Some((appointment_id, AppointmentStatusTransition::MarkNoShow));
                     }

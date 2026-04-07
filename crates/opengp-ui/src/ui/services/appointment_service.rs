@@ -222,6 +222,19 @@ impl AppointmentUiService {
             .map_err(|e| e.to_ui_error())
     }
 
+    /// Marks an appointment as no show.
+    pub async fn mark_no_show(
+        &self,
+        appointment_id: uuid::Uuid,
+        user_id: uuid::Uuid,
+    ) -> UiResult<()> {
+        self.domain_service
+            .mark_no_show(appointment_id, user_id)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_ui_error())
+    }
+
     /// Returns the available time slots for a practitioner on a given date.
     pub async fn get_available_slots(
         &self,

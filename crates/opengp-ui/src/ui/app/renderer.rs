@@ -127,12 +127,7 @@ impl App {
             return;
         }
 
-        if let Some(ref modal) = self.appointment_detail_modal {
-            frame.render_widget(Clear, area);
-            frame.render_widget(modal.clone(), area);
-            return;
-        }
-
+        // Render calendar/schedule FIRST (visible behind modal)
         match self.appointment_state.current_view {
             AppointmentView::Calendar => {
                 frame.render_widget(self.appointment_state.calendar.clone(), area);
@@ -218,6 +213,13 @@ impl App {
 
                 frame.render_widget(schedule.clone(), chunks[1]);
             }
+        }
+
+        // Render modal ON TOP (overlay)
+        if let Some(ref modal) = self.appointment_detail_modal {
+            frame.render_widget(Clear, area);
+            frame.render_widget(modal.clone(), area);
+            return;
         }
     }
 

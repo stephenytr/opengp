@@ -10,6 +10,7 @@ use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
 use crate::ui::theme::Theme;
+use crate::ui::widgets::{DropdownOption, DropdownWidget};
 use opengp_domain::domain::appointment::{AppointmentStatus, CalendarAppointment};
 
 /// Actions returned by the appointment detail modal's key handler.
@@ -42,6 +43,8 @@ pub struct AppointmentDetailModal {
     focused_button: usize,
     /// Patient ID for clinical navigation
     patient_id: Uuid,
+    /// Status dropdown for selecting valid transitions
+    status_dropdown: DropdownWidget,
 }
 
 impl Clone for AppointmentDetailModal {
@@ -51,6 +54,7 @@ impl Clone for AppointmentDetailModal {
             theme: self.theme.clone(),
             focused_button: self.focused_button,
             patient_id: self.patient_id,
+            status_dropdown: self.status_dropdown.clone(),
         }
     }
 }
@@ -58,12 +62,63 @@ impl Clone for AppointmentDetailModal {
 impl AppointmentDetailModal {
     /// Create a new appointment detail modal.
     pub fn new(appointment: CalendarAppointment, theme: Theme) -> Self {
+        // Create all possible status options
+        let all_statuses = vec![
+            DropdownOption::new("scheduled", "Scheduled"),
+            DropdownOption::new("confirmed", "Confirmed"),
+            DropdownOption::new("arrived", "Arrived"),
+            DropdownOption::new("in_progress", "In Progress"),
+            DropdownOption::new("completed", "Completed"),
+            DropdownOption::new("cancelled", "Cancelled"),
+            DropdownOption::new("no_show", "No Show"),
+            DropdownOption::new("rescheduled", "Rescheduled"),
+        ];
+
+        // Filter to only valid transitions from current status
+        let valid_options: Vec<DropdownOption> = all_statuses
+            .into_iter()
+            .filter(|opt| {
+                let target_status = match opt.value.as_str() {
+                    "scheduled" => AppointmentStatus::Scheduled,
+                    "confirmed" => AppointmentStatus::Confirmed,
+                    "arrived" => AppointmentStatus::Arrived,
+                    "in_progress" => AppointmentStatus::InProgress,
+                    "completed" => AppointmentStatus::Completed,
+                    "cancelled" => AppointmentStatus::Cancelled,
+                    "no_show" => AppointmentStatus::NoShow,
+                    "rescheduled" => AppointmentStatus::Rescheduled,
+                    _ => return false,
+                };
+                Self::can_transition(appointment.status, target_status)
+            })
+            .collect();
+
+        let status_dropdown = DropdownWidget::new("Status", valid_options, theme.clone());
+
         Self {
             appointment: appointment.clone(),
             theme,
             focused_button: 0,
             patient_id: appointment.patient_id,
+            status_dropdown,
         }
+    }
+
+    /// Check if a transition from one status to another is valid (mirrors domain logic)
+    fn can_transition(from: AppointmentStatus, to: AppointmentStatus) -> bool {
+        use AppointmentStatus::*;
+
+        if from == to {
+            return true;
+        }
+
+        matches!(
+            (from, to),
+            (Scheduled, Confirmed | Arrived | Cancelled | Rescheduled)
+                | (Confirmed, Arrived | Cancelled | Rescheduled)
+                | (Arrived, InProgress | NoShow)
+                | (InProgress, Completed)
+        )
     }
 
     /// Get the patient ID for clinical navigation.
@@ -221,8 +276,7 @@ impl AppointmentDetailModal {
 
     /// Check if can transition to NoShow
     fn can_mark_no_show(&self) -> bool {
-        use AppointmentStatus::*;
-        matches!(self.appointment.status, Scheduled | Confirmed | Arrived)
+        matches!(self.appointment.status, AppointmentStatus::Arrived)
     }
 
     /// Get the button index for each action
@@ -415,6 +469,10 @@ impl Widget for AppointmentDetailModal {
             buttons.push((" Complete ", self.focused_button == idx));
             idx += 1;
         }
+        if self.can_mark_no_show() {
+            buttons.push((" Mark No Show ", self.focused_button == idx));
+            idx += 1;
+        }
         buttons.push((" View Clinical Notes ", self.focused_button == idx));
 
         // Calculate button layout
@@ -493,6 +551,10 @@ mod tests {
     #[test]
     fn test_button_navigation() {
         let mut modal = make_modal();
+        // make_appointment has Confirmed status
+        // Buttons: Close (0), Mark Arrived (1), View Clinical Notes (2)
+        // NoShow is NOT available for Confirmed (domain rule: only from Arrived)
+
         // Initial focus is on Close (index 0)
         assert!(modal.is_close_focused());
         assert!(!modal.is_clinical_focused());
@@ -503,12 +565,7 @@ mod tests {
         assert!(!modal.is_clinical_focused());
 
         modal.next_button();
-        // Next is Mark No Show (index 2) - added for all valid statuses
-        assert!(!modal.is_close_focused());
-        assert!(!modal.is_clinical_focused());
-
-        modal.next_button();
-        // Next is View Clinical Notes (index 3)
+        // Next is View Clinical Notes (index 2) - NoShow not available for Confirmed
         assert!(!modal.is_close_focused());
         assert!(modal.is_clinical_focused());
 
@@ -517,7 +574,7 @@ mod tests {
         assert!(modal.is_close_focused());
 
         modal.prev_button();
-        // Previous is View Clinical Notes (index 3)
+        // Previous is View Clinical Notes (index 2)
         assert!(!modal.is_close_focused());
         assert!(modal.is_clinical_focused());
     }
