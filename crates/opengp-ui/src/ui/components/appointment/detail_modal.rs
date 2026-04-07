@@ -6,7 +6,7 @@ use crossterm::event::{KeyEvent, KeyModifiers};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Block, Borders, Widget};
+use ratatui::widgets::{Block, Borders, Clear, Widget};
 use uuid::Uuid;
 
 use crate::ui::theme::Theme;
@@ -386,6 +386,19 @@ impl Widget for AppointmentDetailModal {
         let y = area.y + (area.height.saturating_sub(modal_height)) / 2;
 
         let modal_area = Rect::new(x, y, modal_width, modal_height);
+
+        // Clear the modal area with background color
+        let bg_style = Style::default().bg(self.theme.colors.background);
+        Clear.render(modal_area, buf);
+
+        // Fill the modal area with background color
+        for row in modal_area.top()..modal_area.bottom() {
+            for col in modal_area.left()..modal_area.right() {
+                if let Some(cell) = buf.cell_mut((col, row)) {
+                    cell.set_style(bg_style);
+                }
+            }
+        }
 
         // Render modal block with border
         let block = Block::default()
