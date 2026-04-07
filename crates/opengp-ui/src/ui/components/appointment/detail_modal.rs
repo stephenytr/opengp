@@ -491,8 +491,9 @@ impl Widget for AppointmentDetailModal {
         let spacing = 2u16;
         let total_buttons_width = button_width * buttons.len() as u16
             + spacing * (buttons.len().saturating_sub(1)) as u16;
-        let button_start_x = inner.x + (inner.width.saturating_sub(total_buttons_width)) / 2;
-        let change_status_button_x = button_start_x + button_width + spacing;
+        let button_start_offset = (inner.width.saturating_sub(total_buttons_width)) / 2;
+        let button_start_x = inner.x + button_start_offset;
+        let change_status_button_offset = button_start_offset + button_width + spacing;
 
         // Render each button
         let mut current_x = button_start_x;
@@ -523,11 +524,11 @@ impl Widget for AppointmentDetailModal {
         if self.focused_button == 1 {
             let change_status_label_width = " Change Status ".len() as u16;
             let dropdown_width = button_width.max(change_status_label_width.saturating_add(4));
-            let centered_x = change_status_button_x
+            let centered_offset = change_status_button_offset
                 .saturating_add(button_width / 2)
                 .saturating_sub(dropdown_width / 2);
-            let max_x = inner.right().saturating_sub(dropdown_width);
-            let dropdown_x = centered_x.max(inner.x).min(max_x);
+            let max_offset = inner.width.saturating_sub(dropdown_width);
+            let dropdown_x = inner.x + centered_offset.min(max_offset);
             let dropdown_y = button_y + 1;
             let dropdown_area = Rect::new(dropdown_x, dropdown_y, dropdown_width, 3);
             let mut dropdown = self.status_dropdown.clone();
