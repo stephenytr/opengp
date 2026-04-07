@@ -593,4 +593,126 @@ mod tests {
         let modal = make_modal();
         assert_eq!(modal.format_status(), "Confirmed");
     }
+
+    #[test]
+    fn test_mark_no_show_returns_correct_action() {
+        let start = Utc.with_ymd_and_hms(2026, 3, 15, 9, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2026, 3, 15, 9, 30, 0).unwrap();
+        let appointment = CalendarAppointment {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            patient_name: "John Smith".to_string(),
+            practitioner_id: Uuid::new_v4(),
+            start_time: start,
+            end_time: end,
+            appointment_type: AppointmentType::Long,
+            status: AppointmentStatus::Arrived,
+            is_urgent: false,
+            slot_span: 2,
+            reason: Some("Follow-up consultation".to_string()),
+            notes: Some("Patient requested morning appointment".to_string()),
+            is_overlapping: false,
+        };
+
+        let mut modal = AppointmentDetailModal::new(appointment, Theme::dark());
+        modal.next_button();
+        assert_eq!(modal.focused_button, 1);
+
+        let enter_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
+        modal.handle_key(enter_key);
+
+        modal.status_dropdown.select_next();
+        modal.status_dropdown.select_next();
+
+        let confirm_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
+        let action = modal.handle_key(confirm_key);
+        assert_eq!(action, Some(AppointmentDetailModalAction::MarkNoShow));
+    }
+
+    #[test]
+    fn test_can_mark_no_show_only_for_arrived() {
+        assert!(!AppointmentDetailModal::can_transition(
+            AppointmentStatus::Scheduled,
+            AppointmentStatus::NoShow
+        ));
+
+        assert!(!AppointmentDetailModal::can_transition(
+            AppointmentStatus::Confirmed,
+            AppointmentStatus::NoShow
+        ));
+
+        assert!(AppointmentDetailModal::can_transition(
+            AppointmentStatus::Arrived,
+            AppointmentStatus::NoShow
+        ));
+
+        assert!(!AppointmentDetailModal::can_transition(
+            AppointmentStatus::InProgress,
+            AppointmentStatus::NoShow
+        ));
+
+        assert!(!AppointmentDetailModal::can_transition(
+            AppointmentStatus::Completed,
+            AppointmentStatus::NoShow
+        ));
+    }
+
+    #[test]
+    fn test_dropdown_filtered_by_valid_transitions() {
+        let start = Utc.with_ymd_and_hms(2026, 3, 15, 9, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2026, 3, 15, 9, 30, 0).unwrap();
+        let scheduled_appt = CalendarAppointment {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            patient_name: "John Smith".to_string(),
+            practitioner_id: Uuid::new_v4(),
+            start_time: start,
+            end_time: end,
+            appointment_type: AppointmentType::Long,
+            status: AppointmentStatus::Scheduled,
+            is_urgent: false,
+            slot_span: 2,
+            reason: None,
+            notes: None,
+            is_overlapping: false,
+        };
+
+        let modal = AppointmentDetailModal::new(scheduled_appt, Theme::dark());
+        let options = &modal.status_dropdown.options;
+        let option_values: Vec<&str> = options.iter().map(|o| o.value.as_str()).collect();
+
+        assert!(option_values.contains(&"scheduled"));
+        assert!(option_values.contains(&"confirmed"));
+        assert!(option_values.contains(&"arrived"));
+        assert!(option_values.contains(&"cancelled"));
+        assert!(option_values.contains(&"rescheduled"));
+        assert!(!option_values.contains(&"no_show"));
+        assert!(!option_values.contains(&"in_progress"));
+
+        let arrived_appt = CalendarAppointment {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            patient_name: "Jane Doe".to_string(),
+            practitioner_id: Uuid::new_v4(),
+            start_time: start,
+            end_time: end,
+            appointment_type: AppointmentType::Standard,
+            status: AppointmentStatus::Arrived,
+            is_urgent: false,
+            slot_span: 1,
+            reason: None,
+            notes: None,
+            is_overlapping: false,
+        };
+
+        let modal = AppointmentDetailModal::new(arrived_appt, Theme::dark());
+        let options = &modal.status_dropdown.options;
+        let option_values: Vec<&str> = options.iter().map(|o| o.value.as_str()).collect();
+
+        assert!(option_values.contains(&"arrived"));
+        assert!(option_values.contains(&"in_progress"));
+        assert!(option_values.contains(&"no_show"));
+        assert!(!option_values.contains(&"scheduled"));
+        assert!(!option_values.contains(&"confirmed"));
+    }
 }
