@@ -66,6 +66,7 @@ impl App {
                         self.tab_bar
                             .select(crate::ui::components::tabs::Tab::Clinical);
                         self.pending_clinical_patient_id = Some(patient_id);
+                        self.request_refresh_consultations(patient_id);
                         self.refresh_status_bar();
                         self.refresh_context();
                     }
