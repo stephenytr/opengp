@@ -287,7 +287,7 @@ impl AppointmentDetailModal {
             return None;
         }
 
-        if self.focused_button == 1 {
+        if self.focused_button == 1 && self.status_dropdown.is_open() {
             if let Some(action) = self.status_dropdown.handle_key(key) {
                 match action {
                     DropdownAction::Selected(_) => {
@@ -324,6 +324,10 @@ impl AppointmentDetailModal {
                 self.prev_button();
                 None
             }
+            KeyCode::Up | KeyCode::Down if self.focused_button == 1 => {
+                let _ = self.status_dropdown.handle_key(key);
+                None
+            }
             KeyCode::Left | KeyCode::Up => {
                 self.prev_button();
                 None
@@ -333,6 +337,18 @@ impl AppointmentDetailModal {
                 None
             }
             KeyCode::Enter => {
+                if self.focused_button == 1 {
+                    if let Some(action) = self.status_dropdown.handle_key(key) {
+                        match action {
+                            DropdownAction::Selected(_) => return self.get_dropdown_action(),
+                            DropdownAction::Closed
+                            | DropdownAction::Opened
+                            | DropdownAction::FocusChanged => return None,
+                        }
+                    }
+                    return None;
+                }
+
                 let button_map = self.get_button_index();
                 button_map.get(&self.focused_button).copied()
             }
@@ -476,17 +492,6 @@ impl Widget for AppointmentDetailModal {
             current_x += button_width + spacing;
         }
 
-        // Render status dropdown below buttons when focused
-        if self.focused_button == 1 {
-            y += 1;
-            let dropdown_width = 20u16;
-            let dropdown_x = button_start_x + button_width + spacing;
-            let dropdown_area = Rect::new(dropdown_x, y, dropdown_width, 3);
-            let mut dropdown = self.status_dropdown.clone();
-            dropdown.focused = true;
-            dropdown.render(dropdown_area, buf);
-        }
-
         // Help text
         y += 1;
         let help_text = "Tab: Navigate | Enter: Select | Esc: Close";
@@ -497,6 +502,16 @@ impl Widget for AppointmentDetailModal {
             help_text,
             Style::default().fg(self.theme.colors.disabled),
         );
+
+        if self.focused_button == 1 {
+            let dropdown_width = 20u16;
+            let dropdown_x = button_start_x + button_width + spacing;
+            let dropdown_y = y.saturating_sub(1);
+            let dropdown_area = Rect::new(dropdown_x, dropdown_y, dropdown_width, 3);
+            let mut dropdown = self.status_dropdown.clone();
+            dropdown.focused = true;
+            dropdown.render(dropdown_area, buf);
+        }
     }
 }
 
@@ -627,6 +642,55 @@ mod tests {
         let confirm_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
         let action = modal.handle_key(confirm_key);
         assert_eq!(action, Some(AppointmentDetailModalAction::MarkNoShow));
+    }
+
+    #[test]
+    fn test_tab_moves_focus_away_from_status_when_dropdown_closed() {
+        let mut modal = make_modal();
+        modal.next_button();
+        assert_eq!(modal.focused_button, 1);
+        assert!(!modal.status_dropdown.is_open());
+
+        let tab_key = KeyEvent::new(crossterm::event::KeyCode::Tab, KeyModifiers::empty());
+        let action = modal.handle_key(tab_key);
+
+        assert_eq!(action, None);
+        assert_eq!(modal.focused_button, 2);
+    }
+
+    #[test]
+    fn test_arrived_can_select_in_progress_action() {
+        let start = Utc.with_ymd_and_hms(2026, 3, 15, 9, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2026, 3, 15, 9, 30, 0).unwrap();
+        let appointment = CalendarAppointment {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            patient_name: "John Smith".to_string(),
+            practitioner_id: Uuid::new_v4(),
+            start_time: start,
+            end_time: end,
+            appointment_type: AppointmentType::Long,
+            status: AppointmentStatus::Arrived,
+            is_urgent: false,
+            slot_span: 2,
+            reason: Some("Follow-up consultation".to_string()),
+            notes: Some("Patient requested morning appointment".to_string()),
+            is_overlapping: false,
+        };
+
+        let mut modal = AppointmentDetailModal::new(appointment, Theme::dark());
+        modal.next_button();
+        assert_eq!(modal.focused_button, 1);
+
+        let open_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
+        assert_eq!(modal.handle_key(open_key), None);
+        assert!(modal.status_dropdown.is_open());
+
+        modal.status_dropdown.select_next();
+
+        let confirm_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
+        let action = modal.handle_key(confirm_key);
+        assert_eq!(action, Some(AppointmentDetailModalAction::MarkInProgress));
     }
 
     #[test]

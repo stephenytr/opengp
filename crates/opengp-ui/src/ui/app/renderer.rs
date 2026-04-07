@@ -120,8 +120,6 @@ impl App {
     }
 
     fn render_appointment_tab(&mut self, frame: &mut Frame, area: Rect) {
-        use ratatui::widgets::Clear;
-
         if let Some(ref form) = self.appointment_form {
             frame.render_widget(form.clone(), area);
             return;
@@ -217,7 +215,6 @@ impl App {
 
         // Render modal ON TOP (overlay)
         if let Some(ref modal) = self.appointment_detail_modal {
-            frame.render_widget(Clear, area);
             frame.render_widget(modal.clone(), area);
             return;
         }
