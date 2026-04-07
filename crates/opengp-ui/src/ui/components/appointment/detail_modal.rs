@@ -93,7 +93,19 @@ impl AppointmentDetailModal {
             })
             .collect();
 
-        let status_dropdown = DropdownWidget::new("Status", valid_options, theme.clone());
+        let mut status_dropdown = DropdownWidget::new("Status", valid_options, theme.clone());
+
+        let status_value = match appointment.status {
+            AppointmentStatus::Scheduled => "scheduled",
+            AppointmentStatus::Confirmed => "confirmed",
+            AppointmentStatus::Arrived => "arrived",
+            AppointmentStatus::InProgress => "in_progress",
+            AppointmentStatus::Completed => "completed",
+            AppointmentStatus::Cancelled => "cancelled",
+            AppointmentStatus::NoShow => "no_show",
+            AppointmentStatus::Rescheduled => "rescheduled",
+        };
+        status_dropdown.set_value(status_value);
 
         Self {
             appointment: appointment.clone(),
@@ -238,80 +250,63 @@ impl AppointmentDetailModal {
         self.focused_button == self.button_count() - 1
     }
 
-    /// Get the number of visible buttons (depends on valid status transitions)
+    /// Get the number of visible buttons (Close, Status Dropdown, View Clinical Notes)
     fn button_count(&self) -> usize {
-        let mut count = 2; // Close and View Clinical Notes
-        if self.can_mark_arrived() {
-            count += 1;
-        }
-        if self.can_mark_in_progress() {
-            count += 1;
-        }
-        if self.can_mark_completed() {
-            count += 1;
-        }
-        if self.can_mark_no_show() {
-            count += 1;
-        }
-        count
-    }
-
-    /// Check if can transition to Arrived
-    fn can_mark_arrived(&self) -> bool {
-        use AppointmentStatus::*;
-        matches!(self.appointment.status, Scheduled | Confirmed)
-    }
-
-    /// Check if can transition to InProgress
-    fn can_mark_in_progress(&self) -> bool {
-        use AppointmentStatus::*;
-        matches!(self.appointment.status, Arrived)
-    }
-
-    /// Check if can transition to Completed
-    fn can_mark_completed(&self) -> bool {
-        use AppointmentStatus::*;
-        matches!(self.appointment.status, InProgress)
-    }
-
-    /// Check if can transition to NoShow
-    fn can_mark_no_show(&self) -> bool {
-        matches!(self.appointment.status, AppointmentStatus::Arrived)
+        3 // Close, Status Dropdown, View Clinical Notes
     }
 
     /// Get the button index for each action
     fn get_button_index(&self) -> std::collections::HashMap<usize, AppointmentDetailModalAction> {
         let mut map = std::collections::HashMap::new();
         map.insert(0, AppointmentDetailModalAction::Close);
-
-        let mut idx = 1;
-        if self.can_mark_arrived() {
-            map.insert(idx, AppointmentDetailModalAction::MarkArrived);
-            idx += 1;
-        }
-        if self.can_mark_in_progress() {
-            map.insert(idx, AppointmentDetailModalAction::MarkInProgress);
-            idx += 1;
-        }
-        if self.can_mark_completed() {
-            map.insert(idx, AppointmentDetailModalAction::MarkCompleted);
-            idx += 1;
-        }
-        if self.can_mark_no_show() {
-            map.insert(idx, AppointmentDetailModalAction::MarkNoShow);
-            idx += 1;
-        }
-        map.insert(idx, AppointmentDetailModalAction::ViewClinicalNotes);
+        // Button 1 is the dropdown - handled separately in handle_key
+        map.insert(2, AppointmentDetailModalAction::ViewClinicalNotes);
         map
+    }
+
+    /// Get action based on dropdown selection
+    fn get_dropdown_action(&self) -> Option<AppointmentDetailModalAction> {
+        let value = self.status_dropdown.selected_value()?;
+        match value {
+            "arrived" => Some(AppointmentDetailModalAction::MarkArrived),
+            "in_progress" => Some(AppointmentDetailModalAction::MarkInProgress),
+            "completed" => Some(AppointmentDetailModalAction::MarkCompleted),
+            "no_show" => Some(AppointmentDetailModalAction::MarkNoShow),
+            _ => None,
+        }
     }
 
     // ── Key handling ───────────────────────────────────────────────────────
 
     /// Handle keyboard input and return an action if triggered.
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<AppointmentDetailModalAction> {
+        use crate::ui::widgets::DropdownAction;
         use crossterm::event::{KeyCode, KeyEventKind};
 
         if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
+        if self.focused_button == 1 {
+            if let Some(action) = self.status_dropdown.handle_key(key) {
+                match action {
+                    DropdownAction::Selected(_) => {
+                        return self.get_dropdown_action();
+                    }
+                    DropdownAction::Closed => {
+                        // Dropdown closed, stay on button 1 for next interaction
+                        return None;
+                    }
+                    DropdownAction::Opened => {
+                        // Dropdown opened, stay focused
+                        return None;
+                    }
+                    DropdownAction::FocusChanged => {
+                        // Focus changed within dropdown, stay focused
+                        return None;
+                    }
+                }
+            }
             return None;
         }
 
@@ -453,27 +448,12 @@ impl Widget for AppointmentDetailModal {
         // Render buttons at the bottom
         y += 1;
 
-        // Build button list dynamically based on valid transitions
-        let mut buttons: Vec<(&str, bool)> = vec![(" Close ", self.focused_button == 0)];
-
-        let mut idx = 1;
-        if self.can_mark_arrived() {
-            buttons.push((" Mark Arrived ", self.focused_button == idx));
-            idx += 1;
-        }
-        if self.can_mark_in_progress() {
-            buttons.push((" Start Consultation ", self.focused_button == idx));
-            idx += 1;
-        }
-        if self.can_mark_completed() {
-            buttons.push((" Complete ", self.focused_button == idx));
-            idx += 1;
-        }
-        if self.can_mark_no_show() {
-            buttons.push((" Mark No Show ", self.focused_button == idx));
-            idx += 1;
-        }
-        buttons.push((" View Clinical Notes ", self.focused_button == idx));
+        // Build button list: Close, Status Dropdown, View Clinical Notes
+        let buttons: Vec<(&str, bool)> = vec![
+            (" Close ", self.focused_button == 0),
+            (" Change Status ", self.focused_button == 1),
+            (" View Clinical Notes ", self.focused_button == 2),
+        ];
 
         // Calculate button layout
         let button_width = 17u16;
@@ -494,6 +474,17 @@ impl Widget for AppointmentDetailModal {
             };
             buf.set_string(current_x, y, label, style);
             current_x += button_width + spacing;
+        }
+
+        // Render status dropdown below buttons when focused
+        if self.focused_button == 1 {
+            y += 1;
+            let dropdown_width = 20u16;
+            let dropdown_x = button_start_x + button_width + spacing;
+            let dropdown_area = Rect::new(dropdown_x, y, dropdown_width, 3);
+            let mut dropdown = self.status_dropdown.clone();
+            dropdown.focused = true;
+            dropdown.render(dropdown_area, buf);
         }
 
         // Help text
