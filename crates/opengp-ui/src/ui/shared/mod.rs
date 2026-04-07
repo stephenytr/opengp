@@ -3,7 +3,7 @@ pub mod types;
 #[cfg(test)]
 mod tests;
 
-pub use types::{FormAction, FormMode};
+pub use types::{FormAction, FormMode, ModalAction};
 
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders};

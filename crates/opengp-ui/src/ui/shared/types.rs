@@ -22,3 +22,14 @@ pub enum FormAction {
     /// The user cancelled the form without saving.
     Cancel,
 }
+
+/// High level actions that a modal dialog can emit back to its caller.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModalAction {
+    /// Focus moved to a different button.
+    FocusChanged,
+    /// The user confirmed by pressing Enter on the focused button.
+    Confirm,
+    /// The user dismissed the modal without confirming.
+    Dismiss,
+}
