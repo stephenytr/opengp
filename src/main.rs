@@ -83,11 +83,9 @@ async fn run_tui(
     clinical_config: opengp_config::ClinicalConfig,
     social_history_config: opengp_config::SocialHistoryConfig,
 ) -> Result<()> {
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    // All setup runs before entering the alternate screen so that errors
+    // (e.g. database unreachable) are printed to the normal terminal instead
+    // of being swallowed by a black screen.
 
     let has_session_token = api_client.current_session_token().await.is_some();
 
@@ -134,6 +132,13 @@ async fn run_tui(
     if has_session_token {
         app.request_refresh_patients();
     }
+
+    // Only enter the alternate screen once all setup has succeeded.
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
 
     loop {
         app.poll_api_tasks().await;
