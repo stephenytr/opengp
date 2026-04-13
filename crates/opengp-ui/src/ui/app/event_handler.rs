@@ -140,7 +140,6 @@ impl App {
                     self.tab_bar.select(Tab::Appointment);
                     let today = chrono::Utc::now().date_naive();
                     self.appointment_state.selected_date = Some(today);
-                    self.pending_appointment_date = Some(today);
                     // Auto-refresh appointments when switching to Appointment tab
                     if self.previous_tab != Tab::Appointment {
                         self.request_refresh_appointments(today);

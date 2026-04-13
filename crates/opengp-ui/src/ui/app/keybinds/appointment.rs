@@ -38,7 +38,7 @@ impl App {
                         self.appointment_state.current_view = AppointmentView::Schedule;
                         self.appointment_state.focused = true;
                         self.appointment_state.calendar.focused = false;
-                        self.pending_appointment_date = Some(date);
+                        self.request_refresh_appointments(date);
                         self.refresh_context();
                     }
                     CalendarAction::FocusDate(_) => {}

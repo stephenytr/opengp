@@ -14,10 +14,6 @@ impl App {
         self.pending_practitioners_list_refresh = true;
     }
 
-    pub fn take_pending_appointment_date(&mut self) -> Option<NaiveDate> {
-        self.pending_appointment_date.take()
-    }
-
     pub fn request_load_practitioners(&mut self) {
         self.pending_load_practitioners = true;
     }

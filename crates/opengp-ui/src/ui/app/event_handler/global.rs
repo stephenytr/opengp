@@ -73,7 +73,7 @@ impl App {
                             ) => {
                                 self.appointment_state.selected_date = Some(date);
                                 self.appointment_state.current_view = AppointmentView::Schedule;
-                                self.pending_appointment_date = Some(date);
+                                self.request_refresh_appointments(date);
                                 self.refresh_context();
                             }
                             crate::ui::components::appointment::CalendarAction::FocusDate(_) => {}
@@ -101,7 +101,7 @@ impl App {
                             match action {
                                 crate::ui::components::appointment::CalendarAction::SelectDate(date) => {
                                     self.appointment_state.selected_date = Some(date);
-                                    self.pending_appointment_date = Some(date);
+                                    self.request_refresh_appointments(date);
                                 }
                                 crate::ui::components::appointment::CalendarAction::FocusDate(_) => {}
                                 crate::ui::components::appointment::CalendarAction::MonthChanged(_) => {}
