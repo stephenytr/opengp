@@ -715,6 +715,7 @@ pub(super) fn appointment_status_to_string(status: AppointmentStatus) -> &'stati
         AppointmentStatus::Confirmed => "confirmed",
         AppointmentStatus::Arrived => "arrived",
         AppointmentStatus::InProgress => "in_progress",
+        AppointmentStatus::Billing => "billing",
         AppointmentStatus::Completed => "completed",
         AppointmentStatus::NoShow => "no_show",
         AppointmentStatus::Cancelled => "cancelled",

@@ -153,11 +153,17 @@ pub enum PendingClinicalSaveData {
         reason: Option<String>,
         clinical_notes: Option<String>,
     },
-    SocialHistory {
-        patient_id: uuid::Uuid,
-        history: opengp_domain::domain::clinical::SocialHistory,
-    },
-}
+     SocialHistory {
+         patient_id: uuid::Uuid,
+         history: opengp_domain::domain::clinical::SocialHistory,
+     },
+     TimerStart {
+         consultation_id: uuid::Uuid,
+     },
+     TimerStop {
+         consultation_id: uuid::Uuid,
+     },
+ }
 
 pub enum PendingBillingSaveData {
     AwaitingMbsSelection {
@@ -173,10 +179,7 @@ pub enum PendingBillingSaveData {
 
 #[derive(Debug)]
 pub enum AppointmentStatusTransition {
-    MarkArrived,
-    MarkInProgress,
-    MarkCompleted,
-    MarkNoShow,
+    SetStatus(opengp_domain::domain::appointment::AppointmentStatus),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

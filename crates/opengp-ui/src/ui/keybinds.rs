@@ -98,6 +98,10 @@ pub enum Action {
     Clear,
     /// Start/stop consultation timer
     ToggleTimer,
+    /// Finish appointment and return to appointments tab
+    FinishAppointment,
+    /// Start a consultation from the appointment detail modal
+    StartConsultation,
 
     // Tab actions
     /// Switch to Patient tab
@@ -521,6 +525,12 @@ impl KeybindRegistry {
             context: KeyContext::Schedule,
             description: "Select appointment at current time slot",
         });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            action: Action::StartConsultation,
+            context: KeyContext::Schedule,
+            description: "Start Consultation (in appointment modal)",
+        });
         // Schedule: PageUp/PageDown for viewport scrolling
         self.register(Keybind {
             key: KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE),
@@ -624,6 +634,18 @@ impl KeybindRegistry {
             description: "Start/stop consultation timer",
         });
         self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
+            action: Action::ToggleTimer,
+            context: KeyContext::Schedule,
+            description: "Toggle timer for active consultation",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE),
+            action: Action::FinishAppointment,
+            context: KeyContext::Clinical,
+            description: "Finish appointment & return to schedule",
+        });
+        self.register(Keybind {
             key: KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
             action: Action::Delete,
             context: KeyContext::Clinical,
@@ -722,13 +744,7 @@ impl KeybindRegistry {
             context: KeyContext::Clinical,
             description: "View recent consultations",
         });
-        // f = View Family History
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE),
-            action: Action::ViewFamilyHistory,
-            context: KeyContext::Clinical,
-            description: "View family history",
-        });
+
         // h = View Social History
         self.register(Keybind {
             key: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),

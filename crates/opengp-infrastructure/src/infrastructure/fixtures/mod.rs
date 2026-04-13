@@ -12,6 +12,7 @@ pub mod immunisation_generator;
 pub mod patient_generator;
 #[cfg(feature = "prescription")]
 pub mod prescription_generator;
+pub mod schedule_scenarios;
 pub mod working_hours_generator;
 
 pub use appointment_generator::{
@@ -27,4 +28,5 @@ pub use immunisation_generator::{ImmunisationGenerator, ImmunisationGeneratorCon
 pub use patient_generator::{PatientGenerator, PatientGeneratorConfig};
 #[cfg(feature = "prescription")]
 pub use prescription_generator::{PrescriptionGenerator, PrescriptionGeneratorConfig};
+pub use schedule_scenarios::ScheduleScenario;
 pub use working_hours_generator::seed_working_hours;

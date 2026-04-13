@@ -250,6 +250,34 @@ impl ClinicalService {
         Ok(())
     }
 
+    /// Start a timer for a consultation.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the timer cannot be started.
+    #[instrument(skip(self), fields(consultation_id = %consultation_id))]
+    pub async fn start_timer(&self, consultation_id: Uuid) -> Result<(), ServiceError> {
+        info!("Starting timer for consultation: {}", consultation_id);
+        self.repos
+            .consultation
+            .start_timer(consultation_id)
+            .await
+            .map_err(ServiceError::Repository)
+    }
+
+    /// Stop a timer for a consultation and return elapsed milliseconds.
+    ///
+    /// # Errors
+    /// Returns [`ServiceError::Repository`] if the timer cannot be stopped.
+    #[instrument(skip(self), fields(consultation_id = %consultation_id))]
+    pub async fn stop_timer(&self, consultation_id: Uuid) -> Result<Option<i64>, ServiceError> {
+        info!("Stopping timer for consultation: {}", consultation_id);
+        self.repos
+            .consultation
+            .stop_timer(consultation_id)
+            .await
+            .map_err(ServiceError::Repository)
+    }
+
     // ==================== Allergy Management ====================
 
     /// Record a new allergy for a patient.

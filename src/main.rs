@@ -11,13 +11,19 @@ use opengp_domain::domain::api::{
 use opengp_ui::api::ApiClient;
 use opengp_ui::ui::app::App;
 use opengp_ui::ui::app::PendingBillingSaveData;
-use opengp_ui::ui::services::BillingUiService;
+use opengp_ui::ui::services::{BillingUiService, ClinicalUiService};
 use opengp_domain::domain::billing::{BillingRepository, BillingService, BillingType};
-use opengp_domain::domain::clinical::{ConsultationRepository, suggest_mbs_level};
+use opengp_domain::domain::clinical::{
+    Consultation, ConsultationRepository, ClinicalRepositories, ClinicalService, suggest_mbs_level,
+};
+use opengp_domain::domain::patient::PatientRepository;
+use opengp_domain::domain::audit::{AuditEmitter, AuditRepository, AuditService};
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::{create_pool, DatabaseConfig};
 use opengp_infrastructure::infrastructure::database::repositories::{
-    SqlxBillingRepository, SqlxClinicalRepository,
+    SqlxAllergyRepository, SqlxAuditRepository, SqlxBillingRepository, SqlxClinicalRepository,
+    SqlxFamilyHistoryRepository, SqlxMedicalHistoryRepository, SqlxPatientRepository,
+    SqlxSocialHistoryRepository, SqlxVitalSignsRepository,
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
@@ -96,8 +102,28 @@ async fn run_tui(
     };
     theme.colors = ColorPalette::from_config(palette_config);
 
-    let billing_service = {
-        let database_pool = create_pool(&database_config).await?;
+    let (billing_service, clinical_ui_service) = {
+        let db_url = database_config.url.clone();
+        let database_pool = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            create_pool(&database_config),
+        )
+        .await
+        .map_err(|_| {
+            color_eyre::eyre::eyre!(
+                "Database connection timed out after 5 seconds — is PostgreSQL running?\n  URL: {}",
+                db_url
+            )
+        })
+        .and_then(|r| {
+            r.map_err(|e| {
+                color_eyre::eyre::eyre!(
+                    "Failed to connect to database — is PostgreSQL running?\n  URL: {}\n  Cause: {}",
+                    db_url,
+                    e
+                )
+            })
+        })?;
         let pool = database_pool.as_postgres().clone();
 
         let encryption_service = Arc::new(
@@ -108,12 +134,48 @@ async fn run_tui(
         let billing_repo: Arc<dyn BillingRepository> =
             Arc::new(SqlxBillingRepository::new(pool.clone()));
         let consultation_repo: Arc<dyn ConsultationRepository> = Arc::new(
-            SqlxClinicalRepository::new(pool, Arc::clone(&encryption_service)),
+            SqlxClinicalRepository::new(pool.clone(), Arc::clone(&encryption_service)),
         );
 
         let billing_domain_service =
-            BillingService::new(Arc::clone(&billing_repo), consultation_repo);
-        Some(Arc::new(BillingUiService::new(Arc::new(billing_domain_service))))
+            BillingService::new(Arc::clone(&billing_repo), Arc::clone(&consultation_repo));
+        let billing_service = Some(Arc::new(BillingUiService::new(Arc::new(billing_domain_service))));
+
+        // Create clinical service with all required repositories
+        let clinical_repos = ClinicalRepositories {
+            consultation: Arc::clone(&consultation_repo),
+            allergy: Arc::new(SqlxAllergyRepository::new(pool.clone(), Arc::clone(&encryption_service))),
+            medical_history: Arc::new(SqlxMedicalHistoryRepository::new(
+                pool.clone(),
+                Arc::clone(&encryption_service),
+            )),
+            vital_signs: Arc::new(SqlxVitalSignsRepository::new(pool.clone(), Arc::clone(&encryption_service))),
+            social_history: Arc::new(SqlxSocialHistoryRepository::new(
+                pool.clone(),
+                Arc::clone(&encryption_service),
+            )),
+            family_history: Arc::new(SqlxFamilyHistoryRepository::new(
+                pool.clone(),
+                Arc::clone(&encryption_service),
+            )),
+        };
+
+        let patient_repo: Arc<dyn PatientRepository> =
+            Arc::new(SqlxPatientRepository::new(pool.clone(), Arc::clone(&encryption_service)));
+        let patient_service = Arc::new(opengp_domain::domain::patient::PatientService::new(patient_repo));
+
+        let audit_repo: Arc<dyn AuditRepository> =
+            Arc::new(SqlxAuditRepository::new(pool.clone()));
+        let audit_service: Arc<dyn AuditEmitter> = Arc::new(AuditService::new(audit_repo));
+
+        let clinical_domain_service = Arc::new(ClinicalService::new(
+            clinical_repos,
+            patient_service,
+            audit_service,
+        ));
+        let clinical_service = Some(Arc::new(ClinicalUiService::new(clinical_domain_service)));
+
+        (billing_service, clinical_service)
     };
 
     let mut app = App::new(
@@ -246,34 +308,29 @@ async fn run_tui(
 
         if let Some((appointment_id, transition)) = app.take_pending_appointment_status_transition()
         {
-            let result = match transition {
-                opengp_ui::ui::app::AppointmentStatusTransition::MarkArrived => {
-                    api_client
-                        .update_appointment_status(appointment_id, "arrived")
-                        .await
-                }
-                opengp_ui::ui::app::AppointmentStatusTransition::MarkInProgress => {
-                    api_client
-                        .update_appointment_status(appointment_id, "in_progress")
-                        .await
-                }
-                opengp_ui::ui::app::AppointmentStatusTransition::MarkCompleted => {
-                    api_client
-                        .update_appointment_status(appointment_id, "completed")
-                        .await
-                }
-                opengp_ui::ui::app::AppointmentStatusTransition::MarkNoShow => {
-                    api_client
-                        .update_appointment_status(appointment_id, "no_show")
-                        .await
+            let result = {
+                use opengp_ui::ui::app::AppointmentStatusTransition;
+                use opengp_domain::domain::appointment::AppointmentStatus;
+                match transition {
+                    AppointmentStatusTransition::SetStatus(status) => {
+                        let status_str = match status {
+                            AppointmentStatus::Scheduled => "scheduled",
+                            AppointmentStatus::Confirmed => "confirmed",
+                            AppointmentStatus::Arrived => "arrived",
+                            AppointmentStatus::InProgress => "in_progress",
+                            AppointmentStatus::Billing => "billing",
+                            AppointmentStatus::Completed => "completed",
+                            AppointmentStatus::Cancelled => "cancelled",
+                            AppointmentStatus::NoShow => "no_show",
+                            AppointmentStatus::Rescheduled => "rescheduled",
+                        };
+                        api_client.update_appointment_status(appointment_id, status_str).await
+                    }
                 }
             };
             match result {
                 Ok(_) => {
-                    tracing::info!("Updated appointment status: {:?}", transition);
-                    if let Some(date) = app.appointment_state_mut().selected_date {
-                        app.request_refresh_appointments(date);
-                    }
+                    tracing::info!("Updated appointment status");
                 }
                 Err(e) => tracing::error!("Failed to update appointment status: {}", e),
             }
@@ -461,6 +518,33 @@ async fn run_tui(
                                 consultation.id,
                                 patient_id
                             );
+                            let started_at = chrono::Utc::now();
+                            if let Some(ref service) = clinical_ui_service {
+                                if let Err(e) = service.start_timer(consultation.id).await {
+                                    tracing::error!("Failed to start timer: {}", e);
+                                }
+                            }
+                            let domain_consultation = Consultation {
+                                id: consultation.id,
+                                patient_id: consultation.patient_id,
+                                practitioner_id: consultation.practitioner_id,
+                                appointment_id: consultation.appointment_id,
+                                consultation_date: consultation.consultation_date,
+                                reason: consultation.reason.clone(),
+                                clinical_notes: consultation.clinical_notes.clone(),
+                                is_signed: consultation.is_signed,
+                                signed_at: None,
+                                signed_by: None,
+                                consultation_started_at: Some(started_at),
+                                consultation_ended_at: None,
+                                created_at: consultation.consultation_date,
+                                updated_at: consultation.consultation_date,
+                                version: consultation.version,
+                                created_by: consultation.practitioner_id,
+                                updated_by: None,
+                            };
+                            app.clinical_state_mut().consultations.push(domain_consultation);
+                            app.clinical_state_mut().set_active_timer_started_at(started_at);
                             if consultation.is_signed {
                                 app.set_pending_billing(PendingBillingSaveData::AwaitingMbsSelection {
                                     consultation_id: consultation.id,
@@ -520,6 +604,20 @@ async fn run_tui(
                         Err(e) => {
                             tracing::error!("Failed to save social history: {}", e);
                             app.set_status_error(format!("Failed to save social history: {}", e));
+                        }
+                    }
+                }
+                opengp_ui::ui::app::PendingClinicalSaveData::TimerStart { consultation_id } => {
+                    if let Some(ref service) = clinical_ui_service {
+                        if let Err(e) = service.start_timer(consultation_id).await {
+                            app.set_status_error(format!("Timer start failed: {}", e));
+                        }
+                    }
+                }
+                opengp_ui::ui::app::PendingClinicalSaveData::TimerStop { consultation_id } => {
+                    if let Some(ref service) = clinical_ui_service {
+                        if let Err(e) = service.stop_timer(consultation_id).await {
+                            app.set_status_error(format!("Timer stop failed: {}", e));
                         }
                     }
                 }

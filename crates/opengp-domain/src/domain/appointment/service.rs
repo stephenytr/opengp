@@ -598,56 +598,156 @@ impl AppointmentService {
         Ok(updated)
     }
 
-    /// Mark an appointment as no show and record the status change in the audit log.
-    ///
-    /// # Errors
-    /// Returns `ServiceError::NotFound` if the appointment is missing,
-    /// `ServiceError::InvalidTransition` if the status change is not allowed, or
-    /// `ServiceError::Conflict` or `ServiceError::Repository` if persistence fails.
-    pub async fn mark_no_show(
-        &self,
-        appointment_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<Appointment, ServiceError> {
-        info!(
-            "Marking appointment {} as no show by user {}",
-            appointment_id, user_id
-        );
+     /// Mark an appointment as no show and record the status change in the audit log.
+     ///
+     /// # Errors
+     /// Returns `ServiceError::NotFound` if the appointment is missing,
+     /// `ServiceError::InvalidTransition` if the status change is not allowed, or
+     /// `ServiceError::Conflict` or `ServiceError::Repository` if persistence fails.
+     pub async fn mark_no_show(
+         &self,
+         appointment_id: Uuid,
+         user_id: Uuid,
+     ) -> Result<Appointment, ServiceError> {
+         info!(
+             "Marking appointment {} as no show by user {}",
+             appointment_id, user_id
+         );
 
-        let mut appointment = self
-            .repository
-            .find_by_id(appointment_id)
-            .await?
-            .ok_or(ServiceError::NotFound(appointment_id))?;
+         let mut appointment = self
+             .repository
+             .find_by_id(appointment_id)
+             .await?
+             .ok_or(ServiceError::NotFound(appointment_id))?;
 
-        let old_status = appointment.status;
+         let old_status = appointment.status;
 
-        self.validate_transition(&appointment, AppointmentStatus::NoShow)?;
+         self.validate_transition(&appointment, AppointmentStatus::NoShow)?;
 
-        appointment.status = AppointmentStatus::NoShow;
-        appointment.updated_at = Utc::now();
-        appointment.updated_by = Some(user_id);
+         appointment.status = AppointmentStatus::NoShow;
+         appointment.updated_at = Utc::now();
+         appointment.updated_by = Some(user_id);
 
-        let updated = self
-            .repository
-            .update(appointment)
-            .await
-            .map_err(Self::map_repository_error)?;
-        info!("Appointment {} marked as no show", appointment_id);
+         let updated = self
+             .repository
+             .update(appointment)
+             .await
+             .map_err(Self::map_repository_error)?;
+         info!("Appointment {} marked as no show", appointment_id);
 
-        let audit_entry = AuditEntry::new_status_changed(
-            "appointment",
-            appointment_id,
-            format!("{:?}", old_status),
-            format!("{:?}", updated.status),
-            user_id,
-        );
-        self.audit_log(audit_entry).await?;
+         let audit_entry = AuditEntry::new_status_changed(
+             "appointment",
+             appointment_id,
+             format!("{:?}", old_status),
+             format!("{:?}", updated.status),
+             user_id,
+         );
+         self.audit_log(audit_entry).await?;
 
-        Ok(updated)
-    }
+         Ok(updated)
+     }
 
-    /// Reschedule an appointment to a new start time and duration while checking for clashes.
+     /// Mark an appointment as billing and record the status change in the audit log.
+     ///
+     /// # Errors
+     /// Returns `ServiceError::NotFound` if the appointment is missing,
+     /// `ServiceError::InvalidTransition` if the status change is not allowed, or
+     /// `ServiceError::Conflict` or `ServiceError::Repository` if persistence fails.
+     pub async fn mark_billing(
+         &self,
+         appointment_id: Uuid,
+         user_id: Uuid,
+     ) -> Result<Appointment, ServiceError> {
+         info!(
+             "Marking appointment {} as billing by user {}",
+             appointment_id, user_id
+         );
+
+         let mut appointment = self
+             .repository
+             .find_by_id(appointment_id)
+             .await?
+             .ok_or(ServiceError::NotFound(appointment_id))?;
+
+         let old_status = appointment.status;
+
+         self.validate_transition(&appointment, AppointmentStatus::Billing)?;
+
+         appointment.status = AppointmentStatus::Billing;
+         appointment.updated_at = Utc::now();
+         appointment.updated_by = Some(user_id);
+
+         let updated = self
+             .repository
+             .update(appointment)
+             .await
+             .map_err(Self::map_repository_error)?;
+         info!("Appointment {} marked as billing", appointment_id);
+
+         let audit_entry = AuditEntry::new_status_changed(
+             "appointment",
+             appointment_id,
+             format!("{:?}", old_status),
+             format!("{:?}", updated.status),
+             user_id,
+         );
+         self.audit_log(audit_entry).await?;
+
+          Ok(updated)
+      }
+
+     /// Set an appointment to a specific status with validation and audit logging.
+     ///
+     /// # Errors
+     /// Returns `ServiceError::NotFound` if the appointment is missing,
+     /// `ServiceError::InvalidTransition` if the status change is not allowed, or
+     /// `ServiceError::Conflict` or `ServiceError::Repository` if persistence fails.
+     pub async fn set_status(
+         &self,
+         appointment_id: Uuid,
+         status: AppointmentStatus,
+         user_id: Uuid,
+     ) -> Result<Appointment, ServiceError> {
+         info!(
+             "Setting appointment {} status to {:?} by user {}",
+             appointment_id, status, user_id
+         );
+
+         let mut appointment = self
+             .repository
+             .find_by_id(appointment_id)
+             .await?
+             .ok_or(ServiceError::NotFound(appointment_id))?;
+
+         let old_status = appointment.status;
+
+         self.validate_transition(&appointment, status)?;
+
+         appointment.status = status;
+         appointment.updated_at = Utc::now();
+         appointment.updated_by = Some(user_id);
+
+         let updated = self
+             .repository
+             .update(appointment)
+             .await
+             .map_err(Self::map_repository_error)?;
+
+         info!("Appointment {} status set to {:?}", appointment_id, updated.status);
+
+         let audit_entry = AuditEntry::new_status_changed(
+             "appointment",
+             appointment_id,
+             format!("{:?}", old_status),
+             format!("{:?}", updated.status),
+             user_id,
+         );
+         self.audit_log(audit_entry).await?;
+
+         Ok(updated)
+     }
+
+     /// Reschedule an appointment to a new start time and duration while checking for clashes.
     ///
     /// # Errors
     /// Returns `ServiceError::NotFound` if the appointment cannot be found,

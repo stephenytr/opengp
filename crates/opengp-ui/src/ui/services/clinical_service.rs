@@ -320,6 +320,22 @@ impl ClinicalUiService {
             .await
             .map_err(|e| e.to_ui_repository_error())
     }
+
+    /// Start a timer for a consultation.
+    pub async fn start_timer(&self, consultation_id: Uuid) -> UiResult<()> {
+        self.service
+            .start_timer(consultation_id)
+            .await
+            .map_err(|e| e.to_ui_repository_error())
+    }
+
+    /// Stop a timer for a consultation and return elapsed milliseconds.
+    pub async fn stop_timer(&self, consultation_id: Uuid) -> UiResult<Option<i64>> {
+        self.service
+            .stop_timer(consultation_id)
+            .await
+            .map_err(|e| e.to_ui_repository_error())
+    }
 }
 
 #[cfg(test)]

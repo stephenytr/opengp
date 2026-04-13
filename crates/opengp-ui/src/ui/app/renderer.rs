@@ -321,6 +321,9 @@ impl App {
             crate::ui::components::clinical::ClinicalView::Consultations => {
                 frame.render_widget(self.clinical_state.consultation_list.clone(), area);
             }
+            crate::ui::components::clinical::ClinicalView::ConsultationSummary => {
+                frame.render_widget(self.clinical_state.consultation_list.clone(), area);
+            }
             crate::ui::components::clinical::ClinicalView::Allergies => {
                 frame.render_widget(self.clinical_state.allergy_list.clone(), area);
             }
@@ -357,6 +360,33 @@ impl App {
             crate::ui::components::clinical::ClinicalView::FamilyHistory => {
                 frame.render_widget(self.clinical_state.family_history_list.clone(), area);
             }
+        }
+
+        if let Some(started_at) = self.clinical_state.active_timer_started_at {
+            use ratatui::layout::Rect;
+            use ratatui::style::{Color, Style};
+            use ratatui::text::Span;
+            use ratatui::widgets::Paragraph;
+
+            let elapsed = chrono::Utc::now() - started_at;
+            let total_secs = elapsed.num_seconds().max(0);
+            let mins = total_secs / 60;
+            let secs = total_secs % 60;
+            let label = format!(" ● {:02}:{:02} ", mins, secs);
+            let w = label.len() as u16;
+            let timer_rect = Rect {
+                x: area.x + area.width.saturating_sub(w),
+                y: area.y,
+                width: w,
+                height: 1,
+            };
+            let span = Span::styled(
+                label,
+                Style::default()
+                    .fg(Color::White)
+                    .bg(self.theme.colors.primary),
+            );
+            frame.render_widget(Paragraph::new(span), timer_rect);
         }
 
         if let Some(ref mut search) = self.clinical_state.patient_search {

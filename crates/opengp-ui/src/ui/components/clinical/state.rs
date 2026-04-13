@@ -21,6 +21,7 @@ pub enum ClinicalView {
     #[default]
     PatientSummary,
     Consultations,
+    ConsultationSummary,
     Allergies,
     MedicalHistory,
     VitalSigns,
@@ -45,6 +46,8 @@ pub struct ClinicalState {
     pub view: ClinicalView,
     pub form_view: ClinicalFormView,
     pub selected_patient_id: Option<Uuid>,
+    pub active_appointment_id: Option<Uuid>,
+    pub active_timer_started_at: Option<chrono::DateTime<chrono::Utc>>,
     pub loading: bool,
     pub error: Option<String>,
     pub consultations: Vec<Consultation>,
@@ -110,6 +113,8 @@ impl ClinicalState {
             view: ClinicalView::PatientSummary,
             form_view: ClinicalFormView::None,
             selected_patient_id: None,
+            active_appointment_id: None,
+            active_timer_started_at: None,
             loading: false,
             error: None,
             consultations: Vec::new(),
@@ -249,6 +254,10 @@ impl ClinicalState {
         self.view = ClinicalView::Consultations;
     }
 
+    pub fn show_consultation_summary(&mut self) {
+        self.view = ClinicalView::ConsultationSummary;
+    }
+
     pub fn show_allergies(&mut self) {
         self.view = ClinicalView::Allergies;
     }
@@ -277,6 +286,7 @@ impl ClinicalState {
         self.view = match self.view {
             ClinicalView::PatientSummary => ClinicalView::Consultations,
             ClinicalView::Consultations => ClinicalView::Allergies,
+            ClinicalView::ConsultationSummary => ClinicalView::Allergies,
             ClinicalView::Allergies => ClinicalView::MedicalHistory,
             ClinicalView::MedicalHistory => ClinicalView::VitalSigns,
             ClinicalView::VitalSigns => ClinicalView::SocialHistory,
@@ -290,6 +300,7 @@ impl ClinicalState {
         self.view = match self.view {
             ClinicalView::PatientSummary => ClinicalView::FamilyHistory,
             ClinicalView::Consultations => ClinicalView::PatientSummary,
+            ClinicalView::ConsultationSummary => ClinicalView::Consultations,
             ClinicalView::Allergies => ClinicalView::Consultations,
             ClinicalView::MedicalHistory => ClinicalView::Allergies,
             ClinicalView::VitalSigns => ClinicalView::MedicalHistory,
@@ -311,8 +322,23 @@ impl ClinicalState {
         self.selected_patient_id = Some(patient_id);
     }
 
+    pub fn set_active_appointment(&mut self, id: Uuid) {
+        self.active_appointment_id = Some(id);
+    }
+
+    pub fn clear_active_appointment(&mut self) {
+        self.active_appointment_id = None;
+        self.active_timer_started_at = None;
+    }
+
+    pub fn set_active_timer_started_at(&mut self, at: chrono::DateTime<chrono::Utc>) {
+        self.active_timer_started_at = Some(at);
+    }
+
     pub fn clear_patient(&mut self) {
         self.selected_patient_id = None;
+        self.active_appointment_id = None;
+        self.active_timer_started_at = None;
         self.consultations.clear();
         self.allergies.clear();
         self.medical_history.clear();
@@ -351,6 +377,7 @@ impl ClinicalState {
         match self.view {
             ClinicalView::PatientSummary => {}
             ClinicalView::Consultations => self.consultation_list.next(),
+            ClinicalView::ConsultationSummary => {}
             ClinicalView::Allergies => self.allergy_list.next(),
             ClinicalView::MedicalHistory => {
                 self.medical_history_list.selected_index =
@@ -367,6 +394,7 @@ impl ClinicalState {
         match self.view {
             ClinicalView::PatientSummary => {}
             ClinicalView::Consultations => self.consultation_list.prev(),
+            ClinicalView::ConsultationSummary => {}
             ClinicalView::Allergies => self.allergy_list.prev(),
             ClinicalView::MedicalHistory => {
                 self.medical_history_list.selected_index =
@@ -400,6 +428,7 @@ impl ClinicalState {
         match self.view {
             ClinicalView::PatientSummary => {}
             ClinicalView::Consultations => self.consultation_list.adjust_scroll(visible_rows),
+            ClinicalView::ConsultationSummary => {}
             ClinicalView::Allergies => self.allergy_list.adjust_scroll(visible_rows),
             ClinicalView::MedicalHistory => self.medical_history_list.adjust_scroll(visible_rows),
             ClinicalView::VitalSigns => self.vitals_list.adjust_scroll(visible_rows),
@@ -412,6 +441,7 @@ impl ClinicalState {
         match self.view {
             ClinicalView::PatientSummary => 0,
             ClinicalView::Consultations => self.consultation_list.selected_index(),
+            ClinicalView::ConsultationSummary => 0,
             ClinicalView::Allergies => self.allergy_list.selected_index,
             ClinicalView::MedicalHistory => self.medical_history_list.selected_index,
             ClinicalView::VitalSigns => self.vitals_list.selected_index,
@@ -424,6 +454,7 @@ impl ClinicalState {
         match self.view {
             ClinicalView::PatientSummary => 0,
             ClinicalView::Consultations => self.consultation_list.scroll_offset(),
+            ClinicalView::ConsultationSummary => 0,
             ClinicalView::Allergies => self.allergy_list.scroll_offset,
             ClinicalView::MedicalHistory => self.medical_history_list.scroll_offset,
             ClinicalView::VitalSigns => self.vitals_list.scroll_offset,

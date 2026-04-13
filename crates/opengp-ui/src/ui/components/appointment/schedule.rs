@@ -500,6 +500,7 @@ impl Schedule {
             AppointmentStatus::Confirmed => self.theme.colors.appointment_confirmed,
             AppointmentStatus::Arrived => self.theme.colors.appointment_arrived,
             AppointmentStatus::InProgress => self.theme.colors.appointment_in_progress,
+            AppointmentStatus::Billing => self.theme.colors.appointment_completed,
             AppointmentStatus::Completed => self.theme.colors.appointment_completed,
             AppointmentStatus::Cancelled => self.theme.colors.appointment_cancelled,
             AppointmentStatus::NoShow => self.theme.colors.appointment_dna,
@@ -816,25 +817,35 @@ impl Schedule {
             }
         }
 
-        let abbreviation = self.get_abbreviation(&apt.appointment_type);
-        let abbrev_len = abbreviation.len();
-        let name_width = (content_width as usize)
-            .saturating_sub(2)
-            .saturating_sub(abbrev_len + 1);
-        if name_width > 0 && content_y < area.y + area.height {
+        let name_width = (content_width as usize).saturating_sub(2);
+        let name_x = content_x + 1;
+        if name_width > 0 && content_y < area.y + area.height && name_x < area.x + area.width {
+            // Line 1: patient name only
             let name = if apt.patient_name.len() > name_width {
                 format!("{}...", &apt.patient_name[..name_width.saturating_sub(3)])
             } else {
                 apt.patient_name.clone()
             };
-            let name_x = content_x + 1;
-            if name_x < area.x + area.width {
-                let prefix = if apt.is_urgent { "⚡ " } else { "" };
-                let full_text = format!("{}{} [{}]", prefix, name, abbreviation);
+            buf.set_string(
+                name_x,
+                content_y,
+                &name,
+                Style::default().fg(self.theme.colors.foreground).bold(),
+            );
+
+            // Line 2: urgent symbol + type abbreviation (only when there is room)
+            let line2_y = content_y + 1;
+            if content_height >= 2 && line2_y < area.y + area.height {
+                let abbreviation = self.get_abbreviation(&apt.appointment_type);
+                let line2 = if apt.is_urgent {
+                    format!("⚡ [{}]", abbreviation)
+                } else {
+                    format!("[{}]", abbreviation)
+                };
                 buf.set_string(
                     name_x,
-                    content_y,
-                    full_text,
+                    line2_y,
+                    &line2,
                     Style::default().fg(self.theme.colors.foreground).bold(),
                 );
             }

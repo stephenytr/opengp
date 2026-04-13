@@ -19,7 +19,7 @@ COPY crates ./crates
 COPY migrations ./migrations
 
 # Build the API binary with billing feature
-RUN RUSTFLAGS="-A unused" cargo build --release -p opengp-api --features billing
+RUN RUSTFLAGS="-A unused" cargo build --release -p opengp-api
 
 # Stage 2: Production runtime
 FROM debian:bookworm-slim

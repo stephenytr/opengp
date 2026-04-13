@@ -20,14 +20,10 @@ pub enum AppointmentDetailModalAction {
     Close,
     /// Navigate to Clinical tab to view patient notes
     ViewClinicalNotes,
-    /// Mark appointment as arrived
-    MarkArrived,
-    /// Mark appointment as in progress
-    MarkInProgress,
-    /// Mark appointment as completed
-    MarkCompleted,
-    /// Mark appointment as no show
-    MarkNoShow,
+    /// Mark appointment with a specific status
+    MarkStatus(AppointmentStatus),
+    /// Start a new consultation linked to this appointment
+    StartConsultation,
 }
 
 /// Appointment detail modal widget.
@@ -68,6 +64,7 @@ impl AppointmentDetailModal {
             DropdownOption::new("confirmed", "Confirmed"),
             DropdownOption::new("arrived", "Arrived"),
             DropdownOption::new("in_progress", "In Progress"),
+            DropdownOption::new("billing", "Billing"),
             DropdownOption::new("completed", "Completed"),
             DropdownOption::new("cancelled", "Cancelled"),
             DropdownOption::new("no_show", "No Show"),
@@ -83,6 +80,7 @@ impl AppointmentDetailModal {
                     "confirmed" => AppointmentStatus::Confirmed,
                     "arrived" => AppointmentStatus::Arrived,
                     "in_progress" => AppointmentStatus::InProgress,
+                    "billing" => AppointmentStatus::Billing,
                     "completed" => AppointmentStatus::Completed,
                     "cancelled" => AppointmentStatus::Cancelled,
                     "no_show" => AppointmentStatus::NoShow,
@@ -100,6 +98,7 @@ impl AppointmentDetailModal {
             AppointmentStatus::Confirmed => "confirmed",
             AppointmentStatus::Arrived => "arrived",
             AppointmentStatus::InProgress => "in_progress",
+            AppointmentStatus::Billing => "billing",
             AppointmentStatus::Completed => "completed",
             AppointmentStatus::Cancelled => "cancelled",
             AppointmentStatus::NoShow => "no_show",
@@ -117,20 +116,8 @@ impl AppointmentDetailModal {
     }
 
     /// Check if a transition from one status to another is valid (mirrors domain logic)
-    fn can_transition(from: AppointmentStatus, to: AppointmentStatus) -> bool {
-        use AppointmentStatus::*;
-
-        if from == to {
-            return true;
-        }
-
-        matches!(
-            (from, to),
-            (Scheduled, Confirmed | Arrived | Cancelled | Rescheduled)
-                | (Confirmed, Arrived | Cancelled | Rescheduled)
-                | (Arrived, InProgress | NoShow)
-                | (InProgress, Completed)
-        )
+    fn can_transition(_from: AppointmentStatus, _to: AppointmentStatus) -> bool {
+        true
     }
 
     /// Get the patient ID for clinical navigation.
@@ -201,6 +188,7 @@ impl AppointmentDetailModal {
             AppointmentStatus::Confirmed => "Confirmed".to_string(),
             AppointmentStatus::Arrived => "Arrived".to_string(),
             AppointmentStatus::InProgress => "In Progress".to_string(),
+            AppointmentStatus::Billing => "Billing".to_string(),
             AppointmentStatus::Completed => "Completed".to_string(),
             AppointmentStatus::Cancelled => "Cancelled".to_string(),
             AppointmentStatus::NoShow => "No Show".to_string(),
@@ -215,6 +203,7 @@ impl AppointmentDetailModal {
             AppointmentStatus::Confirmed => self.theme.colors.appointment_confirmed,
             AppointmentStatus::Arrived => self.theme.colors.appointment_arrived,
             AppointmentStatus::InProgress => self.theme.colors.appointment_in_progress,
+            AppointmentStatus::Billing => self.theme.colors.appointment_completed,
             AppointmentStatus::Completed => self.theme.colors.appointment_completed,
             AppointmentStatus::Cancelled => self.theme.colors.appointment_cancelled,
             AppointmentStatus::NoShow => self.theme.colors.appointment_dna,
@@ -250,9 +239,17 @@ impl AppointmentDetailModal {
         self.focused_button == self.button_count() - 1
     }
 
-    /// Get the number of visible buttons (Close, Status Dropdown, View Clinical Notes)
+    /// Get the number of visible buttons (Close, Status Dropdown, Start Consultation, View Clinical Notes)
     fn button_count(&self) -> usize {
-        3 // Close, Status Dropdown, View Clinical Notes
+        let has_start_consultation = matches!(
+            self.appointment.status,
+            AppointmentStatus::Arrived | AppointmentStatus::InProgress | AppointmentStatus::Billing
+        );
+        if has_start_consultation {
+            4 // Close, Status Dropdown, Start Consultation, View Clinical Notes
+        } else {
+            3 // Close, Status Dropdown, View Clinical Notes
+        }
     }
 
     /// Get the button index for each action
@@ -260,20 +257,35 @@ impl AppointmentDetailModal {
         let mut map = std::collections::HashMap::new();
         map.insert(0, AppointmentDetailModalAction::Close);
         // Button 1 is the dropdown - handled separately in handle_key
-        map.insert(2, AppointmentDetailModalAction::ViewClinicalNotes);
+        let has_start_consultation = matches!(
+            self.appointment.status,
+            AppointmentStatus::Arrived | AppointmentStatus::InProgress | AppointmentStatus::Billing
+        );
+        if has_start_consultation {
+            map.insert(2, AppointmentDetailModalAction::StartConsultation);
+            map.insert(3, AppointmentDetailModalAction::ViewClinicalNotes);
+        } else {
+            map.insert(2, AppointmentDetailModalAction::ViewClinicalNotes);
+        }
         map
     }
 
     /// Get action based on dropdown selection
     fn get_dropdown_action(&self) -> Option<AppointmentDetailModalAction> {
         let value = self.status_dropdown.selected_value()?;
-        match value {
-            "arrived" => Some(AppointmentDetailModalAction::MarkArrived),
-            "in_progress" => Some(AppointmentDetailModalAction::MarkInProgress),
-            "completed" => Some(AppointmentDetailModalAction::MarkCompleted),
-            "no_show" => Some(AppointmentDetailModalAction::MarkNoShow),
-            _ => None,
-        }
+        let status = match value {
+            "scheduled" => AppointmentStatus::Scheduled,
+            "confirmed" => AppointmentStatus::Confirmed,
+            "arrived" => AppointmentStatus::Arrived,
+            "in_progress" => AppointmentStatus::InProgress,
+            "billing" => AppointmentStatus::Billing,
+            "completed" => AppointmentStatus::Completed,
+            "cancelled" => AppointmentStatus::Cancelled,
+            "no_show" => AppointmentStatus::NoShow,
+            "rescheduled" => AppointmentStatus::Rescheduled,
+            _ => return None,
+        };
+        Some(AppointmentDetailModalAction::MarkStatus(status))
     }
 
     // ── Key handling ───────────────────────────────────────────────────────
@@ -479,12 +491,21 @@ impl Widget for AppointmentDetailModal {
         // Render buttons at the bottom
         y += 1;
 
-        // Build button list: Close, Status Dropdown, View Clinical Notes
-        let buttons: Vec<(&str, bool)> = vec![
+        // Build button list: Close, Status Dropdown, [Start Consultation], View Clinical Notes
+        let has_start_consultation = matches!(
+            self.appointment.status,
+            AppointmentStatus::Arrived | AppointmentStatus::InProgress | AppointmentStatus::Billing
+        );
+        let mut buttons: Vec<(&str, bool)> = vec![
             (" Close ", self.focused_button == 0),
             (" Change Status ", self.focused_button == 1),
-            (" View Clinical Notes ", self.focused_button == 2),
         ];
+        if has_start_consultation {
+            buttons.push((" Start Consultation ", self.focused_button == 2));
+            buttons.push((" View Clinical Notes ", self.focused_button == 3));
+        } else {
+            buttons.push((" View Clinical Notes ", self.focused_button == 2));
+        }
 
         // Calculate button layout
         let button_width = 17u16;
@@ -659,12 +680,21 @@ mod tests {
         let enter_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
         modal.handle_key(enter_key);
 
+        // With all transitions allowed, navigate to "no_show" (5 steps from arrived)
+        modal.status_dropdown.select_next();
+        modal.status_dropdown.select_next();
+        modal.status_dropdown.select_next();
         modal.status_dropdown.select_next();
         modal.status_dropdown.select_next();
 
         let confirm_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
         let action = modal.handle_key(confirm_key);
-        assert_eq!(action, Some(AppointmentDetailModalAction::MarkNoShow));
+        assert_eq!(
+            action,
+            Some(AppointmentDetailModalAction::MarkStatus(
+                AppointmentStatus::NoShow
+            ))
+        );
     }
 
     #[test]
@@ -713,7 +743,12 @@ mod tests {
 
         let confirm_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
         let action = modal.handle_key(confirm_key);
-        assert_eq!(action, Some(AppointmentDetailModalAction::MarkInProgress));
+        assert_eq!(
+            action,
+            Some(AppointmentDetailModalAction::MarkStatus(
+                AppointmentStatus::InProgress
+            ))
+        );
     }
 
     #[test]
@@ -734,12 +769,13 @@ mod tests {
 
     #[test]
     fn test_can_mark_no_show_only_for_arrived() {
-        assert!(!AppointmentDetailModal::can_transition(
+        // All transitions are now allowed
+        assert!(AppointmentDetailModal::can_transition(
             AppointmentStatus::Scheduled,
             AppointmentStatus::NoShow
         ));
 
-        assert!(!AppointmentDetailModal::can_transition(
+        assert!(AppointmentDetailModal::can_transition(
             AppointmentStatus::Confirmed,
             AppointmentStatus::NoShow
         ));
@@ -749,12 +785,12 @@ mod tests {
             AppointmentStatus::NoShow
         ));
 
-        assert!(!AppointmentDetailModal::can_transition(
+        assert!(AppointmentDetailModal::can_transition(
             AppointmentStatus::InProgress,
             AppointmentStatus::NoShow
         ));
 
-        assert!(!AppointmentDetailModal::can_transition(
+        assert!(AppointmentDetailModal::can_transition(
             AppointmentStatus::Completed,
             AppointmentStatus::NoShow
         ));
@@ -784,13 +820,16 @@ mod tests {
         let options = &modal.status_dropdown.options;
         let option_values: Vec<&str> = options.iter().map(|o| o.value.as_str()).collect();
 
+        // All transitions are now allowed, so all statuses should appear
         assert!(option_values.contains(&"scheduled"));
         assert!(option_values.contains(&"confirmed"));
         assert!(option_values.contains(&"arrived"));
         assert!(option_values.contains(&"cancelled"));
         assert!(option_values.contains(&"rescheduled"));
-        assert!(!option_values.contains(&"no_show"));
-        assert!(!option_values.contains(&"in_progress"));
+        assert!(option_values.contains(&"no_show"));
+        assert!(option_values.contains(&"in_progress"));
+        assert!(option_values.contains(&"billing"));
+        assert!(option_values.contains(&"completed"));
 
         let arrived_appt = CalendarAppointment {
             id: Uuid::new_v4(),
@@ -812,10 +851,15 @@ mod tests {
         let options = &modal.status_dropdown.options;
         let option_values: Vec<&str> = options.iter().map(|o| o.value.as_str()).collect();
 
+        // All transitions are now allowed, so all statuses should appear
         assert!(option_values.contains(&"arrived"));
         assert!(option_values.contains(&"in_progress"));
         assert!(option_values.contains(&"no_show"));
-        assert!(!option_values.contains(&"scheduled"));
-        assert!(!option_values.contains(&"confirmed"));
+        assert!(option_values.contains(&"scheduled"));
+        assert!(option_values.contains(&"confirmed"));
+        assert!(option_values.contains(&"billing"));
+        assert!(option_values.contains(&"completed"));
+        assert!(option_values.contains(&"cancelled"));
+        assert!(option_values.contains(&"rescheduled"));
     }
 }

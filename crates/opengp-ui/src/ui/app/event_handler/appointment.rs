@@ -1,4 +1,4 @@
-use crate::ui::app::{App, AppointmentStatusTransition};
+use crate::ui::app::{App, AppointmentStatusTransition, PendingClinicalSaveData};
 use crate::ui::components::appointment::{AppointmentDetailModalAction, AppointmentFormAction};
 use crate::ui::keybinds::Action;
 use chrono::Utc;
@@ -70,29 +70,37 @@ impl App {
                         self.refresh_status_bar();
                         self.refresh_context();
                     }
-                    AppointmentDetailModalAction::MarkArrived => {
+                    AppointmentDetailModalAction::MarkStatus(status) => {
                         let appointment_id = modal.appointment_id();
                         self.appointment_detail_modal = None;
-                        self.pending_appointment_status_transition =
-                            Some((appointment_id, AppointmentStatusTransition::MarkArrived));
+                        self.update_schedule_appointment_status(appointment_id, status);
+                        self.pending_appointment_status_transition = Some((
+                            appointment_id,
+                            AppointmentStatusTransition::SetStatus(status),
+                        ));
                     }
-                    AppointmentDetailModalAction::MarkInProgress => {
+                    AppointmentDetailModalAction::StartConsultation => {
                         let appointment_id = modal.appointment_id();
+                        let patient_id = modal.patient_id();
                         self.appointment_detail_modal = None;
-                        self.pending_appointment_status_transition =
-                            Some((appointment_id, AppointmentStatusTransition::MarkInProgress));
-                    }
-                    AppointmentDetailModalAction::MarkCompleted => {
-                        let appointment_id = modal.appointment_id();
-                        self.appointment_detail_modal = None;
-                        self.pending_appointment_status_transition =
-                            Some((appointment_id, AppointmentStatusTransition::MarkCompleted));
-                    }
-                    AppointmentDetailModalAction::MarkNoShow => {
-                        let appointment_id = modal.appointment_id();
-                        self.appointment_detail_modal = None;
-                        self.pending_appointment_status_transition =
-                            Some((appointment_id, AppointmentStatusTransition::MarkNoShow));
+                        self.clinical_state.clear_patient();
+                        self.clinical_state.set_patient(patient_id);
+                        self.clinical_state.set_active_appointment(appointment_id);
+                        self.clinical_state.show_patient_summary();
+                        self.pending_clinical_save_data =
+                            Some(PendingClinicalSaveData::Consultation {
+                                patient_id,
+                                practitioner_id: self.current_user_id,
+                                appointment_id: Some(appointment_id),
+                                reason: None,
+                                clinical_notes: None,
+                            });
+                        self.tab_bar
+                            .select(crate::ui::components::tabs::Tab::Clinical);
+                        self.pending_clinical_patient_id = Some(patient_id);
+                        self.request_refresh_consultations(patient_id);
+                        self.refresh_status_bar();
+                        self.refresh_context();
                     }
                 }
                 return Action::Enter;

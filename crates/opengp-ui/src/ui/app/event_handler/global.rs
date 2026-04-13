@@ -173,7 +173,9 @@ impl App {
                         .family_history_list
                         .handle_mouse(mouse, clinical_area);
                 }
-                ClinicalView::PatientSummary | ClinicalView::SocialHistory => {}
+                ClinicalView::PatientSummary
+                | ClinicalView::ConsultationSummary
+                | ClinicalView::SocialHistory => {}
             }
         }
     }

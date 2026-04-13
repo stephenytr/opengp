@@ -224,37 +224,33 @@ pub(super) async fn update_appointment_status(
 ) -> Result<(StatusCode, Json<AppointmentResponse>), (StatusCode, Json<ApiErrorResponse>)> {
     authorize_practitioner_access(&context)?;
 
+    use opengp_domain::domain::appointment::AppointmentStatus;
+
     let action = payload.action.trim().to_ascii_lowercase();
-    let appointment = match action.as_str() {
-        "arrived" => {
-            state
-                .services
-                .appointment_service
-                .mark_arrived(id, context.user_id)
-                .await
-        }
-        "in_progress" => {
-            state
-                .services
-                .appointment_service
-                .mark_in_progress(id, context.user_id)
-                .await
-        }
-        "completed" => {
-            state
-                .services
-                .appointment_service
-                .mark_completed(id, context.user_id)
-                .await
-        }
+    let new_status = match action.as_str() {
+        "scheduled" => AppointmentStatus::Scheduled,
+        "confirmed" => AppointmentStatus::Confirmed,
+        "arrived" => AppointmentStatus::Arrived,
+        "in_progress" => AppointmentStatus::InProgress,
+        "billing" => AppointmentStatus::Billing,
+        "completed" => AppointmentStatus::Completed,
+        "cancelled" => AppointmentStatus::Cancelled,
+        "no_show" => AppointmentStatus::NoShow,
+        "rescheduled" => AppointmentStatus::Rescheduled,
         _ => {
             return Err(bad_request_response(
                 "validation_error",
-                "Invalid appointment status action",
+                "Invalid appointment status",
             ));
         }
-    }
-    .map_err(appointment_service_error_to_response)?;
+    };
+
+    let appointment = state
+        .services
+        .appointment_service
+        .set_status(id, new_status, context.user_id)
+        .await
+        .map_err(appointment_service_error_to_response)?;
 
     Ok((StatusCode::OK, Json(appointment_to_response(appointment))))
 }

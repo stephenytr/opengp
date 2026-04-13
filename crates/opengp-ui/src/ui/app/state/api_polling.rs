@@ -260,6 +260,8 @@ impl App {
                 self.appointment_list_fetch_task = Some(tokio::spawn(async move {
                     fetch_appointments_for_day(api_client, date, page_limit, patient_names).await
                 }));
+            } else {
+                self.pending_appointment_list_refresh = Some(date);
             }
         }
 
@@ -450,11 +452,22 @@ async fn fetch_appointments_for_day(
             });
     }
 
+    // Fetch practitioners to resolve names
+    let practitioner_names: HashMap<uuid::Uuid, String> = fetch_practitioners(api_client.clone())
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| (p.id, p.display_name()))
+        .collect();
+
     let mut practitioners: Vec<PractitionerSchedule> = grouped
         .into_iter()
         .map(|(practitioner_id, appointments)| PractitionerSchedule {
             practitioner_id,
-            practitioner_name: format!("Practitioner {}", &practitioner_id.to_string()[..8]),
+            practitioner_name: practitioner_names
+                .get(&practitioner_id)
+                .cloned()
+                .unwrap_or_else(|| format!("Practitioner {}", &practitioner_id.to_string()[..8])),
             appointments,
             working_hours: None,
         })
@@ -495,8 +508,8 @@ async fn fetch_consultations(
                 is_signed: item.is_signed,
                 signed_at: None,
                 signed_by: None,
-                consultation_started_at: None,
-                consultation_ended_at: None,
+                consultation_started_at: item.consultation_started_at,
+                consultation_ended_at: item.consultation_ended_at,
                 created_at: item.consultation_date,
                 updated_at: item.consultation_date,
                 version: 1,
@@ -597,6 +610,7 @@ fn parse_appointment_status(value: &str) -> AppointmentStatus {
         "confirmed" => AppointmentStatus::Confirmed,
         "arrived" => AppointmentStatus::Arrived,
         "in_progress" | "inprogress" => AppointmentStatus::InProgress,
+        "billing" => AppointmentStatus::Billing,
         "completed" => AppointmentStatus::Completed,
         "no_show" | "noshow" => AppointmentStatus::NoShow,
         "cancelled" => AppointmentStatus::Cancelled,

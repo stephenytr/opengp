@@ -209,6 +209,9 @@ impl App {
                                 self.clinical_state.open_consultation_form();
                                 self.current_context = KeyContext::ClinicalForm;
                             }
+                            ClinicalView::ConsultationSummary => {
+                                // Read-only view, no form to open
+                            }
                             ClinicalView::SocialHistory => {
                                 self.clinical_state.open_social_history_form();
                                 self.current_context = KeyContext::ClinicalForm;
@@ -332,6 +335,11 @@ impl App {
                 | Action::ViewObservations
                 | Action::ViewFamilyHistory
                 | Action::ViewSocialHistory => {
+                    if self.tab_bar.selected() == Tab::Clinical {
+                        return self.handle_clinical_keys(key);
+                    }
+                }
+                Action::FinishAppointment | Action::ToggleTimer => {
                     if self.tab_bar.selected() == Tab::Clinical {
                         return self.handle_clinical_keys(key);
                     }

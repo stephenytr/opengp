@@ -1,7 +1,9 @@
-use crate::ui::app::{App, PendingClinicalSaveData};
+use crate::ui::app::{App, AppointmentStatusTransition, PendingClinicalSaveData};
+use crate::ui::components::tabs::Tab;
 use crate::ui::keybinds::Action;
 use crate::ui::widgets::FormNavigation;
 use crossterm::event::KeyEvent;
+use opengp_domain::domain::appointment::AppointmentStatus;
 
 impl App {
     pub(crate) fn handle_clinical_keys(&mut self, key: KeyEvent) -> Action {
@@ -397,29 +399,60 @@ impl App {
                     }
                     return Action::Enter;
                 }
+                KeyAction::FinishAppointment => {
+                    if let Some(appointment_id) = self.clinical_state.active_appointment_id {
+                        self.pending_appointment_status_transition = Some((
+                            appointment_id,
+                            AppointmentStatusTransition::SetStatus(AppointmentStatus::Completed),
+                        ));
+                        self.clinical_state.clear_active_appointment();
+                        self.tab_bar.select(Tab::Appointment);
+                        self.request_refresh_appointments(chrono::Utc::now().date_naive());
+                        self.refresh_status_bar();
+                        self.refresh_context();
+                        return Action::Enter;
+                    }
+                }
                 KeyAction::ToggleTimer => {
-                    if self.clinical_state.view == ClinicalView::Consultations {
-                        if let Some(consultation_id) =
-                            self.clinical_state.consultation_list.selected_id()
-                        {
-                            if let Some(consultation) = self
-                                .clinical_state
-                                .consultations
-                                .iter_mut()
-                                .find(|c| c.id == consultation_id)
-                            {
-                                let is_running = consultation.consultation_started_at.is_some()
-                                    && consultation.consultation_ended_at.is_none();
+                    let consultation_id = if self.clinical_state.view == ClinicalView::Consultations
+                    {
+                        self.clinical_state.consultation_list.selected_id()
+                    } else if self.clinical_state.view == ClinicalView::ConsultationSummary {
+                        self.clinical_state
+                            .active_appointment_id
+                            .and_then(|appointment_id| {
+                                self.clinical_state
+                                    .consultations
+                                    .iter()
+                                    .find(|c| c.appointment_id == Some(appointment_id))
+                                    .map(|c| c.id)
+                            })
+                    } else {
+                        None
+                    };
 
-                                if is_running {
-                                    consultation.consultation_ended_at = Some(chrono::Utc::now());
-                                } else {
-                                    consultation.consultation_started_at = Some(chrono::Utc::now());
-                                    consultation.consultation_ended_at = None;
-                                }
+                    if let Some(consultation_id) = consultation_id {
+                        if let Some(consultation) = self
+                            .clinical_state
+                            .consultations
+                            .iter_mut()
+                            .find(|c| c.id == consultation_id)
+                        {
+                            let is_running = consultation.consultation_started_at.is_some()
+                                && consultation.consultation_ended_at.is_none();
+
+                            if is_running {
+                                consultation.consultation_ended_at = Some(chrono::Utc::now());
+                                self.pending_clinical_save_data =
+                                    Some(PendingClinicalSaveData::TimerStop { consultation_id });
+                            } else {
+                                consultation.consultation_started_at = Some(chrono::Utc::now());
+                                consultation.consultation_ended_at = None;
+                                self.pending_clinical_save_data =
+                                    Some(PendingClinicalSaveData::TimerStart { consultation_id });
                             }
-                            return Action::Enter;
                         }
+                        return Action::Enter;
                     }
                 }
                 _ => {}
@@ -437,6 +470,7 @@ impl App {
 
         match self.clinical_state.view {
             ClinicalView::PatientSummary => {}
+            ClinicalView::ConsultationSummary => {}
             ClinicalView::Consultations => {
                 if let Some(action) = self.clinical_state.consultation_list.handle_key(key) {
                     match action {

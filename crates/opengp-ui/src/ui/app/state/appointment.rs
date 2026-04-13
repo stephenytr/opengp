@@ -45,6 +45,23 @@ impl App {
         &mut self.appointment_state
     }
 
+    pub fn update_schedule_appointment_status(
+        &mut self,
+        appointment_id: uuid::Uuid,
+        status: opengp_domain::domain::appointment::AppointmentStatus,
+    ) {
+        if let Some(ref mut schedule) = self.appointment_state.schedule_data {
+            for practitioner in &mut schedule.practitioners {
+                for appointment in &mut practitioner.appointments {
+                    if appointment.id == appointment_id {
+                        appointment.status = status;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
     pub fn appointment_form_set_patients(&mut self, patients: Vec<PatientListItem>) {
         if let Some(ref mut form) = self.appointment_form {
             form.set_patients(patients);
