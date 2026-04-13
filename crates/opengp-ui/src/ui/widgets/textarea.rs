@@ -157,6 +157,7 @@ impl TextareaState {
                 }
                 return false;
             }
+            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => return false,
             KeyCode::Char(_) => {
                 if let Some(limit) = self.max_length {
                     let current_len: usize = self
@@ -274,7 +275,12 @@ impl Widget for TextareaWidget<'_> {
                         Style::default().fg(self.theme.colors.error),
                     ),
                 ]);
-                buf.set_line(area.x, error_y, &error_line, area.width);
+                buf.set_line(
+                    area.x + 1,
+                    error_y,
+                    &error_line,
+                    area.width.saturating_sub(1),
+                );
             }
         }
     }
