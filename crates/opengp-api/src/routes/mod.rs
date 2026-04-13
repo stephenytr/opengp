@@ -1498,7 +1498,7 @@ mod tests {
     }
 
     fn sample_patient_payload() -> &'static str {
-        r#"{"first_name":"John","last_name":"Citizen","date_of_birth":"1984-05-12","gender":"male","phone_mobile":"0400123456","email":"john.citizen@example.com","medicare_number":"29501012341"}"#
+        r#"{"first_name":"John","last_name":"Citizen","date_of_birth":"1984-05-12","gender":"male","title":"Dr","middle_name":"James","preferred_name":"JC","phone_home":"02 5551234","phone_mobile":"0400123456","email":"john.citizen@example.com","address_line1":"123 Main St","address_line2":"Apt 4","suburb":"Sydney","state":"NSW","postcode":"2000","country":"Australia","medicare_number":"29501012341","medicare_irn":1,"medicare_expiry":"2027-05-12","ihi":"3012345678901234","emergency_contact_name":"John Smith","emergency_contact_phone":"0400987654","emergency_contact_relationship":"Spouse","concession_type":"Pensioner","concession_number":"ABC123","preferred_language":"English","interpreter_required":false,"atsi_status":"AboriginalNotTorresStrait"}"#
     }
 
     fn sample_appointment_payload(start_time: DateTime<Utc>, practitioner_id: Uuid) -> String {

@@ -12,8 +12,8 @@ use crate::infrastructure::database::helpers::*;
 use crate::infrastructure::database::sqlx_to_patient_error;
 use opengp_domain::domain::error::RepositoryError as BaseRepositoryError;
 use opengp_domain::domain::patient::{
-    Address, EmergencyContact, Gender, Ihi, MedicareNumber, Patient, PatientRepository,
-    PhoneNumber, RepositoryError,
+    Address, AtsiStatus, ConcessionType, EmergencyContact, Gender, Ihi, MedicareNumber, Patient,
+    PatientRepository, PhoneNumber, RepositoryError,
 };
 
 #[derive(Debug, FromRow)]
@@ -43,6 +43,11 @@ struct PatientRow {
     emergency_contact_name: Option<String>,
     emergency_contact_phone: Option<String>,
     emergency_contact_relationship: Option<String>,
+    concession_type: Option<String>,
+    concession_number: Option<String>,
+    preferred_language: String,
+    interpreter_required: bool,
+    atsi_status: Option<String>,
     is_active: bool,
     is_deceased: bool,
     created_at: DateTime<Utc>,
@@ -150,11 +155,15 @@ impl PatientRow {
             } else {
                 None
             },
-            concession_type: None,
-            concession_number: None,
-            preferred_language: "English".to_string(),
-            interpreter_required: false,
-            aboriginal_torres_strait_islander: None,
+            concession_type: self.concession_type
+                .as_deref()
+                .and_then(|s| s.parse::<ConcessionType>().ok()),
+            concession_number: self.concession_number,
+            preferred_language: self.preferred_language,
+            interpreter_required: self.interpreter_required,
+            aboriginal_torres_strait_islander: self.atsi_status
+                .as_deref()
+                .and_then(|s| s.parse::<AtsiStatus>().ok()),
             is_active: self.is_active,
             is_deceased: self.is_deceased,
             deceased_date: None,
@@ -173,6 +182,7 @@ SELECT
     address_line1, address_line2, suburb, state, postcode, country,
     phone_home, phone_mobile, email,
     emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+    concession_type, concession_number, preferred_language, interpreter_required, atsi_status,
     is_active, is_deceased,
     created_at, updated_at,
     version
@@ -353,10 +363,11 @@ impl PatientRepository for SqlxPatientRepository {
             address_line1, address_line2, suburb, state, postcode, country,
             phone_home, phone_mobile, email,
             emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+            concession_type, concession_number, preferred_language, interpreter_required, atsi_status,
             is_active, is_deceased,
             created_at, updated_at,
             version
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
         "#,
         )
         .bind(patient.id)
@@ -383,6 +394,11 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(emergency_contact_name)
         .bind(emergency_contact_phone)
         .bind(emergency_contact_relationship)
+        .bind(patient.concession_type.as_ref().map(|c| c.to_string()))
+        .bind(&patient.concession_number)
+        .bind(&patient.preferred_language)
+        .bind(patient.interpreter_required)
+        .bind(patient.aboriginal_torres_strait_islander.as_ref().map(|a| a.to_string()))
         .bind(patient.is_active)
         .bind(patient.is_deceased)
         .bind(patient.created_at)
@@ -479,11 +495,16 @@ impl PatientRepository for SqlxPatientRepository {
             emergency_contact_name = $21,
             emergency_contact_phone = $22,
             emergency_contact_relationship = $23,
-            is_active = $24,
-            is_deceased = $25,
-            updated_at = $26,
-            version = $27
-        WHERE id = $28 AND version = $29
+            concession_type = $24,
+            concession_number = $25,
+            preferred_language = $26,
+            interpreter_required = $27,
+            atsi_status = $28,
+            is_active = $29,
+            is_deceased = $30,
+            updated_at = $31,
+            version = $32
+        WHERE id = $33 AND version = $34
         "#,
         )
         .bind(ihi_encrypted)
@@ -509,6 +530,11 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(emergency_contact_name)
         .bind(emergency_contact_phone)
         .bind(emergency_contact_relationship)
+        .bind(patient.concession_type.as_ref().map(|c| c.to_string()))
+        .bind(&patient.concession_number)
+        .bind(&patient.preferred_language)
+        .bind(patient.interpreter_required)
+        .bind(patient.aboriginal_torres_strait_islander.as_ref().map(|a| a.to_string()))
         .bind(patient.is_active)
         .bind(patient.is_deceased)
         .bind(patient.updated_at)

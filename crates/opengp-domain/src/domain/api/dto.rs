@@ -78,12 +78,54 @@ pub struct PatientRequest {
     pub date_of_birth: NaiveDate,
     #[schema(example = "male")]
     pub gender: String,
+    #[schema(example = "Dr")]
+    pub title: Option<String>,
+    #[schema(example = "James")]
+    pub middle_name: Option<String>,
+    #[schema(example = "JC")]
+    pub preferred_name: Option<String>,
+    #[schema(example = "02 5551234")]
+    pub phone_home: Option<String>,
     #[schema(example = "0400123456")]
     pub phone_mobile: Option<String>,
     #[schema(example = "john.citizen@example.com")]
     pub email: Option<String>,
+    #[schema(example = "123 Main St")]
+    pub address_line1: Option<String>,
+    #[schema(example = "Apt 4")]
+    pub address_line2: Option<String>,
+    #[schema(example = "Sydney")]
+    pub suburb: Option<String>,
+    #[schema(example = "NSW")]
+    pub state: Option<String>,
+    #[schema(example = "2000")]
+    pub postcode: Option<String>,
+    #[schema(example = "Australia")]
+    pub country: Option<String>,
     #[schema(example = "29501012341")]
     pub medicare_number: Option<String>,
+    #[schema(example = 1)]
+    pub medicare_irn: Option<u8>,
+    #[schema(example = "2027-05-12")]
+    pub medicare_expiry: Option<NaiveDate>,
+    #[schema(example = "3012345678901234")]
+    pub ihi: Option<String>,
+    #[schema(example = "John Smith")]
+    pub emergency_contact_name: Option<String>,
+    #[schema(example = "0400987654")]
+    pub emergency_contact_phone: Option<String>,
+    #[schema(example = "Spouse")]
+    pub emergency_contact_relationship: Option<String>,
+    #[schema(example = "Pensioner")]
+    pub concession_type: Option<String>,
+    #[schema(example = "ABC123")]
+    pub concession_number: Option<String>,
+    #[schema(example = "English")]
+    pub preferred_language: Option<String>,
+    #[schema(example = false)]
+    pub interpreter_required: Option<bool>,
+    #[schema(example = "AboriginalNotTorresStrait")]
+    pub atsi_status: Option<String>,
     #[schema(example = 1, default = 1)]
     #[serde(default = "default_version")]
     pub version: i32,
@@ -103,10 +145,54 @@ pub struct PatientResponse {
     pub date_of_birth: NaiveDate,
     #[schema(example = "male")]
     pub gender: String,
+    #[schema(example = "Dr")]
+    pub title: Option<String>,
+    #[schema(example = "James")]
+    pub middle_name: Option<String>,
+    #[schema(example = "JC")]
+    pub preferred_name: Option<String>,
+    #[schema(example = "02 5551234")]
+    pub phone_home: Option<String>,
     #[schema(example = "0400123456")]
     pub phone_mobile: Option<String>,
     #[schema(example = "john.citizen@example.com")]
     pub email: Option<String>,
+    #[schema(example = "123 Main St")]
+    pub address_line1: Option<String>,
+    #[schema(example = "Apt 4")]
+    pub address_line2: Option<String>,
+    #[schema(example = "Sydney")]
+    pub suburb: Option<String>,
+    #[schema(example = "NSW")]
+    pub state: Option<String>,
+    #[schema(example = "2000")]
+    pub postcode: Option<String>,
+    #[schema(example = "Australia")]
+    pub country: Option<String>,
+    #[schema(example = "29501012341")]
+    pub medicare_number: Option<String>,
+    #[schema(example = 1)]
+    pub medicare_irn: Option<u8>,
+    #[schema(example = "2027-05-12")]
+    pub medicare_expiry: Option<NaiveDate>,
+    #[schema(example = "3012345678901234")]
+    pub ihi: Option<String>,
+    #[schema(example = "John Smith")]
+    pub emergency_contact_name: Option<String>,
+    #[schema(example = "0400987654")]
+    pub emergency_contact_phone: Option<String>,
+    #[schema(example = "Spouse")]
+    pub emergency_contact_relationship: Option<String>,
+    #[schema(example = "Pensioner")]
+    pub concession_type: Option<String>,
+    #[schema(example = "ABC123")]
+    pub concession_number: Option<String>,
+    #[schema(example = "English")]
+    pub preferred_language: Option<String>,
+    #[schema(example = false)]
+    pub interpreter_required: Option<bool>,
+    #[schema(example = "AboriginalNotTorresStrait")]
+    pub atsi_status: Option<String>,
     #[schema(example = true)]
     pub is_active: bool,
     #[schema(example = 1)]

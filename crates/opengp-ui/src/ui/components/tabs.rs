@@ -170,14 +170,6 @@ impl TabBar {
         }
 
         match key.code {
-            KeyCode::Left => {
-                self.prev();
-                Some(self.selected)
-            }
-            KeyCode::Right => {
-                self.next();
-                Some(self.selected)
-            }
             KeyCode::Home => {
                 self.select_index(0);
                 Some(self.selected)

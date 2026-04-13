@@ -14,9 +14,35 @@ pub fn patient_request_from_new(
         last_name: data.last_name,
         date_of_birth: data.date_of_birth,
         gender: gender_to_api_string(data.gender),
+        title: data.title,
+        middle_name: data.middle_name,
+        preferred_name: data.preferred_name,
+        phone_home: data.phone_home.map(|p| p.to_string()),
         phone_mobile: data.phone_mobile.map(|p| p.to_string()),
         email: data.email,
+        address_line1: data.address.line1,
+        address_line2: data.address.line2,
+        suburb: data.address.suburb,
+        state: data.address.state,
+        postcode: data.address.postcode,
+        country: Some(data.address.country),
         medicare_number: data.medicare_number.map(|m| m.to_string()),
+        medicare_irn: data.medicare_irn,
+        medicare_expiry: data.medicare_expiry,
+        ihi: data.ihi.map(|i| i.to_string()),
+        emergency_contact_name: data.emergency_contact.as_ref().map(|ec| ec.name.clone()),
+        emergency_contact_phone: data.emergency_contact.as_ref().map(|ec| ec.phone.clone()),
+        emergency_contact_relationship: data
+            .emergency_contact
+            .as_ref()
+            .map(|ec| ec.relationship.clone()),
+        concession_type: data.concession_type.map(|c| c.to_string()),
+        concession_number: data.concession_number,
+        preferred_language: data.preferred_language,
+        interpreter_required: data.interpreter_required,
+        atsi_status: data
+            .aboriginal_torres_strait_islander
+            .map(|a| a.to_string()),
         version: 1,
     }
 }
@@ -50,12 +76,87 @@ pub fn patient_request_from_update(
             .gender
             .map(gender_to_api_string)
             .unwrap_or_else(|| current.gender.clone()),
+        title: data.title.or_else(|| current.title.clone()),
+        middle_name: data.middle_name.or_else(|| current.middle_name.clone()),
+        preferred_name: data
+            .preferred_name
+            .or_else(|| current.preferred_name.clone()),
+        phone_home: data
+            .phone_home
+            .map(|p| p.to_string())
+            .or_else(|| current.phone_home.clone()),
         phone_mobile: data
             .phone_mobile
             .map(|p| p.to_string())
             .or_else(|| current.phone_mobile.clone()),
         email: data.email.or_else(|| current.email.clone()),
+        address_line1: data
+            .address
+            .as_ref()
+            .and_then(|a| a.line1.clone())
+            .or_else(|| current.address_line1.clone()),
+        address_line2: data
+            .address
+            .as_ref()
+            .and_then(|a| a.line2.clone())
+            .or_else(|| current.address_line2.clone()),
+        suburb: data
+            .address
+            .as_ref()
+            .and_then(|a| a.suburb.clone())
+            .or_else(|| current.suburb.clone()),
+        state: data
+            .address
+            .as_ref()
+            .and_then(|a| a.state.clone())
+            .or_else(|| current.state.clone()),
+        postcode: data
+            .address
+            .as_ref()
+            .and_then(|a| a.postcode.clone())
+            .or_else(|| current.postcode.clone()),
+        country: data
+            .address
+            .as_ref()
+            .map(|a| a.country.clone())
+            .or_else(|| current.country.clone()),
         medicare_number: data.medicare_number.map(|m| m.to_string()),
+        medicare_irn: data.medicare_irn.or(current.medicare_irn),
+        medicare_expiry: data.medicare_expiry.or(current.medicare_expiry),
+        ihi: data
+            .ihi
+            .map(|i| i.to_string())
+            .or_else(|| current.ihi.clone()),
+        emergency_contact_name: data
+            .emergency_contact
+            .as_ref()
+            .map(|ec| ec.name.clone())
+            .or_else(|| current.emergency_contact_name.clone()),
+        emergency_contact_phone: data
+            .emergency_contact
+            .as_ref()
+            .map(|ec| ec.phone.clone())
+            .or_else(|| current.emergency_contact_phone.clone()),
+        emergency_contact_relationship: data
+            .emergency_contact
+            .as_ref()
+            .map(|ec| ec.relationship.clone())
+            .or_else(|| current.emergency_contact_relationship.clone()),
+        concession_type: data
+            .concession_type
+            .map(|c| c.to_string())
+            .or_else(|| current.concession_type.clone()),
+        concession_number: data
+            .concession_number
+            .or_else(|| current.concession_number.clone()),
+        preferred_language: data
+            .preferred_language
+            .or_else(|| current.preferred_language.clone()),
+        interpreter_required: data.interpreter_required.or(current.interpreter_required),
+        atsi_status: data
+            .aboriginal_torres_strait_islander
+            .map(|a| a.to_string())
+            .or_else(|| current.atsi_status.clone()),
         version: current.version,
     }
 }
