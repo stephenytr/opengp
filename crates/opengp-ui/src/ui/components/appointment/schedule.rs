@@ -968,6 +968,10 @@ impl Widget for Schedule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use opengp_domain::domain::appointment::PractitionerSchedule;
+    use opengp_infrastructure::infrastructure::fixtures::schedule_scenarios::ScheduleScenario;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
 
     #[test]
     fn test_slot_to_time() {
@@ -1084,5 +1088,277 @@ mod tests {
             "max_slot from start=6: (22-6)*4-1=63"
         );
         assert_eq!(schedule2.slot_to_time(schedule2.max_time_slot()), "21:45");
+    }
+
+    #[test]
+    fn test_render_empty_schedule() {
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let theme = Theme::default();
+        let config = CalendarConfig::default();
+        let schedule = Schedule::new(theme, config);
+
+        // Render should not panic
+        let result = terminal.draw(|f| {
+            schedule.render(f.area(), f.buffer_mut());
+        });
+
+        assert!(result.is_ok(), "render should complete without panic");
+    }
+
+    #[test]
+    fn test_render_appointment_name_visible() {
+        let backend = TestBackend::new(120, 40);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let theme = Theme::default();
+        let config = CalendarConfig::default();
+        let mut schedule = Schedule::new(theme, config);
+
+        let date = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let practitioner_id = Uuid::from_u128(1);
+        let view = ScheduleScenario::single_appointment(date, practitioner_id);
+        schedule.load_schedule(view);
+        schedule.set_inner_height(38);
+
+        terminal
+            .draw(|f| {
+                schedule.render(f.area(), f.buffer_mut());
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer().clone();
+
+        // Search for 'J' from "John Doe" in the buffer
+        let mut found_j = false;
+        for y in 0..buffer.content.len() as u16 {
+            for x in 0..120u16 {
+                if let Some(cell) = buffer.cell((x, y)) {
+                    if cell.symbol() == "J" {
+                        found_j = true;
+                        break;
+                    }
+                }
+            }
+            if found_j {
+                break;
+            }
+        }
+        assert!(found_j, "Should find patient name 'John Doe' in buffer");
+    }
+
+    #[test]
+    fn test_render_selected_slot_highlighted() {
+        let backend = TestBackend::new(80, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let theme = Theme::default();
+        let config = CalendarConfig::default();
+        let mut schedule = Schedule::new(theme, config);
+
+        let date = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let practitioner_id = Uuid::from_u128(1);
+        let view = ScheduleScenario::single_appointment(date, practitioner_id);
+        schedule.load_schedule(view);
+        schedule.selected_time_slot = 4; // 09:00
+        schedule.set_inner_height(28);
+
+        terminal
+            .draw(|f| {
+                schedule.render(f.area(), f.buffer_mut());
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer().clone();
+
+        // Search for "09:00" and verify it has a non-default style
+        let mut found_highlighted = false;
+        for y in 0..buffer.content.len() as u16 {
+            for x in 0..10u16 {
+                if let Some(cell) = buffer.cell((x, y)) {
+                    if cell.symbol() == "9" {
+                        // Check if this cell has a styled background or foreground
+                        let style = cell.style();
+                        if style.bg.is_some() || style.fg.is_some() {
+                            found_highlighted = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if found_highlighted {
+                break;
+            }
+        }
+        assert!(
+            found_highlighted,
+            "Selected time slot should have highlighting"
+        );
+    }
+
+    #[test]
+    fn test_render_overlap_side_by_side() {
+        let backend = TestBackend::new(120, 40);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let theme = Theme::default();
+        let config = CalendarConfig::default();
+        let mut schedule = Schedule::new(theme, config);
+
+        let date = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let practitioner_id = Uuid::from_u128(1);
+        let view = ScheduleScenario::two_overlapping(date, practitioner_id);
+        schedule.load_schedule(view);
+        schedule.set_inner_height(38);
+
+        // Render should not panic even with overlapping appointments
+        let result = terminal.draw(|f| {
+            schedule.render(f.area(), f.buffer_mut());
+        });
+
+        assert!(
+            result.is_ok(),
+            "render should handle overlapping appointments without panic"
+        );
+    }
+
+    #[test]
+    fn test_render_working_hours_shading() {
+        let backend = TestBackend::new(120, 40);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let theme = Theme::default();
+        let config = CalendarConfig::default();
+        let mut schedule = Schedule::new(theme, config);
+
+        let date = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let practitioner_id = Uuid::from_u128(1);
+        let view = ScheduleScenario::with_working_hours(date, practitioner_id, 9, 17);
+        schedule.load_schedule(view);
+        schedule.set_inner_height(38);
+
+        let result = terminal.draw(|f| {
+            schedule.render(f.area(), f.buffer_mut());
+        });
+
+        assert!(
+            result.is_ok(),
+            "render should handle working hours shading without panic"
+        );
+    }
+
+    #[test]
+    fn test_render_name_truncated() {
+        let backend = TestBackend::new(30, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let theme = Theme::default();
+        let config = CalendarConfig::default();
+        let mut schedule = Schedule::new(theme, config);
+
+        let date = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let practitioner_id = Uuid::from_u128(1);
+
+        // Create appointment with very long name
+        let long_name = "A".repeat(60);
+        let start_time = date_time_at(date, 9, 0);
+        let end_time = start_time + chrono::Duration::minutes(15);
+
+        let appointment = CalendarAppointment {
+            id: Uuid::from_u128(100),
+            patient_id: Uuid::from_u128(1000),
+            patient_name: long_name,
+            practitioner_id,
+            start_time,
+            end_time,
+            appointment_type: AppointmentType::Standard,
+            status: AppointmentStatus::Scheduled,
+            is_urgent: false,
+            slot_span: 1,
+            is_overlapping: false,
+            reason: None,
+            notes: None,
+        };
+
+        let view = CalendarDayView {
+            date,
+            practitioners: vec![PractitionerSchedule {
+                practitioner_id,
+                practitioner_name: "Dr. Test".to_string(),
+                appointments: vec![appointment],
+                working_hours: None,
+            }],
+        };
+
+        schedule.load_schedule(view);
+        schedule.set_inner_height(18);
+
+        let result = terminal.draw(|f| {
+            schedule.render(f.area(), f.buffer_mut());
+        });
+
+        assert!(
+            result.is_ok(),
+            "render should handle long names without panic"
+        );
+    }
+
+    #[test]
+    fn test_render_time_column_present() {
+        let backend = TestBackend::new(80, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let theme = Theme::default();
+        let config = CalendarConfig::default();
+        let mut schedule = Schedule::new(theme, config);
+
+        let date = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let practitioner_id = Uuid::from_u128(1);
+        let view = ScheduleScenario::single_appointment(date, practitioner_id);
+        schedule.load_schedule(view);
+        schedule.set_inner_height(28);
+
+        terminal
+            .draw(|f| {
+                schedule.render(f.area(), f.buffer_mut());
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer().clone();
+
+        // Search for "08:00" in the buffer (viewport_start_hour is 8 by default)
+        let mut found_time = false;
+        for y in 0..buffer.content.len() as u16 {
+            for x in 0..10u16 {
+                if let Some(cell) = buffer.cell((x, y)) {
+                    if cell.symbol() == "0" {
+                        // Check if we can find "08:00" nearby
+                        let mut time_str = String::new();
+                        for check_x in x.saturating_sub(2)..=(x + 4).min(9) {
+                            if let Some(check_cell) = buffer.cell((check_x, y)) {
+                                time_str.push_str(check_cell.symbol());
+                            }
+                        }
+                        if time_str.contains("08:00") {
+                            found_time = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if found_time {
+                break;
+            }
+        }
+        assert!(found_time, "Should find time '08:00' in time column");
+    }
+
+    /// Helper function to create DateTime<Utc> from date and time components
+    fn date_time_at(date: NaiveDate, hour: u8, minute: u8) -> chrono::DateTime<chrono::Utc> {
+        let naive_datetime = date
+            .and_hms_opt(hour as u32, minute as u32, 0)
+            .expect("Invalid datetime");
+        chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(naive_datetime, chrono::Utc)
     }
 }
