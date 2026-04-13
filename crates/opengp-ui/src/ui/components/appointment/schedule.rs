@@ -78,56 +78,6 @@ pub struct Schedule {
 }
 
 impl Schedule {
-    fn appointment_type_config_key(apt_type: AppointmentType) -> &'static str {
-        match apt_type {
-            AppointmentType::Standard => "standard",
-            AppointmentType::Long => "long",
-            AppointmentType::Brief => "brief",
-            AppointmentType::NewPatient => "new_patient",
-            AppointmentType::HealthAssessment => "health_assessment",
-            AppointmentType::ChronicDiseaseReview => "chronic_disease_review",
-            AppointmentType::MentalHealthPlan => "mental_health_plan",
-            AppointmentType::Immunisation => "immunisation",
-            AppointmentType::Procedure => "procedure",
-            AppointmentType::Telephone => "telephone",
-            AppointmentType::Telehealth => "telehealth",
-            AppointmentType::HomeVisit => "home_visit",
-            AppointmentType::Emergency => "emergency",
-        }
-    }
-
-    fn load_appointment_abbreviations() -> HashMap<String, String> {
-        let mut abbreviations = HashMap::new();
-
-        if let Ok(appointment_config) = opengp_config::load_appointment_config() {
-            for apt_type in [
-                AppointmentType::Standard,
-                AppointmentType::Long,
-                AppointmentType::Brief,
-                AppointmentType::NewPatient,
-                AppointmentType::HealthAssessment,
-                AppointmentType::ChronicDiseaseReview,
-                AppointmentType::MentalHealthPlan,
-                AppointmentType::Immunisation,
-                AppointmentType::Procedure,
-                AppointmentType::Telephone,
-                AppointmentType::Telehealth,
-                AppointmentType::HomeVisit,
-                AppointmentType::Emergency,
-            ] {
-                if let Some(option) = appointment_config
-                    .types
-                    .get(Self::appointment_type_config_key(apt_type))
-                    .filter(|option| option.enabled)
-                {
-                    abbreviations.insert(apt_type.to_string(), option.abbreviation.clone());
-                }
-            }
-        }
-
-        abbreviations
-    }
-
     /// Create a new schedule component with the given theme and calendar configuration.
     pub fn new(theme: Theme, config: CalendarConfig) -> Self {
         Self {
@@ -140,9 +90,15 @@ impl Schedule {
             theme,
             focused: false,
             config,
-            appointment_abbreviations: Self::load_appointment_abbreviations(),
+            appointment_abbreviations: HashMap::new(),
             last_inner_height: 0,
         }
+    }
+
+    /// Set appointment abbreviations via builder pattern.
+    pub fn with_abbreviations(mut self, abbrevs: HashMap<String, String>) -> Self {
+        self.appointment_abbreviations = abbrevs;
+        self
     }
 
     pub fn set_inner_height(&mut self, inner_height: u16) {

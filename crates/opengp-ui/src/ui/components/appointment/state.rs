@@ -1,8 +1,9 @@
 use chrono::NaiveDate;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use opengp_config::CalendarConfig;
-use opengp_domain::domain::appointment::CalendarDayView;
+use opengp_domain::domain::appointment::{AppointmentType, CalendarDayView};
 use opengp_domain::domain::user::Practitioner;
 
 use crate::ui::widgets::LoadingState;
@@ -33,10 +34,40 @@ pub struct AppointmentState {
 
 impl AppointmentState {
     pub fn new(theme: crate::ui::theme::Theme, config: CalendarConfig) -> Self {
+        let abbreviations = opengp_config::load_appointment_config()
+            .map(|appointment_config| {
+                let mut map = HashMap::new();
+                for apt_type in [
+                    AppointmentType::Standard,
+                    AppointmentType::Long,
+                    AppointmentType::Brief,
+                    AppointmentType::NewPatient,
+                    AppointmentType::HealthAssessment,
+                    AppointmentType::ChronicDiseaseReview,
+                    AppointmentType::MentalHealthPlan,
+                    AppointmentType::Immunisation,
+                    AppointmentType::Procedure,
+                    AppointmentType::Telephone,
+                    AppointmentType::Telehealth,
+                    AppointmentType::HomeVisit,
+                    AppointmentType::Emergency,
+                ] {
+                    if let Some(option) = appointment_config
+                        .types
+                        .get(Self::appointment_type_config_key(apt_type))
+                        .filter(|option| option.enabled)
+                    {
+                        map.insert(apt_type.to_string(), option.abbreviation.clone());
+                    }
+                }
+                map
+            })
+            .unwrap_or_default();
+
         Self {
             current_view: AppointmentView::Schedule,
             calendar: Calendar::new(theme.clone()),
-            schedule: Schedule::new(theme, config),
+            schedule: Schedule::new(theme, config).with_abbreviations(abbreviations),
             selected_date: Some(chrono::Utc::now().date_naive()),
             schedule_data: None,
             practitioners: Vec::new(),
@@ -45,6 +76,24 @@ impl AppointmentState {
             loading_state: LoadingState::new().message("Loading appointments..."),
             loading: false,
             hidden_columns: Vec::new(),
+        }
+    }
+
+    fn appointment_type_config_key(apt_type: AppointmentType) -> &'static str {
+        match apt_type {
+            AppointmentType::Standard => "standard",
+            AppointmentType::Long => "long",
+            AppointmentType::Brief => "brief",
+            AppointmentType::NewPatient => "new_patient",
+            AppointmentType::HealthAssessment => "health_assessment",
+            AppointmentType::ChronicDiseaseReview => "chronic_disease_review",
+            AppointmentType::MentalHealthPlan => "mental_health_plan",
+            AppointmentType::Immunisation => "immunisation",
+            AppointmentType::Procedure => "procedure",
+            AppointmentType::Telephone => "telephone",
+            AppointmentType::Telehealth => "telehealth",
+            AppointmentType::HomeVisit => "home_visit",
+            AppointmentType::Emergency => "emergency",
         }
     }
 
