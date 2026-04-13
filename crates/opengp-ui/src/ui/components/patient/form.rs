@@ -1203,7 +1203,15 @@ fn fallback_patient_field_definitions(
                 | PatientFormField::Suburb
                 | PatientFormField::State
                 | PatientFormField::Postcode
-                | PatientFormField::Country => 1,
+                | PatientFormField::Country
+                | PatientFormField::EmergencyName
+                | PatientFormField::EmergencyPhone
+                | PatientFormField::EmergencyRelationship
+                | PatientFormField::ConcessionType
+                | PatientFormField::ConcessionNumber
+                | PatientFormField::PreferredLanguage
+                | PatientFormField::InterpreterRequired
+                | PatientFormField::AtsiStatus => 1,
                 _ => 0,
             };
             definition.width_percent = 50;
