@@ -1206,22 +1206,7 @@ fn fallback_patient_field_definitions(
                 | PatientFormField::Country => 1,
                 _ => 0,
             };
-            definition.width_percent = match field {
-                PatientFormField::Title
-                | PatientFormField::FirstName
-                | PatientFormField::MiddleName
-                | PatientFormField::LastName
-                | PatientFormField::PreferredName
-                | PatientFormField::DateOfBirth
-                | PatientFormField::Gender
-                | PatientFormField::AddressLine1
-                | PatientFormField::AddressLine2
-                | PatientFormField::Suburb
-                | PatientFormField::State
-                | PatientFormField::Postcode
-                | PatientFormField::Country => 50,
-                _ => 100,
-            };
+            definition.width_percent = 50;
 
             definition
         })
