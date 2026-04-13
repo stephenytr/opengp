@@ -393,7 +393,7 @@ impl Widget for MedicalHistoryForm {
                 3i32
             };
             if y + field_height <= inner.y as i32 || y >= max_y {
-                y += field_height + 1;
+                y += field_height;
                 continue;
             }
 
