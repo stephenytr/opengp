@@ -46,6 +46,7 @@ pub struct DropdownWidget {
     pub label: String,
     pub placeholder: String,
     pub errors: HashMap<String, String>,
+    pub error: Option<String>,
     pub theme: Theme,
     pub focused: bool,
 }
@@ -60,6 +61,7 @@ impl Clone for DropdownWidget {
             label: self.label.clone(),
             placeholder: self.placeholder.clone(),
             errors: self.errors.clone(),
+            error: self.error.clone(),
             theme: self.theme.clone(),
             focused: self.focused,
         }
@@ -77,6 +79,7 @@ impl DropdownWidget {
             label: label.into(),
             placeholder: "Select...".to_string(),
             errors: HashMap::new(),
+            error: None,
             theme,
             focused: false,
         }
@@ -92,6 +95,17 @@ impl DropdownWidget {
     pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
         self
+    }
+
+    /// Sets an error message to be displayed on the bottom border line.
+    pub fn error(mut self, error: Option<String>) -> Self {
+        self.error = error;
+        self
+    }
+
+    /// Sets an error message to be displayed on the bottom border line.
+    pub fn set_error(&mut self, error: Option<String>) {
+        self.error = error;
     }
 
     /// Returns the value of the currently selected option, if any.
@@ -304,11 +318,22 @@ impl Widget for DropdownWidget {
         };
 
         let block = Block::default()
-            .title(self.label.as_str())
+            .title(format!(" {} ", self.label))
             .borders(Borders::ALL)
             .border_style(border_style);
 
         block.clone().render(area, buf);
+
+        // Render error on bottom border line if present
+        if self.error.is_some() && area.height >= 3 {
+            let error_y = area.y + area.height - 1;
+            let error_msg = self.error.as_ref().unwrap();
+            let error_text = format!("  ✗ {}", error_msg);
+            let error_style = Style::default()
+                .fg(self.theme.colors.error)
+                .bg(self.theme.colors.background_dark);
+            buf.set_string(area.x, error_y, &error_text, error_style);
+        }
 
         let inner = block.inner(area);
         if inner.is_empty() {
@@ -534,5 +559,42 @@ mod tests {
 
         let field_area = Rect::new(2, 5, 36, 1);
         dropdown.render(field_area, &mut buf);
+    }
+
+    #[test]
+    fn dropdown_render_with_error_no_panic() {
+        let options = vec![DropdownOption::new("opt1", "Option 1")];
+        let theme = Theme::dark();
+        let mut dropdown = DropdownWidget::new("Test", options, theme);
+        dropdown.set_error(Some("This is an error".to_string()));
+
+        let area = Rect::new(0, 0, 40, 10);
+        let mut buf = Buffer::empty(area);
+
+        let field_area = Rect::new(2, 5, 36, 3);
+        dropdown.render(field_area, &mut buf);
+    }
+
+    #[test]
+    fn dropdown_set_error() {
+        let theme = Theme::dark();
+        let mut dropdown = DropdownWidget::new("Test", vec![], theme);
+
+        assert_eq!(dropdown.error, None);
+
+        dropdown.set_error(Some("Error message".to_string()));
+        assert_eq!(dropdown.error, Some("Error message".to_string()));
+
+        dropdown.set_error(None);
+        assert_eq!(dropdown.error, None);
+    }
+
+    #[test]
+    fn dropdown_builder_error() {
+        let theme = Theme::dark();
+        let dropdown =
+            DropdownWidget::new("Test", vec![], theme).error(Some("Builder error".to_string()));
+
+        assert_eq!(dropdown.error, Some("Builder error".to_string()));
     }
 }
