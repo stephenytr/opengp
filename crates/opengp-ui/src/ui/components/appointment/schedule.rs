@@ -71,6 +71,88 @@ impl Schedule {
         self
     }
 
+    #[cfg(debug_assertions)]
+    fn render_debug_overlay(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        state: &crate::ui::components::appointment::state::AppointmentState,
+    ) {
+        use ratatui::style::Color;
+        use ratatui::widgets::{Block, Borders};
+
+        let overlay_width = 32u16;
+        let overlay_height = 12u16;
+        if area.width < overlay_width || area.height < overlay_height {
+            return;
+        }
+        let overlay_x = area.x + area.width - overlay_width;
+        let overlay_y = area.y;
+        let overlay_area = Rect::new(overlay_x, overlay_y, overlay_width, overlay_height);
+
+        for y in overlay_area.y..overlay_area.y + overlay_area.height {
+            for x in overlay_area.x..overlay_area.x + overlay_area.width {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_symbol(" ");
+                    cell.set_style(Style::default().bg(Color::DarkGray).fg(Color::White));
+                }
+            }
+        }
+
+        let block = Block::default()
+            .title(" DEBUG ")
+            .borders(Borders::ALL)
+            .style(Style::default().bg(Color::DarkGray).fg(Color::Yellow));
+        block.render(overlay_area, buf);
+
+        let inner = overlay_area.inner(ratatui::layout::Margin {
+            vertical: 1,
+            horizontal: 1,
+        });
+
+        let lines = vec![
+            format!(
+                "slot: {} ({})",
+                state.selected_time_slot,
+                state.slot_to_time(state.selected_time_slot)
+            ),
+            format!(
+                "prac: {}/{}",
+                state.selected_practitioner_index,
+                state.practitioners_view.len()
+            ),
+            format!(
+                "viewport: {}h-{}h",
+                state.viewport_start_hour, state.viewport_end_hour
+            ),
+            format!("inner_h: {}", state.last_inner_height),
+            format!(
+                "appts: {}",
+                state
+                    .schedule_data
+                    .as_ref()
+                    .map(|d| d
+                        .practitioners
+                        .iter()
+                        .map(|p| p.appointments.len())
+                        .sum::<usize>())
+                    .unwrap_or(0)
+            ),
+        ];
+
+        for (i, line) in lines.iter().enumerate() {
+            let y = inner.y + i as u16;
+            if y < inner.y + inner.height {
+                buf.set_string(
+                    inner.x,
+                    y,
+                    line,
+                    Style::default().bg(Color::DarkGray).fg(Color::White),
+                );
+            }
+        }
+    }
+
     /// Render the time column on the left side.
     fn render_time_column(
         &self,
@@ -524,6 +606,11 @@ impl StatefulWidget for Schedule {
         }
 
         self.render_practitioner_columns(practitioner_area, buf, state);
+
+        #[cfg(debug_assertions)]
+        if state.debug_overlay_visible {
+            self.render_debug_overlay(area, buf, state);
+        }
     }
 }
 

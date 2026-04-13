@@ -42,6 +42,7 @@ pub struct AppointmentState {
     pub last_inner_height: u16,
     pub focused: bool,
     pub config: CalendarConfig,
+    pub debug_overlay_visible: bool,
 }
 
 impl AppointmentState {
@@ -96,6 +97,7 @@ impl AppointmentState {
             last_inner_height: 0,
             focused: false,
             config,
+            debug_overlay_visible: false,
         }
     }
 
@@ -312,9 +314,18 @@ impl AppointmentState {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ScheduleAction> {
-        use crossterm::event::KeyEventKind;
+        use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
 
         if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
+        // Handle Ctrl+D to toggle debug overlay
+        if key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            #[cfg(debug_assertions)]
+            {
+                self.debug_overlay_visible = !self.debug_overlay_visible;
+            }
             return None;
         }
 
