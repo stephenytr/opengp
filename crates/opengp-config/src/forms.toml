@@ -11,6 +11,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 50
 
 [[forms.patient.fields]]
 id = "first_name"
@@ -19,6 +21,8 @@ type = "text"
 required = true
 visible = true
 navigable = true
+column = 0
+width_percent = 50
 
 [forms.patient.fields.validation]
 max_length = 100
@@ -30,6 +34,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 50
 
 [[forms.patient.fields]]
 id = "last_name"
@@ -38,6 +44,8 @@ type = "text"
 required = true
 visible = true
 navigable = true
+column = 0
+width_percent = 50
 
 [forms.patient.fields.validation]
 max_length = 100
@@ -49,6 +57,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 50
 
 [[forms.patient.fields]]
 id = "date_of_birth"
@@ -57,6 +67,8 @@ type = "date"
 required = true
 visible = true
 navigable = true
+column = 0
+width_percent = 50
 
 [forms.patient.fields.validation]
 date_format = "dd/mm/yyyy"
@@ -68,6 +80,8 @@ type = "select"
 required = true
 visible = true
 navigable = true
+column = 0
+width_percent = 50
 
 [[forms.patient.fields.options]]
 value = "Male"
@@ -92,6 +106,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 1
+width_percent = 50
 
 [[forms.patient.fields]]
 id = "address_line2"
@@ -100,6 +116,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 1
+width_percent = 50
 
 [[forms.patient.fields]]
 id = "suburb"
@@ -108,6 +126,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 1
+width_percent = 50
 
 [[forms.patient.fields]]
 id = "state"
@@ -116,6 +136,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 1
+width_percent = 50
 
 [[forms.patient.fields]]
 id = "postcode"
@@ -124,6 +146,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 1
+width_percent = 50
 
 [[forms.patient.fields]]
 id = "country"
@@ -132,6 +156,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 1
+width_percent = 50
 
 [[forms.patient.fields]]
 id = "phone_home"
@@ -140,6 +166,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [forms.patient.fields.validation]
 phone = true
@@ -151,6 +179,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [forms.patient.fields.validation]
 phone = true
@@ -162,6 +192,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [forms.patient.fields.validation]
 email = true
@@ -173,6 +205,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [forms.patient.fields.validation]
 max_length = 10
@@ -184,6 +218,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [forms.patient.fields.validation]
 max_length = 1
@@ -195,6 +231,8 @@ type = "date"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [forms.patient.fields.validation]
 date_format = "dd/mm/yyyy"
@@ -206,6 +244,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [[forms.patient.fields]]
 id = "emergency_name"
@@ -214,6 +254,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [[forms.patient.fields]]
 id = "emergency_phone"
@@ -222,6 +264,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [forms.patient.fields.validation]
 phone = true
@@ -233,6 +277,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [[forms.patient.fields]]
 id = "concession_type"
@@ -241,6 +287,8 @@ type = "select"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [[forms.patient.fields.options]]
 value = "DVA"
@@ -265,6 +313,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [[forms.patient.fields]]
 id = "preferred_language"
@@ -273,6 +323,8 @@ type = "text"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [[forms.patient.fields]]
 id = "interpreter_required"
@@ -281,6 +333,8 @@ type = "select"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [[forms.patient.fields.options]]
 value = "Yes"
@@ -297,6 +351,8 @@ type = "select"
 required = false
 visible = true
 navigable = true
+column = 0
+width_percent = 100
 
 [[forms.patient.fields.options]]
 value = "AboriginalNotTorresStrait"
