@@ -61,7 +61,7 @@ impl App {
             match self.appointment_state.current_view {
                 AppointmentView::Calendar => {
                     self.appointment_state.calendar.focused = true;
-                    self.appointment_state.schedule.focused = false;
+                    self.appointment_state.focused = false;
                     if let Some(action) = self
                         .appointment_state
                         .calendar
@@ -97,7 +97,7 @@ impl App {
                             .handle_mouse(mouse, chunks[0])
                         {
                             self.appointment_state.calendar.focused = true;
-                            self.appointment_state.schedule.focused = false;
+                            self.appointment_state.focused = false;
                             match action {
                                 crate::ui::components::appointment::CalendarAction::SelectDate(date) => {
                                     self.appointment_state.selected_date = Some(date);
@@ -110,12 +110,8 @@ impl App {
                         }
                     }
 
-                    if let Some(action) = self
-                        .appointment_state
-                        .schedule
-                        .handle_mouse(mouse, chunks[1])
-                    {
-                        self.appointment_state.schedule.focused = true;
+                    if let Some(action) = self.appointment_state.handle_mouse(mouse, chunks[1]) {
+                        self.appointment_state.focused = true;
                         self.appointment_state.calendar.focused = false;
                         match action {
                             ScheduleAction::SelectPractitioner(id) => {

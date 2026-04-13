@@ -36,7 +36,7 @@ impl App {
                     CalendarAction::SelectDate(date) => {
                         self.appointment_state.selected_date = Some(date);
                         self.appointment_state.current_view = AppointmentView::Schedule;
-                        self.appointment_state.schedule.focused = true;
+                        self.appointment_state.focused = true;
                         self.appointment_state.calendar.focused = false;
                         self.pending_appointment_date = Some(date);
                         self.refresh_context();
@@ -50,7 +50,7 @@ impl App {
         }
 
         if self.appointment_state.current_view == AppointmentView::Schedule {
-            if let Some(action) = self.appointment_state.schedule.handle_key(key) {
+            if let Some(action) = self.appointment_state.handle_key(key) {
                 match action {
                     ScheduleAction::SelectPractitioner(id) => {
                         self.appointment_state.selected_practitioner = Some(id);

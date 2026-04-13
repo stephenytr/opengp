@@ -1,15 +1,19 @@
 use chrono::NaiveDate;
+use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
+use ratatui::layout::Rect;
 use std::collections::HashMap;
 use uuid::Uuid;
 
 use opengp_config::CalendarConfig;
-use opengp_domain::domain::appointment::{AppointmentType, CalendarDayView};
+use opengp_domain::domain::appointment::{AppointmentType, CalendarAppointment, CalendarDayView};
 use opengp_domain::domain::user::Practitioner;
 
+use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
+use crate::ui::view_models::PractitionerViewItem;
 use crate::ui::widgets::LoadingState;
 
 use super::calendar::Calendar;
-use super::schedule::Schedule;
+use super::schedule::{Schedule, ScheduleAction};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppointmentView {
@@ -30,6 +34,14 @@ pub struct AppointmentState {
     pub loading_state: LoadingState,
     loading: bool,
     pub hidden_columns: Vec<Uuid>,
+    pub practitioners_view: Vec<PractitionerViewItem>,
+    pub selected_practitioner_index: usize,
+    pub selected_time_slot: u8,
+    pub viewport_start_hour: u8,
+    pub viewport_end_hour: u8,
+    pub last_inner_height: u16,
+    pub focused: bool,
+    pub config: CalendarConfig,
 }
 
 impl AppointmentState {
@@ -67,7 +79,7 @@ impl AppointmentState {
         Self {
             current_view: AppointmentView::Schedule,
             calendar: Calendar::new(theme.clone()),
-            schedule: Schedule::new(theme, config).with_abbreviations(abbreviations),
+            schedule: Schedule::new(theme, config.clone()).with_abbreviations(abbreviations),
             selected_date: Some(chrono::Utc::now().date_naive()),
             schedule_data: None,
             practitioners: Vec::new(),
@@ -76,6 +88,14 @@ impl AppointmentState {
             loading_state: LoadingState::new().message("Loading appointments..."),
             loading: false,
             hidden_columns: Vec::new(),
+            practitioners_view: Vec::new(),
+            selected_practitioner_index: 0,
+            selected_time_slot: 0,
+            viewport_start_hour: config.viewport_start_hour,
+            viewport_end_hour: config.viewport_end_hour,
+            last_inner_height: 0,
+            focused: false,
+            config,
         }
     }
 
@@ -180,6 +200,326 @@ impl AppointmentState {
             .iter()
             .filter(|p| !self.is_column_hidden(p.id))
             .collect()
+    }
+
+    pub fn load_schedule_data(&mut self, data: CalendarDayView) {
+        self.schedule_data = Some(data.clone());
+        self.practitioners_view.clear();
+
+        for ps in &data.practitioners {
+            self.practitioners_view.push(PractitionerViewItem {
+                id: ps.practitioner_id,
+                display_name: ps.practitioner_name.clone(),
+            });
+        }
+
+        if self.selected_practitioner_index >= self.practitioners_view.len() {
+            self.selected_practitioner_index = self.practitioners_view.len().saturating_sub(1);
+        }
+    }
+
+    pub fn set_inner_height(&mut self, inner_height: u16) {
+        self.last_inner_height = inner_height;
+        self.fit_viewport_to_height();
+    }
+
+    fn visible_slots(&self) -> u8 {
+        if self.last_inner_height < 2 {
+            return 1;
+        }
+        ((self.last_inner_height.saturating_sub(1)) / 2).min(255) as u8
+    }
+
+    fn fit_viewport_to_height(&mut self) {
+        let visible = self.visible_slots();
+        let hours_needed = ((visible as u16).div_ceil(4) as u8).max(1);
+        let new_end = (self.viewport_start_hour + hours_needed).min(self.config.max_hour);
+        self.viewport_end_hour = new_end.max(self.viewport_start_hour + 1);
+    }
+
+    fn ensure_slot_visible(&mut self) {
+        let visible = self.visible_slots();
+        if visible == 0 {
+            return;
+        }
+        let slot = self.selected_time_slot;
+        let max_hour = self.config.max_hour;
+        let min_hour = self.config.min_hour;
+        let window = self.viewport_end_hour - self.viewport_start_hour;
+
+        if slot >= visible {
+            let abs_slot = self.viewport_start_hour as u16 * 4 + slot as u16;
+            let new_start_slot = abs_slot.saturating_sub(visible as u16 - 1);
+            let new_start_hour = ((new_start_slot / 4) as u8).min(max_hour - window);
+            let new_start_hour = new_start_hour.max(min_hour);
+            self.viewport_start_hour = new_start_hour;
+            self.viewport_end_hour = (self.viewport_start_hour + window).min(max_hour);
+            self.selected_time_slot = (abs_slot as u8).saturating_sub(self.viewport_start_hour * 4);
+        }
+    }
+
+    fn scroll_viewport_up_if_needed(&mut self) {
+        let visible = self.visible_slots();
+        if visible == 0 {
+            return;
+        }
+        let slot = self.selected_time_slot;
+        let min_hour = self.config.min_hour;
+        let window = self.viewport_end_hour - self.viewport_start_hour;
+
+        if slot == 0 && self.viewport_start_hour > min_hour {
+            let new_start = self.viewport_start_hour.saturating_sub(1).max(min_hour);
+            self.viewport_start_hour = new_start;
+            self.viewport_end_hour = (self.viewport_start_hour + window).min(self.config.max_hour);
+            self.selected_time_slot = 4;
+        }
+    }
+
+    fn scroll_viewport_to_show_selection(&mut self) {
+        let window_hours = self.viewport_end_hour - self.viewport_start_hour;
+        let selected_hour = self.viewport_start_hour + (self.selected_time_slot / 4);
+
+        if selected_hour < self.viewport_start_hour {
+            self.viewport_start_hour = selected_hour;
+            self.viewport_end_hour = selected_hour + window_hours;
+        } else if selected_hour >= self.viewport_end_hour {
+            self.viewport_end_hour = selected_hour + 1;
+            self.viewport_start_hour = self.viewport_end_hour.saturating_sub(window_hours);
+        }
+    }
+
+    pub fn max_time_slot(&self) -> u8 {
+        (self.config.max_hour - self.viewport_start_hour) * 4 - 1
+    }
+
+    pub fn time_to_slot(&self, time: chrono::DateTime<chrono::Utc>) -> Option<u8> {
+        use chrono::Timelike;
+        let hour = time.hour() as u8;
+        let minute = time.minute() as u8;
+        if hour < self.viewport_start_hour {
+            return None;
+        }
+        let hour_offset = hour - self.viewport_start_hour;
+        let slot = hour_offset * 4 + minute / 15;
+        Some(slot)
+    }
+
+    pub fn slot_to_time(&self, slot: u8) -> String {
+        let total_minutes = (self.viewport_start_hour as u16 * 60) + (slot as u16 * 15);
+        let hour = total_minutes / 60;
+        let minute = total_minutes % 60;
+        format!("{:02}:{:02}", hour, minute)
+    }
+
+    pub fn handle_key(&mut self, key: KeyEvent) -> Option<ScheduleAction> {
+        use crossterm::event::KeyEventKind;
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
+        let registry = KeybindRegistry::global();
+
+        if let Some(keybind) = registry.lookup(key, KeyContext::Schedule) {
+            return match keybind.action {
+                Action::PrevPractitioner => {
+                    if self.selected_practitioner_index > 0 {
+                        self.selected_practitioner_index -= 1;
+                    }
+                    self.practitioners_view
+                        .get(self.selected_practitioner_index)
+                        .map(|p| ScheduleAction::SelectPractitioner(p.id))
+                }
+                Action::NextPractitioner => {
+                    if self.selected_practitioner_index
+                        < self.practitioners_view.len().saturating_sub(1)
+                    {
+                        self.selected_practitioner_index += 1;
+                    }
+                    self.practitioners_view
+                        .get(self.selected_practitioner_index)
+                        .map(|p| ScheduleAction::SelectPractitioner(p.id))
+                }
+                Action::PrevTimeSlot => {
+                    if self.selected_time_slot > 0 {
+                        self.selected_time_slot -= 1;
+                        self.scroll_viewport_up_if_needed();
+                    }
+                    Some(ScheduleAction::NavigateTimeSlot(-1))
+                }
+                Action::NextTimeSlot => {
+                    let max_slot = self.max_time_slot();
+                    if self.selected_time_slot < max_slot {
+                        self.selected_time_slot += 1;
+                        self.ensure_slot_visible();
+                    }
+                    Some(ScheduleAction::NavigateTimeSlot(1))
+                }
+                Action::TogglePractitionerColumn => Some(ScheduleAction::ToggleColumn),
+                Action::Enter => {
+                    if let Some(apt) = self.get_appointment_at_selection() {
+                        Some(ScheduleAction::SelectAppointment(apt.id))
+                    } else if let (Some(practitioner), Some(schedule_data)) = (
+                        self.practitioners_view
+                            .get(self.selected_practitioner_index),
+                        &self.schedule_data,
+                    ) {
+                        Some(ScheduleAction::CreateAtSlot {
+                            practitioner_id: practitioner.id,
+                            date: schedule_data.date,
+                            time: self.slot_to_time(self.selected_time_slot),
+                        })
+                    } else {
+                        None
+                    }
+                }
+                Action::ScrollViewportUp => {
+                    let min_hour = self.config.min_hour;
+                    if self.viewport_start_hour > min_hour {
+                        let abs_hour = self.viewport_start_hour + (self.selected_time_slot / 4);
+                        let abs_min_slot = self.selected_time_slot % 4;
+
+                        let window = self.viewport_end_hour - self.viewport_start_hour;
+                        self.viewport_start_hour =
+                            self.viewport_start_hour.saturating_sub(2).max(min_hour);
+                        self.viewport_end_hour = self.viewport_start_hour + window;
+
+                        if abs_hour >= self.viewport_start_hour && abs_hour < self.viewport_end_hour
+                        {
+                            self.selected_time_slot =
+                                (abs_hour - self.viewport_start_hour) * 4 + abs_min_slot;
+                        } else {
+                            self.selected_time_slot = 0;
+                        }
+                    }
+                    None
+                }
+                Action::ScrollViewportDown => {
+                    let max_hour = self.config.max_hour;
+                    if self.viewport_end_hour < max_hour {
+                        let abs_hour = self.viewport_start_hour + (self.selected_time_slot / 4);
+                        let abs_min_slot = self.selected_time_slot % 4;
+
+                        let window = self.viewport_end_hour - self.viewport_start_hour;
+                        self.viewport_end_hour = (self.viewport_end_hour + 2).min(max_hour);
+                        self.viewport_start_hour = self.viewport_end_hour - window;
+
+                        if abs_hour >= self.viewport_start_hour && abs_hour < self.viewport_end_hour
+                        {
+                            self.selected_time_slot =
+                                (abs_hour - self.viewport_start_hour) * 4 + abs_min_slot;
+                        } else {
+                            self.selected_time_slot = self.max_time_slot();
+                        }
+                    }
+                    None
+                }
+                _ => None,
+            };
+        }
+        None
+    }
+
+    pub fn get_appointment_at_selection(&self) -> Option<&CalendarAppointment> {
+        self.get_appointment_at_slot_for_practitioner(
+            self.selected_time_slot,
+            self.selected_practitioner_index,
+        )
+    }
+
+    fn get_appointment_at_slot_for_practitioner(
+        &self,
+        slot: u8,
+        practitioner_index: usize,
+    ) -> Option<&CalendarAppointment> {
+        let schedule = self.schedule_data.as_ref()?;
+        let practitioner = self.practitioners_view.get(practitioner_index)?;
+
+        schedule
+            .practitioners
+            .iter()
+            .find(|ps| ps.practitioner_id == practitioner.id)
+            .and_then(|ps| {
+                ps.appointments
+                    .iter()
+                    .find(|apt| self.is_appointment_at_slot(apt, slot))
+            })
+    }
+
+    fn is_appointment_at_slot(&self, apt: &CalendarAppointment, slot: u8) -> bool {
+        let Some(start_slot) = self.time_to_slot(apt.start_time) else {
+            return false;
+        };
+        let end_slot = start_slot.saturating_add(apt.slot_span).saturating_sub(1);
+        slot >= start_slot && slot <= end_slot
+    }
+
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ScheduleAction> {
+        use crate::ui::layout::TIME_COLUMN_WIDTH;
+
+        match mouse.kind {
+            MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
+                let time_column_width = TIME_COLUMN_WIDTH;
+                let inner = area.inner(ratatui::layout::Margin {
+                    horizontal: 1,
+                    vertical: 1,
+                });
+
+                let y = mouse.row.saturating_sub(inner.y);
+                let slot = (y as u8 / 2).min(self.max_time_slot());
+                self.selected_time_slot = slot;
+
+                if mouse.column < inner.x + time_column_width {
+                    return Some(ScheduleAction::NavigateTimeSlot(0));
+                }
+
+                let col = mouse.column.saturating_sub(inner.x + time_column_width);
+                let practitioner_cols = inner.width.saturating_sub(time_column_width);
+
+                if practitioner_cols > 0 && !self.practitioners_view.is_empty() {
+                    let col_width = practitioner_cols / self.practitioners_view.len() as u16;
+                    if col_width > 0 {
+                        let practitioner_index = (col / col_width) as usize;
+                        if practitioner_index < self.practitioners_view.len() {
+                            self.selected_practitioner_index = practitioner_index;
+
+                            if let Some(apt) = self.get_appointment_at_slot_for_practitioner(
+                                slot,
+                                self.selected_practitioner_index,
+                            ) {
+                                return Some(ScheduleAction::SelectAppointment(apt.id));
+                            }
+
+                            return Some(ScheduleAction::SelectPractitioner(
+                                self.practitioners_view[practitioner_index].id,
+                            ));
+                        }
+                    }
+                }
+                None
+            }
+            MouseEventKind::ScrollUp => {
+                let min_hour = self.config.min_hour;
+                if self.viewport_start_hour > min_hour {
+                    self.viewport_start_hour = self.viewport_start_hour.saturating_sub(1);
+                    self.viewport_end_hour = self.viewport_end_hour.saturating_sub(1);
+                    self.scroll_viewport_to_show_selection();
+                }
+                None
+            }
+            MouseEventKind::ScrollDown => {
+                let max_hour = self.config.max_hour;
+                let window_hours = self.viewport_end_hour - self.viewport_start_hour;
+                if self.viewport_end_hour < max_hour {
+                    self.viewport_start_hour =
+                        (self.viewport_start_hour + 1).min(max_hour - window_hours);
+                    self.viewport_end_hour = (self.viewport_end_hour + 1).min(max_hour);
+                    self.scroll_viewport_to_show_selection();
+                }
+                None
+            }
+            _ => None,
+        }
     }
 }
 

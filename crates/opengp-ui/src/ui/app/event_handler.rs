@@ -246,7 +246,7 @@ impl App {
                     {
                         self.appointment_state.current_view = AppointmentView::Calendar;
                         self.appointment_state.calendar.focused = true;
-                        self.appointment_state.schedule.focused = false;
+                        self.appointment_state.focused = false;
                         self.refresh_context();
                     }
                 }

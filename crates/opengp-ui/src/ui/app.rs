@@ -533,14 +533,14 @@ mod tests {
             AppointmentView::Schedule
         );
 
-        let initial_slot = app.appointment_state().schedule.selected_time_slot;
+        let initial_slot = app.appointment_state().selected_time_slot;
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('j'),
             crossterm::event::KeyModifiers::NONE,
         );
         app.handle_key_event(key);
         assert!(
-            app.appointment_state().schedule.selected_time_slot >= initial_slot,
+            app.appointment_state().selected_time_slot >= initial_slot,
             "Schedule time slot should advance after pressing 'j'"
         );
     }
