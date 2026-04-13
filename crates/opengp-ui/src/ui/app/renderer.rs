@@ -166,24 +166,8 @@ impl App {
                 self.appointment_state
                     .set_inner_height(schedule_inner_height);
 
-                if let Some(ref data) = self.appointment_state.schedule_data {
-                    self.appointment_state.practitioners_view.clear();
-                    for practitioner_schedule in &data.practitioners {
-                        let practitioner = crate::ui::view_models::PractitionerViewItem {
-                            id: practitioner_schedule.practitioner_id,
-                            display_name: practitioner_schedule.practitioner_name.clone(),
-                        };
-                        self.appointment_state.practitioners_view.push(practitioner);
-                    }
-                    if self.appointment_state.selected_practitioner_index
-                        >= self.appointment_state.practitioners_view.len()
-                    {
-                        self.appointment_state.selected_practitioner_index = self
-                            .appointment_state
-                            .practitioners_view
-                            .len()
-                            .saturating_sub(1);
-                    }
+                if let Some(data) = self.appointment_state.schedule_data.clone() {
+                    self.appointment_state.load_schedule_data(data);
                 }
 
                 let schedule_has_practitioners = self
@@ -220,15 +204,7 @@ impl App {
                         practitioners: schedules,
                     };
 
-                    self.appointment_state.schedule_data = Some(day_view.clone());
-                    self.appointment_state.practitioners_view.clear();
-                    for practitioner_schedule in &day_view.practitioners {
-                        let practitioner = crate::ui::view_models::PractitionerViewItem {
-                            id: practitioner_schedule.practitioner_id,
-                            display_name: practitioner_schedule.practitioner_name.clone(),
-                        };
-                        self.appointment_state.practitioners_view.push(practitioner);
-                    }
+                    self.appointment_state.load_schedule_data(day_view);
                 }
 
                 let schedule = self.appointment_state.schedule.clone();
