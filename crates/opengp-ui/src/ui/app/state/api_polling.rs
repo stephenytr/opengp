@@ -452,26 +452,34 @@ async fn fetch_appointments_for_day(
             });
     }
 
-    // Fetch practitioners to resolve names
-    let practitioner_names: HashMap<uuid::Uuid, String> = fetch_practitioners(api_client.clone())
+    // Fetch practitioners to resolve names AND to ensure all appear in schedule
+    let all_practitioners = fetch_practitioners(api_client.clone())
         .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|p| (p.id, p.display_name()))
-        .collect();
+        .unwrap_or_default();
 
-    let mut practitioners: Vec<PractitionerSchedule> = grouped
+    let mut practitioners: Vec<PractitionerSchedule> = all_practitioners
         .into_iter()
-        .map(|(practitioner_id, appointments)| PractitionerSchedule {
-            practitioner_id,
-            practitioner_name: practitioner_names
-                .get(&practitioner_id)
-                .cloned()
-                .unwrap_or_else(|| format!("Practitioner {}", &practitioner_id.to_string()[..8])),
-            appointments,
-            working_hours: None,
+        .map(|p| {
+            let appointments = grouped.remove(&p.id).unwrap_or_default();
+            PractitionerSchedule {
+                practitioner_id: p.id,
+                practitioner_name: p.display_name(),
+                appointments,
+                working_hours: None,
+            }
         })
         .collect();
+
+    // Also include any appointments for practitioners not in the practitioners list
+    // (edge case: appointment exists for unknown practitioner)
+    for (practitioner_id, appointments) in grouped {
+        practitioners.push(PractitionerSchedule {
+            practitioner_id,
+            practitioner_name: format!("Practitioner {}", &practitioner_id.to_string()[..8]),
+            appointments,
+            working_hours: None,
+        });
+    }
 
     practitioners.sort_by(|a, b| a.practitioner_name.cmp(&b.practitioner_name));
 
