@@ -150,6 +150,8 @@ impl Schedule {
         self.fit_viewport_to_height();
     }
 
+    // ── VIEWPORT MATH ──
+
     fn visible_slots(&self) -> u8 {
         if self.last_inner_height < 2 {
             return 1;
@@ -227,6 +229,8 @@ impl Schedule {
             self.selected_practitioner_index = self.practitioners.len().saturating_sub(1);
         }
     }
+
+    // ── INPUT HANDLING ──
 
     /// Handle keyboard input and return an action if triggered.
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ScheduleAction> {
@@ -514,6 +518,8 @@ impl Schedule {
             .cloned()
             .unwrap_or_else(|| self.config.get_abbreviation(&apt_type.to_string()))
     }
+
+    // ── RENDERING ──
 
     /// Render the time column on the left side.
     fn render_time_column(&self, area: Rect, buf: &mut Buffer) {
