@@ -20,10 +20,13 @@ use opengp_domain::domain::billing::BillingType;
 use crate::ui::components::billing::BillingState;
 use crate::ui::services::BillingUiService;
 
+mod command;
 mod event_handler;
 mod keybinds;
 mod renderer;
 mod state;
+
+pub use command::AppCommand;
 
 const DEFAULT_PATIENT_PAGE_LIMIT: u32 = 100;
 const DEFAULT_APPOINTMENT_PAGE_LIMIT: u32 = 100;
@@ -82,14 +85,14 @@ pub struct App {
     patient_form: Option<PatientForm>,
     pending_patient_data: Option<PendingPatientData>,
     pending_edit_patient_id: Option<uuid::Uuid>,
-    appointment_state: AppointmentState,
-    pending_appointment_date: Option<NaiveDate>,
-    pending_load_practitioners: bool,
-    pending_load_booked_slots: Option<(uuid::Uuid, NaiveDate, u32)>,
-    appointment_form: Option<AppointmentForm>,
-    appointment_detail_modal: Option<AppointmentDetailModal>,
-    pending_appointment_save: Option<opengp_domain::domain::appointment::NewAppointmentData>,
-    pending_appointment_status_transition: Option<(uuid::Uuid, AppointmentStatusTransition)>,
+     appointment_state: AppointmentState,
+     appointment_form: Option<AppointmentForm>,
+     appointment_detail_modal: Option<AppointmentDetailModal>,
+     pending_appointment_date: Option<NaiveDate>,
+     pending_load_practitioners: bool,
+     pending_load_booked_slots: Option<(uuid::Uuid, NaiveDate, u32)>,
+     pending_appointment_save: Option<opengp_domain::domain::appointment::NewAppointmentData>,
+     pending_appointment_status_transition: Option<(uuid::Uuid, AppointmentStatusTransition)>,
     pending_clinical_patient_id: Option<uuid::Uuid>,
     pending_clinical_save_data: Option<PendingClinicalSaveData>,
     pending_billing: Option<PendingBillingSaveData>,
@@ -119,6 +122,8 @@ pub struct App {
     active_appointment_refresh_date: Option<NaiveDate>,
     active_consultation_refresh_patient_id: Option<uuid::Uuid>,
     terminal_size: Rect,
+    pub command_tx: tokio::sync::mpsc::UnboundedSender<AppCommand>,
+    command_rx: Option<tokio::sync::mpsc::UnboundedReceiver<AppCommand>>,
 }
 
 pub enum PendingPatientData {
@@ -203,6 +208,8 @@ impl App {
         billing_ui_service: Option<Arc<BillingUiService>>,
         practice_config: opengp_config::PracticeConfig,
     ) -> Self {
+        let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel::<AppCommand>();
+        
         let mut app = Self {
             theme: theme.clone(),
             keybinds: KeybindRegistry::global(),
@@ -220,11 +227,11 @@ impl App {
             pending_patient_data: None,
             pending_edit_patient_id: None,
             appointment_state: AppointmentState::new(theme.clone(), calendar_config),
+            appointment_form: None,
+            appointment_detail_modal: None,
             pending_appointment_date: None,
             pending_load_practitioners: false,
             pending_load_booked_slots: None,
-            appointment_form: None,
-            appointment_detail_modal: None,
             pending_appointment_save: None,
             pending_appointment_status_transition: None,
             pending_clinical_patient_id: None,
@@ -256,6 +263,8 @@ impl App {
             active_appointment_refresh_date: None,
             active_consultation_refresh_patient_id: None,
             terminal_size: Rect::new(0, 0, 80, 24),
+            command_tx,
+            command_rx: Some(command_rx),
         };
 
         app.refresh_status_bar();
@@ -294,6 +303,10 @@ impl App {
 
     pub fn quit(&mut self) {
         self.should_quit = true;
+    }
+
+    pub fn take_command_rx(&mut self) -> Option<tokio::sync::mpsc::UnboundedReceiver<AppCommand>> {
+        self.command_rx.take()
     }
 
     #[cfg(test)]

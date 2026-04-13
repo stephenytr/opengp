@@ -9,8 +9,7 @@ use opengp_domain::domain::api::{
     SocialHistoryRequest, VitalSignsRequest,
 };
 use opengp_ui::api::ApiClient;
-use opengp_ui::ui::app::App;
-use opengp_ui::ui::app::PendingBillingSaveData;
+use opengp_ui::ui::app::{App, AppCommand, PendingBillingSaveData};
 use opengp_ui::ui::services::{BillingUiService, ClinicalUiService};
 use opengp_domain::domain::billing::{BillingRepository, BillingService, BillingType};
 use opengp_domain::domain::clinical::{
@@ -190,6 +189,7 @@ async fn run_tui(
         billing_service,
         practice_config,
     );
+    let mut command_rx = app.take_command_rx().expect("failed to extract command_rx from app");
     app.set_authenticated(has_session_token);
     if has_session_token {
         app.request_refresh_patients();
@@ -241,45 +241,81 @@ async fn run_tui(
             }
         }
 
-        // Check if there's a pending appointment date to load practitioners and schedule for
-        if let Some(date) = app.take_pending_appointment_date() {
-            app.request_refresh_appointments(date);
-        }
-
-        // Check if practitioners need to be loaded for appointment form picker
-        if app.take_pending_load_practitioners() {
-            match api_client.get_practitioners().await {
-                Ok(practitioners) => {
-                    let practitioner_items: Vec<opengp_ui::ui::view_models::PractitionerViewItem> =
-                        practitioners
-                            .into_iter()
-                            .map(|p| opengp_ui::ui::view_models::PractitionerViewItem {
-                                id: p.id,
-                                display_name: p.name,
-                            })
-                            .collect();
-                    app.appointment_form_set_practitioners(practitioner_items);
-                    tracing::info!("Loaded practitioners for appointment form");
+        // Drain appointment commands from the channel
+        while let Ok(cmd) = command_rx.try_recv() {
+            match cmd {
+                AppCommand::RefreshAppointments(date) => {
+                    app.request_refresh_appointments(date);
                 }
-                Err(e) => {
-                    tracing::error!("Failed to load practitioners for form: {}", e);
+                AppCommand::LoadPractitioners => {
+                    match api_client.get_practitioners().await {
+                        Ok(practitioners) => {
+                            let practitioner_items: Vec<opengp_ui::ui::view_models::PractitionerViewItem> =
+                                practitioners
+                                    .into_iter()
+                                    .map(|p| opengp_ui::ui::view_models::PractitionerViewItem {
+                                        id: p.id,
+                                        display_name: p.name,
+                                    })
+                                    .collect();
+                            app.appointment_form_set_practitioners(practitioner_items);
+                            tracing::info!("Loaded practitioners for appointment form");
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to load practitioners for form: {}", e);
+                        }
+                    }
                 }
-            }
-        }
-
-        if let Some((practitioner_id, date, duration)) = app.take_pending_load_booked_slots() {
-            match api_client
-                .get_available_slots(practitioner_id, date, duration as i64)
-                .await
-            {
-                Ok(available_slots) => {
-                    let booked_slots = compute_booked_slots(&available_slots, &calendar_config);
-                    app.appointment_form_set_booked_slots(booked_slots);
-                    tracing::info!("Loaded booked slots for time picker");
+                AppCommand::LoadAvailableSlots { practitioner_id, date, duration_minutes } => {
+                    match api_client
+                        .get_available_slots(practitioner_id, date, duration_minutes as i64)
+                        .await
+                    {
+                        Ok(available_slots) => {
+                            let booked_slots = compute_booked_slots(&available_slots, &calendar_config);
+                            app.appointment_form_set_booked_slots(booked_slots);
+                            tracing::info!("Loaded booked slots for time picker");
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to load available slots: {:?}", e);
+                        }
+                    }
                 }
-                Err(e) => {
-                    tracing::error!("Failed to load available slots: {:?}", e);
+                AppCommand::CreateAppointment(data) => {
+                    let appointment_date = data.start_time.date_naive();
+                    let request = conversions::appointment_request_from_new(data);
+                    match api_client.create_appointment(&request).await {
+                        Ok(_) => {
+                            tracing::info!("Created new appointment via API");
+                            let date = app
+                                .appointment_state_mut()
+                                .selected_date
+                                .unwrap_or(appointment_date);
+                            app.request_refresh_appointments(date);
+                        }
+                        Err(e) => tracing::error!("Failed to create appointment: {}", e),
+                    }
                 }
+                AppCommand::UpdateAppointmentStatus { id, status } => {
+                    let status_str = match status {
+                        opengp_domain::domain::appointment::AppointmentStatus::Scheduled => "scheduled",
+                        opengp_domain::domain::appointment::AppointmentStatus::Confirmed => "confirmed",
+                        opengp_domain::domain::appointment::AppointmentStatus::Arrived => "arrived",
+                        opengp_domain::domain::appointment::AppointmentStatus::InProgress => "in_progress",
+                        opengp_domain::domain::appointment::AppointmentStatus::Billing => "billing",
+                        opengp_domain::domain::appointment::AppointmentStatus::Completed => "completed",
+                        opengp_domain::domain::appointment::AppointmentStatus::Cancelled => "cancelled",
+                        opengp_domain::domain::appointment::AppointmentStatus::NoShow => "no_show",
+                        opengp_domain::domain::appointment::AppointmentStatus::Rescheduled => "rescheduled",
+                    };
+                    match api_client.update_appointment_status(id, status_str).await {
+                        Ok(_) => {
+                            tracing::info!("Updated appointment status");
+                        }
+                        Err(e) => tracing::error!("Failed to update appointment status: {}", e),
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -290,51 +326,7 @@ async fn run_tui(
             app.appointment_form_set_patients(patient_items);
         }
 
-        if let Some(data) = app.take_pending_appointment_save() {
-            let appointment_date = data.start_time.date_naive();
-            let request = conversions::appointment_request_from_new(data);
-            match api_client.create_appointment(&request).await {
-                Ok(_) => {
-                    tracing::info!("Created new appointment via API");
-                    let date = app
-                        .appointment_state_mut()
-                        .selected_date
-                        .unwrap_or(appointment_date);
-                    app.request_refresh_appointments(date);
-                }
-                Err(e) => tracing::error!("Failed to create appointment: {}", e),
-            }
-        }
 
-        if let Some((appointment_id, transition)) = app.take_pending_appointment_status_transition()
-        {
-            let result = {
-                use opengp_ui::ui::app::AppointmentStatusTransition;
-                use opengp_domain::domain::appointment::AppointmentStatus;
-                match transition {
-                    AppointmentStatusTransition::SetStatus(status) => {
-                        let status_str = match status {
-                            AppointmentStatus::Scheduled => "scheduled",
-                            AppointmentStatus::Confirmed => "confirmed",
-                            AppointmentStatus::Arrived => "arrived",
-                            AppointmentStatus::InProgress => "in_progress",
-                            AppointmentStatus::Billing => "billing",
-                            AppointmentStatus::Completed => "completed",
-                            AppointmentStatus::Cancelled => "cancelled",
-                            AppointmentStatus::NoShow => "no_show",
-                            AppointmentStatus::Rescheduled => "rescheduled",
-                        };
-                        api_client.update_appointment_status(appointment_id, status_str).await
-                    }
-                }
-            };
-            match result {
-                Ok(_) => {
-                    tracing::info!("Updated appointment status");
-                }
-                Err(e) => tracing::error!("Failed to update appointment status: {}", e),
-            }
-        }
 
         if let Some(pending) = app.take_pending_clinical_save_data() {
             match pending {
