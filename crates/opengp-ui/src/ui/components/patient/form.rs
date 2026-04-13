@@ -2,6 +2,7 @@
 //!
 //! Comprehensive form for creating and editing patients.
 
+use std::cmp::max;
 use std::collections::HashMap;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
@@ -13,9 +14,9 @@ use opengp_domain::domain::patient::{
     Address, EmergencyContact, Ihi, MedicareNumber, NewPatientData, Patient, PhoneNumber,
 };
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Position, Rect};
+use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::Style;
-use ratatui::widgets::{Block, Borders, Widget};
+use ratatui::widgets::{Block, Borders, Paragraph, Widget};
 use uuid::Uuid;
 
 use crate::ui::input::to_ratatui_key;
@@ -629,7 +630,7 @@ impl PatientForm {
             if id == field_id {
                 return (y, self.get_field_height(id));
             }
-            y += self.get_field_height(id) + 1;
+            y += self.get_field_height(id);
         }
 
         (0, 0)
@@ -637,7 +638,7 @@ impl PatientForm {
 
     fn get_field_height(&self, field_id: &str) -> u16 {
         if self.form_state.dropdowns.contains_key(field_id) {
-            4
+            3
         } else if let Some(textarea) = self.textarea_for(field_id) {
             textarea.height()
         } else {
@@ -651,6 +652,19 @@ impl PatientForm {
 
     pub fn set_saving(&mut self, saving: bool) {
         self.saving = saving;
+    }
+
+    pub fn focus_first_error(&mut self) {
+        if let Some(field_id) = self
+            .field_ids
+            .iter()
+            .find(|id| self.form_state.errors.contains_key(*id))
+        {
+            self.focused_field = field_id.clone();
+            if let Some(field) = PatientFormField::from_id(field_id) {
+                self.form_state.focused_field = field;
+            }
+        }
     }
 
     fn validate_field_by_id(&mut self, field_id: &str) {
@@ -1057,7 +1071,7 @@ impl PatientForm {
                 return None;
             }
 
-            y += field_height + 1;
+            y += field_height;
         }
 
         None
@@ -1282,82 +1296,186 @@ impl Widget for PatientForm {
             return;
         }
 
-        let label_width = LABEL_WIDTH;
-        let field_start = inner.x + label_width + 2;
+        // Detect multi-column mode: check if any field has column > 0
+        let is_multi_column = self.field_configs.values().any(|f| f.column > 0);
+
+        // Check terminal width for multi-column rendering
+        if is_multi_column && inner.width < 80 {
+            let msg = Paragraph::new("Terminal too small for multi-column");
+            msg.render(inner, buf);
+            return;
+        }
 
         let fields = self.field_ids.clone();
-
-        let mut total_height: u16 = 0;
-        for field_id in &fields {
-            total_height += self.get_field_height(field_id) + 1;
-        }
-        self.form_state.scroll.set_total_height(total_height);
-        self.form_state
-            .scroll
-            .clamp_offset(inner.height.saturating_sub(2));
-
-        let (focused_y, focused_height) = self.get_field_position(&self.focused_field);
-        self.form_state.scroll.scroll_to_field(
-            focused_y,
-            focused_height,
-            inner.height.saturating_sub(2),
-        );
-
-        let mut y: i32 = (inner.y as i32) + 1 - (self.form_state.scroll.scroll_offset as i32);
-        let max_y = inner.y as i32 + inner.height as i32 - 2;
         let mut open_dropdown: Option<(DropdownWidget, Rect)> = None;
 
-        for field_id in fields {
-            let field_height = self.get_field_height(&field_id) as i32;
+        if is_multi_column {
+            // Multi-column render mode (no scroll)
+            let [left_col, right_col] =
+                Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                    .areas(inner);
 
-            if y + field_height <= inner.y as i32 || y >= max_y {
-                y += field_height + 1;
-                continue;
-            }
+            let mut left_y: i32 = (left_col.y as i32) + 1;
+            let mut right_y: i32 = (right_col.y as i32) + 1;
+            let max_y = (inner.y as i32) + (inner.height as i32) - 2;
 
-            let is_focused = field_id == self.focused_field;
+            for field_id in fields {
+                let field_config = self.field_configs.get(&field_id);
+                let column = field_config.map(|fc| fc.column).unwrap_or(0);
+                let width_percent = field_config.map(|fc| fc.width_percent).unwrap_or(100);
+                let field_height = self.get_field_height(&field_id) as i32;
+                let is_focused = field_id == self.focused_field;
 
-            if let Some(dropdown) = self.form_state.dropdowns.get(&field_id).cloned() {
-                if y >= inner.y as i32 && y < max_y {
-                    let dropdown_area = Rect::new(
-                        field_start,
-                        y as u16,
-                        inner.width.saturating_sub(label_width + 4),
-                        3,
-                    );
-                    if dropdown.is_open() {
-                        open_dropdown = Some((dropdown.clone(), dropdown_area));
+                if width_percent == 100 {
+                    // Full-width field
+                    let y = max(left_y, right_y);
+                    if y < max_y {
+                        if let Some(dropdown) = self.form_state.dropdowns.get(&field_id).cloned() {
+                            let dropdown_area =
+                                Rect::new(inner.x + 1, y as u16, inner.width - 2, 3);
+                            if dropdown.is_open() {
+                                open_dropdown = Some((dropdown.clone(), dropdown_area));
+                            }
+                            dropdown.focused(is_focused).render(dropdown_area, buf);
+                        } else if let Some(textarea) = self.form_state.textareas.get(&field_id) {
+                            let textarea_area = Rect::new(
+                                inner.x + 1,
+                                y as u16,
+                                inner.width - 2,
+                                textarea.height(),
+                            );
+                            TextareaWidget::new(textarea, self.form_state.theme.clone())
+                                .focused(is_focused)
+                                .render(textarea_area, buf);
+                        }
                     }
-                    dropdown.focused(is_focused).render(dropdown_area, buf);
+                    // Advance both columns
+                    left_y += field_height;
+                    right_y += field_height;
+                } else if column == 0 {
+                    // Left column
+                    if left_y < max_y {
+                        if let Some(dropdown) = self.form_state.dropdowns.get(&field_id).cloned() {
+                            let dropdown_area = Rect::new(
+                                left_col.x + 1,
+                                left_y as u16,
+                                left_col.width.saturating_sub(2),
+                                3,
+                            );
+                            if dropdown.is_open() {
+                                open_dropdown = Some((dropdown.clone(), dropdown_area));
+                            }
+                            dropdown.focused(is_focused).render(dropdown_area, buf);
+                        } else if let Some(textarea) = self.form_state.textareas.get(&field_id) {
+                            let textarea_area = Rect::new(
+                                left_col.x + 1,
+                                left_y as u16,
+                                left_col.width.saturating_sub(2),
+                                textarea.height(),
+                            );
+                            TextareaWidget::new(textarea, self.form_state.theme.clone())
+                                .focused(is_focused)
+                                .render(textarea_area, buf);
+                        }
+                    }
+                    left_y += field_height;
+                } else if column == 1 {
+                    // Right column
+                    if right_y < max_y {
+                        if let Some(dropdown) = self.form_state.dropdowns.get(&field_id).cloned() {
+                            let dropdown_area = Rect::new(
+                                right_col.x + 1,
+                                right_y as u16,
+                                right_col.width.saturating_sub(2),
+                                3,
+                            );
+                            if dropdown.is_open() {
+                                open_dropdown = Some((dropdown.clone(), dropdown_area));
+                            }
+                            dropdown.focused(is_focused).render(dropdown_area, buf);
+                        } else if let Some(textarea) = self.form_state.textareas.get(&field_id) {
+                            let textarea_area = Rect::new(
+                                right_col.x + 1,
+                                right_y as u16,
+                                right_col.width.saturating_sub(2),
+                                textarea.height(),
+                            );
+                            TextareaWidget::new(textarea, self.form_state.theme.clone())
+                                .focused(is_focused)
+                                .render(textarea_area, buf);
+                        }
+                    }
+                    right_y += field_height;
                 }
-                y += 4;
-                continue;
+            }
+        } else {
+            // Single-column render with scroll
+            let mut total_height: u16 = 0;
+            for field_id in &fields {
+                total_height += self.get_field_height(field_id);
+            }
+            self.form_state.scroll.set_total_height(total_height);
+            self.form_state
+                .scroll
+                .clamp_offset(inner.height.saturating_sub(2));
+
+            let (focused_y, focused_height) = self.get_field_position(&self.focused_field);
+            self.form_state.scroll.scroll_to_field(
+                focused_y,
+                focused_height,
+                inner.height.saturating_sub(2),
+            );
+
+            let mut y: i32 = (inner.y as i32) + 1 - (self.form_state.scroll.scroll_offset as i32);
+            let max_y = inner.y as i32 + inner.height as i32 - 2;
+
+            for field_id in fields {
+                let field_height = self.get_field_height(&field_id) as i32;
+
+                if y + field_height <= inner.y as i32 || y >= max_y {
+                    y += field_height;
+                    continue;
+                }
+
+                let is_focused = field_id == self.focused_field;
+
+                if let Some(dropdown) = self.form_state.dropdowns.get(&field_id).cloned() {
+                    if y >= inner.y as i32 && y < max_y {
+                        let dropdown_area = Rect::new(inner.x + 1, y as u16, inner.width - 2, 3);
+                        if dropdown.is_open() {
+                            open_dropdown = Some((dropdown.clone(), dropdown_area));
+                        }
+                        dropdown.focused(is_focused).render(dropdown_area, buf);
+                    }
+                    y += 3;
+                    continue;
+                }
+
+                if let Some(textarea) = self.form_state.textareas.get(&field_id) {
+                    let textarea_height = textarea.height() as i32;
+                    if y >= inner.y as i32 && y < max_y {
+                        let textarea_area = Rect::new(
+                            inner.x + 1,
+                            y as u16,
+                            inner.width - 2,
+                            textarea_height as u16,
+                        );
+                        TextareaWidget::new(textarea, self.form_state.theme.clone())
+                            .focused(is_focused)
+                            .render(textarea_area, buf);
+                    }
+                    y += textarea_height;
+                }
             }
 
-            if let Some(textarea) = self.form_state.textareas.get(&field_id) {
-                let textarea_height = textarea.height() as i32;
-                if y >= inner.y as i32 && y < max_y {
-                    let textarea_area = Rect::new(
-                        inner.x + 1,
-                        y as u16,
-                        inner.width - 2,
-                        textarea_height as u16,
-                    );
-                    TextareaWidget::new(textarea, self.form_state.theme.clone())
-                        .focused(is_focused)
-                        .render(textarea_area, buf);
-                }
-                y += textarea_height + 1;
-            }
+            self.form_state
+                .scroll
+                .render_scrollbar(inner, buf, &self.form_state.theme);
         }
 
         if let Some((dropdown, dropdown_area)) = open_dropdown {
             dropdown.render(dropdown_area, buf);
         }
-
-        self.form_state
-            .scroll
-            .render_scrollbar(inner, buf, &self.form_state.theme);
 
         let help_y = inner.y + inner.height - 1;
         buf.set_string(
@@ -1564,5 +1682,17 @@ mod tests {
 
         let result = form.to_new_patient_data();
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_submit_keeps_form_open_on_error() {
+        let theme = Theme::dark();
+        let mut form = PatientForm::new(theme, &PatientConfig::default());
+
+        form.validate();
+        assert!(form.has_errors());
+
+        form.focus_first_error();
+        assert_eq!(form.focused_field(), PatientFormField::FirstName);
     }
 }
