@@ -95,18 +95,27 @@ impl App {
                         crate::ui::components::patient::PatientFormAction::ValueChanged => {}
                         crate::ui::components::patient::PatientFormAction::Submit => {
                             if let Some(ref mut form) = self.patient_form {
-                                if !form.has_errors() {
-                                    if form.is_edit_mode() {
-                                        if let Some((id, data)) = form.to_update_patient_data() {
-                                            self.pending_patient_data =
-                                                Some(PendingPatientData::Update { id, data });
-                                        }
-                                    } else if let Some(data) = form.to_new_patient_data() {
+                                // Run full validation on all fields
+                                if !form.validate() || form.has_errors() {
+                                    // Stay open — errors are visible on fields
+                                    form.focus_first_error();
+                                } else if form.is_edit_mode() {
+                                    if let Some((id, data)) = form.to_update_patient_data() {
                                         self.pending_patient_data =
-                                            Some(PendingPatientData::New(data));
+                                            Some(PendingPatientData::Update { id, data });
+                                        self.patient_form = None;
+                                        self.current_context = KeyContext::PatientList;
+                                    } else {
+                                        // Data extraction failed after validation — stay open
+                                        form.focus_first_error();
                                     }
+                                } else if let Some(data) = form.to_new_patient_data() {
+                                    self.pending_patient_data = Some(PendingPatientData::New(data));
                                     self.patient_form = None;
                                     self.current_context = KeyContext::PatientList;
+                                } else {
+                                    // Data extraction failed after validation — stay open
+                                    form.focus_first_error();
                                 }
                             }
                         }

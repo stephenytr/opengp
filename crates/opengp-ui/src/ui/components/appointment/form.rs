@@ -1124,18 +1124,8 @@ impl Widget for AppointmentForm {
                     TextareaWidget::new(textarea_state, self.theme.clone())
                         .focused(is_focused)
                         .render(textarea_area, buf);
-
-                    if let Some(error_msg) = self.error(field) {
-                        let error_style = Style::default().fg(self.theme.colors.error);
-                        buf.set_string(
-                            inner.x + 2,
-                            (y as u16) + field_height,
-                            format!("  {}", error_msg),
-                            error_style,
-                        );
-                    }
                 }
-                y += field_height as i32 + 1;
+                y += field_height as i32;
                 continue;
             }
 

@@ -237,14 +237,6 @@ impl Widget for TextareaWidget<'_> {
             return;
         }
 
-        let (textarea_area, error_area) = if self.state.error.is_some() && area.height > 2 {
-            let ta = Rect::new(area.x, area.y, area.width, area.height - 1);
-            let err = Rect::new(area.x, area.y + area.height - 1, area.width, 1);
-            (ta, Some(err))
-        } else {
-            (area, None)
-        };
-
         // Clone so we can apply theme styles without mutating the caller's state.
         let mut ta = self.state.textarea.clone();
 
@@ -268,17 +260,22 @@ impl Widget for TextareaWidget<'_> {
             ta.set_cursor_style(Style::default().fg(Color::Reset).bg(Color::Reset));
         }
 
-        ta.render(textarea_area, buf);
+        // Render textarea into the full area
+        ta.render(area, buf);
 
-        if let (Some(err_area), Some(ref error_msg)) = (error_area, &self.state.error) {
-            let error_line = Line::from(vec![
-                Span::styled("  ✗ ", Style::default().fg(self.theme.colors.error)),
-                Span::styled(
-                    error_msg.as_str(),
-                    Style::default().fg(self.theme.colors.error),
-                ),
-            ]);
-            buf.set_line(err_area.x, err_area.y, &error_line, err_area.width);
+        // Render error message on the bottom border line (compact approach)
+        if let Some(ref error_msg) = self.state.error {
+            if area.height >= 3 {
+                let error_y = area.y + area.height - 1;
+                let error_line = Line::from(vec![
+                    Span::styled("  ✗ ", Style::default().fg(self.theme.colors.error)),
+                    Span::styled(
+                        error_msg.as_str(),
+                        Style::default().fg(self.theme.colors.error),
+                    ),
+                ]);
+                buf.set_line(area.x, error_y, &error_line, area.width);
+            }
         }
     }
 }
@@ -518,5 +515,26 @@ mod tests {
         let consumed = state.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert!(consumed, "Backspace should still be consumed at limit");
         assert_eq!(state.value(), "a", "Backspace should delete a character");
+    }
+
+    #[test]
+    fn test_textarea_single_line_error_compact() {
+        let state = TextareaState::new("Reason")
+            .with_height_mode(HeightMode::SingleLine)
+            .with_value("Test input")
+            .error(Some("This field is required".to_string()));
+
+        let theme = Theme::default();
+        let widget = TextareaWidget::new(&state, theme);
+
+        let mut buf = Buffer::empty(Rect::new(0, 0, 40, 3));
+        widget.render(Rect::new(0, 0, 40, 3), &mut buf);
+
+        assert_eq!(state.height(), 3, "SingleLine height should be 3");
+        assert!(state.error.is_some(), "Error should be set");
+        assert!(
+            !buf.content.is_empty(),
+            "Buffer should have content after rendering"
+        );
     }
 }

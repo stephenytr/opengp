@@ -238,7 +238,7 @@ impl ConsultationForm {
             if id == field_id {
                 return (y, self.get_field_height(id));
             }
-            y += self.get_field_height(id) + 1;
+            y += self.get_field_height(id);
         }
 
         (0, 0)
@@ -487,7 +487,7 @@ impl Widget for ConsultationForm {
 
         let mut total_height: u16 = 0;
         for field_id in &fields {
-            total_height += self.get_field_height(field_id) + 1;
+            total_height += self.get_field_height(field_id);
         }
         self.state.scroll.set_total_height(total_height);
         self.state
@@ -509,7 +509,7 @@ impl Widget for ConsultationForm {
             let field_height = self.get_field_height(&field_id) as i32;
 
             if y + field_height <= inner.y as i32 || y >= max_y {
-                y += field_height + 1;
+                y += field_height;
                 continue;
             }
 
@@ -524,7 +524,7 @@ impl Widget for ConsultationForm {
                         .focused(is_focused)
                         .render(field_area, buf);
                 }
-                y += textarea_height as i32 + 1;
+                y += textarea_height as i32;
             }
         }
 

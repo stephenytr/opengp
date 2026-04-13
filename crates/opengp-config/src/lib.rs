@@ -58,6 +58,10 @@ pub struct UiConfig {
     pub show_scrollbars: bool,
     pub mouse_support: bool,
     pub tick_rate_ms: u64,
+    #[serde(default = "default_min_terminal_width")]
+    pub min_terminal_width: u16,
+    #[serde(default = "default_min_terminal_height")]
+    pub min_terminal_height: u16,
 }
 
 impl Default for UiConfig {
@@ -67,6 +71,8 @@ impl Default for UiConfig {
             show_scrollbars: true,
             mouse_support: true,
             tick_rate_ms: 16,
+            min_terminal_width: 80,
+            min_terminal_height: 24,
         }
     }
 }
@@ -463,6 +469,8 @@ pub struct PartialUiConfig {
     pub show_scrollbars: Option<bool>,
     pub mouse_support: Option<bool>,
     pub tick_rate_ms: Option<u64>,
+    pub min_terminal_width: Option<u16>,
+    pub min_terminal_height: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -953,6 +961,14 @@ impl ThemeConfig {
         validate_palette("theme.light", &self.light)?;
         validate_palette("theme.high_contrast", &self.high_contrast)
     }
+}
+
+fn default_min_terminal_width() -> u16 {
+    80
+}
+
+fn default_min_terminal_height() -> u16 {
+    24
 }
 
 fn merge_palette(palette: &mut ColorPalette, partial: PartialColorPalette) {
@@ -1447,5 +1463,44 @@ mod tests {
                 assert_eq!(config.encryption_key, "abcdef");
             },
         );
+    }
+
+    #[test]
+    fn test_ui_config_default() {
+        let config = UiConfig::default();
+        assert_eq!(config.theme, "dark");
+        assert!(config.show_scrollbars);
+        assert!(config.mouse_support);
+        assert_eq!(config.tick_rate_ms, 16);
+        assert_eq!(config.min_terminal_width, 80);
+        assert_eq!(config.min_terminal_height, 24);
+    }
+
+    #[test]
+    fn test_ui_config_min_terminal_defaults() {
+        let toml_str = r#"
+            theme = "light"
+            show_scrollbars = false
+            mouse_support = false
+            tick_rate_ms = 32
+        "#;
+        let config: UiConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.min_terminal_width, 80);
+        assert_eq!(config.min_terminal_height, 24);
+    }
+
+    #[test]
+    fn test_ui_config_min_terminal_custom() {
+        let toml_str = r#"
+            theme = "light"
+            show_scrollbars = false
+            mouse_support = false
+            tick_rate_ms = 32
+            min_terminal_width = 120
+            min_terminal_height = 40
+        "#;
+        let config: UiConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.min_terminal_width, 120);
+        assert_eq!(config.min_terminal_height, 40);
     }
 }

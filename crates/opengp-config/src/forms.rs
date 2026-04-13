@@ -177,6 +177,8 @@ struct PartialFieldDefinition {
     options: Option<Vec<SelectOption>>,
     validation: Option<ValidationRules>,
     placeholder: Option<String>,
+    column: Option<u16>,
+    width_percent: Option<u16>,
 }
 
 impl PartialFieldDefinition {
@@ -210,6 +212,12 @@ impl PartialFieldDefinition {
         if let Some(placeholder) = self.placeholder {
             field.placeholder = Some(placeholder);
         }
+        if let Some(column) = self.column {
+            field.column = column;
+        }
+        if let Some(width_percent) = self.width_percent {
+            field.width_percent = width_percent;
+        }
 
         field
     }
@@ -240,6 +248,12 @@ impl FieldDefinition {
         }
         if let Some(placeholder) = field_override.placeholder {
             self.placeholder = Some(placeholder);
+        }
+        if let Some(column) = field_override.column {
+            self.column = column;
+        }
+        if let Some(width_percent) = field_override.width_percent {
+            self.width_percent = width_percent;
         }
     }
 }
@@ -283,6 +297,12 @@ pub struct FieldDefinition {
     pub validation: ValidationRules,
     /// Placeholder text for the field
     pub placeholder: Option<String>,
+    /// Column position for multi-column layouts
+    #[serde(default = "default_column")]
+    pub column: u16,
+    /// Width as percentage of available space
+    #[serde(default = "default_width_percent")]
+    pub width_percent: u16,
 }
 
 impl Default for FieldDefinition {
@@ -297,6 +317,8 @@ impl Default for FieldDefinition {
             options: Vec::new(),
             validation: ValidationRules::default(),
             placeholder: None,
+            column: 0,
+            width_percent: 100,
         }
     }
 }
@@ -405,6 +427,16 @@ fn default_true() -> bool {
     true
 }
 
+/// Helper function for default column serde attribute
+fn default_column() -> u16 {
+    0
+}
+
+/// Helper function for default width_percent serde attribute
+fn default_width_percent() -> u16 {
+    100
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -427,6 +459,36 @@ mod tests {
         assert!(!field.required);
         assert!(field.visible);
         assert!(field.navigable);
+        assert_eq!(field.column, 0);
+        assert_eq!(field.width_percent, 100);
+    }
+
+    #[test]
+    fn test_field_definition_column_width_defaults() {
+        let toml_str = r#"
+            id = "test_field"
+            label = "Test Field"
+            type = "text"
+        "#;
+        let partial: PartialFieldDefinition = toml::from_str(toml_str).unwrap();
+        let field = partial.into_field_definition();
+        assert_eq!(field.column, 0);
+        assert_eq!(field.width_percent, 100);
+    }
+
+    #[test]
+    fn test_field_definition_column_width_custom() {
+        let toml_str = r#"
+            id = "test_field"
+            label = "Test Field"
+            type = "text"
+            column = 1
+            width_percent = 50
+        "#;
+        let partial: PartialFieldDefinition = toml::from_str(toml_str).unwrap();
+        let field = partial.into_field_definition();
+        assert_eq!(field.column, 1);
+        assert_eq!(field.width_percent, 50);
     }
 
     #[test]
