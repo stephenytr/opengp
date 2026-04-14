@@ -7,7 +7,7 @@ OpenGP is an open-source, terminal-first general practice management system for 
 - **Language**: Rust (workspace-based)
 - **UI**: Ratatui + Crossterm terminal interface
 - **Architecture**: Domain / Infrastructure / UI layers with trait-based boundaries
-- **Data**: SQLite today, PostgreSQL migration path
+- **Database**: PostgreSQL (via SQLx)
 - **Focus**: Australian clinical, billing, and compliance workflows
 
 ## Workspace layout
@@ -19,8 +19,9 @@ opengp/
 │   ├── opengp-infrastructure/  # SQLx repositories, crypto, auth, fixtures
 │   ├── opengp-ui/              # Ratatui app, components, UI service bridges
 │   ├── opengp-config/          # Configuration loading and validation
-│   └── opengp-api/             # API-facing crate (in progress)
-├── src/main.rs                 # Binary wiring and dependency injection
+│   ├── opengp-api/             # REST API server (Axum)
+│   └── opengp-cache/           # Redis caching layer
+├── src/main.rs                 # TUI binary wiring and dependency injection
 ├── migrations/                 # SQL schema and migration scripts
 ├── wiki/                       # Contributor and integration guides
 ├── ARCHITECTURE.md             # Deep architecture documentation
@@ -29,77 +30,84 @@ opengp/
 
 ## Quick start
 
-### 1) Prerequisites
+### Prerequisites
 
 - Rust toolchain (stable)
-- SQLite available locally
-- Redis (optional, for caching performance improvements)
+- PostgreSQL 14+
+- Redis (optional — caching only)
 
-### 1a) Redis Setup (Optional)
-
-OpenGP supports Redis caching to improve performance. Redis is optional—if not configured, the system operates without caching.
-
-**Install Redis:**
-
-- **macOS**: `brew install redis`
-- **Ubuntu/Debian**: `sudo apt-get install redis-server`
-- **Docker**: `docker run -d -p 6379:6379 redis:latest`
-
-**Configure in `.env`:**
+### 1) Database setup
 
 ```bash
-# Copy .env.example to .env
+# Create database
+createdb opengp
+
+# Set DATABASE_URL
+export DATABASE_URL="postgres://user:password@localhost/opengp"
+```
+
+### 2) Environment configuration
+
+```bash
 cp .env.example .env
-
-# Edit .env and set:
-REDIS_URL=redis://localhost:6379
-REDIS_MAX_CONNECTIONS=32
-REDIS_MIN_CONNECTIONS=2
-REDIS_TTL_DEFAULT_SECS=3600
+# Edit .env — set ENCRYPTION_KEY and API_DATABASE_URL at minimum
 ```
 
-**Start Redis:**
+See [Configuration Guide](wiki/Configuration.md) for all options.
 
-```bash
-# Locally
-redis-server
-
-# Or with Docker
-docker run -d -p 6379:6379 redis:latest
-```
-
-### 2) Build
+### 3) Build
 
 ```bash
 cargo build --release
 ```
 
-### 3) Run tests
+### 4) Run tests
 
 ```bash
 cargo test
 ```
 
-### 4) Run the app
+### 5) Run the TUI
 
 ```bash
 cargo run --release
 ```
 
+### 6) Run the API server (separate binary)
+
+```bash
+cargo run --release -p opengp-api
+```
+
 ## Development workflow
 
-1. Pick a module (for example `patient`, `clinical`, `appointment`)
+1. Pick a module (`patient`, `clinical`, `appointment`, etc.)
 2. Add/update domain contracts in `crates/opengp-domain`
-3. Implement persistence/integration in `crates/opengp-infrastructure`
+3. Implement persistence in `crates/opengp-infrastructure`
 4. Wire interaction in `crates/opengp-ui`
 5. Connect dependencies in `src/main.rs`
 6. Run tests and verify build
 
-## Integration guides (simple, practical)
+## Redis setup (optional)
 
-The wiki now includes step-by-step integration docs:
+Redis improves performance for patient search, appointment calendars, and permission checks. Without Redis the system falls back to direct database queries.
+
+**Install Redis:**
+
+- **Ubuntu/Debian**: `sudo apt-get install redis-server`
+- **macOS**: `brew install redis`
+- **Docker**: `docker run -d -p 6379:6379 redis:latest`
+
+**Configure in `.env`:**
+
+```bash
+REDIS_URL=redis://localhost:6379
+```
+
+## Integration guides
 
 - [Wiki Home](wiki/Home.md)
+- [Configuration Guide](wiki/Configuration.md)
 - [UI Integration Guide](wiki/Integration-UI-Guide.md)
 - [Database Integration Guide](wiki/Integration-Database-Guide.md)
 - [External Integration Guide](wiki/Integration-External-Guide.md)
@@ -111,8 +119,9 @@ The wiki now includes step-by-step integration docs:
 - [REQUIREMENTS.md](REQUIREMENTS.md)
 - [AGENTS.md](AGENTS.md)
 
-## Project status notes
+## Project status
 
-- Workspace architecture is active and used by the main binary.
-- Australian integrations (Medicare/PBS/AIR/etc.) are still evolving.
-- Security and audit capabilities exist, with some compliance work still pending.
+- Core TUI workflows (patients, appointments, clinical, billing) are active.
+- Australian integrations (Medicare/PBS/AIR) are partially implemented — MBS XML importer exists; end-to-end claiming is in progress.
+- REST API (`opengp-api`) is functional but not production-hardened.
+- Feature-gated modules (`immunisation`, `pathology`, `prescription`, `referral`) may have incomplete UI coverage.

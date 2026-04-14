@@ -34,7 +34,7 @@ OpenGP is built using a **layered, component-based architecture** with clear sep
 - **Modular**: Each domain is isolated with well-defined interfaces
 - **Testable**: Dependency injection and trait-based abstractions enable comprehensive testing
 - **Maintainable**: Clear boundaries between layers reduce coupling
-- **Scalable**: Architecture supports migration from SQLite to PostgreSQL
+- **Scalable**: Architecture supports horizontal scaling via PostgreSQL connection pooling
 - **Secure**: Security is built into every layer, not bolted on
 
 ### Key Characteristics
@@ -45,7 +45,7 @@ OpenGP is built using a **layered, component-based architecture** with clear sep
 | **UI Framework** | Ratatui + Custom Wrappers | Terminal-based, cross-platform, resource-efficient |
 | **UI Integration** | tui-realm (integrated) | adapters for form inputs, lists, and selects |
 | **Async Runtime** | Tokio | Industry standard, excellent ecosystem |
-| **Database** | SQLx | Compile-time query validation, multi-DB support |
+| **Database** | SQLx + PostgreSQL | Compile-time query validation, strong typing, async |
 | **Architecture Style** | Layered + Domain-Driven Design + Trait Abstractions | Clear boundaries, business logic isolation, dependency injection |
 
 ---
@@ -86,7 +86,7 @@ pub trait PatientRepository {
 }
 
 // Data layer implements it
-impl PatientRepository for SqlitePatientRepository { ... }
+impl PatientRepository for PostgresPatientRepository { ... }
 ```
 
 ### Abstraction Patterns
@@ -117,7 +117,7 @@ pub struct PatientService {
 
 // Concrete implementations injected at runtime:
 let service = PatientService::new(
-    Arc::new(SqlitePatientRepository::new(pool)),  // Or MockPatientRepository for tests
+    Arc::new(PostgresPatientRepository::new(pool)),  // Or MockPatientRepository for tests
     Arc::new(AuditLogger::new(repo)),
 );
 ```
@@ -234,11 +234,11 @@ pub trait Renderable {
 │  │  • PatientRepository    • AppointmentRepository                 │ │
 │  │  • ClinicalRepository   • UserRepository                        │ │
 │  │  • AuditRepository      • PractitionerRepository                │ │
-│  └────────────────┬───────────────────────────┬───────────────────┘ │
-│                   │                           │                      │
-│          ┌────────┴────────┐         ┌───────┴────────┐            │
-│          │  SQLite Pool    │   OR    │ PostgreSQL Pool│            │
-│          └─────────────────┘         └────────────────┘            │
+│  └────────────────────────────┬──────────────────────────────────┘ │
+│                                │                                     │
+│                       ┌────────┴────────┐                           │
+│                       │ PostgreSQL Pool  │                           │
+│                       └─────────────────┘                           │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
 ┌───────────────────────────────┴─────────────────────────────────────┐
@@ -807,21 +807,21 @@ pub enum RepositoryError {
 
 ```rust
 // src/infrastructure/database/repositories/patient.rs
-use sqlx::{Pool, Sqlite};  // or Postgres
+use sqlx::{Pool, Postgres};
 use async_trait::async_trait;
 
-pub struct SqlxPatientRepository {
-    pool: Pool<Sqlite>,
+pub struct PostgresPatientRepository {
+    pool: Pool<Postgres>,
 }
 
-impl SqlxPatientRepository {
-    pub fn new(pool: Pool<Sqlite>) -> Self {
+impl PostgresPatientRepository {
+    pub fn new(pool: Pool<Postgres>) -> Self {
         Self { pool }
     }
 }
 
 #[async_trait]
-impl PatientRepository for SqlxPatientRepository {
+impl PatientRepository for PostgresPatientRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Patient>, RepositoryError> {
         let row = sqlx::query_as!(
             PatientRow,
@@ -836,7 +836,7 @@ impl PatientRepository for SqlxPatientRepository {
                 is_active, is_deceased,
                 created_at, updated_at
             FROM patients
-            WHERE id = ? AND is_active = TRUE
+            WHERE id = $1 AND is_active = TRUE
             "#,
             id
         )
@@ -847,28 +847,26 @@ impl PatientRepository for SqlxPatientRepository {
     }
     
     async fn search(&self, query: PatientSearchQuery) -> Result<PagedResult<Patient>, RepositoryError> {
-        // Build dynamic query
-        let mut sql = String::from("SELECT * FROM patients WHERE is_active = TRUE");
-        let mut params = vec![];
+        let offset = (query.page * query.page_size) as i64;
+        let limit = query.page_size as i64;
         
-        if let Some(ref name) = query.name {
-            sql.push_str(" AND (first_name LIKE ? OR last_name LIKE ?)");
-            params.push(format!("%{}%", name));
-            params.push(format!("%{}%", name));
-        }
-        
-        if let Some(dob) = query.date_of_birth {
-            sql.push_str(" AND date_of_birth = ?");
-            params.push(dob.to_string());
-        }
-        
-        sql.push_str(" LIMIT ? OFFSET ?");
-        let offset = query.page * query.page_size;
-        
-        // Execute query (simplified - use query builder in production)
-        let rows = sqlx::query_as::<_, PatientRow>(&sql)
-            .fetch_all(&self.pool)
-            .await?;
+        let rows = sqlx::query_as!(
+            PatientRow,
+            r#"
+            SELECT * FROM patients
+            WHERE is_active = TRUE
+              AND ($1::text IS NULL OR first_name ILIKE '%' || $1 || '%' OR last_name ILIKE '%' || $1 || '%')
+              AND ($2::date IS NULL OR date_of_birth = $2)
+            ORDER BY last_name, first_name
+            LIMIT $3 OFFSET $4
+            "#,
+            query.name,
+            query.date_of_birth,
+            limit,
+            offset
+        )
+        .fetch_all(&self.pool)
+        .await?;
         
         let total = self.count_search_results(&query).await?;
         
@@ -888,12 +886,12 @@ impl PatientRepository for SqlxPatientRepository {
                 first_name, last_name, date_of_birth, gender,
                 address_line1, suburb, state, postcode, country,
                 phone_mobile, is_active, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
             "#,
             patient.id,
             patient.ihi,
             patient.medicare_number,
-            patient.medicare_irn,
+            patient.medicare_irn.map(|v| v as i32),
             patient.medicare_expiry,
             patient.first_name,
             patient.last_name,
@@ -921,12 +919,12 @@ impl PatientRepository for SqlxPatientRepository {
 /// Database row representation
 #[derive(sqlx::FromRow)]
 struct PatientRow {
-    id: Vec<u8>,  // UUID as bytes in SQLite
+    id: Uuid,
     ihi: Option<String>,
     medicare_number: Option<String>,
     first_name: String,
     last_name: String,
-    date_of_birth: String,  // Date as string in SQLite
+    date_of_birth: NaiveDate,
     // ... other fields
 }
 
@@ -934,12 +932,12 @@ impl PatientRow {
     /// Convert database row to domain model
     fn into_domain(self) -> Patient {
         Patient {
-            id: Uuid::from_slice(&self.id).unwrap(),
+            id: self.id,
             ihi: self.ihi,
             medicare_number: self.medicare_number,
             first_name: self.first_name,
             last_name: self.last_name,
-            date_of_birth: NaiveDate::parse_from_str(&self.date_of_birth, "%Y-%m-%d").unwrap(),
+            date_of_birth: self.date_of_birth,
             // ... map other fields
         }
     }
@@ -1418,7 +1416,7 @@ impl Component for PatientListComponent {
 ```sql
 CREATE TABLE patients (
     -- Primary Key
-    id BLOB PRIMARY KEY,  -- UUID as BLOB in SQLite
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Healthcare Identifiers
     ihi TEXT,  -- Individual Healthcare Identifier (16 digits)
@@ -1466,12 +1464,11 @@ CREATE TABLE patients (
     deceased_date DATE,
     
     -- Audit
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by BLOB,  -- References users(id)
-    updated_by BLOB,  -- References users(id)
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID REFERENCES users(id),
+    updated_by UUID REFERENCES users(id),
     
-    -- Indexes
     UNIQUE(medicare_number, medicare_irn)
 );
 
@@ -1481,30 +1478,13 @@ CREATE INDEX idx_patients_dob ON patients(date_of_birth);
 CREATE INDEX idx_patients_medicare ON patients(medicare_number);
 CREATE INDEX idx_patients_active ON patients(is_active) WHERE is_active = TRUE;
 
--- Full-text search index (SQLite FTS5)
-CREATE VIRTUAL TABLE patients_fts USING fts5(
-    patient_id UNINDEXED,
-    first_name,
-    last_name,
-    content=patients,
-    content_rowid=rowid
-);
+-- Full-text search using PostgreSQL tsvector
+ALTER TABLE patients ADD COLUMN search_vector tsvector
+    GENERATED ALWAYS AS (
+        to_tsvector('english', coalesce(first_name, '') || ' ' || coalesce(last_name, ''))
+    ) STORED;
 
--- Triggers to keep FTS index in sync
-CREATE TRIGGER patients_ai AFTER INSERT ON patients BEGIN
-    INSERT INTO patients_fts(rowid, patient_id, first_name, last_name)
-    VALUES (new.rowid, new.id, new.first_name, new.last_name);
-END;
-
-CREATE TRIGGER patients_ad AFTER DELETE ON patients BEGIN
-    DELETE FROM patients_fts WHERE rowid = old.rowid;
-END;
-
-CREATE TRIGGER patients_au AFTER UPDATE ON patients BEGIN
-    UPDATE patients_fts 
-    SET first_name = new.first_name, last_name = new.last_name
-    WHERE rowid = new.rowid;
-END;
+CREATE INDEX idx_patients_fts ON patients USING GIN(search_vector);
 ```
 
 ### Migration Strategy
@@ -3072,8 +3052,8 @@ fn test_patient_list_rendering() {
 ### Development Environment
 
 ```bash
-# Local development with SQLite
-export DATABASE_URL="sqlite:./data/opengp.db"
+# Local development
+export DATABASE_URL="postgres://user:password@localhost/opengp"
 export ENCRYPTION_KEY="<generated_key>"
 export RUST_LOG="opengp=debug"
 
