@@ -208,6 +208,22 @@ impl ApiClient {
         Self::parse_json_response(response).await
     }
 
+    pub async fn update_appointment(
+        &self,
+        id: Uuid,
+        request: &AppointmentRequest,
+    ) -> Result<AppointmentResponse, ApiClientError> {
+        let response = self
+            .authenticated_request(Method::PUT, &format!("/api/v1/appointments/{id}"))
+            .await?
+            .json(request)
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        Self::parse_json_response(response).await
+    }
+
     pub async fn update_appointment_status(
         &self,
         id: Uuid,

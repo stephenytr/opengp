@@ -395,9 +395,17 @@ async fn fetch_appointments_for_day(
     patient_names: HashMap<uuid::Uuid, String>,
 ) -> Result<CalendarDayView, ApiTaskError> {
     #[allow(clippy::expect_used)]
-    let start = chrono::Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).expect("valid start"));
+    let local_start = date.and_hms_opt(0, 0, 0).expect("valid start");
     #[allow(clippy::expect_used)]
-    let end = chrono::Utc.from_utc_datetime(&date.and_hms_opt(23, 59, 59).expect("valid end"));
+    let local_end = date.and_hms_opt(23, 59, 59).expect("valid end");
+    let start = chrono::Local.from_local_datetime(&local_start)
+        .single()
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or_else(|| chrono::Utc.from_utc_datetime(&local_start));
+    let end = chrono::Local.from_local_datetime(&local_end)
+        .single()
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or_else(|| chrono::Utc.from_utc_datetime(&local_end));
 
     let mut page = 1;
     let mut all = Vec::new();
@@ -864,7 +872,7 @@ mod tests {
             },
         ));
 
-        app.pending_appointment_save = Some(opengp_domain::domain::appointment::NewAppointmentData {
+        app.pending_appointment_save = Some((opengp_domain::domain::appointment::NewAppointmentData {
             patient_id,
             practitioner_id,
             start_time: Utc::now(),
@@ -872,7 +880,7 @@ mod tests {
             appointment_type: AppointmentType::Standard,
             reason: Some("Follow-up".to_string()),
             is_urgent: false,
-        });
+        }, 1));
 
         app.pending_clinical_save_data = Some(crate::ui::app::PendingClinicalSaveData::Consultation {
             patient_id,

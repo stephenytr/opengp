@@ -296,8 +296,9 @@ impl AppointmentState {
 
     pub fn time_to_slot(&self, time: chrono::DateTime<chrono::Utc>) -> Option<u8> {
         use chrono::Timelike;
-        let hour = time.hour() as u8;
-        let minute = time.minute() as u8;
+        let local = time.with_timezone(&chrono::Local);
+        let hour = local.hour() as u8;
+        let minute = local.minute() as u8;
         if hour < self.viewport_start_hour {
             return None;
         }

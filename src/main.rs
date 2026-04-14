@@ -228,7 +228,22 @@ async fn run_tui(
             app.request_refresh_patients();
         }
 
-        // Check if there's a pending patient to load for editing
+        if let Some((data, version)) = app.take_pending_appointment_save() {
+            tracing::info!("pending appointment save taken: patient={} practitioner={} start={}", data.patient_id, data.practitioner_id, data.start_time);
+            if let Some(appointment_id) = app.appointment_form_appointment_id() {
+                tracing::info!("dispatching UpdateAppointment for {}", appointment_id);
+                let _ = app.command_tx.send(AppCommand::UpdateAppointment {
+                    id: appointment_id,
+                    data,
+                    version,
+                });
+            } else {
+                tracing::info!("dispatching CreateAppointment");
+                let _ = app.command_tx.send(AppCommand::CreateAppointment(data));
+            }
+        }
+
+
         if let Some(patient_id) = app.take_pending_edit_patient_id() {
             match api_client.get_patient(patient_id).await {
                 Ok(patient) => {
@@ -282,9 +297,9 @@ async fn run_tui(
                     }
                 }
                 AppCommand::CreateAppointment(data) => {
-                    let appointment_date = data.start_time.date_naive();
+                    let appointment_date = data.start_time.with_timezone(&chrono::Local).date_naive();
                     let request = conversions::appointment_request_from_new(data);
-                    match api_client.create_appointment(&request).await {
+                    let result = match api_client.create_appointment(&request).await {
                         Ok(_) => {
                             tracing::info!("Created new appointment via API");
                             let date = app
@@ -292,8 +307,45 @@ async fn run_tui(
                                 .selected_date
                                 .unwrap_or(appointment_date);
                             app.request_refresh_appointments(date);
+                            Ok(())
                         }
-                        Err(e) => tracing::error!("Failed to create appointment: {}", e),
+                        Err(e) => {
+                            tracing::error!("Failed to create appointment: {}", e);
+                            Err(e.to_string())
+                        }
+                    };
+                    let _ = app.command_tx.send(AppCommand::AppointmentSaveResult(result));
+                }
+                AppCommand::UpdateAppointment { id, data, version } => {
+                    let appointment_date = data.start_time.with_timezone(&chrono::Local).date_naive();
+                    let request = conversions::appointment_request_from_new_versioned(data, version);
+                    let result = match api_client.update_appointment(id, &request).await {
+                        Ok(_) => {
+                            tracing::info!("Updated appointment {} via API", id);
+                            let date = app
+                                .appointment_state_mut()
+                                .selected_date
+                                .unwrap_or(appointment_date);
+                            app.request_refresh_appointments(date);
+                            Ok(())
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to update appointment {}: {}", id, e);
+                            Err(e.to_string())
+                        }
+                    };
+                    let _ = app.command_tx.send(AppCommand::AppointmentSaveResult(result));
+                }
+                AppCommand::AppointmentSaveResult(result) => {
+                    match result {
+                        Ok(()) => {
+                            tracing::info!("AppointmentSaveResult: Ok — closing form");
+                            app.appointment_form_complete_save();
+                        }
+                        Err(ref msg) => {
+                            tracing::warn!("AppointmentSaveResult: Err — {}", msg);
+                            app.appointment_form_set_save_error(result.unwrap_err());
+                        }
                     }
                 }
                 AppCommand::UpdateAppointmentStatus { id, status } => {
@@ -324,6 +376,10 @@ async fn run_tui(
             let patient_items: Vec<opengp_ui::ui::view_models::PatientListItem> =
                 app.patient_list_patients().to_vec();
             app.appointment_form_set_patients(patient_items);
+        }
+
+        if app.take_pending_load_practitioners() {
+            let _ = app.command_tx.send(AppCommand::LoadPractitioners);
         }
 
 

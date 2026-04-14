@@ -24,7 +24,7 @@ impl App {
 
     pub fn take_pending_appointment_save(
         &mut self,
-    ) -> Option<opengp_domain::domain::appointment::NewAppointmentData> {
+    ) -> Option<(opengp_domain::domain::appointment::NewAppointmentData, i32)> {
         if !self.authenticated {
             return None;
         }
@@ -78,5 +78,20 @@ impl App {
         if let Some(ref mut form) = self.appointment_form {
             form.set_booked_slots(booked_slots);
         }
+    }
+
+    pub fn appointment_form_appointment_id(&self) -> Option<uuid::Uuid> {
+        self.appointment_form.as_ref()?.appointment_id()
+    }
+
+    pub fn appointment_form_set_save_error(&mut self, error: String) {
+        if let Some(ref mut form) = self.appointment_form {
+            form.set_saving(false);
+            form.set_save_error(error);
+        }
+    }
+
+    pub fn appointment_form_complete_save(&mut self) {
+        self.appointment_form = None;
     }
 }

@@ -3,11 +3,16 @@ use uuid::Uuid;
 
 use opengp_domain::domain::appointment::{AppointmentStatus, NewAppointmentData};
 
-/// Commands dispatched from the UI to the async event loop.
 #[derive(Debug)]
 pub enum AppCommand {
     RefreshAppointments(NaiveDate),
     CreateAppointment(NewAppointmentData),
+    UpdateAppointment {
+        id: Uuid,
+        data: NewAppointmentData,
+        version: i32,
+    },
+    AppointmentSaveResult(Result<(), String>),
     UpdateAppointmentStatus {
         id: Uuid,
         status: AppointmentStatus,

@@ -193,11 +193,13 @@ pub struct AppointmentForm {
     mode: FormMode,
     data: AppointmentFormData,
     errors: HashMap<String, String>,
+    save_error: Option<String>,
     focused_field: String,
     field_ids: Vec<String>,
     textareas: HashMap<String, TextareaState>,
     dropdowns: HashMap<String, DropdownWidget>,
     saving: bool,
+    version: i32,
     theme: Theme,
     healthcare_config: HealthcareConfig,
     appointment_config: AppointmentConfig,
@@ -230,11 +232,13 @@ impl Clone for AppointmentForm {
             mode: self.mode,
             data: self.data.clone(),
             errors: self.errors.clone(),
+            save_error: self.save_error.clone(),
             focused_field: self.focused_field.clone(),
             field_ids: self.field_ids.clone(),
             textareas: self.textareas.clone(),
             dropdowns: self.dropdowns.clone(),
             saving: self.saving,
+            version: self.version,
             theme: self.theme.clone(),
             healthcare_config: self.healthcare_config.clone(),
             appointment_config: self.appointment_config.clone(),
@@ -365,11 +369,13 @@ impl AppointmentForm {
             mode: FormMode::Create,
             data,
             errors: HashMap::new(),
+            save_error: None,
             focused_field: FIELD_PATIENT.to_string(),
             field_ids,
             textareas,
             dropdowns,
             saving: false,
+            version: 1,
             theme: theme.clone(),
             healthcare_config,
             appointment_config,
@@ -392,13 +398,14 @@ impl AppointmentForm {
         form.data.patient_id = Some(appointment.patient_id);
         form.data.practitioner_id = Some(appointment.practitioner_id);
 
+        let local_start = appointment.start_time.with_timezone(&chrono::Local);
         form.set_value(
             AppointmentFormField::Date,
-            format_date(appointment.start_time.date_naive()),
+            format_date(local_start.date_naive()),
         );
         form.set_value(
             AppointmentFormField::StartTime,
-            appointment.start_time.format("%H:%M").to_string(),
+            local_start.format("%H:%M").to_string(),
         );
         form.set_value(
             AppointmentFormField::Reason,
@@ -416,8 +423,13 @@ impl AppointmentForm {
 
         let duration_minutes = appointment.duration_minutes();
         form.data.duration = duration_minutes.to_string();
+        form.version = appointment.version;
 
         form
+    }
+
+    pub fn form_version(&self) -> i32 {
+        self.version
     }
 
     pub fn is_edit_mode(&self) -> bool {
@@ -447,6 +459,13 @@ impl AppointmentForm {
 
     pub fn set_saving(&mut self, saving: bool) {
         self.saving = saving;
+        if saving {
+            self.save_error = None;
+        }
+    }
+
+    pub fn set_save_error(&mut self, error: String) {
+        self.save_error = Some(error);
     }
 
     /// Set the selected patient (called after patient search resolves).
@@ -614,7 +633,7 @@ impl AppointmentForm {
                 if v.is_empty() {
                     self.errors
                         .insert(field_id.to_string(), "Start time is required".to_string());
-                } else if NaiveTime::parse_from_str(&v, "%H:%M").is_err() {
+                } else if parse_time(&v).is_none() {
                     self.errors.insert(
                         field_id.to_string(),
                         "Use HH:MM format (24-hour)".to_string(),
@@ -671,6 +690,12 @@ impl AppointmentForm {
         self.errors.get(field.id())
     }
 
+    pub fn first_error(&self) -> Option<String> {
+        AppointmentFormField::all()
+            .into_iter()
+            .find_map(|f| self.errors.get(f.id()).cloned())
+    }
+
     // ── Build DTO ────────────────────────────────────────────────────────────
 
     /// Validate and build a `NewAppointmentData` DTO ready for the service layer.
@@ -678,16 +703,29 @@ impl AppointmentForm {
     /// Returns `None` if validation fails.
     pub fn to_new_appointment_data(&mut self) -> Option<NewAppointmentData> {
         if !FormNavigation::validate(self) {
+            tracing::warn!("appointment form validation failed: {:?}", self.errors);
             return None;
         }
 
-        let patient_id = self.data.patient_id?;
-        let practitioner_id = self.data.practitioner_id?;
+        let patient_id = self.data.patient_id.or_else(|| {
+            tracing::warn!("appointment form: no patient_id");
+            None
+        })?;
+        let practitioner_id = self.data.practitioner_id.or_else(|| {
+            tracing::warn!("appointment form: no practitioner_id");
+            None
+        })?;
 
         let date_str = self.get_value_by_id(FIELD_DATE);
         let time_str = self.get_value_by_id(FIELD_START_TIME);
-        let date = parse_date(&date_str)?;
-        let time = NaiveTime::parse_from_str(&time_str, "%H:%M").ok()?;
+        let date = parse_date(&date_str).or_else(|| {
+            tracing::warn!("appointment form: failed to parse date {:?}", date_str);
+            None
+        })?;
+        let time = parse_time(&time_str).or_else(|| {
+            tracing::warn!("appointment form: failed to parse time {:?}", time_str);
+            None
+        })?;
 
         let naive_dt = date.and_time(time);
         let start_time = naive_dt
@@ -699,7 +737,18 @@ impl AppointmentForm {
         let duration_mins: i64 = self.data.duration.parse().unwrap_or(15);
         let duration = chrono::Duration::minutes(duration_mins);
 
-        let appointment_type = self.data.appointment_type.parse::<AppointmentType>().ok()?;
+        let appointment_type = self
+            .data
+            .appointment_type
+            .parse::<AppointmentType>()
+            .ok()
+            .or_else(|| {
+                tracing::warn!(
+                    "appointment form: failed to parse appointment_type {:?}",
+                    self.data.appointment_type
+                );
+                None
+            })?;
 
         let reason_str = self.get_value_by_id(FIELD_REASON);
         let reason = if reason_str.trim().is_empty() {
@@ -1033,10 +1082,15 @@ impl Widget for AppointmentForm {
 
         let mut total_height: u16 = 0;
         for field in &fields {
-            total_height += 2;
-            if field == &AppointmentFormField::AppointmentType {
-                total_height += 2;
-            }
+            let h = if field.is_textarea() {
+                self.textareas
+                    .get(field.id())
+                    .map(|t| t.height())
+                    .unwrap_or(3)
+            } else {
+                3
+            };
+            total_height += h;
         }
         self.scroll.set_total_height(total_height);
         self.scroll.clamp_offset(inner.height.saturating_sub(2));
@@ -1093,15 +1147,11 @@ impl Widget for AppointmentForm {
                         );
                     }
                 }
-                y += 4;
+                y += 3;
                 continue;
             }
 
-            let field_height = if field == AppointmentFormField::AppointmentType {
-                4i32
-            } else {
-                2i32
-            };
+            let field_height = 3i32;
 
             if y + field_height <= inner.y as i32 || y >= max_y {
                 y += field_height;
@@ -1110,7 +1160,7 @@ impl Widget for AppointmentForm {
 
             if field.is_textarea() {
                 let Some(textarea_state) = self.textarea_for(field.id()) else {
-                    y += 2;
+                    y += 3;
                     continue;
                 };
                 let field_height = textarea_state.height();
@@ -1195,7 +1245,7 @@ impl Widget for AppointmentForm {
                         );
                     }
                 }
-                y += 4;
+                y += 3;
                 continue;
             }
 
@@ -1222,14 +1272,10 @@ impl Widget for AppointmentForm {
 
             if field == AppointmentFormField::AppointmentType {
                 if y >= inner.y as i32 && y < max_y {
-                    let dropdown_area = Rect::new(
-                        field_start - 1,
-                        y as u16,
-                        inner.width.saturating_sub(label_width + 2),
-                        3,
-                    );
+                    let dropdown_area =
+                        Rect::new(inner.x + 1, y as u16, inner.width.saturating_sub(2), 3);
                     let Some(dropdown) = self.dropdowns.get(FIELD_APPOINTMENT_TYPE).cloned() else {
-                        y += 4;
+                        y += 3;
                         continue;
                     };
                     if dropdown.is_open() {
@@ -1240,14 +1286,14 @@ impl Widget for AppointmentForm {
                     if let Some(error_msg) = self.error(field) {
                         let error_style = Style::default().fg(self.theme.colors.error);
                         buf.set_string(
-                            field_start,
+                            inner.x + 2,
                             (y as u16) + 3,
                             format!("  {}", error_msg),
                             error_style,
                         );
                     }
                 }
-                y += 4;
+                y += 3;
             } else {
                 if y >= inner.y as i32 && y < max_y {
                     let value = self.get_value(field);
@@ -1315,12 +1361,33 @@ impl Widget for AppointmentForm {
         self.scroll.render_scrollbar(inner, buf, &self.theme);
 
         let help_y = inner.y + inner.height - 1;
-        buf.set_string(
-            inner.x + 1,
-            help_y,
-            "Tab: Next | Shift+Tab: Prev | Ctrl+S: Submit | Esc: Cancel",
-            Style::default().fg(self.theme.colors.disabled),
-        );
+        if self.saving {
+            buf.set_string(
+                inner.x + 1,
+                help_y,
+                "Saving...",
+                Style::default()
+                    .fg(self.theme.colors.warning)
+                    .add_modifier(Modifier::BOLD),
+            );
+        } else if let Some(ref err) = self.save_error {
+            let msg = format!("Error: {}", err);
+            buf.set_string(
+                inner.x + 1,
+                help_y,
+                &msg,
+                Style::default()
+                    .fg(self.theme.colors.error)
+                    .add_modifier(Modifier::BOLD),
+            );
+        } else {
+            buf.set_string(
+                inner.x + 1,
+                help_y,
+                "Tab: Next | Shift+Tab: Prev | Ctrl+S: Submit | Esc: Cancel",
+                Style::default().fg(self.theme.colors.disabled),
+            );
+        }
 
         if self.date_picker.is_visible() {
             self.date_picker.render(area, buf);
@@ -1440,6 +1507,45 @@ impl FormNavigation for AppointmentForm {
     fn set_current_field(&mut self, field: Self::FormField) {
         self.focused_field = field.id().to_string();
     }
+}
+
+fn parse_time(s: &str) -> Option<NaiveTime> {
+    let trimmed = s.trim();
+
+    if let Ok(t) = NaiveTime::parse_from_str(trimmed, "%H:%M") {
+        return Some(t);
+    }
+
+    if let Ok(t) = NaiveTime::parse_from_str(trimmed, "%H:%M:%S") {
+        return Some(t);
+    }
+
+    // "0900" → "09:00"
+    if trimmed.len() == 4 && trimmed.chars().all(|c| c.is_ascii_digit()) {
+        if let Ok(t) =
+            NaiveTime::parse_from_str(&format!("{}:{}", &trimmed[..2], &trimmed[2..]), "%H:%M")
+        {
+            return Some(t);
+        }
+    }
+
+    // "9:00" → "09:00"
+    if let Some(pos) = trimmed.find(':') {
+        let h = trimmed[..pos].trim();
+        let m = trimmed[pos + 1..].trim();
+        if let (Ok(hour), Ok(min)) = (h.parse::<u32>(), m.parse::<u32>()) {
+            return NaiveTime::from_hms_opt(hour, min, 0);
+        }
+    }
+
+    // "9" → "09:00"  "14" → "14:00"
+    if trimmed.len() <= 2 && trimmed.chars().all(|c| c.is_ascii_digit()) {
+        if let Ok(hour) = trimmed.parse::<u32>() {
+            return NaiveTime::from_hms_opt(hour, 0, 0);
+        }
+    }
+
+    None
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

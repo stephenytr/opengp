@@ -62,6 +62,22 @@ pub fn appointment_request_from_new(
     }
 }
 
+pub fn appointment_request_from_new_versioned(
+    data: opengp_domain::domain::appointment::NewAppointmentData,
+    version: i32,
+) -> AppointmentRequest {
+    AppointmentRequest {
+        patient_id: data.patient_id,
+        practitioner_id: data.practitioner_id,
+        start_time: data.start_time,
+        duration_minutes: data.duration.num_minutes(),
+        appointment_type: appointment_type_to_api_string(data.appointment_type).to_string(),
+        reason: data.reason,
+        is_urgent: data.is_urgent,
+        version,
+    }
+}
+
 pub fn patient_request_from_update(
     data: opengp_domain::domain::patient::UpdatePatientData,
     current: &PatientResponse,

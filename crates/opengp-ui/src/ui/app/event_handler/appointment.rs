@@ -13,13 +13,14 @@ impl App {
                     AppointmentFormAction::Submit => {
                         if let Some(ref mut form) = self.appointment_form {
                             if let Some(data) = form.to_new_appointment_data() {
-                                self.pending_appointment_save = Some(data);
-                                self.appointment_form = None;
-                                self.status_bar.clear_error();
+                                let version = form.form_version();
+                                form.set_saving(true);
+                                self.pending_appointment_save = Some((data, version));
                             } else {
-                                self.status_bar.set_error(
-                                    "Cannot save: select a patient and practitioner from the picker",
-                                );
+                                let msg = form
+                                    .first_error()
+                                    .unwrap_or_else(|| "Check required fields".to_string());
+                                self.status_bar.set_error(msg);
                             }
                         }
                     }
