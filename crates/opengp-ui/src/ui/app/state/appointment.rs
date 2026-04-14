@@ -37,6 +37,10 @@ impl App {
         self.pending_appointment_status_transition.take()
     }
 
+    pub fn take_pending_reschedule(&mut self) -> Option<crate::ui::app::PendingRescheduleData> {
+        self.pending_reschedule.take()
+    }
+
     pub fn appointment_state_mut(&mut self) -> &mut AppointmentState {
         &mut self.appointment_state
     }

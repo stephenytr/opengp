@@ -102,6 +102,37 @@ impl App {
                         self.refresh_status_bar();
                         self.refresh_context();
                     }
+                    AppointmentDetailModalAction::RescheduleDate => {
+                        // Date picker is opening in modal, keep modal open
+                    }
+                    AppointmentDetailModalAction::OpenTimePicker {
+                        practitioner_id,
+                        date,
+                        duration,
+                    } => {
+                        self.pending_load_booked_slots = Some((practitioner_id, date, duration));
+                    }
+                    AppointmentDetailModalAction::RescheduleTime => {
+                        if let Some(ref modal) = self.appointment_detail_modal {
+                            if let Some(new_date) = modal.pending_reschedule_date() {
+                                if let Some(new_time) = modal.pending_reschedule_time() {
+                                    let appointment_id = modal.appointment_id();
+                                    let practitioner_id = modal.appointment().practitioner_id;
+                                    let duration_minutes =
+                                        modal.appointment().duration_minutes() as i64;
+                                    self.pending_reschedule =
+                                        Some(crate::ui::app::PendingRescheduleData {
+                                            appointment_id,
+                                            new_date: Some(new_date),
+                                            new_time: Some(new_time),
+                                            practitioner_id,
+                                            duration_minutes,
+                                        });
+                                    self.appointment_detail_modal = None;
+                                }
+                            }
+                        }
+                    }
                 }
                 return Action::Enter;
             }

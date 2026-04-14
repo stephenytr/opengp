@@ -10,19 +10,24 @@ use opengp_domain::domain::api::{
 };
 use opengp_ui::api::ApiClient;
 use opengp_ui::ui::app::{App, AppCommand, PendingBillingSaveData};
-use opengp_ui::ui::services::{BillingUiService, ClinicalUiService};
+use opengp_ui::ui::services::{BillingUiService, ClinicalUiService, AppointmentUiService};
 use opengp_domain::domain::billing::{BillingRepository, BillingService, BillingType};
 use opengp_domain::domain::clinical::{
     Consultation, ConsultationRepository, ClinicalRepositories, ClinicalService, suggest_mbs_level,
 };
 use opengp_domain::domain::patient::PatientRepository;
 use opengp_domain::domain::audit::{AuditEmitter, AuditRepository, AuditService};
+use opengp_domain::domain::appointment::{
+    AppointmentRepository, AppointmentCalendarQuery, AppointmentService, AvailabilityService,
+};
+use opengp_domain::domain::user::WorkingHoursRepository;
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::{create_pool, DatabaseConfig};
 use opengp_infrastructure::infrastructure::database::repositories::{
     SqlxAllergyRepository, SqlxAuditRepository, SqlxBillingRepository, SqlxClinicalRepository,
     SqlxFamilyHistoryRepository, SqlxMedicalHistoryRepository, SqlxPatientRepository,
-    SqlxSocialHistoryRepository, SqlxVitalSignsRepository,
+    SqlxSocialHistoryRepository, SqlxVitalSignsRepository, SqlxAppointmentRepository,
+    SqlxPractitionerRepository, SqlxWorkingHoursRepository,
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
@@ -101,7 +106,7 @@ async fn run_tui(
     };
     theme.colors = ColorPalette::from_config(palette_config);
 
-    let (billing_service, clinical_ui_service) = {
+    let (billing_service, clinical_ui_service, appointment_ui_service) = {
         let db_url = database_config.url.clone();
         let database_pool = tokio::time::timeout(
             std::time::Duration::from_secs(5),
@@ -163,18 +168,47 @@ async fn run_tui(
             Arc::new(SqlxPatientRepository::new(pool.clone(), Arc::clone(&encryption_service)));
         let patient_service = Arc::new(opengp_domain::domain::patient::PatientService::new(patient_repo));
 
-        let audit_repo: Arc<dyn AuditRepository> =
-            Arc::new(SqlxAuditRepository::new(pool.clone()));
-        let audit_service: Arc<dyn AuditEmitter> = Arc::new(AuditService::new(audit_repo));
+         let audit_repo: Arc<dyn AuditRepository> =
+             Arc::new(SqlxAuditRepository::new(pool.clone()));
+         let audit_service: Arc<dyn AuditEmitter> = Arc::new(AuditService::new(audit_repo));
 
-        let clinical_domain_service = Arc::new(ClinicalService::new(
-            clinical_repos,
-            patient_service,
-            audit_service,
-        ));
-        let clinical_service = Some(Arc::new(ClinicalUiService::new(clinical_domain_service)));
+          let clinical_domain_service = Arc::new(ClinicalService::new(
+              clinical_repos,
+              patient_service,
+              Arc::clone(&audit_service),
+          ));
+         let clinical_service = Some(Arc::new(ClinicalUiService::new(clinical_domain_service)));
 
-        (billing_service, clinical_service)
+         // Create appointment service
+         let practitioner_repo: Arc<dyn opengp_domain::domain::user::PractitionerRepository> =
+             Arc::new(SqlxPractitionerRepository::new(pool.clone()));
+         let appointment_repo: Arc<dyn AppointmentRepository> =
+             Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+         let appointment_calendar_query: Arc<dyn AppointmentCalendarQuery> =
+             Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+         let working_hours_repo: Arc<dyn WorkingHoursRepository> =
+             Arc::new(SqlxWorkingHoursRepository::new(pool.clone()));
+         
+         let appointment_domain_service = Arc::new(AppointmentService::new(
+             Arc::clone(&appointment_repo),
+             Arc::clone(&audit_service),
+             Arc::clone(&appointment_calendar_query),
+         ));
+         let availability_service = Arc::new(AvailabilityService::new(
+             Arc::clone(&appointment_repo),
+             Arc::clone(&working_hours_repo),
+         ));
+
+         let appointment_ui_service = Some(Arc::new(AppointmentUiService::new(
+             Arc::clone(&practitioner_repo),
+             appointment_calendar_query,
+             appointment_repo,
+             Arc::clone(&appointment_domain_service),
+             availability_service,
+             Arc::clone(&working_hours_repo),
+         )));
+
+         (billing_service, clinical_service, appointment_ui_service)
     };
 
     let mut app = App::new(
@@ -187,6 +221,7 @@ async fn run_tui(
         clinical_config,
         social_history_config,
         billing_service,
+        appointment_ui_service,
         practice_config,
     );
     let mut command_rx = app.take_command_rx().expect("failed to extract command_rx from app");
