@@ -55,6 +55,7 @@ impl App {
         }
 
         self.start_pending_api_requests();
+        self.start_pending_reschedule_request();
 
         if self
             .patient_list_fetch_task
@@ -176,6 +177,33 @@ impl App {
                         None,
                     )
                     .await;
+                }
+            }
+        }
+
+        if self
+            .reschedule_task
+            .as_ref()
+            .is_some_and(tokio::task::JoinHandle::is_finished)
+        {
+            #[allow(clippy::expect_used)]
+            let handle = self.reschedule_task.take().expect("task exists");
+
+            match handle.await {
+                Ok(Ok((_, new_date))) => {
+                    self.appointment_detail_modal = None;
+                    self.request_refresh_appointments(new_date);
+                    self.status_bar.clear_error();
+                }
+                Ok(Err((msg, is_conflict))) => {
+                    if is_conflict {
+                        self.status_bar.set_error(format!("Schedule conflict: {}", msg));
+                    } else {
+                        self.status_bar.set_error(msg);
+                    }
+                }
+                Err(err) => {
+                    self.status_bar.set_error(format!("Reschedule failed: {}", err));
                 }
             }
         }
@@ -309,6 +337,65 @@ impl App {
         self.active_login_attempt = Some((username.clone(), password.clone()));
         self.login_task = Some(tokio::spawn(async move {
             api_client.login(username, password).await
+        }));
+    }
+
+    fn start_pending_reschedule_request(&mut self) {
+        if !self.authenticated {
+            return;
+        }
+
+        let Some(reschedule_data) = self.take_pending_reschedule() else {
+            return;
+        };
+
+        if self.reschedule_task.is_some() {
+            self.pending_reschedule = Some(reschedule_data);
+            return;
+        }
+
+        let Some(appointment_service) = self.appointment_ui_service.clone() else {
+            self.status_bar.set_error("Appointment service not configured");
+            self.pending_reschedule = Some(reschedule_data);
+            return;
+        };
+
+        let appointment_id = reschedule_data.appointment_id;
+        let new_date = reschedule_data.new_date;
+        let duration_minutes = reschedule_data.duration_minutes;
+        let user_id = self.current_user_id;
+
+        self.reschedule_task = Some(tokio::spawn(async move {
+            let new_datetime = match (new_date, reschedule_data.new_time) {
+                (Some(date), Some(time)) => {
+                    let naive_dt = date.and_time(time);
+                    chrono::Local
+                        .from_local_datetime(&naive_dt)
+                        .unwrap()
+                        .with_timezone(&chrono::Utc)
+                },
+                _ => {
+                    return Err((
+                        "New date and time required for reschedule".to_string(),
+                        false,
+                    ));
+                }
+            };
+
+            match appointment_service
+                .reschedule_appointment(appointment_id, new_datetime, duration_minutes, user_id)
+                .await
+            {
+                Ok(_) => {
+                    let refresh_date = new_date.unwrap_or_else(|| chrono::Local::now().naive_local().date());
+                    Ok((appointment_id, refresh_date))
+                }
+                Err(e) => {
+                    let err_string = e.to_string();
+                    let is_conflict = err_string.contains("Schedule conflict") || err_string.contains("Overlapping");
+                    Err((err_string, is_conflict))
+                }
+            }
         }));
     }
 }
@@ -690,6 +777,7 @@ mod tests {
             opengp_config::AllergyConfig::default(),
             opengp_config::ClinicalConfig::default(),
             opengp_config::SocialHistoryConfig::default(),
+            None,
             None,
             opengp_config::PracticeConfig::default(),
         )

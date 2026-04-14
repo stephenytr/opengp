@@ -235,20 +235,35 @@ impl AppointmentUiService {
              .map_err(|e| e.to_ui_error())
      }
 
-     /// Marks an appointment as billing.
-     pub async fn mark_billing(
-         &self,
-         appointment_id: uuid::Uuid,
-         user_id: uuid::Uuid,
-     ) -> UiResult<()> {
-         self.domain_service
-             .mark_billing(appointment_id, user_id)
-             .await
-             .map(|_| ())
-             .map_err(|e| e.to_ui_error())
-     }
+      /// Marks an appointment as billing.
+      pub async fn mark_billing(
+          &self,
+          appointment_id: uuid::Uuid,
+          user_id: uuid::Uuid,
+      ) -> UiResult<()> {
+          self.domain_service
+              .mark_billing(appointment_id, user_id)
+              .await
+              .map(|_| ())
+              .map_err(|e| e.to_ui_error())
+      }
 
-     /// Returns the available time slots for a practitioner on a given date.
+      /// Reschedules an appointment to a new time.
+      pub async fn reschedule_appointment(
+          &self,
+          appointment_id: uuid::Uuid,
+          new_start_time: chrono::DateTime<chrono::Utc>,
+          new_duration_minutes: i64,
+          user_id: uuid::Uuid,
+      ) -> UiResult<()> {
+          self.domain_service
+              .reschedule_appointment(appointment_id, new_start_time, new_duration_minutes, user_id)
+              .await
+              .map(|_| ())
+              .map_err(|e| e.to_ui_error())
+      }
+
+      /// Returns the available time slots for a practitioner on a given date.
      pub async fn get_available_slots(
          &self,
          practitioner_id: uuid::Uuid,
