@@ -1,6 +1,6 @@
 //! Patient Summary Component
 //!
-//! Displays patient demographics and clinical overview in a two-column layout.
+//! Displays patient demographics, allergies, and clinical overview in a three-column layout.
 
 use chrono::Datelike;
 use ratatui::buffer::Buffer;
@@ -156,9 +156,6 @@ impl Widget for PatientSummaryComponent {
         #[allow(clippy::unwrap_used)]
         let patient = self.patient.as_ref().unwrap();
 
-        // Calculate layout
-        // Top section: demographics (left) + clinical overview (right)
-        // Bottom section: recent consultations
         let top_height = if inner.height > 10 {
             8
         } else {
@@ -169,28 +166,31 @@ impl Widget for PatientSummaryComponent {
         let top_area = Rect::new(inner.x, inner.y, inner.width, top_height);
         let bottom_area = Rect::new(inner.x, inner.y + top_height, inner.width, bottom_height);
 
-        // Render top section (two columns)
-        let col_width = inner.width / 2;
-        let left_col = Rect::new(
+        let col_width = inner.width / 3;
+        let remaining = inner.width.saturating_sub(col_width * 2);
+        let col1 = Rect::new(
             top_area.x,
             top_area.y,
             col_width.saturating_sub(1),
             top_height,
         );
-        let right_col = Rect::new(
+        let col2 = Rect::new(
             top_area.x + col_width,
             top_area.y,
-            inner.width.saturating_sub(col_width),
+            col_width.saturating_sub(1),
+            top_height,
+        );
+        let col3 = Rect::new(
+            top_area.x + col_width * 2,
+            top_area.y,
+            remaining,
             top_height,
         );
 
-        // Left column: Demographics
-        self.render_demographics(left_col, buf, patient);
+        self.render_demographics(col1, buf, patient);
+        self.render_allergies_box(col2, buf);
+        self.render_clinical_overview(col3, buf);
 
-        // Right column: Clinical overview
-        self.render_clinical_overview(right_col, buf);
-
-        // Bottom section: Recent consultations
         if bottom_height > 2 {
             self.render_recent_consultations(bottom_area, buf);
         }
@@ -312,6 +312,80 @@ impl PatientSummaryComponent {
             buf.set_line(inner.x + 1, y, line, inner.width.saturating_sub(2));
             y += 1;
         }
+    }
+
+    fn render_allergies_box(&self, area: Rect, buf: &mut Buffer) {
+        let block = Block::default()
+            .title(" Allergies ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(self.theme.colors.border));
+
+        block.clone().render(area, buf);
+
+        let inner = block.inner(area);
+        if inner.is_empty() {
+            return;
+        }
+
+        let active: Vec<&Allergy> = self.allergies.iter().filter(|a| a.is_active).collect();
+
+        if active.is_empty() {
+            let message = if self.allergies.is_empty() {
+                "None recorded"
+            } else {
+                "No active allergies"
+            };
+            let text = Line::from(vec![Span::styled(
+                message,
+                Style::default().fg(self.theme.colors.disabled),
+            )]);
+            buf.set_line(inner.x + 1, inner.y, &text, inner.width.saturating_sub(2));
+            return;
+        }
+
+        let col_widths = [
+            Constraint::Length(14),
+            Constraint::Length(10),
+            Constraint::Min(8),
+        ];
+
+        let header = Row::new(vec!["Allergen", "Severity", "Reaction"])
+            .style(Style::default().fg(self.theme.colors.primary).bold());
+
+        let rows: Vec<Row> = active
+            .iter()
+            .take(inner.height.saturating_sub(2) as usize)
+            .map(|allergy| {
+                let severity_style = match allergy.severity {
+                    opengp_domain::domain::clinical::Severity::Severe => {
+                        Style::default().fg(self.theme.colors.error)
+                    }
+                    opengp_domain::domain::clinical::Severity::Moderate => {
+                        Style::default().fg(self.theme.colors.warning)
+                    }
+                    opengp_domain::domain::clinical::Severity::Mild => {
+                        Style::default().fg(self.theme.colors.foreground)
+                    }
+                };
+
+                let reaction = allergy.reaction.as_deref().unwrap_or("-").to_string();
+
+                Row::new(vec![
+                    allergy.allergen.clone(),
+                    allergy.severity.to_string(),
+                    reaction,
+                ])
+                .style(severity_style)
+                .height(1)
+            })
+            .collect();
+
+        let table = Table::new(rows, col_widths)
+            .header(header)
+            .block(Block::default().borders(Borders::NONE))
+            .widths(col_widths);
+
+        table.render(inner, buf);
     }
 
     fn render_clinical_overview(&self, area: Rect, buf: &mut Buffer) {
