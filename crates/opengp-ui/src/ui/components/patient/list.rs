@@ -227,6 +227,14 @@ impl PatientList {
                 KeyCode::Enter => {
                     self.searching = false;
                 }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.move_up();
+                    return Some(PatientListAction::SelectionChanged);
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.move_down();
+                    return Some(PatientListAction::SelectionChanged);
+                }
                 _ => {}
             }
             return Some(PatientListAction::SearchChanged);

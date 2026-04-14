@@ -141,7 +141,19 @@ impl<T: Searchable> SearchableListState<T> {
             .into_iter()
             .map(|(i, _)| self.items[i].clone())
             .collect();
-        self.scrollable = ScrollableState::new();
+        let new_count = self.filtered.len();
+        self.scrollable.set_item_count(new_count);
+        if new_count == 0 {
+            self.scrollable = ScrollableState::new();
+        } else {
+            let clamped = self
+                .scrollable
+                .selected_index()
+                .min(new_count.saturating_sub(1));
+            if clamped != self.scrollable.selected_index() {
+                self.scrollable = ScrollableState::new();
+            }
+        }
     }
 
     fn filter_substring(&mut self) {
@@ -157,7 +169,19 @@ impl<T: Searchable> SearchableListState<T> {
             .filter(|item| item.search_text().to_lowercase().contains(&query))
             .cloned()
             .collect();
-        self.scrollable = ScrollableState::new();
+        let new_count = self.filtered.len();
+        self.scrollable.set_item_count(new_count);
+        if new_count == 0 {
+            self.scrollable = ScrollableState::new();
+        } else {
+            let clamped = self
+                .scrollable
+                .selected_index()
+                .min(new_count.saturating_sub(1));
+            if clamped != self.scrollable.selected_index() {
+                self.scrollable = ScrollableState::new();
+            }
+        }
     }
 
     /// Updates the search query and reapplies either fuzzy or substring matching.
