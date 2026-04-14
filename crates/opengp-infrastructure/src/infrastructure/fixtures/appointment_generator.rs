@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Duration, Utc, Weekday};
+use chrono::{DateTime, Datelike, Duration, TimeZone, Utc, Weekday};
 use rand::seq::SliceRandom;
 use rand::Rng;
 use std::collections::HashMap;
@@ -248,9 +248,14 @@ impl AppointmentGenerator {
                 for slot_idx in 0..slots_per_hour {
                     let minute = slot_idx * self.config.slot_duration_minutes as u32;
 
-                    if let Some(start_time) = current_date.and_hms_opt(hour, minute, 0) {
+                    if let Some(naive_dt) = current_date.and_hms_opt(hour, minute, 0) {
+                        let start_time = chrono::Local
+                            .from_local_datetime(&naive_dt)
+                            .single()
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .unwrap_or_else(|| naive_dt.and_utc());
                         slots.push(TimeSlot {
-                            start_time: start_time.and_utc(),
+                            start_time,
                             duration: slot_duration,
                             _filled: false,
                         });
@@ -488,14 +493,18 @@ impl AppointmentGenerator {
         let hour = self.rng.gen_range(9..17);
         let minute = self.rng.gen_range(0..60);
 
-        adjusted_date
+        let naive_dt = adjusted_date
             .and_hms_opt(hour, minute, 0)
             .unwrap_or_else(|| {
                 adjusted_date
                     .and_hms_opt(9, 0, 0)
                     .expect("9:00:00 is valid")
-            })
-            .and_utc()
+            });
+        chrono::Local
+            .from_local_datetime(&naive_dt)
+            .single()
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|| naive_dt.and_utc())
     }
 
     /// Generate a random appointment reason based on appointment type

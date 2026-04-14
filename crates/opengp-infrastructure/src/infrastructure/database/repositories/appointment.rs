@@ -212,8 +212,6 @@ impl AppointmentRepository for SqlxAppointmentRepository {
     }
 
     async fn create(&self, appointment: Appointment) -> Result<Appointment, RepositoryError> {
-        let start_time_str = appointment.start_time.to_rfc3339();
-        let end_time_str = appointment.end_time.to_rfc3339();
         let appointment_type_str = match appointment.appointment_type {
             AppointmentType::Standard => "Standard",
             AppointmentType::Long => "Long",
@@ -240,8 +238,6 @@ impl AppointmentRepository for SqlxAppointmentRepository {
             AppointmentStatus::Cancelled => "Cancelled",
             AppointmentStatus::Rescheduled => "Rescheduled",
         };
-        let created_at_str = appointment.created_at.to_rfc3339();
-        let updated_at_str = appointment.updated_at.to_rfc3339();
 
         let result = sqlx::query(
             r#"
@@ -261,8 +257,8 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         .bind(appointment.id)
         .bind(appointment.patient_id)
         .bind(appointment.practitioner_id)
-        .bind(start_time_str)
-        .bind(end_time_str)
+        .bind(appointment.start_time)
+        .bind(appointment.end_time)
         .bind(appointment_type_str)
         .bind(status_str)
         .bind(&appointment.reason)
@@ -271,8 +267,8 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         .bind(appointment.reminder_sent)
         .bind(appointment.confirmed)
         .bind(&appointment.cancellation_reason)
-        .bind(created_at_str)
-        .bind(updated_at_str)
+        .bind(appointment.created_at)
+        .bind(appointment.updated_at)
         .bind(appointment.version)
         .bind(appointment.created_by)
         .bind(appointment.updated_by)
@@ -304,8 +300,6 @@ impl AppointmentRepository for SqlxAppointmentRepository {
     }
 
     async fn update(&self, appointment: Appointment) -> Result<Appointment, RepositoryError> {
-        let start_time_str = appointment.start_time.to_rfc3339();
-        let end_time_str = appointment.end_time.to_rfc3339();
         let appointment_type_str = match appointment.appointment_type {
             AppointmentType::Standard => "Standard",
             AppointmentType::Long => "Long",
@@ -332,7 +326,6 @@ impl AppointmentRepository for SqlxAppointmentRepository {
             AppointmentStatus::Cancelled => "Cancelled",
             AppointmentStatus::Rescheduled => "Rescheduled",
         };
-        let updated_at_str = appointment.updated_at.to_rfc3339();
 
         let current_version =
             sqlx::query_scalar::<_, i32>("SELECT version FROM appointments WHERE id = $1")
@@ -373,8 +366,8 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         WHERE id = $14 AND version = $15
         "#,
         )
-        .bind(start_time_str)
-        .bind(end_time_str)
+        .bind(appointment.start_time)
+        .bind(appointment.end_time)
         .bind(appointment_type_str)
         .bind(status_str)
         .bind(&appointment.reason)
@@ -383,7 +376,7 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         .bind(appointment.reminder_sent)
         .bind(appointment.confirmed)
         .bind(&appointment.cancellation_reason)
-        .bind(updated_at_str)
+        .bind(appointment.updated_at)
         .bind(appointment.updated_by)
         .bind(new_version)
         .bind(appointment.id)

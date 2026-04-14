@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, Utc};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
 use uuid::Uuid;
 
 use opengp_domain::domain::appointment::{
@@ -271,7 +271,11 @@ fn date_time_at(date: NaiveDate, hour: u8, minute: u8) -> DateTime<Utc> {
     let naive_datetime = date
         .and_hms_opt(hour as u32, minute as u32, 0)
         .expect("Invalid datetime");
-    DateTime::<Utc>::from_naive_utc_and_offset(naive_datetime, Utc)
+    chrono::Local
+        .from_local_datetime(&naive_datetime)
+        .single()
+        .map(|dt| dt.with_timezone(&Utc))
+        .unwrap_or_else(|| DateTime::<Utc>::from_naive_utc_and_offset(naive_datetime, Utc))
 }
 
 #[cfg(test)]
