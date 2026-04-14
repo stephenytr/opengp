@@ -3,7 +3,7 @@
 //! Reusable time slot picker popup for selecting appointment times.
 //! Provides keyboard-driven time selection with centered overlay rendering.
 
-use chrono::{NaiveDate, NaiveTime};
+use chrono::{NaiveDate, NaiveTime, Timelike};
 use crossterm::event::{KeyCode, KeyEvent};
 use opengp_config::CalendarConfig;
 use ratatui::buffer::Buffer;
@@ -116,8 +116,45 @@ impl TimePickerPopup {
         self.booked_slots.contains(&time)
     }
 
+    fn get_available_slots(&self) -> Vec<NaiveTime> {
+        let mut available = Vec::new();
+        let max_row = self.grid_max_row();
+        for row in 0..=max_row {
+            let hour = self.config.viewport_start_hour as u32 + row as u32;
+            for col in 0..GRID_COLS {
+                let minute = col as u32 * 15;
+                if hour >= self.config.max_hour as u32 {
+                    break;
+                }
+                if let Some(time) = NaiveTime::from_hms_opt(hour, minute, 0) {
+                    if !self.is_slot_booked(time) {
+                        available.push(time);
+                    }
+                }
+            }
+        }
+        available
+    }
+
+    fn find_available_slot_index(&self, target_time: NaiveTime) -> usize {
+        let available = self.get_available_slots();
+        available
+            .iter()
+            .position(|&t| t == target_time)
+            .unwrap_or(0)
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<TimePickerAction> {
         if !self.is_visible {
+            return None;
+        }
+
+        // If no available slots, only allow Esc
+        if self.get_available_slots().is_empty() {
+            if key.code == KeyCode::Esc {
+                self.is_visible = false;
+                return Some(TimePickerAction::Dismissed);
+            }
             return None;
         }
 
@@ -155,31 +192,46 @@ impl TimePickerPopup {
     }
 
     fn move_selection_up(&mut self) {
-        if self.selected_row > 0 {
-            self.selected_row -= 1;
-            self.update_time_from_grid();
+        let available = self.get_available_slots();
+        if available.is_empty() {
+            return;
+        }
+        let current_index = self.find_available_slot_index(self.selected_time);
+        if current_index > 0 {
+            self.selected_time = available[current_index - 1];
         }
     }
 
     fn move_selection_down(&mut self) {
-        let max_row = self.grid_max_row();
-        if self.selected_row < max_row {
-            self.selected_row += 1;
-            self.update_time_from_grid();
+        let available = self.get_available_slots();
+        if available.is_empty() {
+            return;
+        }
+        let current_index = self.find_available_slot_index(self.selected_time);
+        if current_index < available.len() - 1 {
+            self.selected_time = available[current_index + 1];
         }
     }
 
     fn move_selection_left(&mut self) {
-        if self.selected_col > 0 {
-            self.selected_col -= 1;
-            self.update_time_from_grid();
+        let available = self.get_available_slots();
+        if available.is_empty() {
+            return;
+        }
+        let current_index = self.find_available_slot_index(self.selected_time);
+        if current_index >= GRID_COLS as usize {
+            self.selected_time = available[current_index - GRID_COLS as usize];
         }
     }
 
     fn move_selection_right(&mut self) {
-        if self.selected_col < GRID_COLS - 1 {
-            self.selected_col += 1;
-            self.update_time_from_grid();
+        let available = self.get_available_slots();
+        if available.is_empty() {
+            return;
+        }
+        let current_index = self.find_available_slot_index(self.selected_time);
+        if current_index + (GRID_COLS as usize) < available.len() {
+            self.selected_time = available[current_index + (GRID_COLS as usize)];
         }
     }
 
@@ -239,45 +291,60 @@ impl TimePickerPopup {
             return;
         }
 
+        let available_slots = self.get_available_slots();
+
+        // No available slots - show message
+        if available_slots.is_empty() {
+            let message = "No Appointments Available";
+            let msg_width = message.len() as u16;
+
+            let msg_x = inner_area.x + (inner_area.width.saturating_sub(msg_width)) / 2;
+            let msg_y = inner_area.y + inner_area.height / 2;
+
+            buf.set_string(
+                msg_x,
+                msg_y,
+                message,
+                Style::new().fg(self.theme.colors.text_dim).dim(),
+            );
+
+            let help_text = "Esc to dismiss";
+            let help_x = inner_area.x + 1;
+            let help_y = inner_area.y + inner_area.height - 1;
+            if help_y < area.y + area.height {
+                buf.set_string(help_x, help_y, help_text, Style::new().dim());
+            }
+            return;
+        }
+
+        // Render available slots in a list format
         let cell_width = 10u16;
         let start_x = inner_area.x + 1;
         let start_y = inner_area.y + 1;
-        let max_row = self.grid_max_row();
+        let cols = GRID_COLS;
 
-        for row in 0..=max_row {
-            let hour = self.config.viewport_start_hour as u32 + row as u32;
-            for col in 0..GRID_COLS {
-                let minute = col as u32 * 15;
-                if hour >= self.config.max_hour as u32 {
-                    break;
-                }
+        let current_index = self.find_available_slot_index(self.selected_time);
 
-                if let Some(time) = NaiveTime::from_hms_opt(hour, minute, 0) {
-                    let is_selected = row == self.selected_row && col == self.selected_col;
-                    let is_booked = self.is_slot_booked(time);
-                    let time_str = format!("{:02}:{:02}", hour, minute);
+        for (index, time) in available_slots.iter().enumerate() {
+            let row = index / cols as usize;
+            let col = index % cols as usize;
 
-                    let style = if is_selected {
-                        Style::new().fg(self.theme.colors.primary).bold().reversed()
-                    } else if is_booked {
-                        Style::new().fg(self.theme.colors.text_dim).dim()
-                    } else {
-                        Style::new().fg(self.theme.colors.foreground)
-                    };
+            let is_selected = index == current_index;
+            let time_str = format!("{:02}:{:02}", time.hour(), time.minute());
 
-                    let display = if is_booked {
-                        format!("{}[X]", time_str)
-                    } else {
-                        format!("{}[ ]", time_str)
-                    };
+            let style = if is_selected {
+                Style::new().fg(self.theme.colors.primary).bold().reversed()
+            } else {
+                Style::new().fg(self.theme.colors.foreground)
+            };
 
-                    let x = start_x + (col as u16 * cell_width);
-                    let y = start_y + (row as u16 * 2);
+            let display = format!("{}[ ]", time_str);
 
-                    if x < inner_area.x + inner_area.width && y < inner_area.y + inner_area.height {
-                        buf.set_string(x, y, display, style);
-                    }
-                }
+            let x = start_x + (col as u16 * cell_width);
+            let y = start_y + (row as u16 * 2);
+
+            if x < inner_area.x + inner_area.width && y < inner_area.y + inner_area.height {
+                buf.set_string(x, y, display, style);
             }
         }
 
@@ -299,7 +366,6 @@ impl Default for TimePickerPopup {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Timelike;
 
     #[test]
     fn test_new_popup_is_not_visible() {

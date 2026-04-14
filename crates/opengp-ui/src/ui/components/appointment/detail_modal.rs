@@ -167,6 +167,10 @@ impl AppointmentDetailModal {
         self.pending_reschedule_time
     }
 
+    pub fn set_booked_slots(&mut self, booked_slots: Vec<chrono::NaiveTime>) {
+        self.inline_picker.set_booked_slots(booked_slots);
+    }
+
     /// Format the appointment time for display.
     fn format_time(&self) -> String {
         let start = self

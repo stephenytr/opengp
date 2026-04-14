@@ -417,7 +417,13 @@ async fn run_tui(
             let _ = app.command_tx.send(AppCommand::LoadPractitioners);
         }
 
-
+        if let Some((practitioner_id, date, duration)) = app.take_pending_load_booked_slots() {
+            let _ = app.command_tx.send(AppCommand::LoadAvailableSlots {
+                practitioner_id,
+                date,
+                duration_minutes: duration,
+            });
+        }
 
         if let Some(pending) = app.take_pending_clinical_save_data() {
             match pending {

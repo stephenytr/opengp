@@ -80,7 +80,7 @@ impl App {
 
     pub fn appointment_form_set_booked_slots(&mut self, booked_slots: Vec<chrono::NaiveTime>) {
         if let Some(ref mut form) = self.appointment_form {
-            form.set_booked_slots(booked_slots);
+            form.set_booked_slots(booked_slots.clone());
         }
     }
 
