@@ -25,7 +25,7 @@ opengp/
 │   ├── main.rs                 # TUI binary — wires all dependencies
 │   ├── lib.rs
 │   └── conversions.rs          # Domain↔UI type conversions
-├── migrations/                 # SQLite schema migrations (20 files, latest Apr 2026)
+├── migrations/                 # PostgreSQL schema migrations (20 files, latest Apr 2026)
 ├── tests/                      # Integration-level tests
 ├── wiki/                       # Contributor and integration guides
 ├── docs/                       # Quick reference and research docs
@@ -163,12 +163,12 @@ cargo test -p opengp-cache
 
 - `README.md` — entry point and contributor navigation
 - `wiki/Home.md` — practical integration guide index
+- `wiki/Configuration.md` — full configuration reference (env vars, TOML files, all options)
 - `wiki/User-Guide.md` — end-user guide
 - `wiki/Integration-UI-Guide.md` — UI integration walkthrough
 - `wiki/Integration-Database-Guide.md` — DB integration walkthrough
 - `wiki/Integration-External-Guide.md` — external integration guide
 - `wiki/Integration-End-to-End-Checklist.md` — end-to-end checklist
-- `docs/QUICK_REFERENCE.md` — quick reference card
 - `ARCHITECTURE.md` — architecture deep dive
 - `REQUIREMENTS.md` — compliance and product expectations
 
@@ -185,7 +185,7 @@ cargo test -p opengp-cache
 - Security roadmap: Auth hardening and broader compliance automation still in progress.
 - `opengp-api` is functional (Axum, full route set) but not production-hardened — auth middleware, rate limiting, and observability still evolving.
 - Feature-gated modules (`immunisation`, `pathology`, `prescription`, `referral`) may have incomplete UI coverage.
-- PostgreSQL migration path exists in design but SQLite is the active database.
+- PostgreSQL is the active database. Connection configured via `DATABASE_URL` / `API_DATABASE_URL` env var.
 
 ## PRACTICAL REFERENCE MODULES
 

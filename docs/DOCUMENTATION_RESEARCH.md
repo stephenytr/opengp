@@ -122,7 +122,7 @@ cargo build --release
 - **Purpose**: Australian general practice management system
 - **Language**: Rust
 - **Framework**: Ratatui (TUI)
-- **Database**: SQLite (with PostgreSQL migration path)
+- **Database**: PostgreSQL
 - **Key Features**: Patient management, appointments, clinical notes, e-prescribing, audit logging
 - **Compliance**: Australian healthcare standards (Medicare, PBS, AIR integration stubs)
 ```

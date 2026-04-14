@@ -2694,7 +2694,7 @@ OpenGP uses **in-memory mock repository implementations** to test service-layer 
 
 - **Location**: `src/infrastructure/database/mocks.rs`
 - **Pattern**: `Arc<Mutex<Vec<T>>>` storage for async + thread-safe tests
-- **Purpose**: make service tests fast, deterministic, and independent of SQLx/SQLite/PostgreSQL
+- **Purpose**: make service tests fast, deterministic, and independent of SQLx/PostgreSQL
 
 #### Test Dependency Flow
 
@@ -2987,17 +2987,17 @@ Test repository implementations with real database:
 
 ```rust
 // tests/integration/patient_repository_test.rs
-use sqlx::SqlitePool;
-use opengp::infrastructure::database::SqlxPatientRepository;
+use sqlx::PgPool;
+use opengp::infrastructure::database::PostgresPatientRepository;
 use opengp::domain::patient::*;
 
 #[tokio::test]
 async fn test_create_and_find_patient() {
-    // Setup in-memory database
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    // Setup test database (use TEST_DATABASE_URL env var)
+    let pool = PgPool::connect(&std::env::var("TEST_DATABASE_URL").unwrap()).await.unwrap();
     sqlx::migrate!("./migrations").run(&pool).await.unwrap();
     
-    let repo = SqlxPatientRepository::new(pool);
+    let repo = PostgresPatientRepository::new(pool);
     
     // Create patient
     let patient = Patient::new(NewPatientData {

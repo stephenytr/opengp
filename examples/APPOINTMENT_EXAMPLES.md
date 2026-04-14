@@ -12,7 +12,7 @@ You need:
 
 ```bash
 # If you don't have patients yet:
-export DATABASE_URL="sqlite://opengp.db"
+export DATABASE_URL="postgres://postgres:postgres@localhost/opengp"
 cargo run --example seed_database  # Creates patients
 
 # The database should already have practitioners from migrations
@@ -184,9 +184,7 @@ cargo run --example seed_database
 
 Set your DATABASE_URL:
 ```bash
-export DATABASE_URL="sqlite://opengp.db"
-# or for PostgreSQL:
-export DATABASE_URL="postgres://user:pass@localhost/opengp"
+export DATABASE_URL="postgres://postgres:postgres@localhost/opengp"
 ```
 
 **Error: "UNIQUE constraint failed"**

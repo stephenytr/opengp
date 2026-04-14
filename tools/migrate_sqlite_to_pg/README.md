@@ -1,5 +1,7 @@
 # SQLite → PostgreSQL Migration Tool
 
+> **Historical tool.** OpenGP now uses PostgreSQL exclusively. This tool is for one-time data migration of existing `opengp.db` SQLite databases from earlier installs.
+
 This tool migrates all OpenGP data from `opengp.db` (SQLite) into PostgreSQL.
 
 ## What it does

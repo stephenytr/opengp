@@ -25,7 +25,7 @@
 - **Performance**: Rust's memory safety and speed for handling sensitive health data
 - **Portability**: Terminal-based UI works across any system with a terminal
 - **Open Source**: Community-driven development under a permissive license
-- **Database Flexibility**: Start with SQLite, migrate to PostgreSQL for larger practices
+- **Database**: PostgreSQL — reliable, concurrent, production-ready
 
 ### Target Users
 
@@ -776,7 +776,7 @@ Integration with Australian secure messaging networks:
 ├─────────────────────────────────────────────────────────┤
 │  Domain Layer (Patient, Appointment, Clinical, Billing)  │
 ├─────────────────────────────────────────────────────────┤
-│  Data Layer (SQLx - SQLite/PostgreSQL)                   │
+│  Data Layer (SQLx - PostgreSQL)                          │
 ├─────────────────────────────────────────────────────────┤
 │  Infrastructure (Encryption, Audit, Auth, API Clients)   │
 └─────────────────────────────────────────────────────────┘
@@ -903,10 +903,10 @@ opengp/
 
 ### Design Principles
 
-1. **Portability**: Use ANSI SQL for SQLite → PostgreSQL migration
-2. **Audit Trail**: All clinical data includes audit columns
-3. **Soft Deletes**: Never hard delete clinical data
-4. **Encryption**: Sensitive fields encrypted at application level
+1. **Audit Trail**: All clinical data includes audit columns
+2. **Soft Deletes**: Never hard delete clinical data
+3. **Encryption**: Sensitive fields encrypted at application level
+4. **UUID primary keys**: All tables use UUID PKs via `gen_random_uuid()`
 
 ### Core Tables
 
@@ -919,12 +919,12 @@ opengp/
 - **patient_allergies**: Allergen tracking
 - **audit_log**: Append-only audit trail
 
-### SQLite to PostgreSQL Strategy
+### Database Stack
 
-- Use SQLx with feature flags
-- Repository pattern for abstraction
-- Compile-time query validation
-- Migration tool: sqlx-cli
+- **Engine**: PostgreSQL 14+
+- **Driver**: SQLx with compile-time query validation
+- **Migrations**: sqlx-cli (`sqlx migrate run`)
+- **Connection**: Pool via `DATABASE_URL` env var
 
 ---
 
@@ -983,9 +983,8 @@ All 8 strategies must be implemented at Maturity Level 2 minimum:
   - Patient financial information
   - Any PII marked as sensitive
 - **Database Encryption**: 
-  - Column-level encryption at application layer
-  - SQLite database file encryption (SQLCipher) for additional protection
-  - PostgreSQL: Use pgcrypto or application-level encryption
+  - Column-level encryption at application layer (AES-256-GCM before insert)
+  - PostgreSQL transparent data encryption at filesystem level (production)
 
 #### Data in Transit
 - **Protocol**: TLS 1.3 (minimum TLS 1.2 for legacy compatibility)
@@ -1081,7 +1080,7 @@ All patient data access MUST be logged per Privacy Act APP 11:
 
 **Core Deliverables**:
 - [ ] Project architecture and module structure
-- [ ] Database schema design (SQLite)
+- [ ] Database schema design (PostgreSQL)
 - [ ] Migration framework (sqlx-cli)
 - [ ] Authentication system (password-based, session management)
 - [ ] User management (CRUD, RBAC)

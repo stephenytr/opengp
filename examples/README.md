@@ -59,7 +59,7 @@ See [PATIENT-GENERATION.md](../PATIENT-GENERATION.md) for detailed configuration
 
 Solution: Set your `DATABASE_URL`:
 ```bash
-export DATABASE_URL="sqlite://opengp.db"
+export DATABASE_URL="postgres://postgres:postgres@localhost/opengp"
 ```
 
 **Error: "UNIQUE constraint failed"**

@@ -54,7 +54,7 @@ cargo build --release
 - **Purpose**: Australian GP management system
 - **Language**: Rust
 - **Framework**: Ratatui (TUI)
-- **Database**: SQLite
+- **Database**: PostgreSQL
 
 ## Setup Commands
 - Build: `cargo build`
