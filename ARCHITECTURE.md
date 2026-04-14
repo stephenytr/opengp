@@ -3135,7 +3135,7 @@ pbs_api_url = "https://data.pbs.gov.au/api"
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2026-02-11 | Use SQLx over Diesel | Compile-time query validation, better async support, multi-DB |
+| 2026-02-11 | Use SQLx over Diesel | Compile-time query validation, better async support, native Postgres types |
 | 2026-02-11 | Use Ratatui over cursive | More active development, better documentation |
 | 2026-02-11 | Use AGPL-3.0 license | Ensures modifications stay open source |
 | 2026-02-11 | Component-based architecture | Modularity, testability, maintainability |
@@ -3229,15 +3229,14 @@ impl AuditService {
 
 ```sql
 CREATE TABLE audit_logs (
-    id BLOB PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     entity_type TEXT NOT NULL,
-    entity_id BLOB NOT NULL,
+    entity_id UUID NOT NULL,
     action TEXT NOT NULL,  -- JSON serialized AuditAction
     old_value TEXT,
     new_value TEXT,
-    changed_by BLOB NOT NULL,
-    changed_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    FOREIGN KEY (changed_by) REFERENCES users(id)
+    changed_by UUID NOT NULL REFERENCES users(id),
+    changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);

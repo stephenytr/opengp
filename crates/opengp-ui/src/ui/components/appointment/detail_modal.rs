@@ -132,15 +132,25 @@ impl AppointmentDetailModal {
 
     /// Format the appointment time for display.
     fn format_time(&self) -> String {
-        let start = self.appointment.start_time.format("%H:%M").to_string();
-        let end = self.appointment.end_time.format("%H:%M").to_string();
+        let start = self
+            .appointment
+            .start_time
+            .with_timezone(&chrono::Local)
+            .format("%H:%M")
+            .to_string();
+        let end = self
+            .appointment
+            .end_time
+            .with_timezone(&chrono::Local)
+            .format("%H:%M")
+            .to_string();
         format!("{} - {}", start, end)
     }
 
-    /// Format the appointment date for display.
     fn format_date(&self) -> String {
         self.appointment
             .start_time
+            .with_timezone(&chrono::Local)
             .format("%A %d %B %Y")
             .to_string()
     }
