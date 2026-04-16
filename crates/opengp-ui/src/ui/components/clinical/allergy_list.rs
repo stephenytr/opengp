@@ -139,3 +139,86 @@ fn columns() -> Vec<ColumnDef<Allergy>> {
         }),
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::theme::Theme;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use opengp_domain::domain::clinical::AllergyType;
+    use uuid::Uuid;
+
+    fn make_test_allergy() -> Allergy {
+        Allergy {
+            id: Uuid::new_v4(),
+            patient_id: Uuid::new_v4(),
+            allergen: "Peanuts".to_string(),
+            allergy_type: AllergyType::Food,
+            severity: opengp_domain::domain::clinical::Severity::Severe,
+            reaction: Some("Anaphylaxis".to_string()),
+            onset_date: None,
+            notes: None,
+            is_active: true,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            created_by: Uuid::new_v4(),
+            updated_by: None,
+        }
+    }
+
+    #[test]
+    fn test_allergy_list_up_down_key_navigation() {
+        let theme = Theme::dark();
+        let mut list = AllergyList::new(theme);
+
+        let allergies = vec![
+            make_test_allergy(),
+            make_test_allergy(),
+            make_test_allergy(),
+        ];
+        list.allergies = allergies;
+
+        let key_down = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        let key_up = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
+
+        assert_eq!(list.selected_index, 0);
+
+        let action = list.handle_key(key_down);
+        assert!(matches!(action, Some(AllergyListAction::Select(1))));
+        assert_eq!(list.selected_index, 1);
+
+        let action = list.handle_key(key_down);
+        assert!(matches!(action, Some(AllergyListAction::Select(2))));
+        assert_eq!(list.selected_index, 2);
+
+        let action = list.handle_key(key_up);
+        assert!(matches!(action, Some(AllergyListAction::Select(1))));
+        assert_eq!(list.selected_index, 1);
+
+        let action = list.handle_key(key_up);
+        assert!(matches!(action, Some(AllergyListAction::Select(0))));
+        assert_eq!(list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_allergy_list_j_k_key_navigation() {
+        let theme = Theme::dark();
+        let mut list = AllergyList::new(theme);
+
+        let allergies = vec![make_test_allergy(), make_test_allergy()];
+        list.allergies = allergies;
+
+        let key_j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
+        let key_k = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
+
+        assert_eq!(list.selected_index, 0);
+
+        let action = list.handle_key(key_j);
+        assert!(matches!(action, Some(AllergyListAction::Select(1))));
+        assert_eq!(list.selected_index, 1);
+
+        let action = list.handle_key(key_k);
+        assert!(matches!(action, Some(AllergyListAction::Select(0))));
+        assert_eq!(list.selected_index, 0);
+    }
+}

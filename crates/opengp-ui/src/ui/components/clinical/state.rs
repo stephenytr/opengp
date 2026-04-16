@@ -1,7 +1,8 @@
 use crate::ui::components::clinical::{
-    AllergyForm, AllergyList, ConsultationForm, ConsultationList, FamilyHistoryForm,
-    FamilyHistoryList, MedicalHistoryForm, MedicalHistoryList, SocialHistoryComponent,
-    VitalSignsForm, VitalSignsList,
+    AllergyDetailModal, AllergyForm, AllergyList, ConsultationDetailModal, ConsultationForm,
+    ConsultationList, FamilyHistoryDetailModal, FamilyHistoryForm, FamilyHistoryList,
+    MedicalHistoryDetailModal, MedicalHistoryForm, MedicalHistoryList, SocialHistoryComponent,
+    VitalSignsForm, VitalSignsList, VitalsDetailModal,
 };
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientListItem;
@@ -73,6 +74,12 @@ pub struct ClinicalState {
     pub social_history_component: Option<SocialHistoryComponent>,
     pub consultation_filter_start: Option<String>,
     pub consultation_filter_end: Option<String>,
+    // Detail modals for read-only display
+    pub consultation_detail_modal: Option<ConsultationDetailModal>,
+    pub allergy_detail_modal: Option<AllergyDetailModal>,
+    pub medical_history_detail_modal: Option<MedicalHistoryDetailModal>,
+    pub vitals_detail_modal: Option<VitalsDetailModal>,
+    pub family_history_detail_modal: Option<FamilyHistoryDetailModal>,
     #[cfg(feature = "prescription")]
     pub consultation_prescriptions: Vec<Prescription>,
     #[cfg(not(feature = "prescription"))]
@@ -140,6 +147,11 @@ impl ClinicalState {
             social_history_component: None,
             consultation_filter_start: None,
             consultation_filter_end: None,
+            consultation_detail_modal: None,
+            allergy_detail_modal: None,
+            medical_history_detail_modal: None,
+            vitals_detail_modal: None,
+            family_history_detail_modal: None,
             consultation_prescriptions: Vec::new(),
             consultation_list: ConsultationList::new(theme.clone()),
             allergy_list: AllergyList::new(theme.clone()),
@@ -185,6 +197,61 @@ impl ClinicalState {
     pub fn close_consultation_form(&mut self) {
         self.consultation_form = None;
         self.form_view = ClinicalFormView::None;
+    }
+
+    pub fn open_consultation_detail(
+        &mut self,
+        consultation: Consultation,
+        patient_name: String,
+        practitioner_name: String,
+        theme: &Theme,
+    ) {
+        self.consultation_detail_modal = Some(ConsultationDetailModal::new(
+            consultation,
+            patient_name,
+            practitioner_name,
+            theme.clone(),
+        ));
+    }
+
+    pub fn close_consultation_detail(&mut self) {
+        self.consultation_detail_modal = None;
+    }
+
+    pub fn open_allergy_detail(&mut self, allergy: Allergy, theme: &Theme) {
+        self.allergy_detail_modal = Some(AllergyDetailModal::new(allergy, theme.clone()));
+    }
+
+    pub fn close_allergy_detail(&mut self) {
+        self.allergy_detail_modal = None;
+    }
+
+    pub fn open_medical_history_detail(&mut self, medical_history: MedicalHistory, theme: &Theme) {
+        self.medical_history_detail_modal = Some(MedicalHistoryDetailModal::new(
+            medical_history,
+            theme.clone(),
+        ));
+    }
+
+    pub fn close_medical_history_detail(&mut self) {
+        self.medical_history_detail_modal = None;
+    }
+
+    pub fn open_vitals_detail(&mut self, vitals: VitalSigns, theme: &Theme) {
+        self.vitals_detail_modal = Some(VitalsDetailModal::new(vitals, theme.clone()));
+    }
+
+    pub fn close_vitals_detail(&mut self) {
+        self.vitals_detail_modal = None;
+    }
+
+    pub fn open_family_history_detail(&mut self, family_history: FamilyHistory, theme: &Theme) {
+        self.family_history_detail_modal =
+            Some(FamilyHistoryDetailModal::new(family_history, theme.clone()));
+    }
+
+    pub fn close_family_history_detail(&mut self) {
+        self.family_history_detail_modal = None;
     }
 
     pub fn open_allergy_form(&mut self) {
@@ -419,6 +486,14 @@ impl ClinicalState {
 
     pub fn has_patient(&self) -> bool {
         self.selected_patient_id.is_some()
+    }
+
+    pub fn has_open_detail_modal(&self) -> bool {
+        self.consultation_detail_modal.is_some()
+            || self.allergy_detail_modal.is_some()
+            || self.medical_history_detail_modal.is_some()
+            || self.vitals_detail_modal.is_some()
+            || self.family_history_detail_modal.is_some()
     }
 
     pub fn adjust_scroll(&mut self, visible_rows: usize) {
@@ -845,5 +920,31 @@ mod tests {
         state.close_form();
         assert!(!state.is_form_open());
         assert!(state.family_history_form.is_none());
+    }
+
+    #[test]
+    fn test_has_open_detail_modal() {
+        let mut state = test_state();
+
+        assert!(!state.has_open_detail_modal());
+        assert!(state.consultation_detail_modal.is_none());
+
+        let consultation = Consultation::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Some(Uuid::new_v4()),
+            Uuid::new_v4(),
+        );
+
+        let theme = state.theme.clone();
+        let patient_name = "John Doe".to_string();
+        let practitioner_name = "Dr. Smith".to_string();
+        state.open_consultation_detail(consultation, patient_name, practitioner_name, &theme);
+        assert!(state.has_open_detail_modal());
+        assert!(state.consultation_detail_modal.is_some());
+
+        state.close_consultation_detail();
+        assert!(!state.has_open_detail_modal());
+        assert!(state.consultation_detail_modal.is_none());
     }
 }

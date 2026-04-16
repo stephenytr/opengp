@@ -238,4 +238,63 @@ mod tests {
         list.move_up();
         assert_eq!(list.selected_index(), 0);
     }
+
+    #[test]
+    fn test_consultation_list_up_down_key_navigation() {
+        let theme = Theme::dark();
+        let mut list = ConsultationList::new(theme);
+
+        let consultations = vec![
+            Consultation::new(Uuid::new_v4(), Uuid::new_v4(), None, Uuid::new_v4()),
+            Consultation::new(Uuid::new_v4(), Uuid::new_v4(), None, Uuid::new_v4()),
+            Consultation::new(Uuid::new_v4(), Uuid::new_v4(), None, Uuid::new_v4()),
+        ];
+        list.consultations = consultations;
+
+        let key_down = KeyEvent::new(KeyCode::Down, crossterm::event::KeyModifiers::NONE);
+        let key_up = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::NONE);
+
+        assert_eq!(list.selected_index(), 0);
+
+        let action = list.handle_key(key_down);
+        assert!(matches!(action, Some(ConsultationListAction::Select(1))));
+        assert_eq!(list.selected_index(), 1);
+
+        let action = list.handle_key(key_down);
+        assert!(matches!(action, Some(ConsultationListAction::Select(2))));
+        assert_eq!(list.selected_index(), 2);
+
+        let action = list.handle_key(key_up);
+        assert!(matches!(action, Some(ConsultationListAction::Select(1))));
+        assert_eq!(list.selected_index(), 1);
+
+        let action = list.handle_key(key_up);
+        assert!(matches!(action, Some(ConsultationListAction::Select(0))));
+        assert_eq!(list.selected_index(), 0);
+    }
+
+    #[test]
+    fn test_consultation_list_j_k_key_navigation() {
+        let theme = Theme::dark();
+        let mut list = ConsultationList::new(theme);
+
+        let consultations = vec![
+            Consultation::new(Uuid::new_v4(), Uuid::new_v4(), None, Uuid::new_v4()),
+            Consultation::new(Uuid::new_v4(), Uuid::new_v4(), None, Uuid::new_v4()),
+        ];
+        list.consultations = consultations;
+
+        let key_j = KeyEvent::new(KeyCode::Char('j'), crossterm::event::KeyModifiers::NONE);
+        let key_k = KeyEvent::new(KeyCode::Char('k'), crossterm::event::KeyModifiers::NONE);
+
+        assert_eq!(list.selected_index(), 0);
+
+        let action = list.handle_key(key_j);
+        assert!(matches!(action, Some(ConsultationListAction::Select(1))));
+        assert_eq!(list.selected_index(), 1);
+
+        let action = list.handle_key(key_k);
+        assert!(matches!(action, Some(ConsultationListAction::Select(0))));
+        assert_eq!(list.selected_index(), 0);
+    }
 }
