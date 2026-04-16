@@ -1,6 +1,10 @@
 use crate::ui::app::{App, AppointmentStatusTransition, PendingClinicalSaveData};
+use crate::ui::components::clinical::{
+    AllergyDetailModalAction, ConsultationDetailModalAction, FamilyHistoryDetailModalAction,
+    MedicalHistoryDetailModalAction, VitalsDetailModalAction,
+};
 use crate::ui::components::tabs::Tab;
-use crate::ui::keybinds::Action;
+use crate::ui::keybinds::{Action, KeyContext};
 use crate::ui::widgets::FormNavigation;
 use crossterm::event::KeyEvent;
 use opengp_domain::domain::appointment::AppointmentStatus;
@@ -11,9 +15,130 @@ impl App {
             AllergyFormAction, ClinicalFormView, ClinicalView, ConsultationFormAction,
             FamilyHistoryFormAction, MedicalHistoryFormAction, VitalSignsFormAction,
         };
-        use crate::ui::keybinds::{Action as KeyAction, KeyContext, KeybindRegistry};
+        use crate::ui::keybinds::{Action as KeyAction, KeybindRegistry};
         use crate::ui::widgets::SearchableListState;
-        use crossterm::event::KeyCode;
+        use crossterm::event::{KeyCode, KeyModifiers};
+
+        if self.clinical_state.has_open_detail_modal() {
+            match key.code {
+                KeyCode::Esc => {
+                    self.clinical_state.close_consultation_detail();
+                    self.clinical_state.close_allergy_detail();
+                    self.clinical_state.close_medical_history_detail();
+                    self.clinical_state.close_vitals_detail();
+                    self.clinical_state.close_family_history_detail();
+                    return Action::Enter;
+                }
+                KeyCode::Char('e') => {
+                    if let Some(ref mut modal) = self.clinical_state.consultation_detail_modal {
+                        if modal.is_signed() {
+                            self.status_bar.set_error("Cannot edit signed consultation");
+                        } else {
+                            self.clinical_state.close_consultation_detail();
+                            self.clinical_state.open_consultation_form();
+                            self.current_context = KeyContext::ClinicalForm;
+                        }
+                        return Action::Enter;
+                    } else if let Some(ref mut modal) = self.clinical_state.allergy_detail_modal {
+                        self.clinical_state.close_allergy_detail();
+                        self.clinical_state.open_allergy_form();
+                        self.current_context = KeyContext::ClinicalForm;
+                        return Action::Enter;
+                    } else if self.clinical_state.medical_history_detail_modal.is_some() {
+                        self.clinical_state.close_medical_history_detail();
+                        self.clinical_state.open_medical_history_form();
+                        self.current_context = KeyContext::ClinicalForm;
+                        return Action::Enter;
+                    } else if self.clinical_state.vitals_detail_modal.is_some() {
+                        self.clinical_state.close_vitals_detail();
+                        self.clinical_state.open_vitals_form();
+                        self.current_context = KeyContext::ClinicalForm;
+                        return Action::Enter;
+                    } else if self.clinical_state.family_history_detail_modal.is_some() {
+                        self.clinical_state.close_family_history_detail();
+                        self.clinical_state.open_family_history_form();
+                        self.current_context = KeyContext::ClinicalForm;
+                        return Action::Enter;
+                    }
+                }
+                KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    if let Some(ref modal) = self.clinical_state.consultation_detail_modal {
+                        if modal.is_signed() {
+                            self.status_bar.set_error("Consultation already signed");
+                        } else {
+                            let consultation_id = modal.consultation_id();
+                            let user_id = self.current_user_id;
+                            self.pending_clinical_save_data =
+                                Some(PendingClinicalSaveData::SignConsultation {
+                                    consultation_id,
+                                    user_id,
+                                });
+                        }
+                        return Action::Enter;
+                    }
+                }
+                KeyCode::Left | KeyCode::Right => {
+                    if let Some(ref mut modal) = self.clinical_state.consultation_detail_modal {
+                        if let Some(action) = modal.handle_key(key) {
+                            self.handle_consultation_modal_action(action);
+                        }
+                    } else if let Some(ref mut modal) = self.clinical_state.allergy_detail_modal {
+                        if let Some(action) = modal.handle_key(key) {
+                            self.handle_allergy_modal_action(action);
+                        }
+                    } else if let Some(ref mut modal) =
+                        self.clinical_state.medical_history_detail_modal
+                    {
+                        if let Some(action) = modal.handle_key(key) {
+                            self.handle_medical_history_modal_action(action);
+                        }
+                    } else if let Some(ref mut modal) = self.clinical_state.vitals_detail_modal {
+                        if let Some(action) = modal.handle_key(key) {
+                            self.handle_vitals_modal_action(action);
+                        }
+                    } else if let Some(ref mut modal) =
+                        self.clinical_state.family_history_detail_modal
+                    {
+                        if let Some(action) = modal.handle_key(key) {
+                            self.handle_family_history_modal_action(action);
+                        }
+                    }
+                    return Action::Enter;
+                }
+                _ => {
+                    if let Some(ref mut modal) = self.clinical_state.consultation_detail_modal {
+                        if let Some(action) = modal.handle_key(key) {
+                            self.handle_consultation_modal_action(action);
+                        }
+                        return Action::Enter;
+                    } else if let Some(ref mut modal) = self.clinical_state.allergy_detail_modal {
+                        if let Some(action) = modal.handle_key(key) {
+                            self.handle_allergy_modal_action(action);
+                        }
+                        return Action::Enter;
+                    } else if let Some(ref mut modal) =
+                        self.clinical_state.medical_history_detail_modal
+                    {
+                        if let Some(action) = modal.handle_key(key) {
+                            self.handle_medical_history_modal_action(action);
+                        }
+                        return Action::Enter;
+                    } else if let Some(ref mut modal) = self.clinical_state.vitals_detail_modal {
+                        if let Some(action) = modal.handle_key(key) {
+                            self.handle_vitals_modal_action(action);
+                        }
+                        return Action::Enter;
+                    } else if let Some(ref mut modal) =
+                        self.clinical_state.family_history_detail_modal
+                    {
+                        if let Some(action) = modal.handle_key(key) {
+                            self.handle_family_history_modal_action(action);
+                        }
+                        return Action::Enter;
+                    }
+                }
+            }
+        }
 
         if self.clinical_state.is_form_open() {
             match self.clinical_state.form_view.clone() {
@@ -474,8 +599,26 @@ impl App {
             ClinicalView::Consultations => {
                 if let Some(action) = self.clinical_state.consultation_list.handle_key(key) {
                     match action {
+                        crate::ui::components::clinical::ConsultationListAction::Open(
+                            consultation,
+                        ) => {
+                            let patient_name = self
+                                .patient_list
+                                .patients()
+                                .iter()
+                                .find(|p| p.id == consultation.patient_id)
+                                .map(|p| p.full_name.clone())
+                                .unwrap_or_else(|| "Unknown".to_string());
+                            let practitioner_name = "Unknown".to_string();
+                            self.clinical_state.open_consultation_detail(
+                                *consultation,
+                                patient_name,
+                                practitioner_name,
+                                &self.theme,
+                            );
+                            return Action::Enter;
+                        }
                         crate::ui::components::clinical::ConsultationListAction::Select(_)
-                        | crate::ui::components::clinical::ConsultationListAction::Open(_)
                         | crate::ui::components::clinical::ConsultationListAction::New
                         | crate::ui::components::clinical::ConsultationListAction::NextPage
                         | crate::ui::components::clinical::ConsultationListAction::PrevPage => {
@@ -487,13 +630,17 @@ impl App {
             ClinicalView::Allergies => {
                 if let Some(action) = self.clinical_state.allergy_list.handle_key(key) {
                     match action {
+                        crate::ui::components::clinical::AllergyListAction::Open(allergy) => {
+                            self.clinical_state
+                                .open_allergy_detail(allergy, &self.theme);
+                            return Action::Enter;
+                        }
                         crate::ui::components::clinical::AllergyListAction::New => {
                             self.clinical_state.open_allergy_form();
                             self.current_context = KeyContext::ClinicalForm;
                             return Action::Enter;
                         }
                         crate::ui::components::clinical::AllergyListAction::Select(_)
-                        | crate::ui::components::clinical::AllergyListAction::Open(_)
                         | crate::ui::components::clinical::AllergyListAction::ToggleInactive
                         | crate::ui::components::clinical::AllergyListAction::Delete(_) => {
                             return Action::Enter;
@@ -504,13 +651,16 @@ impl App {
             ClinicalView::MedicalHistory => {
                 if let Some(action) = self.clinical_state.medical_history_list.handle_key(key) {
                     match action {
+                        crate::ui::components::clinical::MedicalHistoryListAction::Open(medical_history) => {
+                            self.clinical_state.open_medical_history_detail(medical_history, &self.theme);
+                            return Action::Enter;
+                        }
                         crate::ui::components::clinical::MedicalHistoryListAction::New => {
                             self.clinical_state.open_medical_history_form();
                             self.current_context = KeyContext::ClinicalForm;
                             return Action::Enter;
                         }
                         crate::ui::components::clinical::MedicalHistoryListAction::Select(_)
-                        | crate::ui::components::clinical::MedicalHistoryListAction::Open(_)
                         | crate::ui::components::clinical::MedicalHistoryListAction::Edit(_)
                         | crate::ui::components::clinical::MedicalHistoryListAction::Delete(_) => {
                             return Action::Enter;
@@ -524,13 +674,16 @@ impl App {
             ClinicalView::VitalSigns => {
                 if let Some(action) = self.clinical_state.vitals_list.handle_key(key) {
                     match action {
+                        crate::ui::components::clinical::VitalSignsListAction::Open(vitals) => {
+                            self.clinical_state.open_vitals_detail(vitals, &self.theme);
+                            return Action::Enter;
+                        }
                         crate::ui::components::clinical::VitalSignsListAction::New => {
                             self.clinical_state.open_vitals_form();
                             self.current_context = KeyContext::ClinicalForm;
                             return Action::Enter;
                         }
                         crate::ui::components::clinical::VitalSignsListAction::Select(_)
-                        | crate::ui::components::clinical::VitalSignsListAction::Open(_)
                         | crate::ui::components::clinical::VitalSignsListAction::NextPage
                         | crate::ui::components::clinical::VitalSignsListAction::PrevPage => {
                             return Action::Enter;
@@ -550,13 +703,19 @@ impl App {
             ClinicalView::FamilyHistory => {
                 if let Some(action) = self.clinical_state.family_history_list.handle_key(key) {
                     match action {
+                        crate::ui::components::clinical::FamilyHistoryListAction::Open(
+                            family_history,
+                        ) => {
+                            self.clinical_state
+                                .open_family_history_detail(family_history, &self.theme);
+                            return Action::Enter;
+                        }
                         crate::ui::components::clinical::FamilyHistoryListAction::New => {
                             self.clinical_state.open_family_history_form();
                             self.current_context = KeyContext::ClinicalForm;
                             return Action::Enter;
                         }
                         crate::ui::components::clinical::FamilyHistoryListAction::Select(_)
-                        | crate::ui::components::clinical::FamilyHistoryListAction::Open(_)
                         | crate::ui::components::clinical::FamilyHistoryListAction::Delete(_) => {
                             return Action::Enter;
                         }
@@ -566,5 +725,82 @@ impl App {
         }
 
         Action::Unknown
+    }
+
+    fn handle_consultation_modal_action(&mut self, action: ConsultationDetailModalAction) {
+        match action {
+            ConsultationDetailModalAction::Close => {
+                self.clinical_state.close_consultation_detail();
+            }
+            ConsultationDetailModalAction::Edit => {
+                self.clinical_state.close_consultation_detail();
+                self.clinical_state.open_consultation_form();
+                self.current_context = KeyContext::ClinicalForm;
+            }
+            ConsultationDetailModalAction::Sign => {
+                if let Some(ref modal) = self.clinical_state.consultation_detail_modal {
+                    let consultation_id = modal.consultation_id();
+                    let user_id = self.current_user_id;
+                    self.pending_clinical_save_data =
+                        Some(PendingClinicalSaveData::SignConsultation {
+                            consultation_id,
+                            user_id,
+                        });
+                }
+            }
+            ConsultationDetailModalAction::StopTimer => {}
+        }
+    }
+
+    fn handle_allergy_modal_action(&mut self, action: AllergyDetailModalAction) {
+        match action {
+            AllergyDetailModalAction::Close => {
+                self.clinical_state.close_allergy_detail();
+            }
+            AllergyDetailModalAction::Edit => {
+                self.clinical_state.close_allergy_detail();
+                self.clinical_state.open_allergy_form();
+                self.current_context = KeyContext::ClinicalForm;
+            }
+        }
+    }
+
+    fn handle_medical_history_modal_action(&mut self, action: MedicalHistoryDetailModalAction) {
+        match action {
+            MedicalHistoryDetailModalAction::Close => {
+                self.clinical_state.close_medical_history_detail();
+            }
+            MedicalHistoryDetailModalAction::Edit => {
+                self.clinical_state.close_medical_history_detail();
+                self.clinical_state.open_medical_history_form();
+                self.current_context = KeyContext::ClinicalForm;
+            }
+        }
+    }
+
+    fn handle_vitals_modal_action(&mut self, action: VitalsDetailModalAction) {
+        match action {
+            VitalsDetailModalAction::Close => {
+                self.clinical_state.close_vitals_detail();
+            }
+            VitalsDetailModalAction::Edit => {
+                self.clinical_state.close_vitals_detail();
+                self.clinical_state.open_vitals_form();
+                self.current_context = KeyContext::ClinicalForm;
+            }
+        }
+    }
+
+    fn handle_family_history_modal_action(&mut self, action: FamilyHistoryDetailModalAction) {
+        match action {
+            FamilyHistoryDetailModalAction::Close => {
+                self.clinical_state.close_family_history_detail();
+            }
+            FamilyHistoryDetailModalAction::Edit => {
+                self.clinical_state.close_family_history_detail();
+                self.clinical_state.open_family_history_form();
+                self.current_context = KeyContext::ClinicalForm;
+            }
+        }
     }
 }

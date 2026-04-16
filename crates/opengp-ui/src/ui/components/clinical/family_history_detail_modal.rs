@@ -66,6 +66,10 @@ impl FamilyHistoryDetailModal {
         };
     }
 
+    pub fn family_history_id(&self) -> uuid::Uuid {
+        self.family_history.id
+    }
+
     // ── Key handling ───────────────────────────────────────────────────────
 
     /// Handle keyboard input and return an action if triggered.

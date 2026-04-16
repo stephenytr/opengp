@@ -318,18 +318,34 @@ impl App {
                 frame.render_widget(component, area);
             }
             crate::ui::components::clinical::ClinicalView::Consultations => {
+                if let Some(ref modal) = self.clinical_state.consultation_detail_modal {
+                    frame.render_widget(modal.clone(), area);
+                    return;
+                }
                 frame.render_widget(self.clinical_state.consultation_list.clone(), area);
             }
             crate::ui::components::clinical::ClinicalView::ConsultationSummary => {
                 frame.render_widget(self.clinical_state.consultation_list.clone(), area);
             }
             crate::ui::components::clinical::ClinicalView::Allergies => {
+                if let Some(ref modal) = self.clinical_state.allergy_detail_modal {
+                    frame.render_widget(modal.clone(), area);
+                    return;
+                }
                 frame.render_widget(self.clinical_state.allergy_list.clone(), area);
             }
             crate::ui::components::clinical::ClinicalView::MedicalHistory => {
+                if let Some(ref modal) = self.clinical_state.medical_history_detail_modal {
+                    frame.render_widget(modal.clone(), area);
+                    return;
+                }
                 frame.render_widget(self.clinical_state.medical_history_list.clone(), area);
             }
             crate::ui::components::clinical::ClinicalView::VitalSigns => {
+                if let Some(ref modal) = self.clinical_state.vitals_detail_modal {
+                    frame.render_widget(modal.clone(), area);
+                    return;
+                }
                 frame.render_widget(self.clinical_state.vitals_list.clone(), area);
             }
             crate::ui::components::clinical::ClinicalView::SocialHistory => {
@@ -357,6 +373,10 @@ impl App {
                 frame.render_widget(component, area);
             }
             crate::ui::components::clinical::ClinicalView::FamilyHistory => {
+                if let Some(ref modal) = self.clinical_state.family_history_detail_modal {
+                    frame.render_widget(modal.clone(), area);
+                    return;
+                }
                 frame.render_widget(self.clinical_state.family_history_list.clone(), area);
             }
         }

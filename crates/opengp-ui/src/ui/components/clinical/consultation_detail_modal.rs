@@ -95,6 +95,14 @@ impl ConsultationDetailModal {
         };
     }
 
+    pub fn is_signed(&self) -> bool {
+        self.consultation.is_signed
+    }
+
+    pub fn consultation_id(&self) -> uuid::Uuid {
+        self.consultation.id
+    }
+
     /// Format the consultation date.
     fn format_date(&self) -> String {
         self.consultation

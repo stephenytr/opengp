@@ -66,6 +66,10 @@ impl MedicalHistoryDetailModal {
         };
     }
 
+    pub fn medical_history_id(&self) -> uuid::Uuid {
+        self.medical_history.id
+    }
+
     /// Get the active/inactive status display text.
     fn format_active_status(&self) -> String {
         if self.medical_history.is_active {

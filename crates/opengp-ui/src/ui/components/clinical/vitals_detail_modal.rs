@@ -66,6 +66,10 @@ impl VitalsDetailModal {
         };
     }
 
+    pub fn vitals_id(&self) -> uuid::Uuid {
+        self.vitals.id
+    }
+
     /// Format blood pressure display.
     fn format_blood_pressure(&self) -> String {
         match (self.vitals.systolic_bp, self.vitals.diastolic_bp) {

@@ -66,6 +66,10 @@ impl AllergyDetailModal {
         };
     }
 
+    pub fn allergy_id(&self) -> uuid::Uuid {
+        self.allergy.id
+    }
+
     /// Get the status display text.
     fn format_status(&self) -> String {
         if self.allergy.is_active {
