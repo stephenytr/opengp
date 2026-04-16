@@ -6,6 +6,7 @@
 pub mod allergy_form;
 pub mod allergy_list;
 pub mod consultation_detail;
+pub mod consultation_detail_modal;
 pub mod consultation_form;
 pub mod consultation_list;
 pub mod family_history_form;
@@ -21,6 +22,7 @@ pub mod vitals_list;
 pub use allergy_form::{AllergyForm, AllergyFormAction};
 pub use allergy_list::{AllergyList, AllergyListAction};
 pub use consultation_detail::{ConsultationDetail, ConsultationDetailAction};
+pub use consultation_detail_modal::{ConsultationDetailModal, ConsultationDetailModalAction};
 pub use consultation_form::{ConsultationForm, ConsultationFormAction};
 pub use consultation_list::{ConsultationList, ConsultationListAction};
 pub use family_history_form::{FamilyHistoryForm, FamilyHistoryFormAction};
