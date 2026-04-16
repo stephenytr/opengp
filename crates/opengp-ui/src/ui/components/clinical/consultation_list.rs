@@ -207,6 +207,7 @@ fn columns() -> Vec<ColumnDef<Consultation>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::KeyCode;
     use uuid::Uuid;
 
     #[test]
