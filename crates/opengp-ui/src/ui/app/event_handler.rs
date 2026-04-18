@@ -279,12 +279,16 @@ impl App {
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
                         let visible_rows = self.calculate_visible_patient_rows();
                         self.patient_list.move_down_and_scroll(visible_rows);
+                    } else if self.tab_bar.selected() == Tab::Clinical {
+                        return self.handle_clinical_keys(key);
                     }
                 }
                 Action::NavigateUp => {
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
                         let visible_rows = self.calculate_visible_patient_rows();
                         self.patient_list.move_up_and_scroll(visible_rows);
+                    } else if self.tab_bar.selected() == Tab::Clinical {
+                        return self.handle_clinical_keys(key);
                     }
                 }
                 Action::PrevDay
