@@ -170,9 +170,13 @@ pub enum PendingClinicalSaveData {
          consultation_id: uuid::Uuid,
      },
      TimerStop {
-         consultation_id: uuid::Uuid,
-     },
- }
+          consultation_id: uuid::Uuid,
+      },
+      SignConsultation {
+          consultation_id: uuid::Uuid,
+          user_id: uuid::Uuid,
+      },
+  }
 
 pub enum PendingBillingSaveData {
     AwaitingMbsSelection {
@@ -658,5 +662,25 @@ mod tests {
             app.should_quit(),
             "Bare 'q' should still quit from Patient tab"
         );
+    }
+
+    #[test]
+    fn test_sign_consultation_variant() {
+        let consultation_id = uuid::Uuid::new_v4();
+        let user_id = uuid::Uuid::new_v4();
+        let variant = PendingClinicalSaveData::SignConsultation {
+            consultation_id,
+            user_id,
+        };
+        match variant {
+            PendingClinicalSaveData::SignConsultation {
+                consultation_id: cid,
+                user_id: uid,
+            } => {
+                assert_eq!(cid, consultation_id);
+                assert_eq!(uid, user_id);
+            }
+            _ => panic!("Expected SignConsultation variant"),
+        }
     }
 }

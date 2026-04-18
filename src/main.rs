@@ -710,6 +710,56 @@ async fn run_tui(
                         }
                     }
                 }
+                opengp_ui::ui::app::PendingClinicalSaveData::SignConsultation {
+                    consultation_id,
+                    user_id,
+                } => {
+                    if let Some(consultation) = app
+                        .clinical_state_mut()
+                        .consultations
+                        .iter()
+                        .find(|c| c.id == consultation_id)
+                        .cloned()
+                    {
+                        if consultation.consultation_started_at.is_some()
+                            && consultation.consultation_ended_at.is_none()
+                        {
+                            if let Some(ref service) = clinical_ui_service {
+                                let _ = service.stop_timer(consultation_id).await;
+                            }
+                        }
+                    }
+
+                    if let Some(ref service) = clinical_ui_service {
+                        match service.sign_consultation(consultation_id, user_id).await {
+                            Ok(()) => {
+                                if let Some(c) = app
+                                    .clinical_state_mut()
+                                    .consultations
+                                    .iter_mut()
+                                    .find(|c| c.id == consultation_id)
+                                {
+                                    c.is_signed = true;
+                                    c.signed_at = Some(chrono::Utc::now());
+                                    c.signed_by = Some(user_id);
+                                }
+                                app.clinical_state_mut().close_consultation_form();
+                                app.clinical_state_mut().view =
+                                    opengp_ui::ui::components::clinical::ClinicalView::Consultations;
+                                app.set_status_success("Consultation signed successfully");
+                                tracing::info!(
+                                    "Consultation {} signed by {}",
+                                    consultation_id,
+                                    user_id
+                                );
+                            }
+                            Err(e) => {
+                                app.set_status_error(format!("Failed to sign consultation: {}", e));
+                                tracing::error!("Failed to sign consultation: {}", e);
+                            }
+                        }
+                    }
+                }
             }
         }
 
