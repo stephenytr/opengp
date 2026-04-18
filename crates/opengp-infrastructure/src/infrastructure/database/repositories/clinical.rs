@@ -451,10 +451,10 @@ struct SocialHistoryRow {
     id: Uuid,
     patient_id: Uuid,
     smoking_status: Option<String>,
-    cigarettes_per_day: Option<i64>,
+    cigarettes_per_day: Option<i32>,
     smoking_quit_date: Option<chrono::NaiveDate>,
     alcohol_status: Option<String>,
-    standard_drinks_per_week: Option<i64>,
+    standard_drinks_per_week: Option<i32>,
     exercise_frequency: Option<String>,
     occupation: Option<String>,
     living_situation: Option<String>,
@@ -582,10 +582,10 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
         .bind(history.id)
         .bind(history.patient_id)
         .bind(history.smoking_status.to_string())
-        .bind(history.cigarettes_per_day.map(|i| i as i64))
+        .bind(history.cigarettes_per_day.map(|i| i as i32))
         .bind(history.smoking_quit_date)
         .bind(history.alcohol_status.to_string())
-        .bind(history.standard_drinks_per_week.map(|i| i as i64))
+        .bind(history.standard_drinks_per_week.map(|i| i as i32))
         .bind(history.exercise_frequency.as_ref().map(|e| e.to_string()))
         .bind(&history.occupation)
         .bind(&history.living_situation)
@@ -623,10 +623,10 @@ impl SocialHistoryRepository for SqlxSocialHistoryRepository {
         "#,
         )
         .bind(history.smoking_status.to_string())
-        .bind(history.cigarettes_per_day.map(|i| i as i64))
+        .bind(history.cigarettes_per_day.map(|i| i as i32))
         .bind(history.smoking_quit_date)
         .bind(history.alcohol_status.to_string())
-        .bind(history.standard_drinks_per_week.map(|i| i as i64))
+        .bind(history.standard_drinks_per_week.map(|i| i as i32))
         .bind(history.exercise_frequency.as_ref().map(|e| e.to_string()))
         .bind(&history.occupation)
         .bind(&history.living_situation)
@@ -1085,13 +1085,13 @@ struct VitalSignsRow {
     patient_id: Uuid,
     consultation_id: Option<Uuid>,
     measured_at: DateTime<Utc>,
-    systolic_bp: Option<i64>,
-    diastolic_bp: Option<i64>,
-    heart_rate: Option<i64>,
-    respiratory_rate: Option<i64>,
+    systolic_bp: Option<i32>,
+    diastolic_bp: Option<i32>,
+    heart_rate: Option<i32>,
+    respiratory_rate: Option<i32>,
     temperature: Option<f32>,
-    oxygen_saturation: Option<i64>,
-    height_cm: Option<i64>,
+    oxygen_saturation: Option<i32>,
+    height_cm: Option<i32>,
     weight_kg: Option<f32>,
     bmi: Option<f32>,
     notes: Option<String>,
@@ -1191,13 +1191,13 @@ impl VitalSignsRepository for SqlxVitalSignsRepository {
         .bind(vitals.patient_id)
         .bind(vitals.consultation_id)
         .bind(vitals.measured_at)
-        .bind(vitals.systolic_bp.map(|v| v as i64))
-        .bind(vitals.diastolic_bp.map(|v| v as i64))
-        .bind(vitals.heart_rate.map(|v| v as i64))
-        .bind(vitals.respiratory_rate.map(|v| v as i64))
+        .bind(vitals.systolic_bp.map(|v| v as i32))
+        .bind(vitals.diastolic_bp.map(|v| v as i32))
+        .bind(vitals.heart_rate.map(|v| v as i32))
+        .bind(vitals.respiratory_rate.map(|v| v as i32))
         .bind(vitals.temperature)
-        .bind(vitals.oxygen_saturation.map(|v| v as i64))
-        .bind(vitals.height_cm.map(|v| v as i64))
+        .bind(vitals.oxygen_saturation.map(|v| v as i32))
+        .bind(vitals.height_cm.map(|v| v as i32))
         .bind(vitals.weight_kg)
         .bind(vitals.bmi)
         .bind(&vitals.notes)
@@ -1221,7 +1221,7 @@ struct FamilyHistoryRow {
     patient_id: Uuid,
     relative_relationship: String,
     condition: String,
-    age_at_diagnosis: Option<i64>,
+    age_at_diagnosis: Option<i32>,
     notes: Option<Vec<u8>>,
     created_at: DateTime<Utc>,
     created_by: Uuid,
@@ -1331,7 +1331,7 @@ impl FamilyHistoryRepository for SqlxFamilyHistoryRepository {
         .bind(history.patient_id)
         .bind(&history.relative_relationship)
         .bind(&history.condition)
-        .bind(history.age_at_diagnosis.map(|v| v as i64))
+        .bind(history.age_at_diagnosis.map(|v| v as i32))
         .bind(notes_encrypted)
         .bind(history.created_at)
         .bind(history.created_by)
@@ -1358,7 +1358,7 @@ impl FamilyHistoryRepository for SqlxFamilyHistoryRepository {
         sqlx::query("UPDATE family_history SET relative_relationship = $1, condition = $2, age_at_diagnosis = $3, notes = $4 WHERE id = $5")
         .bind(&history.relative_relationship)
         .bind(&history.condition)
-        .bind(history.age_at_diagnosis.map(|v| v as i64))
+        .bind(history.age_at_diagnosis.map(|v| v as i32))
         .bind(notes_encrypted)
         .bind(history.id)
         .execute(&self.pool)
