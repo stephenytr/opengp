@@ -9,6 +9,9 @@ rust-version.workspace = true
 
 [features]
 prescription = ["opengp-domain/prescription"]
+immunisation = ["opengp-domain/immunisation"]
+pathology = ["opengp-domain/pathology"]
+referral = ["opengp-domain/referral"]
 
 [dependencies]
 ratatui.workspace = true

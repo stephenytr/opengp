@@ -16,16 +16,14 @@ pub enum KeyContext {
     PatientList,
     /// Patient form screen
     PatientForm,
+    /// Patient workspace (open clinical record with tabs)
+    PatientWorkspace,
+    /// Patient subtab navigation (within workspace)
+    PatientSubtab,
     /// Appointment calendar
     Calendar,
     /// Appointment schedule
     Schedule,
-    /// Clinical notes
-    Clinical,
-    /// Clinical form (allergy, medical history, vitals, family history)
-    ClinicalForm,
-    /// Billing screen
-    Billing,
     /// Search/modal dialogs
     Search,
     /// Help overlay
@@ -108,10 +106,22 @@ pub enum Action {
     SwitchToPatient,
     /// Switch to Appointments tab
     SwitchToAppointments,
-    /// Switch to Clinical tab
-    SwitchToClinical,
-    /// Switch to Billing tab
-    SwitchToBilling,
+    /// Close current patient tab
+    ClosePatientTab,
+    /// Switch to next patient tab
+    NextPatientTab,
+    /// Switch to previous patient tab
+    PrevPatientTab,
+    /// Select specific patient tab by index
+    SelectPatientTab(usize),
+
+    // Subtab actions
+    /// Navigate to next subtab within workspace
+    NextSubtab,
+    /// Navigate to previous subtab within workspace
+    PrevSubtab,
+    /// Open patient from list (clinical record)
+    OpenPatientFromList,
 
     // Calendar actions
     /// Go to previous day
@@ -303,17 +313,115 @@ impl KeybindRegistry {
             context: KeyContext::Global,
             description: "Switch to Appointments tab",
         });
+
+        // Patient workspace tab navigation
         self.register(Keybind {
-            key: KeyEvent::new(KeyCode::F(4), KeyModifiers::NONE),
-            action: Action::SwitchToClinical,
-            context: KeyContext::Global,
-            description: "Switch to Clinical tab",
+            key: KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL),
+            action: Action::ClosePatientTab,
+            context: KeyContext::PatientWorkspace,
+            description: "Close current patient tab",
         });
         self.register(Keybind {
-            key: KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE),
-            action: Action::SwitchToBilling,
+            key: KeyEvent::new(KeyCode::Right, KeyModifiers::ALT),
+            action: Action::NextPatientTab,
             context: KeyContext::Global,
-            description: "Switch to Billing tab",
+            description: "Switch to next patient tab",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Left, KeyModifiers::ALT),
+            action: Action::PrevPatientTab,
+            context: KeyContext::Global,
+            description: "Switch to previous patient tab",
+        });
+
+        // Patient tab selection by number (Alt+1 through Alt+9)
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('1'), KeyModifiers::ALT),
+            action: Action::SelectPatientTab(0),
+            context: KeyContext::Global,
+            description: "Select patient tab 1",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('2'), KeyModifiers::ALT),
+            action: Action::SelectPatientTab(1),
+            context: KeyContext::Global,
+            description: "Select patient tab 2",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('3'), KeyModifiers::ALT),
+            action: Action::SelectPatientTab(2),
+            context: KeyContext::Global,
+            description: "Select patient tab 3",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('4'), KeyModifiers::ALT),
+            action: Action::SelectPatientTab(3),
+            context: KeyContext::Global,
+            description: "Select patient tab 4",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('5'), KeyModifiers::ALT),
+            action: Action::SelectPatientTab(4),
+            context: KeyContext::Global,
+            description: "Select patient tab 5",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('6'), KeyModifiers::ALT),
+            action: Action::SelectPatientTab(5),
+            context: KeyContext::Global,
+            description: "Select patient tab 6",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('7'), KeyModifiers::ALT),
+            action: Action::SelectPatientTab(6),
+            context: KeyContext::Global,
+            description: "Select patient tab 7",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('8'), KeyModifiers::ALT),
+            action: Action::SelectPatientTab(7),
+            context: KeyContext::Global,
+            description: "Select patient tab 8",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('9'), KeyModifiers::ALT),
+            action: Action::SelectPatientTab(8),
+            context: KeyContext::Global,
+            description: "Select patient tab 9",
+        });
+
+        // Patient workspace subtab navigation
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL),
+            action: Action::NextSubtab,
+            context: KeyContext::PatientWorkspace,
+            description: "Navigate to next subtab",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE),
+            action: Action::NextSubtab,
+            context: KeyContext::PatientSubtab,
+            description: "Navigate to next subtab",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL),
+            action: Action::PrevSubtab,
+            context: KeyContext::PatientWorkspace,
+            description: "Navigate to previous subtab",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE),
+            action: Action::PrevSubtab,
+            context: KeyContext::PatientSubtab,
+            description: "Navigate to previous subtab",
+        });
+
+        // Patient list: open patient from list
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            action: Action::OpenPatientFromList,
+            context: KeyContext::PatientList,
+            description: "Open patient clinical record",
         });
 
         // Navigation keybinds (work in most contexts)
@@ -564,194 +672,7 @@ impl KeybindRegistry {
             description: "Go to today",
         });
 
-        // Clinical keybinds
-        // Navigation
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
-            action: Action::NavigateDown,
-            context: KeyContext::Clinical,
-            description: "Move selection down",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE),
-            action: Action::NavigateUp,
-            context: KeyContext::Clinical,
-            description: "Move selection up",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
-            action: Action::NavigateDown,
-            context: KeyContext::Clinical,
-            description: "Move selection down",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
-            action: Action::NavigateUp,
-            context: KeyContext::Clinical,
-            description: "Move selection up",
-        });
-        // Actions
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
-            action: Action::New,
-            context: KeyContext::Clinical,
-            description: "Create new clinical note",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE),
-            action: Action::Edit,
-            context: KeyContext::Clinical,
-            description: "Edit selected item",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE),
-            action: Action::TabNext,
-            context: KeyContext::Clinical,
-            description: "Cycle to next sub-view",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT),
-            action: Action::TabPrev,
-            context: KeyContext::Clinical,
-            description: "Cycle to previous sub-view",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
-            action: Action::Enter,
-            context: KeyContext::Clinical,
-            description: "Open selected item",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
-            action: Action::Save,
-            context: KeyContext::Clinical,
-            description: "Sign consultation",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
-            action: Action::ToggleTimer,
-            context: KeyContext::Clinical,
-            description: "Start/stop consultation timer",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
-            action: Action::ToggleTimer,
-            context: KeyContext::Schedule,
-            description: "Toggle timer for active consultation",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE),
-            action: Action::FinishAppointment,
-            context: KeyContext::Clinical,
-            description: "Finish appointment & return to schedule",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE),
-            action: Action::Delete,
-            context: KeyContext::Clinical,
-            description: "Deactivate item",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
-            action: Action::Escape,
-            context: KeyContext::Clinical,
-            description: "Go back / Cancel",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE),
-            action: Action::Search,
-            context: KeyContext::Clinical,
-            description: "Search patients",
-        });
-
-        // Clinical: Number keys 1-7 to jump to specific views
-        // 1 = Patient Summary
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE),
-            action: Action::SwitchToPatientSummary,
-            context: KeyContext::Clinical,
-            description: "Go to Patient Summary",
-        });
-        // 2 = Consultations
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE),
-            action: Action::SwitchToConsultations,
-            context: KeyContext::Clinical,
-            description: "Go to Consultations",
-        });
-        // 3 = Allergies
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE),
-            action: Action::SwitchToAllergies,
-            context: KeyContext::Clinical,
-            description: "Go to Allergies",
-        });
-        // 4 = Medical History
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE),
-            action: Action::SwitchToMedicalHistory,
-            context: KeyContext::Clinical,
-            description: "Go to Medical History",
-        });
-        // 5 = Vital Signs
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE),
-            action: Action::SwitchToVitalSigns,
-            context: KeyContext::Clinical,
-            description: "Go to Vital Signs",
-        });
-        // 6 = Social History
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('6'), KeyModifiers::NONE),
-            action: Action::SwitchToSocialHistory,
-            context: KeyContext::Clinical,
-            description: "Go to Social History",
-        });
-        // 7 = Family History
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('7'), KeyModifiers::NONE),
-            action: Action::SwitchToFamilyHistory,
-            context: KeyContext::Clinical,
-            description: "Go to Family History",
-        });
-
-        // Clinical: Quick actions
-        // a = Add/View Allergies
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
-            action: Action::ViewAllergies,
-            context: KeyContext::Clinical,
-            description: "View allergies",
-        });
-        // c = Add/View Conditions (Medical History)
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE),
-            action: Action::ViewConditions,
-            context: KeyContext::Clinical,
-            description: "View conditions",
-        });
-        // v = View Vital Signs
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE),
-            action: Action::ViewVitals,
-            context: KeyContext::Clinical,
-            description: "View vital signs",
-        });
-        // o = View Observations (recent consultations)
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE),
-            action: Action::ViewObservations,
-            context: KeyContext::Clinical,
-            description: "View recent consultations",
-        });
-
-        // h = View Social History
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
-            action: Action::ViewSocialHistory,
-            context: KeyContext::Clinical,
-            description: "View social history",
-        });
+        // Clinical keybinds removed in Task 5 — moved to workspace subtab in Task 28
     }
 
     /// Register a keybind
@@ -905,5 +826,116 @@ mod tests {
         let registry = KeybindRegistry::new();
         let keybinds = registry.get_keybinds_for_context(KeyContext::Global);
         assert!(!keybinds.is_empty());
+    }
+
+    // RED tests for new workspace navigation variants
+    #[test]
+    fn test_new_action_variants_exist() {
+        // Verify new Action variants can be constructed
+        let _ = Action::ClosePatientTab;
+        let _ = Action::NextPatientTab;
+        let _ = Action::PrevPatientTab;
+        let _ = Action::SelectPatientTab(1);
+        let _ = Action::NextSubtab;
+        let _ = Action::PrevSubtab;
+        let _ = Action::OpenPatientFromList;
+    }
+
+    #[test]
+    fn test_new_key_context_variants_exist() {
+        // Verify new KeyContext variants can be constructed
+        let _ = KeyContext::PatientWorkspace;
+        let _ = KeyContext::PatientSubtab;
+    }
+
+    #[test]
+    fn test_close_patient_tab_registered() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL);
+        let result = registry.lookup(key, KeyContext::PatientWorkspace);
+        assert!(
+            result.is_some(),
+            "Ctrl+W should be registered for PatientWorkspace context"
+        );
+        assert_eq!(result.unwrap().action, Action::ClosePatientTab);
+    }
+
+    #[test]
+    fn test_next_patient_tab_registered() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Right, KeyModifiers::ALT);
+        let result = registry.lookup(key, KeyContext::Global);
+        assert!(
+            result.is_some(),
+            "Alt+Right should be registered for Global context"
+        );
+        assert_eq!(result.unwrap().action, Action::NextPatientTab);
+    }
+
+    #[test]
+    fn test_prev_patient_tab_registered() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Left, KeyModifiers::ALT);
+        let result = registry.lookup(key, KeyContext::Global);
+        assert!(
+            result.is_some(),
+            "Alt+Left should be registered for Global context"
+        );
+        assert_eq!(result.unwrap().action, Action::PrevPatientTab);
+    }
+
+    #[test]
+    fn test_select_patient_tab_registered() {
+        let registry = KeybindRegistry::new();
+        // Test Alt+1 through Alt+9 (0-indexed: Alt+1 = tab 0, Alt+2 = tab 1, etc.)
+        for i in 1..=9 {
+            let key = KeyEvent::new(
+                KeyCode::Char(char::from_digit(i, 10).unwrap()),
+                KeyModifiers::ALT,
+            );
+            let result = registry.lookup(key, KeyContext::Global);
+            assert!(
+                result.is_some(),
+                "Alt+{} should be registered for Global context",
+                i
+            );
+            assert_eq!(result.unwrap().action, Action::SelectPatientTab((i - 1) as usize));
+        }
+    }
+
+    #[test]
+    fn test_next_subtab_registered() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL);
+        let result = registry.lookup(key, KeyContext::PatientWorkspace);
+        assert!(
+            result.is_some(),
+            "Ctrl+Right should be registered for PatientWorkspace context"
+        );
+        assert_eq!(result.unwrap().action, Action::NextSubtab);
+    }
+
+    #[test]
+    fn test_prev_subtab_registered() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL);
+        let result = registry.lookup(key, KeyContext::PatientWorkspace);
+        assert!(
+            result.is_some(),
+            "Ctrl+Left should be registered for PatientWorkspace context"
+        );
+        assert_eq!(result.unwrap().action, Action::PrevSubtab);
+    }
+
+    #[test]
+    fn test_open_patient_from_list_registered() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        let result = registry.lookup(key, KeyContext::PatientList);
+        assert!(
+            result.is_some(),
+            "Enter should be registered for PatientList context"
+        );
+        assert_eq!(result.unwrap().action, Action::OpenPatientFromList);
     }
 }

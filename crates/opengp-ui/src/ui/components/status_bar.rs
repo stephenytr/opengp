@@ -135,6 +135,15 @@ impl StatusBar {
         bar.set_right("F1 Help");
         bar
     }
+
+    /// Create a status bar for the Patient workspace (multi-tab view)
+    pub fn patient_workspace(theme: Theme, patient_name: &str) -> Self {
+        let mut bar = Self::new(theme);
+        bar.set_left(patient_name.to_string());
+        bar.set_center("Tab/Shift+Tab: Subtabs | n: Next | p: Prev | w: Close | 1-7: Views");
+        bar.set_right("F1 Help");
+        bar
+    }
 }
 
 /// Render the status bar

@@ -58,6 +58,8 @@ pub struct ColorPalette {
     pub text_dim: Color,
     /// Secondary text color (for Color::Gray replacements)
     pub text_secondary: Color,
+    /// Patient tab colours (8-colour palette for round-robin assignment)
+    pub patient_tab_colours: [Color; 8],
 }
 
 impl Default for ColorPalette {
@@ -94,7 +96,25 @@ impl ColorPalette {
             background_dark: parse_color(&config.background_dark),
             text_dim: parse_color(&config.text_dim),
             text_secondary: parse_color(&config.text_secondary),
+            patient_tab_colours: Self::default_patient_tab_colours(),
         }
+    }
+
+    fn default_patient_tab_colours() -> [Color; 8] {
+        [
+            Color::Rgb(100, 180, 220),
+            Color::Rgb(255, 140, 100),
+            Color::Rgb(100, 200, 180),
+            Color::Rgb(255, 200, 80),
+            Color::Rgb(200, 160, 220),
+            Color::Rgb(140, 180, 120),
+            Color::Rgb(220, 140, 160),
+            Color::Rgb(120, 200, 240),
+        ]
+    }
+
+    pub fn patient_colour(&self, index: usize) -> Color {
+        self.patient_tab_colours[index % 8]
     }
 
     /// Dark theme color palette (default)
@@ -114,7 +134,6 @@ impl ColorPalette {
             disabled: Color::Gray,
             scrollbar_bg: Color::DarkGray,
             scrollbar_thumb: Color::Gray,
-            // Appointment status colors
             appointment_scheduled: Color::Yellow,
             appointment_confirmed: Color::Cyan,
             appointment_arrived: Color::Green,
@@ -126,6 +145,7 @@ impl ColorPalette {
             background_dark: Color::Black,
             text_dim: Color::DarkGray,
             text_secondary: Color::Gray,
+            patient_tab_colours: Self::default_patient_tab_colours(),
         }
     }
 
@@ -146,7 +166,6 @@ impl ColorPalette {
             disabled: Color::Gray,
             scrollbar_bg: Color::Gray,
             scrollbar_thumb: Color::DarkGray,
-            // Appointment status colors
             appointment_scheduled: Color::Yellow,
             appointment_confirmed: Color::Blue,
             appointment_arrived: Color::Green,
@@ -158,6 +177,7 @@ impl ColorPalette {
             background_dark: Color::White,
             text_dim: Color::Gray,
             text_secondary: Color::DarkGray,
+            patient_tab_colours: Self::default_patient_tab_colours(),
         }
     }
 
@@ -178,7 +198,6 @@ impl ColorPalette {
             disabled: Color::DarkGray,
             scrollbar_bg: Color::DarkGray,
             scrollbar_thumb: Color::White,
-            // Appointment status colors
             appointment_scheduled: Color::Yellow,
             appointment_confirmed: Color::Cyan,
             appointment_arrived: Color::Green,
@@ -190,6 +209,7 @@ impl ColorPalette {
             background_dark: Color::Black,
             text_dim: Color::DarkGray,
             text_secondary: Color::White,
+            patient_tab_colours: Self::default_patient_tab_colours(),
         }
     }
 }
@@ -384,5 +404,26 @@ mod tests {
         assert_eq!(dark.colors.background, Color::Black);
         assert_eq!(light.colors.background, Color::White);
         assert_eq!(hc.colors.background, Color::Black);
+    }
+
+    #[test]
+    fn test_patient_colour_round_robin() {
+        let palette = ColorPalette::dark();
+        
+        // Test first colour
+        let colour_0 = palette.patient_colour(0);
+        assert_eq!(colour_0, palette.patient_tab_colours[0]);
+        
+        // Test all 8 colours
+        for i in 0..8 {
+            assert_eq!(palette.patient_colour(i), palette.patient_tab_colours[i]);
+        }
+        
+        // Test round-robin wrapping: index 8 should equal index 0
+        assert_eq!(palette.patient_colour(8), palette.patient_colour(0));
+        
+        // Test larger indices wrap correctly
+        assert_eq!(palette.patient_colour(16), palette.patient_colour(0));
+        assert_eq!(palette.patient_colour(17), palette.patient_colour(1));
     }
 }

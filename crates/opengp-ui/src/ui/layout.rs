@@ -1,6 +1,6 @@
 //! Layout Constants Module
 
-pub const HEADER_HEIGHT: u16 = 2;
+pub const HEADER_HEIGHT: u16 = 3;
 pub const LABEL_WIDTH: u16 = 22;
 pub const STATUS_BAR_HEIGHT: u16 = 1;
 pub const TIME_COLUMN_WIDTH: u16 = 7;
@@ -22,7 +22,7 @@ mod tests {
 
     #[test]
     fn test_layout_constants_exist_and_have_expected_values() {
-        assert_eq!(HEADER_HEIGHT, 2);
+        assert_eq!(HEADER_HEIGHT, 3);
         assert_eq!(LABEL_WIDTH, 22);
         assert_eq!(STATUS_BAR_HEIGHT, 1);
         assert_eq!(TIME_COLUMN_WIDTH, 7);

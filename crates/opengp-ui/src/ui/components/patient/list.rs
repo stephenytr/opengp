@@ -79,6 +79,10 @@ impl PatientList {
         self.selected_patient().map(|p| p.id)
     }
 
+    pub fn get_patient_by_id(&self, id: Uuid) -> Option<&PatientListItem> {
+        self.patients.iter().find(|patient| patient.id == id)
+    }
+
     pub fn is_loading(&self) -> bool {
         self.loading
     }

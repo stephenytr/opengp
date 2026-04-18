@@ -74,10 +74,10 @@ fn clinical_state_has_social_history_form_field() {
     // The state should have a social_history_form field like allergy_form
     state.open_social_history_form();
 
-    // Should be able to access the form via the new field
+    // Should be able to access the form via the new field (now part of social_history sub-struct)
     assert!(
-        state.social_history_form.is_some(),
-        "Should have social_history_form after opening"
+        state.social_history.social_history_editing,
+        "Should have social_history_editing flag set after opening"
     );
 }
 

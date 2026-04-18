@@ -5,18 +5,26 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 impl App {
     pub(crate) fn handle_billing_keys(&mut self, key: KeyEvent) -> Action {
+        let Some(workspace) = self.workspace_manager.active_mut() else {
+            return Action::Unknown;
+        };
+
+        let Some(billing_state) = &mut workspace.billing else {
+            return Action::Unknown;
+        };
+
         if key.code == KeyCode::Right {
-            match self.billing_state.view {
+            match billing_state.view {
                 BillingView::InvoiceList => {
-                    self.billing_state.show_claim_list();
+                    billing_state.show_claim_list();
                     return Action::Enter;
                 }
                 BillingView::ClaimList => {
-                    self.billing_state.show_payment_list();
+                    billing_state.show_payment_list();
                     return Action::Enter;
                 }
                 BillingView::PaymentList => {
-                    self.billing_state.show_invoice_list();
+                    billing_state.show_invoice_list();
                     return Action::Enter;
                 }
                 BillingView::InvoiceDetail(_) => {}
@@ -24,24 +32,24 @@ impl App {
         }
 
         if key.code == KeyCode::Left {
-            match self.billing_state.view {
+            match billing_state.view {
                 BillingView::InvoiceList => {
-                    self.billing_state.show_payment_list();
+                    billing_state.show_payment_list();
                     return Action::Enter;
                 }
                 BillingView::ClaimList => {
-                    self.billing_state.show_invoice_list();
+                    billing_state.show_invoice_list();
                     return Action::Enter;
                 }
                 BillingView::PaymentList => {
-                    self.billing_state.show_claim_list();
+                    billing_state.show_claim_list();
                     return Action::Enter;
                 }
                 BillingView::InvoiceDetail(_) => {}
             }
         }
 
-        match self.billing_state.view {
+        match billing_state.view {
             BillingView::InvoiceList => {
                 if key.code == KeyCode::Up || key.code == KeyCode::Char('k') {
                     return Action::Enter;
@@ -83,7 +91,7 @@ impl App {
             }
             BillingView::InvoiceDetail(_) => {
                 if key.code == KeyCode::Esc {
-                    self.billing_state.show_invoice_list();
+                    billing_state.show_invoice_list();
                     return Action::Enter;
                 }
                 if key.code == KeyCode::Char('e') {

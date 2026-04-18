@@ -216,13 +216,14 @@ async fn run_tui(
         calendar_config.clone(),
         theme,
         healthcare_config,
-        patient_config,
+        patient_config.clone(),
         allergy_config,
         clinical_config,
         social_history_config,
         billing_service,
         appointment_ui_service,
         practice_config,
+        patient_config.max_open_patients,
     );
     let mut command_rx = app.take_command_rx().expect("failed to extract command_rx from app");
     app.set_authenticated(has_session_token);
@@ -402,7 +403,94 @@ async fn run_tui(
                         Err(e) => tracing::error!("Failed to update appointment status: {}", e),
                     }
                 }
-                _ => {}
+                AppCommand::SaveClinicalData { patient_id, data } => {
+                    tracing::info!("SaveClinicalData command received for patient {}", patient_id);
+                    // Find workspace by patient_id and call clinical save service
+                    if let Some(workspace) = app.workspace_manager_mut().find_patient(patient_id) {
+                        match app.workspace_manager_mut().select_by_index(workspace) {
+                            Ok(()) => {
+                                tracing::debug!("Selected workspace for patient {}", patient_id);
+                                // In a full implementation, we would call the clinical save service here
+                                // For now, this is a placeholder that will be completed when clinical
+                                // subtab workflow is fully wired in the renderer
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to select workspace for patient {}: {}", patient_id, e);
+                            }
+                        }
+                    }
+                }
+                AppCommand::SaveBillingData { patient_id, data } => {
+                    tracing::info!("SaveBillingData command received for patient {}", patient_id);
+                    // Find workspace by patient_id and call billing save service
+                    if let Some(workspace) = app.workspace_manager_mut().find_patient(patient_id) {
+                        match app.workspace_manager_mut().select_by_index(workspace) {
+                            Ok(()) => {
+                                tracing::debug!("Selected workspace for patient {}", patient_id);
+                                // In a full implementation, we would call the billing save service here
+                                // For now, this is a placeholder that will be completed when billing
+                                // subtab workflow is fully wired in the renderer
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to select workspace for patient {}: {}", patient_id, e);
+                            }
+                        }
+                    }
+                }
+                AppCommand::LoadPatientWorkspaceData { patient_id, subtab } => {
+                    tracing::info!("LoadPatientWorkspaceData command received for patient {} subtab {:?}", patient_id, subtab);
+                    // Find workspace and lazily initialise subtab state
+                    if let Some(workspace_idx) = app.workspace_manager_mut().find_patient(patient_id) {
+                        match app.workspace_manager_mut().select_by_index(workspace_idx) {
+                            Ok(()) => {
+                                tracing::debug!("Selected workspace for patient {}", patient_id);
+                                // Convert from the full SubtabKind to workspace-specific SubtabKind
+                                let workspace_subtab = match subtab {
+                                    opengp_ui::ui::components::SubtabKind::Clinical => {
+                                        opengp_ui::ui::components::workspace::SubtabKind::Clinical
+                                    }
+                                    opengp_ui::ui::components::SubtabKind::Billing => {
+                                        opengp_ui::ui::components::workspace::SubtabKind::Billing
+                                    }
+                                    opengp_ui::ui::components::SubtabKind::Appointments => {
+                                        opengp_ui::ui::components::workspace::SubtabKind::Appointments
+                                    }
+                                    _ => {
+                                        tracing::warn!("Unsupported subtab kind for workspace: {:?}", subtab);
+                                        opengp_ui::ui::components::workspace::SubtabKind::Clinical
+                                    }
+                                };
+                                // Mark subtab as loaded to prevent re-fetching
+                                app.workspace_manager_mut().mark_subtab_loaded(workspace_subtab);
+                                // In a full implementation, we would initialise the subtab state here
+                                // For now, this is a placeholder that will be completed when subtab
+                                // lazy-loading workflow is fully wired in the renderer
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to select workspace for patient {}: {}", patient_id, e);
+                            }
+                        }
+                    }
+                }
+                AppCommand::CancelAppointment { id, reason } => {
+                    tracing::info!("CancelAppointment command received for appointment {}: {}", id, reason);
+                    // This is an appointment-scoped operation and should be handled at the appointment level
+                    // For now, this is a placeholder for future appointment cancellation workflow
+                }
+                AppCommand::RescheduleAppointment {
+                    id,
+                    new_start_time,
+                    new_duration_minutes,
+                    user_id,
+                } => {
+                    tracing::info!(
+                        "RescheduleAppointment command received for appointment {} at {}",
+                        id,
+                        new_start_time
+                    );
+                    // This is an appointment-scoped operation and should be handled at the appointment level
+                    // For now, this is a placeholder for future appointment rescheduling workflow
+                }
             }
         }
 
@@ -445,7 +533,7 @@ async fn run_tui(
                             tracing::info!("Saved allergy for patient {}", patient_id);
                             match api_client.get_allergies(patient_id).await {
                                 Ok(allergies) => {
-                                    app.clinical_state_mut().allergies = allergies
+                                    app.clinical_state_mut().allergies.allergies = allergies
                                         .into_iter()
                                         .map(conversions::domain_allergy_from_api_response)
                                         .collect()
@@ -487,7 +575,7 @@ async fn run_tui(
                             tracing::info!("Saved medical history for patient {}", patient_id);
                             match api_client.get_medical_history(patient_id).await {
                                 Ok(conditions) => {
-                                    app.clinical_state_mut().medical_history = conditions
+                                    app.clinical_state_mut().medical_history.medical_history = conditions
                                         .into_iter()
                                         .map(conversions::domain_medical_history_from_api_response)
                                         .collect()
@@ -525,7 +613,7 @@ async fn run_tui(
                             tracing::info!("Saved vital signs for patient {}", patient_id);
                             match api_client.get_vitals(patient_id).await {
                                 Ok(v) => {
-                                    app.clinical_state_mut().vital_signs = v
+                                    app.clinical_state_mut().vitals.vital_signs = v
                                         .into_iter()
                                         .map(conversions::domain_vital_signs_from_api_response)
                                         .collect()
@@ -560,7 +648,7 @@ async fn run_tui(
                             tracing::info!("Saved family history for patient {}", patient_id);
                             match api_client.get_family_history(patient_id).await {
                                 Ok(entries) => {
-                                    app.clinical_state_mut().family_history = entries
+                                    app.clinical_state_mut().family_history.family_history = entries
                                         .into_iter()
                                         .map(conversions::domain_family_history_from_api_response)
                                         .collect()
@@ -632,7 +720,7 @@ async fn run_tui(
                                 created_by: consultation.practitioner_id,
                                 updated_by: None,
                             };
-                            app.clinical_state_mut().consultations.push(domain_consultation);
+                            app.clinical_state_mut().consultations.consultations.push(domain_consultation);
                             app.clinical_state_mut().set_active_timer_started_at(started_at);
                             if consultation.is_signed {
                                 app.set_pending_billing(PendingBillingSaveData::AwaitingMbsSelection {
@@ -677,7 +765,7 @@ async fn run_tui(
                             tracing::info!("Saved social history for patient {}", patient_id);
                             match api_client.get_social_history(patient_id).await {
                                 Ok(sh) => {
-                                    app.clinical_state_mut().social_history = Some(
+                                    app.clinical_state_mut().social_history.social_history = Some(
                                         conversions::domain_social_history_from_api_response(sh),
                                     )
                                 }
@@ -717,6 +805,7 @@ async fn run_tui(
                     if let Some(consultation) = app
                         .clinical_state_mut()
                         .consultations
+                        .consultations
                         .iter()
                         .find(|c| c.id == consultation_id)
                         .cloned()
@@ -735,6 +824,7 @@ async fn run_tui(
                             Ok(()) => {
                                 if let Some(c) = app
                                     .clinical_state_mut()
+                                    .consultations
                                     .consultations
                                     .iter_mut()
                                     .find(|c| c.id == consultation_id)
@@ -894,7 +984,7 @@ async fn run_tui(
 
             match api_client.get_allergies(patient_id).await {
                 Ok(allergies) => {
-                    app.clinical_state_mut().allergies = allergies
+                    app.clinical_state_mut().allergies.allergies = allergies
                         .into_iter()
                         .map(conversions::domain_allergy_from_api_response)
                         .collect();
@@ -905,7 +995,7 @@ async fn run_tui(
 
             match api_client.get_medical_history(patient_id).await {
                 Ok(conditions) => {
-                    app.clinical_state_mut().medical_history = conditions
+                    app.clinical_state_mut().medical_history.medical_history = conditions
                         .into_iter()
                         .map(conversions::domain_medical_history_from_api_response)
                         .collect();
@@ -916,7 +1006,7 @@ async fn run_tui(
 
             match api_client.get_vitals(patient_id).await {
                 Ok(vitals) => {
-                    app.clinical_state_mut().vital_signs = vitals
+                    app.clinical_state_mut().vitals.vital_signs = vitals
                         .into_iter()
                         .map(conversions::domain_vital_signs_from_api_response)
                         .collect();
@@ -927,7 +1017,7 @@ async fn run_tui(
 
             match api_client.get_social_history(patient_id).await {
                 Ok(history) => {
-                    app.clinical_state_mut().social_history = Some(
+                    app.clinical_state_mut().social_history.social_history = Some(
                         conversions::domain_social_history_from_api_response(history),
                     );
                     tracing::info!("Loaded social history for clinical view");
@@ -937,7 +1027,7 @@ async fn run_tui(
 
             match api_client.get_family_history(patient_id).await {
                 Ok(entries) => {
-                    app.clinical_state_mut().family_history = entries
+                    app.clinical_state_mut().family_history.family_history = entries
                         .into_iter()
                         .map(conversions::domain_family_history_from_api_response)
                         .collect();

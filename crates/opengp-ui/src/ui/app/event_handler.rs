@@ -1,7 +1,10 @@
 mod appointment;
 mod global;
 
-use crate::ui::app::{App, PendingPatientData};
+#[cfg(test)]
+mod workspace_tests;
+
+use crate::ui::app::{App, AppCommand, PendingPatientData};
 use crate::ui::components::appointment::{AppointmentForm, AppointmentView};
 use crate::ui::components::tabs::Tab;
 use crate::ui::keybinds::{Action, KeyContext};
@@ -67,7 +70,12 @@ impl App {
             if let Some(action) = self.patient_list.handle_key(key) {
                 match action {
                     crate::ui::components::patient::PatientListAction::SelectionChanged => {}
-                    crate::ui::components::patient::PatientListAction::OpenPatient(_id) => {}
+                    crate::ui::components::patient::PatientListAction::OpenPatient(id) => {
+                        if let Some(patient_item) = self.patient_list.get_patient_by_id(id) {
+                            let _ = self.workspace_manager.open_patient(patient_item.clone());
+                            self.tab_bar.select(Tab::Patient);
+                        }
+                    }
                     crate::ui::components::patient::PatientListAction::FocusSearch => {}
                     crate::ui::components::patient::PatientListAction::SearchChanged => {}
                 }
@@ -75,9 +83,7 @@ impl App {
             }
         }
 
-        if self.tab_bar.selected() == Tab::Clinical && self.clinical_state.is_form_open() {
-            return self.handle_clinical_keys(key);
-        }
+
 
         if self.appointment_form.is_some() {
             return self.handle_appointment_form_keys(key);
@@ -157,22 +163,7 @@ impl App {
                     self.refresh_status_bar();
                     self.refresh_context();
                 }
-                Action::SwitchToClinical => {
-                    self.tab_bar.select(Tab::Clinical);
-                    self.previous_tab = Tab::Clinical;
-                    if let Some(patient_id) = self.patient_list.selected_patient_id() {
-                        self.clinical_state.set_patient(patient_id);
-                    }
-                    self.clinical_state.show_patient_summary();
-                    self.refresh_status_bar();
-                    self.refresh_context();
-                }
-                Action::SwitchToBilling => {
-                    self.tab_bar.select(Tab::Billing);
-                    self.previous_tab = Tab::Billing;
-                    self.refresh_status_bar();
-                    self.refresh_context();
-                }
+
                 Action::OpenHelp => {
                     self.help_overlay.toggle();
                 }
@@ -185,51 +176,12 @@ impl App {
                     }
                 }
                 Action::New => {
-                    use crate::ui::components::clinical::ClinicalView;
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
                         self.patient_form = Some(crate::ui::components::patient::PatientForm::new(
                             self.theme.clone(),
                             &self.patient_config,
                         ));
                         self.current_context = KeyContext::PatientForm;
-                    }
-                    if self.tab_bar.selected() == Tab::Clinical
-                        && !self.clinical_state.is_form_open()
-                    {
-                        match self.clinical_state.view {
-                            ClinicalView::Allergies => {
-                                self.clinical_state.open_allergy_form();
-                                self.current_context = KeyContext::ClinicalForm;
-                            }
-                            ClinicalView::MedicalHistory => {
-                                self.clinical_state.open_medical_history_form();
-                                self.current_context = KeyContext::ClinicalForm;
-                            }
-                            ClinicalView::VitalSigns => {
-                                self.clinical_state.open_vitals_form();
-                                self.current_context = KeyContext::ClinicalForm;
-                            }
-                            ClinicalView::FamilyHistory => {
-                                self.clinical_state.open_family_history_form();
-                                self.current_context = KeyContext::ClinicalForm;
-                            }
-                            ClinicalView::Consultations => {
-                                self.clinical_state.open_consultation_form();
-                                self.current_context = KeyContext::ClinicalForm;
-                            }
-                            ClinicalView::ConsultationSummary => {
-                                // Read-only view, no form to open
-                            }
-                            ClinicalView::SocialHistory => {
-                                self.clinical_state.open_social_history_form();
-                                self.current_context = KeyContext::ClinicalForm;
-                            }
-                            ClinicalView::PatientSummary => {
-                                self.clinical_state.view = ClinicalView::Consultations;
-                                self.clinical_state.open_consultation_form();
-                                self.current_context = KeyContext::ClinicalForm;
-                            }
-                        }
                     }
                 }
                 Action::Edit => {
@@ -268,27 +220,17 @@ impl App {
                             .unwrap_or_else(|| chrono::Utc::now().date_naive());
                         self.request_refresh_appointments(date);
                     }
-                    Tab::Clinical => {
-                        if let Some(patient_id) = self.clinical_state.selected_patient_id {
-                            self.request_refresh_consultations(patient_id);
-                        }
-                    }
-                    Tab::Billing => {}
                 },
                 Action::NavigateDown => {
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
                         let visible_rows = self.calculate_visible_patient_rows();
                         self.patient_list.move_down_and_scroll(visible_rows);
-                    } else if self.tab_bar.selected() == Tab::Clinical {
-                        return self.handle_clinical_keys(key);
                     }
                 }
                 Action::NavigateUp => {
                     if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
                         let visible_rows = self.calculate_visible_patient_rows();
                         self.patient_list.move_up_and_scroll(visible_rows);
-                    } else if self.tab_bar.selected() == Tab::Clinical {
-                        return self.handle_clinical_keys(key);
                     }
                 }
                 Action::PrevDay
@@ -318,12 +260,6 @@ impl App {
                     if self.tab_bar.selected() == Tab::Appointment {
                         return self.handle_appointment_keys(key);
                     }
-                    if self.tab_bar.selected() == Tab::Clinical {
-                        return self.handle_clinical_keys(key);
-                    }
-                    if self.tab_bar.selected() == Tab::Billing {
-                        return self.handle_billing_keys(key);
-                    }
                 }
                 Action::NewAppointment => {
                     if self.tab_bar.selected() == Tab::Appointment
@@ -336,32 +272,134 @@ impl App {
                         self.request_load_practitioners();
                     }
                 }
-                Action::SwitchToPatientSummary
-                | Action::SwitchToConsultations
-                | Action::SwitchToAllergies
-                | Action::SwitchToMedicalHistory
-                | Action::SwitchToVitalSigns
-                | Action::SwitchToSocialHistory
-                | Action::SwitchToFamilyHistory => {
-                    if self.tab_bar.selected() == Tab::Clinical {
-                        return self.handle_clinical_keys(key);
+
+                // Workspace (multi-patient tab) actions
+                Action::ClosePatientTab => {
+                    let blocked = self
+                        .workspace_manager
+                        .active()
+                        .and_then(|workspace| workspace.clinical.as_ref())
+                        .map(|clinical| {
+                            clinical.consultations.consultation_form.is_some()
+                                || clinical.consultations.active_timer_started_at.is_some()
+                        })
+                        .unwrap_or(false);
+
+                    if blocked {
+                        self.status_bar
+                            .set_error("Cannot close: form open or timer active");
+                    } else {
+                        let _ = self.workspace_manager.close_active();
+                        self.refresh_status_bar();
+                        self.refresh_context();
                     }
                 }
-                Action::ViewAllergies
-                | Action::ViewConditions
-                | Action::ViewVitals
-                | Action::ViewObservations
-                | Action::ViewFamilyHistory
-                | Action::ViewSocialHistory => {
-                    if self.tab_bar.selected() == Tab::Clinical {
-                        return self.handle_clinical_keys(key);
+
+                Action::NextPatientTab => {
+                    self.workspace_manager.cycle_next();
+                    self.refresh_status_bar();
+                    self.refresh_context();
+                }
+
+                Action::PrevPatientTab => {
+                    self.workspace_manager.cycle_prev();
+                    self.refresh_status_bar();
+                    self.refresh_context();
+                }
+
+                Action::SelectPatientTab(n) => {
+                    let _ = self.workspace_manager.select_by_index(n);
+                    self.refresh_status_bar();
+                    self.refresh_context();
+                }
+
+                Action::NextSubtab => {
+                    if let Some(workspace) = self.workspace_manager.active_mut() {
+                        let current = workspace.active_subtab;
+                        let next = match current {
+                            crate::ui::components::SubtabKind::Clinical => {
+                                crate::ui::components::SubtabKind::Billing
+                            }
+                            crate::ui::components::SubtabKind::Billing => {
+                                crate::ui::components::SubtabKind::Appointments
+                            }
+                            crate::ui::components::SubtabKind::Appointments => {
+                                crate::ui::components::SubtabKind::Clinical
+                            }
+                            _ => current,
+                        };
+                        workspace.active_subtab = next;
+                        
+                        // Lazy load if subtab not yet loaded
+                        if !workspace.is_loaded(next) {
+                            if let Some(patient_id) = self.workspace_manager.active().map(|w| w.patient_id) {
+                                // Send command to load workspace data for this subtab
+                                let _ = self.command_tx.send(AppCommand::LoadPatientWorkspaceData {
+                                    patient_id,
+                                    subtab: next,
+                                });
+                            }
+                        }
+                        self.refresh_status_bar();
                     }
                 }
-                Action::FinishAppointment | Action::ToggleTimer => {
-                    if self.tab_bar.selected() == Tab::Clinical {
-                        return self.handle_clinical_keys(key);
+
+                Action::PrevSubtab => {
+                    if let Some(workspace) = self.workspace_manager.active_mut() {
+                        let current = workspace.active_subtab;
+                        let prev = match current {
+                            crate::ui::components::SubtabKind::Clinical => {
+                                crate::ui::components::SubtabKind::Appointments
+                            }
+                            crate::ui::components::SubtabKind::Billing => {
+                                crate::ui::components::SubtabKind::Clinical
+                            }
+                            crate::ui::components::SubtabKind::Appointments => {
+                                crate::ui::components::SubtabKind::Billing
+                            }
+                            _ => current,
+                        };
+                        workspace.active_subtab = prev;
+                        
+                        // Lazy load if subtab not yet loaded
+                        if !workspace.is_loaded(prev) {
+                            if let Some(patient_id) = self.workspace_manager.active().map(|w| w.patient_id) {
+                                let _ = self.command_tx.send(AppCommand::LoadPatientWorkspaceData {
+                                    patient_id,
+                                    subtab: prev,
+                                });
+                            }
+                        }
+                        self.refresh_status_bar();
                     }
                 }
+
+                Action::OpenPatientFromList => {
+                    if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+                        if let Some(patient) = self.patient_list.selected_patient() {
+                            match self.workspace_manager.open_patient(patient.clone()) {
+                                Ok(index) => {
+                                    self.workspace_manager.active_index = Some(index);
+                                    self.current_context = KeyContext::PatientWorkspace;
+                                    self.refresh_status_bar();
+                                    self.refresh_context();
+                                }
+                                Err(crate::ui::components::workspace::WorkspaceError::AlreadyAtLimit) => {
+                                    let max = self.workspace_manager.max_open;
+                                    let error_msg = format!(
+                                        "Max open patients reached (max: {}). Close a tab first.",
+                                        max
+                                    );
+                                    self.status_bar.set_error(error_msg);
+                                }
+                                Err(err) => {
+                                    self.status_bar.set_error(err.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+
                 _ => {}
             }
             return action;
@@ -379,14 +417,6 @@ impl App {
 
         if self.tab_bar.selected() == Tab::Appointment {
             return self.handle_appointment_keys(key);
-        }
-
-        if self.tab_bar.selected() == Tab::Clinical {
-            return self.handle_clinical_keys(key);
-        }
-
-        if self.tab_bar.selected() == Tab::Billing {
-            return self.handle_billing_keys(key);
         }
 
         Action::Unknown

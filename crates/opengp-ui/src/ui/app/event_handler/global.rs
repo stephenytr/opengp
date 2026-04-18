@@ -130,49 +130,6 @@ impl App {
             }
         }
 
-        if self.tab_bar.selected() == Tab::Clinical && !self.clinical_state.is_form_open() {
-            use crate::ui::components::clinical::ClinicalView;
-            let clinical_area = Rect::new(
-                area.x,
-                area.y + 2,
-                area.width,
-                area.height.saturating_sub(2 + STATUS_BAR_HEIGHT),
-            );
-            match self.clinical_state.view {
-                ClinicalView::Consultations => {
-                    let _ = self
-                        .clinical_state
-                        .consultation_list
-                        .handle_mouse(mouse, clinical_area);
-                }
-                ClinicalView::Allergies => {
-                    let _ = self
-                        .clinical_state
-                        .allergy_list
-                        .handle_mouse(mouse, clinical_area);
-                }
-                ClinicalView::MedicalHistory => {
-                    let _ = self
-                        .clinical_state
-                        .medical_history_list
-                        .handle_mouse(mouse, clinical_area);
-                }
-                ClinicalView::VitalSigns => {
-                    let _ = self
-                        .clinical_state
-                        .vitals_list
-                        .handle_mouse(mouse, clinical_area);
-                }
-                ClinicalView::FamilyHistory => {
-                    let _ = self
-                        .clinical_state
-                        .family_history_list
-                        .handle_mouse(mouse, clinical_area);
-                }
-                ClinicalView::PatientSummary
-                | ClinicalView::ConsultationSummary
-                | ClinicalView::SocialHistory => {}
-            }
-        }
+
     }
 }

@@ -1,20 +1,11 @@
 use crate::ui::components::clinical::{
-    AllergyDetailModal, AllergyForm, AllergyList, ConsultationDetailModal, ConsultationForm,
-    ConsultationList, FamilyHistoryDetailModal, FamilyHistoryForm, FamilyHistoryList,
-    MedicalHistoryDetailModal, MedicalHistoryForm, MedicalHistoryList, SocialHistoryComponent,
-    VitalSignsForm, VitalSignsList, VitalsDetailModal,
+    AllergyState, ConsultationState, FamilyHistoryState, MedicalHistoryState,
+    SocialHistoryState, VitalsState,
 };
 use crate::ui::theme::Theme;
-use crate::ui::view_models::PatientListItem;
-use crate::ui::widgets::SearchableListState;
 use opengp_config::{
     healthcare::HealthcareConfig, AllergyConfig, ClinicalConfig, SocialHistoryConfig,
 };
-use opengp_domain::domain::clinical::{
-    Allergy, Consultation, FamilyHistory, MedicalHistory, SocialHistory, VitalSigns,
-};
-#[cfg(feature = "prescription")]
-use opengp_domain::domain::prescription::Prescription;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -48,48 +39,16 @@ pub struct ClinicalState {
     pub form_view: ClinicalFormView,
     pub selected_patient_id: Option<Uuid>,
     pub active_appointment_id: Option<Uuid>,
-    pub active_timer_started_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub loading: bool,
-    pub error: Option<String>,
-    pub consultations: Vec<Consultation>,
-    pub allergies: Vec<Allergy>,
-    pub medical_history: Vec<MedicalHistory>,
-    pub vital_signs: Vec<VitalSigns>,
-    pub social_history: Option<SocialHistory>,
-    pub social_history_editing: bool,
-    pub family_history: Vec<FamilyHistory>,
     pub page: usize,
     pub page_size: usize,
-    pub theme: Theme,
-    pub healthcare_config: HealthcareConfig,
-    pub allergy_config: AllergyConfig,
-    pub clinical_config: ClinicalConfig,
-    pub social_history_config: opengp_config::SocialHistoryConfig,
-    pub allergy_form: Option<AllergyForm>,
-    pub consultation_form: Option<ConsultationForm>,
-    pub medical_history_form: Option<MedicalHistoryForm>,
-    pub vitals_form: Option<VitalSignsForm>,
-    pub family_history_form: Option<FamilyHistoryForm>,
-    pub social_history_form: Option<SocialHistoryComponent>,
-    pub social_history_component: Option<SocialHistoryComponent>,
-    pub consultation_filter_start: Option<String>,
-    pub consultation_filter_end: Option<String>,
-    // Detail modals for read-only display
-    pub consultation_detail_modal: Option<ConsultationDetailModal>,
-    pub allergy_detail_modal: Option<AllergyDetailModal>,
-    pub medical_history_detail_modal: Option<MedicalHistoryDetailModal>,
-    pub vitals_detail_modal: Option<VitalsDetailModal>,
-    pub family_history_detail_modal: Option<FamilyHistoryDetailModal>,
-    #[cfg(feature = "prescription")]
-    pub consultation_prescriptions: Vec<Prescription>,
-    #[cfg(not(feature = "prescription"))]
-    pub consultation_prescriptions: Vec<()>,
-    pub consultation_list: ConsultationList,
-    pub allergy_list: AllergyList,
-    pub medical_history_list: MedicalHistoryList,
-    pub vitals_list: VitalSignsList,
-    pub family_history_list: FamilyHistoryList,
-    pub patient_search: Option<SearchableListState<PatientListItem>>,
+    pub error: Option<String>,
+    // Sub-structs encapsulating domain-specific state
+    pub consultations: ConsultationState,
+    pub allergies: AllergyState,
+    pub vitals: VitalsState,
+    pub medical_history: MedicalHistoryState,
+    pub family_history: FamilyHistoryState,
+    pub social_history: SocialHistoryState,
 }
 
 impl ClinicalState {
@@ -121,44 +80,15 @@ impl ClinicalState {
             form_view: ClinicalFormView::None,
             selected_patient_id: None,
             active_appointment_id: None,
-            active_timer_started_at: None,
-            loading: false,
-            error: None,
-            consultations: Vec::new(),
-            allergies: Vec::new(),
-            medical_history: Vec::new(),
-            vital_signs: Vec::new(),
-            social_history: None,
-            social_history_editing: false,
-            family_history: Vec::new(),
             page: 0,
             page_size: 20,
-            theme: theme.clone(),
-            healthcare_config,
-            allergy_config,
-            clinical_config,
-            social_history_config,
-            allergy_form: None,
-            consultation_form: None,
-            medical_history_form: None,
-            vitals_form: None,
-            family_history_form: None,
-            social_history_form: None,
-            social_history_component: None,
-            consultation_filter_start: None,
-            consultation_filter_end: None,
-            consultation_detail_modal: None,
-            allergy_detail_modal: None,
-            medical_history_detail_modal: None,
-            vitals_detail_modal: None,
-            family_history_detail_modal: None,
-            consultation_prescriptions: Vec::new(),
-            consultation_list: ConsultationList::new(theme.clone()),
-            allergy_list: AllergyList::new(theme.clone()),
-            medical_history_list: MedicalHistoryList::new(theme.clone()),
-            vitals_list: VitalSignsList::new(theme.clone()),
-            family_history_list: FamilyHistoryList::new(theme),
-            patient_search: None,
+            error: None,
+            consultations: ConsultationState::new(theme.clone(), clinical_config.clone()),
+            allergies: AllergyState::new(theme.clone(), allergy_config),
+            vitals: VitalsState::new(theme.clone(), healthcare_config),
+            medical_history: MedicalHistoryState::new(theme.clone(), clinical_config),
+            family_history: FamilyHistoryState::new(theme.clone()),
+            social_history: SocialHistoryState::new(theme, social_history_config),
         }
     }
 
@@ -190,131 +120,111 @@ impl ClinicalState {
     }
 
     pub fn open_consultation_form(&mut self) {
-        self.consultation_form = Some(ConsultationForm::new(self.theme.clone()));
+        self.consultations.open_consultation_form();
         self.form_view = ClinicalFormView::ConsultationForm;
     }
 
     pub fn close_consultation_form(&mut self) {
-        self.consultation_form = None;
+        self.consultations.close_consultation_form();
         self.form_view = ClinicalFormView::None;
     }
 
     pub fn open_consultation_detail(
         &mut self,
-        consultation: Consultation,
+        consultation: opengp_domain::domain::clinical::Consultation,
         patient_name: String,
         practitioner_name: String,
         theme: &Theme,
     ) {
-        self.consultation_detail_modal = Some(ConsultationDetailModal::new(
+        self.consultations.open_consultation_detail(
             consultation,
             patient_name,
             practitioner_name,
-            theme.clone(),
-        ));
+        );
     }
 
     pub fn close_consultation_detail(&mut self) {
-        self.consultation_detail_modal = None;
+        self.consultations.close_consultation_detail();
     }
 
-    pub fn open_allergy_detail(&mut self, allergy: Allergy, theme: &Theme) {
-        self.allergy_detail_modal = Some(AllergyDetailModal::new(allergy, theme.clone()));
+    pub fn open_allergy_detail(&mut self, allergy: opengp_domain::domain::clinical::Allergy, _theme: &Theme) {
+        self.allergies.open_allergy_detail(allergy);
     }
 
     pub fn close_allergy_detail(&mut self) {
-        self.allergy_detail_modal = None;
+        self.allergies.close_allergy_detail();
     }
 
-    pub fn open_medical_history_detail(&mut self, medical_history: MedicalHistory, theme: &Theme) {
-        self.medical_history_detail_modal = Some(MedicalHistoryDetailModal::new(
-            medical_history,
-            theme.clone(),
-        ));
+    pub fn open_medical_history_detail(&mut self, medical_history: opengp_domain::domain::clinical::MedicalHistory, _theme: &Theme) {
+        self.medical_history.open_medical_history_detail(medical_history);
     }
 
     pub fn close_medical_history_detail(&mut self) {
-        self.medical_history_detail_modal = None;
+        self.medical_history.close_medical_history_detail();
     }
 
-    pub fn open_vitals_detail(&mut self, vitals: VitalSigns, theme: &Theme) {
-        self.vitals_detail_modal = Some(VitalsDetailModal::new(vitals, theme.clone()));
+    pub fn open_vitals_detail(&mut self, vitals: opengp_domain::domain::clinical::VitalSigns, _theme: &Theme) {
+        self.vitals.open_vitals_detail(vitals, self.vitals.theme.clone());
     }
 
     pub fn close_vitals_detail(&mut self) {
-        self.vitals_detail_modal = None;
+        self.vitals.close_vitals_detail();
     }
 
-    pub fn open_family_history_detail(&mut self, family_history: FamilyHistory, theme: &Theme) {
-        self.family_history_detail_modal =
-            Some(FamilyHistoryDetailModal::new(family_history, theme.clone()));
+    pub fn open_family_history_detail(&mut self, family_history: opengp_domain::domain::clinical::FamilyHistory, _theme: &Theme) {
+        self.family_history.open_family_history_detail(family_history);
     }
 
     pub fn close_family_history_detail(&mut self) {
-        self.family_history_detail_modal = None;
+        self.family_history.close_family_history_detail();
     }
 
     pub fn open_allergy_form(&mut self) {
-        self.allergy_form = Some(AllergyForm::new(self.theme.clone(), &self.allergy_config));
+        self.allergies.open_allergy_form();
         self.form_view = ClinicalFormView::AllergyForm;
     }
 
     pub fn open_medical_history_form(&mut self) {
-        self.medical_history_form = Some(MedicalHistoryForm::new(
-            &self.clinical_config,
-            self.theme.clone(),
-        ));
+        self.medical_history.open_medical_history_form();
         self.form_view = ClinicalFormView::MedicalHistoryForm;
     }
 
     pub fn open_vitals_form(&mut self) {
-        self.vitals_form = Some(VitalSignsForm::new(
-            self.theme.clone(),
-            self.healthcare_config.clone(),
-        ));
+        self.vitals.open_vitals_form(self.vitals.theme.clone());
         self.form_view = ClinicalFormView::VitalSignsForm;
     }
 
     pub fn open_family_history_form(&mut self) {
-        self.family_history_form = Some(FamilyHistoryForm::new(self.theme.clone()));
+        self.family_history.open_family_history_form();
         self.form_view = ClinicalFormView::FamilyHistoryForm;
     }
 
     pub fn open_social_history_editing(&mut self) {
-        self.social_history_component = Some(SocialHistoryComponent::new(
-            self.theme.clone(),
-            &self.social_history_config,
-        ));
-        self.social_history_editing = true;
+        self.social_history.open_social_history_editing();
     }
 
     pub fn close_social_history_editing(&mut self) {
-        self.social_history_component = None;
-        self.social_history_editing = false;
+        self.social_history.close_social_history_editing();
     }
 
     pub fn open_social_history_form(&mut self) {
-        self.social_history_form = Some(SocialHistoryComponent::new(
-            self.theme.clone(),
-            &self.social_history_config,
-        ));
+        self.social_history.open_social_history_form();
         self.form_view = ClinicalFormView::SocialHistoryForm;
     }
 
     pub fn close_social_history_form(&mut self) {
-        self.social_history_form = None;
+        self.social_history.close_social_history_form();
         self.form_view = ClinicalFormView::None;
     }
 
     pub fn close_form(&mut self) {
         self.form_view = ClinicalFormView::None;
-        self.allergy_form = None;
-        self.consultation_form = None;
-        self.medical_history_form = None;
-        self.vitals_form = None;
-        self.family_history_form = None;
-        self.social_history_form = None;
-        self.social_history_component = None;
+        self.allergies.close_allergy_form();
+        self.consultations.close_consultation_form();
+        self.medical_history.close_medical_history_form();
+        self.vitals.close_vitals_form();
+        self.family_history.close_family_history_form();
+        self.social_history.close_social_history_form();
     }
 
     pub fn show_consultations(&mut self) {
@@ -378,11 +288,11 @@ impl ClinicalState {
     }
 
     fn reset_component_selection(&mut self) {
-        self.consultation_list.move_first();
-        self.allergy_list.move_first();
-        self.medical_history_list.selected_index = 0;
-        self.vitals_list.move_first();
-        self.family_history_list.move_first();
+        self.consultations.consultation_list.move_first();
+        self.allergies.allergy_list.move_first();
+        self.medical_history.medical_history_list.selected_index = 0;
+        self.vitals.vitals_list.move_first();
+        self.family_history.family_history_list.move_first();
     }
 
     pub fn set_patient(&mut self, patient_id: Uuid) {
@@ -395,41 +305,32 @@ impl ClinicalState {
 
     pub fn clear_active_appointment(&mut self) {
         self.active_appointment_id = None;
-        self.active_timer_started_at = None;
+        self.consultations.clear_active_timer();
     }
 
     pub fn set_active_timer_started_at(&mut self, at: chrono::DateTime<chrono::Utc>) {
-        self.active_timer_started_at = Some(at);
+        self.consultations.active_timer_started_at = Some(at);
     }
 
     pub fn clear_patient(&mut self) {
         self.selected_patient_id = None;
         self.active_appointment_id = None;
-        self.active_timer_started_at = None;
+        self.close_form();
         self.consultations.clear();
         self.allergies.clear();
         self.medical_history.clear();
-        self.vital_signs.clear();
-        self.social_history = None;
+        self.vitals.clear();
+        self.social_history.clear();
         self.family_history.clear();
-        self.close_form();
-        self.social_history_component = None;
-        self.social_history_editing = false;
-
-        self.consultation_list.consultations.clear();
-        self.consultation_list.move_first();
-        self.allergy_list.allergies.clear();
-        self.allergy_list.move_first();
-        self.medical_history_list.conditions.clear();
-        self.medical_history_list.selected_index = 0;
-        self.vitals_list.vitals.clear();
-        self.vitals_list.move_first();
-        self.family_history_list.entries.clear();
-        self.family_history_list.move_first();
     }
 
     pub fn set_loading(&mut self, loading: bool) {
-        self.loading = loading;
+        self.consultations.loading = loading;
+        self.allergies.loading = loading;
+        self.vitals.loading = loading;
+        self.medical_history.loading = loading;
+        self.family_history.loading = loading;
+        self.social_history.loading = loading;
     }
 
     pub fn set_error(&mut self, error: Option<String>) {
@@ -443,33 +344,33 @@ impl ClinicalState {
     pub fn next_item(&mut self) {
         match self.view {
             ClinicalView::PatientSummary => {}
-            ClinicalView::Consultations => self.consultation_list.next(),
+            ClinicalView::Consultations => self.consultations.consultation_list.next(),
             ClinicalView::ConsultationSummary => {}
-            ClinicalView::Allergies => self.allergy_list.next(),
+            ClinicalView::Allergies => self.allergies.allergy_list.next(),
             ClinicalView::MedicalHistory => {
-                self.medical_history_list.selected_index =
-                    (self.medical_history_list.selected_index + 1)
-                        .min(self.medical_history_list.conditions.len().saturating_sub(1))
+                self.medical_history.medical_history_list.selected_index =
+                    (self.medical_history.medical_history_list.selected_index + 1)
+                        .min(self.medical_history.medical_history_list.conditions.len().saturating_sub(1))
             }
-            ClinicalView::VitalSigns => self.vitals_list.next(),
+            ClinicalView::VitalSigns => self.vitals.vitals_list.next(),
             ClinicalView::SocialHistory => {}
-            ClinicalView::FamilyHistory => self.family_history_list.next(),
+            ClinicalView::FamilyHistory => self.family_history.family_history_list.next(),
         }
     }
 
     pub fn prev_item(&mut self) {
         match self.view {
             ClinicalView::PatientSummary => {}
-            ClinicalView::Consultations => self.consultation_list.prev(),
+            ClinicalView::Consultations => self.consultations.consultation_list.prev(),
             ClinicalView::ConsultationSummary => {}
-            ClinicalView::Allergies => self.allergy_list.prev(),
+            ClinicalView::Allergies => self.allergies.allergy_list.prev(),
             ClinicalView::MedicalHistory => {
-                self.medical_history_list.selected_index =
-                    self.medical_history_list.selected_index.saturating_sub(1)
+                self.medical_history.medical_history_list.selected_index =
+                    self.medical_history.medical_history_list.selected_index.saturating_sub(1)
             }
-            ClinicalView::VitalSigns => self.vitals_list.prev(),
+            ClinicalView::VitalSigns => self.vitals.vitals_list.prev(),
             ClinicalView::SocialHistory => {}
-            ClinicalView::FamilyHistory => self.family_history_list.prev(),
+            ClinicalView::FamilyHistory => self.family_history.family_history_list.prev(),
         }
     }
 
@@ -489,11 +390,11 @@ impl ClinicalState {
     }
 
     pub fn has_open_detail_modal(&self) -> bool {
-        self.consultation_detail_modal.is_some()
-            || self.allergy_detail_modal.is_some()
-            || self.medical_history_detail_modal.is_some()
-            || self.vitals_detail_modal.is_some()
-            || self.family_history_detail_modal.is_some()
+        self.consultations.consultation_detail_modal.is_some()
+            || self.allergies.allergy_detail_modal.is_some()
+            || self.medical_history.medical_history_detail_modal.is_some()
+            || self.vitals.vitals_detail_modal.is_some()
+            || self.family_history.family_history_detail_modal.is_some()
     }
 
     pub fn adjust_scroll(&mut self, visible_rows: usize) {
@@ -502,39 +403,39 @@ impl ClinicalState {
         }
         match self.view {
             ClinicalView::PatientSummary => {}
-            ClinicalView::Consultations => self.consultation_list.adjust_scroll(visible_rows),
+            ClinicalView::Consultations => self.consultations.consultation_list.adjust_scroll(visible_rows),
             ClinicalView::ConsultationSummary => {}
-            ClinicalView::Allergies => self.allergy_list.adjust_scroll(visible_rows),
-            ClinicalView::MedicalHistory => self.medical_history_list.adjust_scroll(visible_rows),
-            ClinicalView::VitalSigns => self.vitals_list.adjust_scroll(visible_rows),
+            ClinicalView::Allergies => self.allergies.allergy_list.adjust_scroll(visible_rows),
+            ClinicalView::MedicalHistory => self.medical_history.medical_history_list.adjust_scroll(visible_rows),
+            ClinicalView::VitalSigns => self.vitals.vitals_list.adjust_scroll(visible_rows),
             ClinicalView::SocialHistory => {}
-            ClinicalView::FamilyHistory => self.family_history_list.adjust_scroll(visible_rows),
+            ClinicalView::FamilyHistory => self.family_history.family_history_list.adjust_scroll(visible_rows),
         }
     }
 
     pub fn selected_index(&self) -> usize {
         match self.view {
             ClinicalView::PatientSummary => 0,
-            ClinicalView::Consultations => self.consultation_list.selected_index(),
+            ClinicalView::Consultations => self.consultations.consultation_list.selected_index(),
             ClinicalView::ConsultationSummary => 0,
-            ClinicalView::Allergies => self.allergy_list.selected_index,
-            ClinicalView::MedicalHistory => self.medical_history_list.selected_index,
-            ClinicalView::VitalSigns => self.vitals_list.selected_index,
+            ClinicalView::Allergies => self.allergies.allergy_list.selected_index,
+            ClinicalView::MedicalHistory => self.medical_history.medical_history_list.selected_index,
+            ClinicalView::VitalSigns => self.vitals.vitals_list.selected_index,
             ClinicalView::SocialHistory => 0,
-            ClinicalView::FamilyHistory => self.family_history_list.selected_index,
+            ClinicalView::FamilyHistory => self.family_history.family_history_list.selected_index,
         }
     }
 
     pub fn scroll_offset(&self) -> usize {
         match self.view {
             ClinicalView::PatientSummary => 0,
-            ClinicalView::Consultations => self.consultation_list.scroll_offset(),
+            ClinicalView::Consultations => self.consultations.consultation_list.scroll_offset(),
             ClinicalView::ConsultationSummary => 0,
-            ClinicalView::Allergies => self.allergy_list.scroll_offset,
-            ClinicalView::MedicalHistory => self.medical_history_list.scroll_offset,
-            ClinicalView::VitalSigns => self.vitals_list.scroll_offset,
+            ClinicalView::Allergies => self.allergies.allergy_list.scroll_offset,
+            ClinicalView::MedicalHistory => self.medical_history.medical_history_list.scroll_offset,
+            ClinicalView::VitalSigns => self.vitals.vitals_list.scroll_offset,
             ClinicalView::SocialHistory => 0,
-            ClinicalView::FamilyHistory => self.family_history_list.scroll_offset,
+            ClinicalView::FamilyHistory => self.family_history.family_history_list.scroll_offset,
         }
     }
 }
@@ -619,19 +520,19 @@ mod tests {
         // Initially no form open
         assert!(!state.is_form_open());
         assert_eq!(state.form_view, ClinicalFormView::None);
-        assert!(state.allergy_form.is_none());
+        assert!(state.allergies.allergy_form.is_none());
 
         // Open allergy form
         state.open_allergy_form();
         assert!(state.is_form_open());
         assert!(matches!(state.form_view, ClinicalFormView::AllergyForm));
-        assert!(state.allergy_form.is_some());
+        assert!(state.allergies.allergy_form.is_some());
 
         // Close form
         state.close_form();
         assert!(!state.is_form_open());
         assert!(matches!(state.form_view, ClinicalFormView::None));
-        assert!(state.allergy_form.is_none());
+        assert!(state.allergies.allergy_form.is_none());
     }
 
     // Test 4: Consultation form lifecycle
@@ -645,12 +546,12 @@ mod tests {
             state.form_view,
             ClinicalFormView::ConsultationForm
         ));
-        assert!(state.consultation_form.is_some());
+        assert!(state.consultations.consultation_form.is_some());
 
         state.close_consultation_form();
         assert!(!state.is_form_open());
         assert!(matches!(state.form_view, ClinicalFormView::None));
-        assert!(state.consultation_form.is_none());
+        assert!(state.consultations.consultation_form.is_none());
     }
 
     // Test 5: Medical history form lifecycle
@@ -664,11 +565,11 @@ mod tests {
             state.form_view,
             ClinicalFormView::MedicalHistoryForm
         ));
-        assert!(state.medical_history_form.is_some());
+        assert!(state.medical_history.medical_history_form.is_some());
 
         state.close_form();
         assert!(!state.is_form_open());
-        assert!(state.medical_history_form.is_none());
+        assert!(state.medical_history.medical_history_form.is_none());
     }
 
     // Test 6: Set and clear patient
@@ -694,11 +595,11 @@ mod tests {
         state.clear_patient();
         assert!(!state.has_patient());
         assert_eq!(state.selected_patient_id, None);
-        assert_eq!(state.consultations.len(), 0);
-        assert_eq!(state.allergies.len(), 0);
-        assert_eq!(state.medical_history.len(), 0);
-        assert_eq!(state.vital_signs.len(), 0);
-        assert_eq!(state.family_history.len(), 0);
+        assert_eq!(state.consultations.consultations.len(), 0);
+        assert_eq!(state.allergies.allergies.len(), 0);
+        assert_eq!(state.medical_history.medical_history.len(), 0);
+        assert_eq!(state.vitals.vital_signs.len(), 0);
+        assert_eq!(state.family_history.family_history.len(), 0);
         assert!(!state.is_form_open());
     }
 
@@ -850,7 +751,7 @@ mod tests {
         // Consultations delegates to consultation_list
         state.view = ClinicalView::Consultations;
         let idx = state.selected_index();
-        assert_eq!(idx, state.consultation_list.selected_index());
+        assert_eq!(idx, state.consultations.consultation_list.selected_index());
 
         // SocialHistory → 0
         state.view = ClinicalView::SocialHistory;
@@ -860,7 +761,7 @@ mod tests {
         state.view = ClinicalView::FamilyHistory;
         assert_eq!(
             state.selected_index(),
-            state.family_history_list.selected_index
+            state.family_history.family_history_list.selected_index
         );
     }
 
@@ -877,12 +778,12 @@ mod tests {
         state.view = ClinicalView::Consultations;
         assert_eq!(
             state.scroll_offset(),
-            state.consultation_list.scroll_offset()
+            state.consultations.consultation_list.scroll_offset()
         );
 
         // Allergies delegates to allergy_list
         state.view = ClinicalView::Allergies;
-        assert_eq!(state.scroll_offset(), state.allergy_list.scroll_offset);
+        assert_eq!(state.scroll_offset(), state.allergies.allergy_list.scroll_offset);
 
         // SocialHistory → 0
         state.view = ClinicalView::SocialHistory;
@@ -897,11 +798,11 @@ mod tests {
         state.open_vitals_form();
         assert!(state.is_form_open());
         assert!(matches!(state.form_view, ClinicalFormView::VitalSignsForm));
-        assert!(state.vitals_form.is_some());
+        assert!(state.vitals.vitals_form.is_some());
 
         state.close_form();
         assert!(!state.is_form_open());
-        assert!(state.vitals_form.is_none());
+        assert!(state.vitals.vitals_form.is_none());
     }
 
     // Test 16: FamilyHistory form lifecycle
@@ -915,11 +816,11 @@ mod tests {
             state.form_view,
             ClinicalFormView::FamilyHistoryForm
         ));
-        assert!(state.family_history_form.is_some());
+        assert!(state.family_history.family_history_form.is_some());
 
         state.close_form();
         assert!(!state.is_form_open());
-        assert!(state.family_history_form.is_none());
+        assert!(state.family_history.family_history_form.is_none());
     }
 
     #[test]
@@ -927,24 +828,24 @@ mod tests {
         let mut state = test_state();
 
         assert!(!state.has_open_detail_modal());
-        assert!(state.consultation_detail_modal.is_none());
+        assert!(state.consultations.consultation_detail_modal.is_none());
 
-        let consultation = Consultation::new(
+        let consultation = opengp_domain::domain::clinical::Consultation::new(
             Uuid::new_v4(),
             Uuid::new_v4(),
             Some(Uuid::new_v4()),
             Uuid::new_v4(),
         );
 
-        let theme = state.theme.clone();
+        let theme = state.consultations.theme.clone();
         let patient_name = "John Doe".to_string();
         let practitioner_name = "Dr. Smith".to_string();
         state.open_consultation_detail(consultation, patient_name, practitioner_name, &theme);
         assert!(state.has_open_detail_modal());
-        assert!(state.consultation_detail_modal.is_some());
+        assert!(state.consultations.consultation_detail_modal.is_some());
 
         state.close_consultation_detail();
         assert!(!state.has_open_detail_modal());
-        assert!(state.consultation_detail_modal.is_none());
+        assert!(state.consultations.consultation_detail_modal.is_none());
     }
 }

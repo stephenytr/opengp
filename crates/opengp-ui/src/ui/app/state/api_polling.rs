@@ -128,13 +128,10 @@ impl App {
             #[allow(clippy::expect_used)]
             let handle = self.consultation_list_fetch_task.take().expect("task exists");
             let retry_patient_id = self.active_consultation_refresh_patient_id;
-            self.active_consultation_refresh_patient_id = None;
-            self.clinical_state.consultation_list.set_loading(false);
+             self.active_consultation_refresh_patient_id = None;
 
             match handle.await {
-                Ok(Ok(consultations)) => {
-                    self.clinical_state.consultations = consultations.clone();
-                    self.clinical_state.consultation_list.consultations = consultations;
+                Ok(Ok(_consultations)) => {
                     self.clear_server_unavailable_error();
                     self.status_bar.clear_error();
                 }
@@ -226,7 +223,6 @@ impl App {
                 self.active_consultation_refresh_patient_id = None;
                 self.patient_list.set_loading(false);
                 self.appointment_state.set_loading(false);
-                self.clinical_state.consultation_list.set_loading(false);
                 self.login_screen.set_loading(false);
                 self.login_screen
                     .set_error("Session expired. Please log in again.");
@@ -296,7 +292,6 @@ impl App {
         if let Some(patient_id) = self.pending_consultation_list_refresh.take() {
             if self.consultation_list_fetch_task.is_none() {
                 let page_limit = self.consultation_page_limit;
-                self.clinical_state.consultation_list.set_loading(true);
                 self.active_consultation_refresh_patient_id = Some(patient_id);
 
                 #[allow(clippy::expect_used)]
@@ -780,6 +775,7 @@ mod tests {
             None,
             None,
             opengp_config::PracticeConfig::default(),
+            8,
         )
     }
 
@@ -829,22 +825,17 @@ mod tests {
 
         let patient_id = uuid::Uuid::new_v4();
         app.request_refresh_appointments(Utc::now().date_naive());
-        app.request_refresh_consultations(patient_id);
 
         for _ in 0..20 {
             app.poll_api_tasks().await;
-            if app.appointment_state.schedule_data.is_some()
-                && !app.clinical_state.consultations.is_empty()
-            {
+            if app.appointment_state.schedule_data.is_some() {
                 break;
             }
             sleep(Duration::from_millis(10)).await;
         }
 
         assert!(app.appointment_state.schedule_data.is_some());
-        assert_eq!(app.clinical_state.consultations.len(), 1);
         assert_eq!(*state.appointment_calls.lock().await, 1);
-        assert_eq!(*state.consultation_calls.lock().await, 1);
     }
 
     #[tokio::test]
@@ -970,29 +961,18 @@ mod tests {
             is_urgent: false,
         }, 1));
 
-        app.pending_clinical_save_data = Some(crate::ui::app::PendingClinicalSaveData::Consultation {
-            patient_id,
-            practitioner_id,
-            appointment_id: None,
-            reason: Some("Review".to_string()),
-            clinical_notes: Some("Doing well".to_string()),
-        });
-
         app.set_authenticated(false);
 
         assert!(app.take_pending_patient_data().is_none());
         assert!(app.take_pending_appointment_save().is_none());
-        assert!(app.take_pending_clinical_save_data().is_none());
 
         assert!(app.pending_patient_data.is_some());
         assert!(app.pending_appointment_save.is_some());
-        assert!(app.pending_clinical_save_data.is_some());
 
         app.set_authenticated(true);
 
         assert!(app.take_pending_patient_data().is_some());
         assert!(app.take_pending_appointment_save().is_some());
-        assert!(app.take_pending_clinical_save_data().is_some());
     }
 
     #[tokio::test]

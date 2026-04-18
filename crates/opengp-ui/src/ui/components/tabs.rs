@@ -18,10 +18,6 @@ pub enum Tab {
     Patient,
     /// Appointments tab
     Appointment,
-    /// Clinical notes tab
-    Clinical,
-    /// Billing tab
-    Billing,
 }
 
 impl Tab {
@@ -30,8 +26,6 @@ impl Tab {
         match self {
             Tab::Patient => "Patients",
             Tab::Appointment => "Appointments",
-            Tab::Clinical => "Clinical",
-            Tab::Billing => "Billing",
         }
     }
 
@@ -40,14 +34,12 @@ impl Tab {
         match self {
             Tab::Patient => "F2",
             Tab::Appointment => "F3",
-            Tab::Clinical => "F4",
-            Tab::Billing => "F5",
         }
     }
 
     /// Get all tabs
-    pub fn all() -> [Tab; 4] {
-        [Tab::Patient, Tab::Appointment, Tab::Clinical, Tab::Billing]
+    pub fn all() -> [Tab; 2] {
+        [Tab::Patient, Tab::Appointment]
     }
 
     /// Get the index of this tab
@@ -55,8 +47,6 @@ impl Tab {
         match self {
             Tab::Patient => 0,
             Tab::Appointment => 1,
-            Tab::Clinical => 2,
-            Tab::Billing => 3,
         }
     }
 
@@ -65,8 +55,6 @@ impl Tab {
         match index {
             0 => Some(Tab::Patient),
             1 => Some(Tab::Appointment),
-            2 => Some(Tab::Clinical),
-            3 => Some(Tab::Billing),
             _ => None,
         }
     }
@@ -133,8 +121,8 @@ impl TabBar {
     #[allow(clippy::unwrap_used)]
     pub fn next(&mut self) {
         let current_index = self.selected.index();
-        let next_index = (current_index + 1) % 4;
-        // SAFETY: next_index is 0-3 due to % 4 operation
+        let next_index = (current_index + 1) % 2;
+        // SAFETY: next_index is 0-1 due to % 2 operation
         self.selected = Tab::from_index(next_index).unwrap();
     }
 
@@ -143,11 +131,11 @@ impl TabBar {
     pub fn prev(&mut self) {
         let current_index = self.selected.index();
         let prev_index = if current_index == 0 {
-            3
+            1
         } else {
             current_index - 1
         };
-        // SAFETY: prev_index is 0-3 by conditional logic
+        // SAFETY: prev_index is 0-1 by conditional logic
         self.selected = Tab::from_index(prev_index).unwrap();
     }
 
@@ -300,32 +288,22 @@ mod tests {
         assert_eq!(tab_bar.selected(), Tab::Appointment);
 
         tab_bar.next();
-        assert_eq!(tab_bar.selected(), Tab::Clinical);
-
-        tab_bar.next();
-        assert_eq!(tab_bar.selected(), Tab::Billing);
-
-        tab_bar.next();
         assert_eq!(tab_bar.selected(), Tab::Patient); // Wrap around
 
         tab_bar.prev();
-        assert_eq!(tab_bar.selected(), Tab::Billing);
+        assert_eq!(tab_bar.selected(), Tab::Appointment);
     }
 
     #[test]
     fn test_tab_from_index() {
         assert_eq!(Tab::from_index(0), Some(Tab::Patient));
         assert_eq!(Tab::from_index(1), Some(Tab::Appointment));
-        assert_eq!(Tab::from_index(2), Some(Tab::Clinical));
-        assert_eq!(Tab::from_index(3), Some(Tab::Billing));
-        assert_eq!(Tab::from_index(4), None);
+        assert_eq!(Tab::from_index(2), None);
     }
 
     #[test]
     fn test_tab_names() {
         assert_eq!(Tab::Patient.name(), "Patients");
         assert_eq!(Tab::Appointment.name(), "Appointments");
-        assert_eq!(Tab::Clinical.name(), "Clinical");
-        assert_eq!(Tab::Billing.name(), "Billing");
     }
 }

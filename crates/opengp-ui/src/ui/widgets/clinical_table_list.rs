@@ -7,7 +7,7 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
 
-use crate::ui::layout::HEADER_HEIGHT;
+const TABLE_HEADER_ROWS: u16 = 1;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::LoadingIndicator;
 
@@ -210,11 +210,11 @@ impl<T> ClinicalTableList<T> {
             return None;
         }
 
-        if mouse.row < area.y + HEADER_HEIGHT {
+        if mouse.row < area.y + TABLE_HEADER_ROWS {
             return None;
         }
 
-        let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
+        let row_index = (mouse.row - area.y - TABLE_HEADER_ROWS) as usize;
         let actual_index = self.scroll_offset + row_index;
         if actual_index < self.items.len() {
             self.selected_index = actual_index;
@@ -487,7 +487,7 @@ mod tests {
             list.handle_mouse(click(2, 4), area),
             Some(ListAction::Select(_))
         ));
-        assert_eq!(list.selected_index, list.scroll_offset + 2);
+        assert_eq!(list.selected_index, list.scroll_offset + 3);
     }
 
     #[test]

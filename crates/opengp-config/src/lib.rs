@@ -309,7 +309,7 @@ pub struct SocialHistoryConfig {
     pub exercise_frequency: HashMap<String, EnumOption>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PatientConfig {
     #[serde(default)]
     pub gender: HashMap<String, EnumOption>,
@@ -317,6 +317,19 @@ pub struct PatientConfig {
     pub concession_type: HashMap<String, EnumOption>,
     #[serde(default)]
     pub atsi_status: HashMap<String, EnumOption>,
+    #[serde(default = "default_max_open_patients")]
+    pub max_open_patients: usize,
+}
+
+impl Default for PatientConfig {
+    fn default() -> Self {
+        Self {
+            gender: HashMap::new(),
+            concession_type: HashMap::new(),
+            atsi_status: HashMap::new(),
+            max_open_patients: 8,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -574,6 +587,8 @@ pub struct PartialPatientConfig {
     pub concession_type: Option<HashMap<String, EnumOption>>,
     #[serde(default)]
     pub atsi_status: Option<HashMap<String, EnumOption>>,
+    #[serde(default)]
+    pub max_open_patients: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -934,6 +949,9 @@ impl PatientConfig {
         if let Some(atsi_status) = overrides.atsi_status {
             self.atsi_status.extend(atsi_status);
         }
+        if let Some(max_open_patients) = overrides.max_open_patients {
+            self.max_open_patients = max_open_patients;
+        }
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
@@ -969,6 +987,10 @@ fn default_min_terminal_width() -> u16 {
 
 fn default_min_terminal_height() -> u16 {
     24
+}
+
+fn default_max_open_patients() -> usize {
+    8
 }
 
 fn merge_palette(palette: &mut ColorPalette, partial: PartialColorPalette) {
@@ -1502,5 +1524,11 @@ mod tests {
         let config: UiConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.min_terminal_width, 120);
         assert_eq!(config.min_terminal_height, 40);
+    }
+
+    #[test]
+    fn test_patient_config_max_open_patients_default() {
+        let config = PatientConfig::default();
+        assert_eq!(config.max_open_patients, 8);
     }
 }

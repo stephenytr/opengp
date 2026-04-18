@@ -170,11 +170,13 @@ impl InvoiceForm {
             .map(|id| id.to_string())
             .unwrap_or_else(|| "<select practitioner>".to_string());
 
+        let billing_type_str = self.billing_type.to_string();
+        let due_date_str = self.due_date.to_string();
         let header = vec![
-            Row::new(vec!["Patient", patient]),
-            Row::new(vec!["Practitioner", practitioner]),
-            Row::new(vec!["Billing Type", self.billing_type.to_string()]),
-            Row::new(vec!["Due Date", self.due_date.clone()]),
+            Row::new(vec!["Patient", patient.as_ref()]),
+            Row::new(vec!["Practitioner", practitioner.as_ref()]),
+            Row::new(vec!["Billing Type", billing_type_str.as_ref()]),
+            Row::new(vec!["Due Date", due_date_str.as_ref()]),
         ];
 
         let table = Table::new(header, [Constraint::Length(16), Constraint::Min(10)])

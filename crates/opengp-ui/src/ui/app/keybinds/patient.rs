@@ -1,5 +1,4 @@
 use crate::ui::app::App;
-use crate::ui::components::tabs::Tab;
 use crate::ui::keybinds::{Action, KeyContext};
 use crossterm::event::KeyEvent;
 
@@ -11,14 +10,8 @@ impl App {
                     let visible_rows = self.calculate_visible_patient_rows();
                     self.patient_list.adjust_scroll(visible_rows);
                 }
-                crate::ui::components::patient::PatientListAction::OpenPatient(id) => {
-                    self.clinical_state.clear_patient();
-                    self.clinical_state.set_patient(id);
-                    self.clinical_state.show_patient_summary();
-                    self.tab_bar.select(Tab::Clinical);
-                    self.pending_clinical_patient_id = Some(id);
-                    self.refresh_status_bar();
-                    self.refresh_context();
+                crate::ui::components::patient::PatientListAction::OpenPatient(_id) => {
+                    todo!("Patient clinical detail workflow moved to workspace subtab in Task 28")
                 }
                 crate::ui::components::patient::PatientListAction::FocusSearch => {
                     self.current_context = KeyContext::Search;
