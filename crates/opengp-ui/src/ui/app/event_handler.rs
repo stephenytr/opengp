@@ -318,6 +318,12 @@ impl App {
                     if self.tab_bar.selected() == Tab::Appointment {
                         return self.handle_appointment_keys(key);
                     }
+                    if self.tab_bar.selected() == Tab::Clinical {
+                        return self.handle_clinical_keys(key);
+                    }
+                    if self.tab_bar.selected() == Tab::Billing {
+                        return self.handle_billing_keys(key);
+                    }
                 }
                 Action::NewAppointment => {
                     if self.tab_bar.selected() == Tab::Appointment
