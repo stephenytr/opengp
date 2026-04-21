@@ -8,15 +8,17 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 impl App {
     pub fn handle_global_mouse_event(&mut self, mouse: MouseEvent, area: Rect) {
-        let tab_bar_area = self.tab_bar.area(area);
-        if self.tab_bar.handle_mouse(mouse, tab_bar_area).is_some() {
+        let main_tab_bar_area = Rect::new(area.x, area.y, area.width, 1);
+        let patient_tab_bar_area = Rect::new(area.x, area.y + 1, area.width, 1);
+
+        if self.tab_bar.handle_mouse(mouse, main_tab_bar_area).is_some() {
             self.refresh_status_bar();
             self.refresh_context();
             return;
         }
 
         if !self.workspace_manager.workspaces.is_empty() {
-            if self.workspace_manager.handle_patient_tab_mouse(mouse, tab_bar_area).is_some() {
+            if self.workspace_manager.handle_patient_tab_mouse(mouse, patient_tab_bar_area).is_some() {
                 self.refresh_status_bar();
                 self.refresh_context();
                 return;
