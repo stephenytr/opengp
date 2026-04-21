@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use super::shared::{ToUiError, UiResult, UiServiceError};
+use super::shared::{ToUiError, UiResult, UiServiceError, UiResultExt};
 use crate::ui::view_models::PatientListItem;
 use opengp_domain::domain::patient::{
     NewPatientData, Patient, PatientService, UpdatePatientData,
@@ -32,7 +32,7 @@ impl PatientUiService {
         self.service
             .list_active_patients()
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// List all active patients as view items
@@ -46,7 +46,7 @@ impl PatientUiService {
         self.service
             .search_patients(query)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Get a patient by ID
@@ -54,7 +54,7 @@ impl PatientUiService {
         self.service
             .find_patient(id)
             .await
-            .map_err(|e| e.to_ui_repository_error())?
+            .map_ui_repo_err()?
             .ok_or(UiServiceError::NotFound(format!("Patient not found: {}", id)))
     }
 
@@ -63,7 +63,7 @@ impl PatientUiService {
         self.service
             .register_patient(data)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Update an existing patient
@@ -72,14 +72,14 @@ impl PatientUiService {
             .service
             .find_patient(id)
             .await
-            .map_err(|e| e.to_ui_repository_error())?
+            .map_ui_repo_err()?
             .ok_or(UiServiceError::NotFound(format!("Patient not found: {}", id)))?
             .version;
 
         self.service
             .update_patient(id, data, expected_version)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Deactivate (soft delete) a patient
@@ -88,7 +88,7 @@ impl PatientUiService {
         self.service
             .find_patient(id)
             .await
-            .map_err(|e| e.to_ui_repository_error())?
+            .map_ui_repo_err()?
             .ok_or(UiServiceError::NotFound(format!("Patient not found: {}", id)))?;
 
         // TODO: Implement deactivate in repository

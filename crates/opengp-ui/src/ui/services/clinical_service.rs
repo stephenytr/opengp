@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use super::shared::{ToUiError, UiResult};
+use super::shared::{ToUiError, UiResult, UiResultExt};
 use opengp_domain::domain::clinical::{
     Allergy, ClinicalService, ConditionStatus, Consultation, FamilyHistory, MedicalHistory,
     NewAllergyData, NewConsultationData, NewFamilyHistoryData, NewMedicalHistoryData,
@@ -30,7 +30,7 @@ impl ClinicalUiService {
         self.service
             .list_patient_consultations(patient_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Retrieves a single consultation by id.
@@ -38,7 +38,7 @@ impl ClinicalUiService {
         self.service
             .find_consultation(id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Creates a new consultation for the given patient and practitioner.
@@ -60,7 +60,7 @@ impl ClinicalUiService {
         self.service
             .create_consultation(data, user_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Updates the clinical notes and reason fields for a consultation.
@@ -81,7 +81,7 @@ impl ClinicalUiService {
                 user_id,
             )
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Signs a consultation to indicate completion.
@@ -89,7 +89,7 @@ impl ClinicalUiService {
         self.service
             .sign_consultation(consultation_id, user_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Lists allergies for a patient, optionally filtering to active only.
@@ -101,7 +101,7 @@ impl ClinicalUiService {
         self.service
             .list_patient_allergies(patient_id, active_only)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -128,7 +128,7 @@ impl ClinicalUiService {
         self.service
             .add_allergy(data, user_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Marks an allergy as inactive.
@@ -136,7 +136,7 @@ impl ClinicalUiService {
         self.service
             .deactivate_allergy(allergy_id, user_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Lists medical history entries for a patient.
@@ -148,7 +148,7 @@ impl ClinicalUiService {
         self.service
             .list_medical_history(patient_id, active_only)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Adds a new medical history entry for a patient.
@@ -172,7 +172,7 @@ impl ClinicalUiService {
         self.service
             .add_medical_history(data, user_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Updates the status field of a medical history entry.
@@ -185,7 +185,7 @@ impl ClinicalUiService {
         self.service
             .update_condition_status(history_id, status, user_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -220,7 +220,7 @@ impl ClinicalUiService {
         self.service
             .record_vital_signs(data, user_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Gets the most recent vital signs for a patient, if any.
@@ -228,7 +228,7 @@ impl ClinicalUiService {
         self.service
             .get_latest_vital_signs(patient_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Lists historical vital sign entries for a patient.
@@ -240,7 +240,7 @@ impl ClinicalUiService {
         self.service
             .list_vital_signs_history(patient_id, limit)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Retrieves the social history record for a patient, if present.
@@ -248,7 +248,7 @@ impl ClinicalUiService {
         self.service
             .get_social_history(patient_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -282,14 +282,14 @@ impl ClinicalUiService {
         self.service
             .update_social_history(patient_id, data, user_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     pub async fn list_family_history(&self, patient_id: Uuid) -> UiResult<Vec<FamilyHistory>> {
         self.service
             .list_family_history(patient_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     pub async fn add_family_history(
@@ -311,14 +311,14 @@ impl ClinicalUiService {
         self.service
             .add_family_history(data, user_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     pub async fn delete_family_history(&self, history_id: Uuid, user_id: Uuid) -> UiResult<()> {
         self.service
             .delete_family_history(history_id, user_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Start a timer for a consultation.
@@ -326,7 +326,7 @@ impl ClinicalUiService {
         self.service
             .start_timer(consultation_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Stop a timer for a consultation and return elapsed milliseconds.
@@ -334,7 +334,7 @@ impl ClinicalUiService {
         self.service
             .stop_timer(consultation_id)
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 }
 

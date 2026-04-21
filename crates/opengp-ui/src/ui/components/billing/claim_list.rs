@@ -10,6 +10,8 @@ use crate::ui::input::DoubleClickDetector;
 use crate::ui::shared::{hover_style, selected_hover_style};
 use crate::ui::theme::Theme;
 
+use super::paginated_list::PaginatedList;
+
 #[derive(Debug, Clone)]
 pub struct ClaimList {
     pub claims: Vec<MedicareClaim>,
@@ -18,6 +20,7 @@ pub struct ClaimList {
     pub hovered_index: Option<usize>,
     pub double_click_detector: DoubleClickDetector,
     pub theme: Theme,
+    paginated_list: PaginatedList<MedicareClaim>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +34,7 @@ pub enum ClaimListAction {
 
 impl ClaimList {
     pub fn new(claims: Vec<MedicareClaim>, theme: Theme) -> Self {
+        let paginated_list = PaginatedList::new(claims.clone());
         let mut scroll_state = ratatui::widgets::ListState::default();
         if !claims.is_empty() {
             scroll_state.select(Some(0));
@@ -43,33 +47,20 @@ impl ClaimList {
             hovered_index: None,
             double_click_detector: DoubleClickDetector::default(),
             theme,
+            paginated_list,
         }
     }
 
     pub fn select_next(&mut self) {
-        if self.claims.is_empty() {
-            self.selected_index = 0;
-            self.scroll_state.select(None);
-            return;
-        }
-
-        self.selected_index = (self.selected_index + 1) % self.claims.len();
-        self.scroll_state.select(Some(self.selected_index));
+        self.paginated_list.select_next_wrap();
+        self.selected_index = self.paginated_list.selected_index;
+        self.scroll_state = self.paginated_list.scroll_state.clone();
     }
 
     pub fn select_prev(&mut self) {
-        if self.claims.is_empty() {
-            self.selected_index = 0;
-            self.scroll_state.select(None);
-            return;
-        }
-
-        self.selected_index = if self.selected_index == 0 {
-            self.claims.len().saturating_sub(1)
-        } else {
-            self.selected_index.saturating_sub(1)
-        };
-        self.scroll_state.select(Some(self.selected_index));
+        self.paginated_list.select_prev_wrap();
+        self.selected_index = self.paginated_list.selected_index;
+        self.scroll_state = self.paginated_list.scroll_state.clone();
     }
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ClaimListAction> {

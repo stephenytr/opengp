@@ -10,6 +10,8 @@ use crate::ui::input::DoubleClickDetector;
 use crate::ui::shared::{hover_style, selected_hover_style};
 use crate::ui::theme::Theme;
 
+use super::paginated_list::PaginatedList;
+
 #[derive(Debug, Clone)]
 pub struct PaymentList {
     pub payments: Vec<Payment>,
@@ -18,10 +20,12 @@ pub struct PaymentList {
     pub hovered_index: Option<usize>,
     pub double_click_detector: DoubleClickDetector,
     pub theme: Theme,
+    paginated_list: PaginatedList<Payment>,
 }
 
 impl PaymentList {
     pub fn new(payments: Vec<Payment>, theme: Theme) -> Self {
+        let paginated_list = PaginatedList::new(payments.clone());
         let mut scroll_state = ratatui::widgets::ListState::default();
         if !payments.is_empty() {
             scroll_state.select(Some(0));
@@ -34,33 +38,20 @@ impl PaymentList {
             hovered_index: None,
             double_click_detector: DoubleClickDetector::default(),
             theme,
+            paginated_list,
         }
     }
 
     pub fn select_next(&mut self) {
-        if self.payments.is_empty() {
-            self.selected_index = 0;
-            self.scroll_state.select(None);
-            return;
-        }
-
-        self.selected_index = (self.selected_index + 1) % self.payments.len();
-        self.scroll_state.select(Some(self.selected_index));
+        self.paginated_list.select_next_wrap();
+        self.selected_index = self.paginated_list.selected_index;
+        self.scroll_state = self.paginated_list.scroll_state.clone();
     }
 
     pub fn select_prev(&mut self) {
-        if self.payments.is_empty() {
-            self.selected_index = 0;
-            self.scroll_state.select(None);
-            return;
-        }
-
-        self.selected_index = if self.selected_index == 0 {
-            self.payments.len().saturating_sub(1)
-        } else {
-            self.selected_index.saturating_sub(1)
-        };
-        self.scroll_state.select(Some(self.selected_index));
+        self.paginated_list.select_prev_wrap();
+        self.selected_index = self.paginated_list.selected_index;
+        self.scroll_state = self.paginated_list.scroll_state.clone();
     }
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<PaymentListAction> {

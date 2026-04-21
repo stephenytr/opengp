@@ -18,6 +18,8 @@ pub mod state;
 
 pub mod patient_billing_state;
 
+pub mod paginated_list;
+
 pub use claim_detail::{ClaimDetail, ClaimDetailAction};
 
 pub use claim_list::{ClaimList, ClaimListAction};
@@ -37,3 +39,5 @@ pub use receipt::{ReceiptAction, ReceiptPopup};
 pub use state::{BillingState, BillingView};
 
 pub use patient_billing_state::PatientBillingState;
+
+pub use paginated_list::PaginatedList;

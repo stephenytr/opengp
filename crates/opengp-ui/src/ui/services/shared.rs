@@ -38,3 +38,21 @@ where
         UiServiceError::Repository(self.to_string())
     }
 }
+
+/// Extension trait for Result types to convert errors to UiServiceError
+pub trait UiResultExt<T> {
+    /// Convert repository error to UiServiceError
+    fn map_ui_repo_err(self) -> Result<T, UiServiceError>;
+    /// Convert generic error to UiServiceError
+    fn map_ui_err(self) -> Result<T, UiServiceError>;
+}
+
+impl<T, E: std::error::Error> UiResultExt<T> for Result<T, E> {
+    fn map_ui_repo_err(self) -> Result<T, UiServiceError> {
+        self.map_err(|e| e.to_ui_repository_error())
+    }
+
+    fn map_ui_err(self) -> Result<T, UiServiceError> {
+        self.map_err(|e| e.to_ui_error())
+    }
+}

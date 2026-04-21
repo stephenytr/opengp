@@ -5,6 +5,7 @@
 
 use crate::ui::theme::Theme;
 use crate::ui::components::clinical::{VitalSignsForm, VitalSignsList, VitalsDetailModal};
+use crate::ui::components::clinical::ClinicalSubState;
 use opengp_config::healthcare::HealthcareConfig;
 use opengp_domain::domain::clinical::VitalSigns;
 
@@ -129,6 +130,36 @@ impl VitalsState {
     /// Clear error state.
     pub fn clear_error(&mut self) {
         self.error = None;
+    }
+}
+
+impl ClinicalSubState for VitalsState {
+    fn set_loading(&mut self, loading: bool) {
+        VitalsState::set_loading(self, loading);
+    }
+
+    fn set_error(&mut self, error: Option<String>) {
+        VitalsState::set_error(self, error);
+    }
+
+    fn clear_error(&mut self) {
+        VitalsState::clear_error(self);
+    }
+
+    fn clear(&mut self) {
+        VitalsState::clear(self);
+    }
+
+    fn is_form_open(&self) -> bool {
+        VitalsState::is_form_open(self)
+    }
+
+    fn next_item(&mut self) {
+        VitalsState::next_item(self);
+    }
+
+    fn prev_item(&mut self) {
+        VitalsState::prev_item(self);
     }
 }
 

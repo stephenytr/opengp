@@ -7,7 +7,7 @@ use std::sync::Arc;
 use chrono::{Datelike, NaiveDate, TimeZone, Utc, Weekday};
 
 use chrono::NaiveTime;
-use super::shared::{ToUiError, UiResult};
+use super::shared::{ToUiError, UiResult, UiResultExt};
 use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentRepository, AppointmentSearchCriteria, AppointmentService,
     AvailabilityService, CalendarAppointment, CalendarDayView, NewAppointmentData,
@@ -67,7 +67,7 @@ impl AppointmentUiService {
             .create_appointment(data, user_id)
             .await
             .map(|_| ())
-            .map_err(|e| e.to_ui_error())
+            .map_ui_err()
     }
 
     /// Lists all active practitioners.
@@ -75,7 +75,7 @@ impl AppointmentUiService {
         self.practitioner_repo
             .list_active()
             .await
-            .map_err(|e| e.to_ui_repository_error())
+            .map_ui_repo_err()
     }
 
     /// Get schedule for a specific date
@@ -109,7 +109,7 @@ impl AppointmentUiService {
             .calendar_query
             .find_calendar_appointments(&criteria)
             .await
-            .map_err(|e| e.to_ui_repository_error())?;
+            .map_ui_repo_err()?;
 
         // Group appointments by practitioner
         let mut appointments_by_practitioner: std::collections::HashMap<
@@ -129,7 +129,7 @@ impl AppointmentUiService {
             .practitioner_repo
             .list_active()
             .await
-            .map_err(|e| e.to_ui_repository_error())?;
+            .map_ui_repo_err()?;
 
         let mut schedules: Vec<PractitionerSchedule> = Vec::new();
         for p in practitioners {
@@ -193,7 +193,7 @@ impl AppointmentUiService {
             .mark_arrived(appointment_id, user_id)
             .await
             .map(|_| ())
-            .map_err(|e| e.to_ui_error())
+            .map_ui_err()
     }
 
     /// Marks an appointment as in progress.
@@ -206,7 +206,7 @@ impl AppointmentUiService {
             .mark_in_progress(appointment_id, user_id)
             .await
             .map(|_| ())
-            .map_err(|e| e.to_ui_error())
+            .map_ui_err()
     }
 
     /// Marks an appointment as completed.
@@ -219,62 +219,62 @@ impl AppointmentUiService {
             .mark_completed(appointment_id, user_id)
             .await
             .map(|_| ())
-            .map_err(|e| e.to_ui_error())
+            .map_ui_err()
     }
 
      /// Marks an appointment as no show.
-     pub async fn mark_no_show(
-         &self,
-         appointment_id: uuid::Uuid,
-         user_id: uuid::Uuid,
-     ) -> UiResult<()> {
-         self.domain_service
-             .mark_no_show(appointment_id, user_id)
-             .await
-             .map(|_| ())
-             .map_err(|e| e.to_ui_error())
-     }
+      pub async fn mark_no_show(
+          &self,
+          appointment_id: uuid::Uuid,
+          user_id: uuid::Uuid,
+      ) -> UiResult<()> {
+          self.domain_service
+              .mark_no_show(appointment_id, user_id)
+              .await
+              .map(|_| ())
+              .map_ui_err()
+      }
 
       /// Marks an appointment as billing.
-      pub async fn mark_billing(
-          &self,
-          appointment_id: uuid::Uuid,
-          user_id: uuid::Uuid,
-      ) -> UiResult<()> {
-          self.domain_service
-              .mark_billing(appointment_id, user_id)
-              .await
-              .map(|_| ())
-              .map_err(|e| e.to_ui_error())
-      }
+       pub async fn mark_billing(
+           &self,
+           appointment_id: uuid::Uuid,
+           user_id: uuid::Uuid,
+       ) -> UiResult<()> {
+           self.domain_service
+               .mark_billing(appointment_id, user_id)
+               .await
+               .map(|_| ())
+               .map_ui_err()
+       }
 
       /// Reschedules an appointment to a new time.
-      pub async fn reschedule_appointment(
-          &self,
-          appointment_id: uuid::Uuid,
-          new_start_time: chrono::DateTime<chrono::Utc>,
-          new_duration_minutes: i64,
-          user_id: uuid::Uuid,
-      ) -> UiResult<()> {
-          self.domain_service
-              .reschedule_appointment(appointment_id, new_start_time, new_duration_minutes, user_id)
-              .await
-              .map(|_| ())
-              .map_err(|e| e.to_ui_error())
-      }
+       pub async fn reschedule_appointment(
+           &self,
+           appointment_id: uuid::Uuid,
+           new_start_time: chrono::DateTime<chrono::Utc>,
+           new_duration_minutes: i64,
+           user_id: uuid::Uuid,
+       ) -> UiResult<()> {
+           self.domain_service
+               .reschedule_appointment(appointment_id, new_start_time, new_duration_minutes, user_id)
+               .await
+               .map(|_| ())
+               .map_ui_err()
+       }
 
       /// Returns the available time slots for a practitioner on a given date.
-     pub async fn get_available_slots(
-         &self,
-         practitioner_id: uuid::Uuid,
-         date: NaiveDate,
-         duration: u32,
-     ) -> UiResult<Vec<NaiveTime>> {
-         self.availability_service
-             .get_available_slots(practitioner_id, date, duration as i64)
-             .await
-             .map_err(|e| e.to_ui_error())
-     }
+      pub async fn get_available_slots(
+          &self,
+          practitioner_id: uuid::Uuid,
+          date: NaiveDate,
+          duration: u32,
+      ) -> UiResult<Vec<NaiveTime>> {
+          self.availability_service
+              .get_available_slots(practitioner_id, date, duration as i64)
+              .await
+              .map_ui_err()
+      }
 }
 
 #[cfg(test)]
