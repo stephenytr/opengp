@@ -134,35 +134,47 @@ impl WorkspaceManager {
             return None;
         }
 
+        let tab_index = self.patient_tab_index_at(mouse.column, tab_area);
+
         match mouse.kind {
             MouseEventKind::Moved => {
-                if !self.workspaces.is_empty() {
-                    let tab_width = (tab_area.width as usize / self.workspaces.len()).max(1);
-                    let hovered_idx =
-                        (mouse.column.saturating_sub(tab_area.x)) as usize / tab_width;
-                    if hovered_idx < self.workspaces.len() {
-                        self.hovered_tab.set_hovered(hovered_idx, (mouse.column, mouse.row));
-                    } else {
-                        self.hovered_tab.clear_hover();
-                    }
+                match tab_index {
+                    Some(idx) => self.hovered_tab.set_hovered(idx, (mouse.column, mouse.row)),
+                    None => self.hovered_tab.clear_hover(),
                 }
                 None
             }
-            MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
-                if !self.workspaces.is_empty() {
-                    let tab_width = (tab_area.width as usize / self.workspaces.len()).max(1);
-                    let clicked_idx = (mouse.column.saturating_sub(tab_area.x)) as usize / tab_width;
-                    if clicked_idx < self.workspaces.len() {
-                        if self.double_click_detector.check_double_click(&mouse, &crate::ui::input::SystemClock) {
-                            self.active_index = Some(clicked_idx);
-                            return Some(clicked_idx);
-                        }
-                    }
+            MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
+                if let Some(idx) = tab_index {
+                    self.active_index = Some(idx);
+                    Some(idx)
+                } else {
+                    None
                 }
-                None
             }
             _ => None,
         }
+    }
+
+    fn patient_tab_index_at(&self, col: u16, tab_area: Rect) -> Option<usize> {
+        let mut x = tab_area.x;
+        for (idx, ws) in self.workspaces.iter().enumerate() {
+            let name = if ws.patient_snapshot.full_name.len() > 20 {
+                ws.patient_snapshot.full_name[..19].to_string() + "…"
+            } else {
+                ws.patient_snapshot.full_name.clone()
+            };
+            let fkey_label = format!(" F{}", idx + 4);
+            let tab_width = (name.len() + 2 + fkey_label.len() + 2) as u16;
+            if col >= x && col < x + tab_width {
+                return Some(idx);
+            }
+            x += tab_width;
+            if x >= tab_area.x + tab_area.width {
+                break;
+            }
+        }
+        None
     }
 }
 

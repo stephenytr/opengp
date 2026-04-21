@@ -91,8 +91,8 @@ impl PatientTabBar {
             let mut current_width = 0;
             let max_width = 120;
 
-            for patient in &self.patients {
-                let tab_width = 3 + patient.truncated_name().len();
+            for (idx, patient) in self.patients.iter().enumerate() {
+                let tab_width = 3 + patient.truncated_name().len() + format!(" F{}", idx + 4).len();
                 if current_width + tab_width > max_width && current_width > 0 {
                     current_row += 1;
                     current_width = tab_width + 2;
@@ -143,8 +143,9 @@ impl PatientTabBar {
 
         for (idx, patient) in self.patients.iter().enumerate() {
             let is_active = self.active_index == Some(idx);
-            let tab_text = format!("■ {}", patient.truncated_name());
-            let tab_width = (tab_text.len() + 2) as u16; // +2 for padding
+            let fkey = idx + 4;
+            let tab_text = format!("■ {} F{}", patient.truncated_name(), fkey);
+            let tab_width = (tab_text.len() + 2) as u16;
 
             // Check if tab fits on current row
             if x + tab_width > max_x && x > area.x {
@@ -159,13 +160,12 @@ impl PatientTabBar {
             // Render the tab
             let is_hovered = self.hovered_index == Some(idx);
             let tab_style = if is_active && is_hovered {
-                selected_hover_style(&self.theme)
-                    .fg(patient.colour)
+                selected_hover_style(&self.theme).fg(patient.colour)
             } else if is_active {
                 Style::default()
+                    .bg(self.theme.colors.primary)
                     .fg(patient.colour)
                     .add_modifier(Modifier::BOLD)
-                    .bg(self.theme.colors.selected)
             } else if is_hovered {
                 hover_style(&self.theme)
             } else {
