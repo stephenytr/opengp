@@ -137,13 +137,15 @@ impl ConsultationList {
         area: Rect,
     ) -> Option<ConsultationListAction> {
         let mut table = self.table();
-        let out = match table.handle_mouse(mouse, area) {
-            Some(ListAction::Select(i)) => Some(ConsultationListAction::Select(i)),
-            _ => None,
-        };
+        let action = table.handle_mouse(mouse, area).and_then(|a| match a {
+            ListAction::Select(i) => Some(ConsultationListAction::Select(i)),
+            ListAction::Open(consultation) => Some(ConsultationListAction::Open(Box::new(consultation))),
+            ListAction::New => Some(ConsultationListAction::New),
+            ListAction::Edit(_) | ListAction::Delete(_) | ListAction::ToggleInactive | ListAction::ContextMenu { .. } => None,
+        });
         self.selected_index = table.selected_index;
         self.scroll_offset = table.scroll_offset;
-        out
+        action
     }
 
     fn table(&self) -> ClinicalTableList<Consultation> {

@@ -83,13 +83,15 @@ impl AllergyList {
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<AllergyListAction> {
         let mut table = self.table();
-        let out = match table.handle_mouse(mouse, area) {
-            Some(ListAction::Select(i)) => Some(AllergyListAction::Select(i)),
-            _ => None,
-        };
+        let action = table.handle_mouse(mouse, area).and_then(|a| match a {
+            ListAction::Select(i) => Some(AllergyListAction::Select(i)),
+            ListAction::Open(allergy) => Some(AllergyListAction::Open(allergy)),
+            ListAction::New => Some(AllergyListAction::New),
+            ListAction::Edit(_) | ListAction::Delete(_) | ListAction::ToggleInactive | ListAction::ContextMenu { .. } => None,
+        });
         self.selected_index = table.selected_index;
         self.scroll_offset = table.scroll_offset;
-        out
+        action
     }
 
     fn table(&self) -> ClinicalTableList<Allergy> {
