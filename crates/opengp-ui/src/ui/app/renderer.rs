@@ -178,12 +178,39 @@ impl App {
             let menu = workspace.active_clinical_menu;
             if let Some(ref mut clinical) = workspace.clinical {
                 match menu {
-                    ClinicalMenuKind::Consultations => clinical.show_consultations(),
-                    ClinicalMenuKind::Vitals => clinical.show_vital_signs(),
-                    ClinicalMenuKind::Allergies => clinical.show_allergies(),
-                    ClinicalMenuKind::MedicalHistory => clinical.show_medical_history(),
-                    ClinicalMenuKind::FamilyHistory => clinical.show_family_history(),
-                    ClinicalMenuKind::SocialHistory => clinical.show_social_history(),
+                    ClinicalMenuKind::Consultations => {
+                        match clinical.view {
+                            ClinicalView::PatientSummary
+                            | ClinicalView::Consultations
+                            | ClinicalView::ConsultationSummary => {}
+                            _ => clinical.show_patient_summary(),
+                        }
+                    }
+                    ClinicalMenuKind::Vitals => {
+                        if clinical.view != ClinicalView::VitalSigns {
+                            clinical.show_vital_signs();
+                        }
+                    }
+                    ClinicalMenuKind::Allergies => {
+                        if clinical.view != ClinicalView::Allergies {
+                            clinical.show_allergies();
+                        }
+                    }
+                    ClinicalMenuKind::MedicalHistory => {
+                        if clinical.view != ClinicalView::MedicalHistory {
+                            clinical.show_medical_history();
+                        }
+                    }
+                    ClinicalMenuKind::FamilyHistory => {
+                        if clinical.view != ClinicalView::FamilyHistory {
+                            clinical.show_family_history();
+                        }
+                    }
+                    ClinicalMenuKind::SocialHistory => {
+                        if clinical.view != ClinicalView::SocialHistory {
+                            clinical.show_social_history();
+                        }
+                    }
                 }
             }
         }
