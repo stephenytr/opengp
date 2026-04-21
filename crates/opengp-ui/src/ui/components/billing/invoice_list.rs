@@ -1,10 +1,14 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind};
 use opengp_domain::domain::billing::{Invoice, InvoiceStatus};
-use ratatui::layout::{Constraint, Rect};
+use ratatui::layout::{Constraint, Position, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Cell, ListState, Row, Table};
 use ratatui::Frame;
 use uuid::Uuid;
+
+use crate::ui::input::DoubleClickDetector;
+use crate::ui::shared::{hover_style, selected_hover_style};
+use crate::ui::theme::Theme;
 
 pub struct InvoiceList {
     invoices: Vec<Invoice>,
@@ -12,6 +16,9 @@ pub struct InvoiceList {
     search_query: String,
     scroll_state: ListState,
     selected_index: usize,
+    hovered_index: Option<usize>,
+    double_click_detector: DoubleClickDetector,
+    theme: Theme,
 }
 
 #[derive(Debug, Clone)]
@@ -20,16 +27,17 @@ pub enum InvoiceListAction {
     Open(Uuid),
     SearchChanged(String),
     New,
+    ContextMenu { x: u16, y: u16, invoice_id: Uuid },
 }
 
 impl Default for InvoiceList {
     fn default() -> Self {
-        Self::new()
+        Self::new(Theme::dark())
     }
 }
 
 impl InvoiceList {
-    pub fn new() -> Self {
+    pub fn new(theme: Theme) -> Self {
         let mut scroll_state = ListState::default();
         scroll_state.select(Some(0));
 
@@ -39,6 +47,9 @@ impl InvoiceList {
             search_query: String::new(),
             scroll_state,
             selected_index: 0,
+            hovered_index: None,
+            double_click_detector: DoubleClickDetector::default(),
+            theme,
         }
     }
 
@@ -146,6 +157,101 @@ impl InvoiceList {
         }
     }
 
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<InvoiceListAction> {
+        const HEADER_HEIGHT: u16 = 2;
+
+        // Track hover state on mouse movement
+        if let MouseEventKind::Moved = mouse.kind {
+            if area.contains(Position::new(mouse.column, mouse.row))
+                && mouse.row >= area.y + HEADER_HEIGHT
+            {
+                let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
+                if row_index < self.filtered.len() {
+                    self.hovered_index = Some(row_index);
+                } else {
+                    self.hovered_index = None;
+                }
+            } else {
+                self.hovered_index = None;
+            }
+            return None;
+        }
+
+        // Handle right-click for context menu
+        if let MouseEventKind::Down(MouseButton::Right) = mouse.kind {
+            if !area.contains(Position::new(mouse.column, mouse.row)) {
+                return None;
+            }
+
+            if mouse.row < area.y + HEADER_HEIGHT {
+                return None;
+            }
+
+            let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
+            if row_index < self.filtered.len() {
+                self.selected_index = row_index;
+                self.scroll_state.select(Some(self.selected_index));
+                if let Some(invoice) = self.filtered.get(row_index) {
+                    return Some(InvoiceListAction::ContextMenu {
+                        x: mouse.column,
+                        y: mouse.row,
+                        invoice_id: invoice.id,
+                    });
+                }
+            }
+            return None;
+        }
+
+        // Handle double-click for open action
+        if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+            if !area.contains(Position::new(mouse.column, mouse.row)) {
+                return None;
+            }
+
+            if mouse.row < area.y + HEADER_HEIGHT {
+                return None;
+            }
+
+            let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
+
+            if row_index >= self.filtered.len() {
+                return None;
+            }
+
+            // Check for double-click
+            if self.double_click_detector.check_double_click_now(&mouse) {
+                if let Some(invoice) = self.filtered.get(row_index) {
+                    self.selected_index = row_index;
+                    self.scroll_state.select(Some(self.selected_index));
+                    return Some(InvoiceListAction::Open(invoice.id));
+                }
+            }
+            return None;
+        }
+
+        // Only process left mouse up for normal selection
+        if mouse.kind != MouseEventKind::Up(MouseButton::Left) {
+            return None;
+        }
+
+        if !area.contains(Position::new(mouse.column, mouse.row)) {
+            return None;
+        }
+
+        if mouse.row < area.y + HEADER_HEIGHT {
+            return None;
+        }
+
+        let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
+        if row_index < self.filtered.len() {
+            self.selected_index = row_index;
+            self.scroll_state.select(Some(self.selected_index));
+            Some(InvoiceListAction::Select(self.selected_index))
+        } else {
+            None
+        }
+    }
+
     pub fn render(&self, frame: &mut Frame, area: Rect) {
         let block = Block::default().title(" Invoices ").borders(Borders::ALL);
         let inner = block.inner(area);
@@ -167,10 +273,14 @@ impl InvoiceList {
             .iter()
             .enumerate()
             .map(|(idx, invoice)| {
-                let row_style = if idx == self.selected_index {
-                    Style::default().bg(Color::Blue).fg(Color::White)
-                } else {
-                    Style::default().fg(Color::White)
+                let is_selected = idx == self.selected_index;
+                let is_hovered = self.hovered_index == Some(idx);
+
+                let row_style = match (is_selected, is_hovered) {
+                    (true, true) => selected_hover_style(&self.theme),
+                    (true, false) => Style::default().bg(Color::Blue).fg(Color::White),
+                    (false, true) => hover_style(&self.theme),
+                    (false, false) => Style::default().fg(Color::White),
                 };
 
                 let status = invoice.status.to_string();

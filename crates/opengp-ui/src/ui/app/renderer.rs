@@ -418,7 +418,7 @@ impl App {
             if let Some(ref billing_state) = workspace.billing {
                 match billing_state.view {
                     BillingView::InvoiceList => {
-                        let mut invoice_list = InvoiceList::new();
+                        let mut invoice_list = InvoiceList::new(self.theme.clone());
                         invoice_list.set_invoices(billing_state.invoices.clone());
                         invoice_list.render(frame, area);
                     }
@@ -436,11 +436,11 @@ impl App {
                         invoice_detail.render(area, frame.buffer_mut());
                     }
                     BillingView::ClaimList => {
-                        let claim_list = ClaimList::new(billing_state.claims.clone());
+                        let claim_list = ClaimList::new(billing_state.claims.clone(), self.theme.clone());
                         claim_list.render(area, frame.buffer_mut());
                     }
                     BillingView::PaymentList => {
-                        let payment_list = PaymentList::new(billing_state.payments.clone());
+                        let payment_list = PaymentList::new(billing_state.payments.clone(), self.theme.clone());
                         payment_list.render(area, frame.buffer_mut());
                     }
                 }
