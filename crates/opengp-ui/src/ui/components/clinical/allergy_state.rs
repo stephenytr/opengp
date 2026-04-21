@@ -93,13 +93,12 @@ impl AllergyState {
     /// Check if a patient is selected (from parent state context).
     /// This is a helper; actual patient selection is managed by ClinicalState.
     pub fn has_patient(&self) -> bool {
-        true // This will be set by the parent ClinicalState context
+        !self.allergies.is_empty() || self.allergy_form.is_some()
     }
 
     /// Clear all allergy state.
     pub fn clear(&mut self) {
         self.allergies.clear();
-        self.allergy_list.allergies.clear();
         self.allergy_list.move_first();
         self.allergy_form = None;
         self.allergy_detail_modal = None;
@@ -118,14 +117,12 @@ impl AllergyState {
 
     /// Add an allergy to the list.
     pub fn add_allergy(&mut self, allergy: Allergy) {
-        self.allergies.push(allergy.clone());
-        self.allergy_list.allergies.push(allergy);
+        self.allergies.push(allergy);
     }
 
     /// Remove an allergy by ID.
     pub fn remove_allergy(&mut self, id: uuid::Uuid) {
         self.allergies.retain(|a| a.id != id);
-        self.allergy_list.allergies.retain(|a| a.id != id);
         if self.allergy_list.selected_index >= self.allergies.len() && !self.allergies.is_empty()
         {
             self.allergy_list.selected_index = self.allergies.len() - 1;
@@ -142,10 +139,6 @@ impl AllergyState {
         self.allergy_list.prev();
     }
 
-    /// Sync the allergy list data with the raw allergies vector.
-    pub fn sync_list(&mut self) {
-        self.allergy_list.allergies = self.allergies.clone();
-    }
 }
 
 #[cfg(test)]
@@ -206,7 +199,6 @@ mod tests {
         state.add_allergy(allergy.clone());
 
         assert_eq!(state.allergies.len(), 1);
-        assert_eq!(state.allergy_list.allergies.len(), 1);
         assert_eq!(state.allergies[0].id, allergy.id);
     }
 
@@ -228,7 +220,6 @@ mod tests {
 
         assert_eq!(state.allergies.len(), 1);
         assert_eq!(state.allergies[0].id, allergy2.id);
-        assert_eq!(state.allergy_list.allergies.len(), 1);
     }
 
     #[test]
@@ -309,6 +300,9 @@ mod tests {
         state.add_allergy(allergy1);
         state.add_allergy(allergy2);
 
+        // Manually sync the list widget with the state data (renderer does this at render time)
+        state.allergy_list.allergies = state.allergies.clone();
+
         assert_eq!(state.allergy_list.selected_index, 0);
 
         state.next_item();
@@ -316,5 +310,25 @@ mod tests {
 
         state.prev_item();
         assert_eq!(state.allergy_list.selected_index, 0);
+    }
+
+    #[test]
+    fn test_has_patient_empty() {
+        let state = AllergyState::new(create_test_theme(), create_test_config());
+        assert!(!state.has_patient());
+    }
+
+    #[test]
+    fn test_has_patient_with_data() {
+        let mut state = AllergyState::new(create_test_theme(), create_test_config());
+        state.add_allergy(create_test_allergy());
+        assert!(state.has_patient());
+    }
+
+    #[test]
+    fn test_has_patient_with_form_open() {
+        let mut state = AllergyState::new(create_test_theme(), create_test_config());
+        state.open_allergy_form();
+        assert!(state.has_patient());
     }
 }

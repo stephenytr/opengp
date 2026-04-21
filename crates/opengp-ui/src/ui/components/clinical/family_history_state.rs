@@ -91,13 +91,12 @@ impl FamilyHistoryState {
     /// Check if a patient is selected (from parent state context).
     /// This is a helper; actual patient selection is managed by ClinicalState.
     pub fn has_patient(&self) -> bool {
-        true // This will be set by the parent ClinicalState context
+        !self.family_history.is_empty() || self.family_history_form.is_some()
     }
 
     /// Clear all family history state.
     pub fn clear(&mut self) {
         self.family_history.clear();
-        self.family_history_list.entries.clear();
         self.family_history_list.move_first();
         self.family_history_form = None;
         self.family_history_detail_modal = None;
@@ -116,14 +115,12 @@ impl FamilyHistoryState {
 
     /// Add a family history entry to the list.
     pub fn add_family_history(&mut self, family_history: FamilyHistory) {
-        self.family_history.push(family_history.clone());
-        self.family_history_list.entries.push(family_history);
+        self.family_history.push(family_history);
     }
 
     /// Remove a family history entry by ID.
     pub fn remove_family_history(&mut self, id: uuid::Uuid) {
         self.family_history.retain(|fh| fh.id != id);
-        self.family_history_list.entries.retain(|fh| fh.id != id);
         if self.family_history_list.selected_index >= self.family_history.len()
             && !self.family_history.is_empty()
         {
@@ -139,11 +136,6 @@ impl FamilyHistoryState {
     /// Navigate to the previous family history entry in the list.
     pub fn prev_item(&mut self) {
         self.family_history_list.prev();
-    }
-
-    /// Sync the family history list data with the raw family_history vector.
-    pub fn sync_list(&mut self) {
-        self.family_history_list.entries = self.family_history.clone();
     }
 }
 
@@ -192,7 +184,6 @@ mod tests {
         state.add_family_history(fh.clone());
 
         assert_eq!(state.family_history.len(), 1);
-        assert_eq!(state.family_history_list.entries.len(), 1);
         assert_eq!(state.family_history[0].id, fh.id);
     }
 
@@ -213,7 +204,6 @@ mod tests {
 
         assert_eq!(state.family_history.len(), 1);
         assert_eq!(state.family_history[0].id, fh2.id);
-        assert_eq!(state.family_history_list.entries.len(), 1);
     }
 
     #[test]
@@ -289,6 +279,9 @@ mod tests {
         state.add_family_history(fh1);
         state.add_family_history(fh2);
 
+        // Simulate renderer populating the list entries
+        state.family_history_list.entries = state.family_history.clone();
+
         assert_eq!(state.family_history_list.selected_index, 0);
 
         state.next_item();
@@ -296,24 +289,6 @@ mod tests {
 
         state.prev_item();
         assert_eq!(state.family_history_list.selected_index, 0);
-    }
-
-    #[test]
-    fn test_sync_list() {
-        let theme = create_test_theme();
-        let mut state = FamilyHistoryState::new(theme);
-
-        let fh1 = create_test_family_history();
-        let fh2 = create_test_family_history();
-
-        state.family_history.push(fh1.clone());
-        state.family_history.push(fh2.clone());
-
-        state.sync_list();
-
-        assert_eq!(state.family_history_list.entries.len(), 2);
-        assert_eq!(state.family_history_list.entries[0].id, fh1.id);
-        assert_eq!(state.family_history_list.entries[1].id, fh2.id);
     }
 
     #[test]
@@ -345,10 +320,22 @@ mod tests {
     }
 
     #[test]
-    fn test_has_patient() {
-        let theme = create_test_theme();
-        let state = FamilyHistoryState::new(theme);
+    fn test_has_patient_empty() {
+        let state = FamilyHistoryState::new(create_test_theme());
+        assert!(!state.has_patient());
+    }
 
+    #[test]
+    fn test_has_patient_with_data() {
+        let mut state = FamilyHistoryState::new(create_test_theme());
+        state.add_family_history(create_test_family_history());
+        assert!(state.has_patient());
+    }
+
+    #[test]
+    fn test_has_patient_with_form_open() {
+        let mut state = FamilyHistoryState::new(create_test_theme());
+        state.open_family_history_form();
         assert!(state.has_patient());
     }
 }

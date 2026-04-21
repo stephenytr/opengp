@@ -104,8 +104,9 @@ impl MedicalHistoryState {
 
     /// Move to the next item in the list.
     pub fn next_item(&mut self) {
-        let visible_rows = 10; // default, would be adjusted by caller
-        self.medical_history_list.adjust_scroll(visible_rows);
+        self.medical_history_list.selected_index =
+            (self.medical_history_list.selected_index + 1)
+                .min(self.medical_history.len().saturating_sub(1));
     }
 
     /// Move to the previous item in the list.
@@ -232,8 +233,43 @@ mod tests {
         let mut state = create_test_state();
         assert_eq!(state.medical_history_list.selected_index, 0);
 
+        // Add test items
+        state.medical_history = vec![
+            MedicalHistory {
+                id: uuid::Uuid::new_v4(),
+                patient_id: uuid::Uuid::new_v4(),
+                condition: "Hypertension".to_string(),
+                diagnosis_date: None,
+                status: opengp_domain::domain::clinical::ConditionStatus::Active,
+                severity: None,
+                notes: None,
+                is_active: true,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+                created_by: uuid::Uuid::new_v4(),
+                updated_by: None,
+            },
+            MedicalHistory {
+                id: uuid::Uuid::new_v4(),
+                patient_id: uuid::Uuid::new_v4(),
+                condition: "Diabetes".to_string(),
+                diagnosis_date: None,
+                status: opengp_domain::domain::clinical::ConditionStatus::Chronic,
+                severity: None,
+                notes: None,
+                is_active: true,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+                created_by: uuid::Uuid::new_v4(),
+                updated_by: None,
+            },
+        ];
+
         state.next_item();
-        // next_item calls adjust_scroll which may not change selected_index in tests
+        assert_eq!(state.medical_history_list.selected_index, 1);
+
+        state.next_item();
+        assert_eq!(state.medical_history_list.selected_index, 1); // clamped at max
 
         state.prev_item();
         assert_eq!(state.medical_history_list.selected_index, 0); // saturating_sub prevents underflow
