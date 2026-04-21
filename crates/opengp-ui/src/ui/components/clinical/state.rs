@@ -8,6 +8,16 @@ use opengp_config::{
 };
 use uuid::Uuid;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClinicalSubDomain {
+    Consultations,
+    Allergies,
+    Vitals,
+    MedicalHistory,
+    FamilyHistory,
+    SocialHistory,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub enum ClinicalView {
     #[default]
@@ -331,6 +341,17 @@ impl ClinicalState {
         self.medical_history.loading = loading;
         self.family_history.loading = loading;
         self.social_history.loading = loading;
+    }
+
+    pub fn set_sub_loading(&mut self, domain: ClinicalSubDomain, loading: bool) {
+        match domain {
+            ClinicalSubDomain::Consultations => self.consultations.loading = loading,
+            ClinicalSubDomain::Allergies => self.allergies.loading = loading,
+            ClinicalSubDomain::Vitals => self.vitals.loading = loading,
+            ClinicalSubDomain::MedicalHistory => self.medical_history.loading = loading,
+            ClinicalSubDomain::FamilyHistory => self.family_history.loading = loading,
+            ClinicalSubDomain::SocialHistory => self.social_history.loading = loading,
+        }
     }
 
     pub fn set_error(&mut self, error: Option<String>) {
@@ -847,5 +868,31 @@ mod tests {
         state.close_consultation_detail();
         assert!(!state.has_open_detail_modal());
         assert!(state.consultations.consultation_detail_modal.is_none());
+    }
+
+    #[test]
+    fn test_set_sub_loading_scoped() {
+        use super::ClinicalSubDomain;
+        let mut state = test_state();
+        
+        // Initially all loading should be false
+        assert!(!state.consultations.loading);
+        assert!(!state.allergies.loading);
+        assert!(!state.vitals.loading);
+        
+        // Setting one domain's loading should NOT affect others
+        state.set_sub_loading(ClinicalSubDomain::Allergies, true);
+        assert!(state.allergies.loading);
+        assert!(!state.consultations.loading);
+        assert!(!state.vitals.loading);
+        assert!(!state.medical_history.loading);
+        assert!(!state.family_history.loading);
+        assert!(!state.social_history.loading);
+        
+        // Setting another domain should not affect Allergies
+        state.set_sub_loading(ClinicalSubDomain::Vitals, true);
+        assert!(state.allergies.loading);  // Still true
+        assert!(state.vitals.loading);     // Now true
+        assert!(!state.consultations.loading);
     }
 }
