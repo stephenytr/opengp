@@ -1,7 +1,9 @@
 use crate::ui::app::App;
 
 impl App {
-    pub fn request_refresh_consultations(&mut self, _patient_id: uuid::Uuid) {}
+    pub fn request_refresh_consultations(&mut self, patient_id: uuid::Uuid) {
+        self.pending_consultation_list_refresh = Some(patient_id);
+    }
 
     pub fn take_pending_clinical_patient_id(&mut self) -> Option<uuid::Uuid> {
         if !self.authenticated {
@@ -14,8 +16,7 @@ impl App {
         if !self.authenticated {
             return None;
         }
-        // Pending data is stored in the workspace's clinical state; extract if needed
-        None
+        self.pending_clinical_save_data.take()
     }
 
     pub fn clinical_state_mut(&mut self) -> &mut crate::ui::components::clinical::ClinicalState {
@@ -43,5 +44,63 @@ impl App {
             .expect("No active workspace for clinical state access")
             .clinical.as_mut()
             .expect("clinical state must be initialized")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::app::PendingClinicalSaveData;
+    use crate::ui::theme::Theme;
+    use opengp_config::CalendarConfig;
+
+    fn make_app() -> App {
+        App::new(
+            None,
+            CalendarConfig::default(),
+            Theme::dark(),
+            opengp_config::healthcare::HealthcareConfig::default(),
+            opengp_config::PatientConfig::default(),
+            opengp_config::AllergyConfig::default(),
+            opengp_config::ClinicalConfig::default(),
+            opengp_config::SocialHistoryConfig::default(),
+            None,
+            None,
+            opengp_config::PracticeConfig::default(),
+            8,
+        )
+    }
+
+    #[test]
+    fn request_refresh_consultations_sets_pending_patient() {
+        let mut app = make_app();
+        let patient_id = uuid::Uuid::new_v4();
+
+        app.request_refresh_consultations(patient_id);
+
+        assert_eq!(app.pending_consultation_list_refresh, Some(patient_id));
+    }
+
+    #[test]
+    fn take_pending_clinical_save_data_returns_and_clears_pending_value() {
+        let mut app = make_app();
+        let consultation_id = uuid::Uuid::new_v4();
+        let user_id = uuid::Uuid::new_v4();
+        app.pending_clinical_save_data = Some(PendingClinicalSaveData::SignConsultation {
+            consultation_id,
+            user_id,
+        });
+
+        let first = app.take_pending_clinical_save_data();
+        let second = app.take_pending_clinical_save_data();
+
+        assert!(matches!(
+            first,
+            Some(PendingClinicalSaveData::SignConsultation {
+                consultation_id: id,
+                user_id: uid,
+            }) if id == consultation_id && uid == user_id
+        ));
+        assert!(second.is_none());
     }
 }

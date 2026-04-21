@@ -176,13 +176,13 @@ impl AppointmentDetailModal {
         let start = self
             .appointment
             .start_time
-            .with_timezone(&chrono::Local)
+            .naive_utc()
             .format("%H:%M")
             .to_string();
         let end = self
             .appointment
             .end_time
-            .with_timezone(&chrono::Local)
+            .naive_utc()
             .format("%H:%M")
             .to_string();
         format!("{} - {}", start, end)

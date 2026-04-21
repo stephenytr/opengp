@@ -285,8 +285,8 @@ impl TimePickerPopup {
             return;
         }
         let current_index = self.find_available_slot_index(self.selected_time);
-        if current_index > 0 {
-            self.selected_time = available[current_index - 1];
+        if current_index >= GRID_COLS as usize {
+            self.selected_time = available[current_index - GRID_COLS as usize];
         }
     }
 
@@ -296,8 +296,9 @@ impl TimePickerPopup {
             return;
         }
         let current_index = self.find_available_slot_index(self.selected_time);
-        if current_index < available.len() - 1 {
-            self.selected_time = available[current_index + 1];
+        let next_index = current_index + GRID_COLS as usize;
+        if next_index < available.len() {
+            self.selected_time = available[next_index];
         }
     }
 
@@ -307,8 +308,8 @@ impl TimePickerPopup {
             return;
         }
         let current_index = self.find_available_slot_index(self.selected_time);
-        if current_index >= GRID_COLS as usize {
-            self.selected_time = available[current_index - GRID_COLS as usize];
+        if current_index > 0 {
+            self.selected_time = available[current_index - 1];
         }
     }
 
@@ -318,8 +319,8 @@ impl TimePickerPopup {
             return;
         }
         let current_index = self.find_available_slot_index(self.selected_time);
-        if current_index + (GRID_COLS as usize) < available.len() {
-            self.selected_time = available[current_index + (GRID_COLS as usize)];
+        if current_index + 1 < available.len() {
+            self.selected_time = available[current_index + 1];
         }
     }
 

@@ -415,7 +415,25 @@ impl App {
         }
 
         if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
-            return self.handle_patient_keys(key);
+            if let Some(workspace) = self.workspace_manager.active() {
+                match workspace.active_subtab {
+                    crate::ui::components::SubtabKind::Clinical => {
+                        let action = self.handle_clinical_keys(key);
+                        if action != Action::Unknown {
+                            return action;
+                        }
+                    }
+                    crate::ui::components::SubtabKind::Billing => {
+                        let action = self.handle_billing_keys(key);
+                        if action != Action::Unknown {
+                            return action;
+                        }
+                    }
+                    _ => {}
+                }
+            } else {
+                return self.handle_patient_keys(key);
+            }
         }
 
         if self.tab_bar.selected() == Tab::Appointment {
