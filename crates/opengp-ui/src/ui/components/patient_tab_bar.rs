@@ -8,11 +8,12 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Widget};
+use ratatui::widgets::{Paragraph, Widget};
 use uuid::Uuid;
 
 use crate::ui::components::subtab_bar::{SubtabBar, SubtabKind};
 use crate::ui::theme::Theme;
+use crate::ui::shared::{hover_style, selected_hover_style};
 
 /// Patient data for tab display
 #[derive(Debug, Clone)]
@@ -53,6 +54,8 @@ pub struct PatientTabBar {
     active_subtab_index: usize,
     /// Theme for styling
     theme: Theme,
+    /// Index of currently hovered patient tab
+    hovered_index: Option<usize>,
 }
 
 impl PatientTabBar {
@@ -70,7 +73,14 @@ impl PatientTabBar {
             subtabs,
             active_subtab_index,
             theme,
+            hovered_index: None,
         }
+    }
+
+    /// Set the hovered tab index for hover styling
+    pub fn with_hovered(mut self, hovered_index: Option<usize>) -> Self {
+        self.hovered_index = hovered_index;
+        self
     }
 
     /// Get the number of rows needed (patient tabs + 1 for subtab bar)
@@ -181,11 +191,17 @@ impl PatientTabBar {
             }
 
             // Render the tab
-            let tab_style = if is_active {
+            let is_hovered = self.hovered_index == Some(idx);
+            let tab_style = if is_active && is_hovered {
+                selected_hover_style(&self.theme)
+                    .fg(patient.colour)
+            } else if is_active {
                 Style::default()
                     .fg(patient.colour)
                     .add_modifier(Modifier::BOLD)
                     .bg(self.theme.colors.selected)
+            } else if is_hovered {
+                hover_style(&self.theme)
             } else {
                 Style::default().fg(patient.colour)
             };

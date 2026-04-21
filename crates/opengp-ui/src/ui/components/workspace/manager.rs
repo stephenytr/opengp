@@ -1,7 +1,10 @@
 use uuid::Uuid;
+use crossterm::event::{MouseEvent, MouseEventKind};
+use ratatui::layout::{Position, Rect};
 use crate::ui::view_models::PatientListItem;
 use crate::ui::theme::Theme;
 use crate::ui::components::SubtabKind;
+use crate::ui::input::{HoverState, DoubleClickDetector};
 use super::workspace::{PatientWorkspace, WorkspaceError};
 
 pub struct WorkspaceManager {
@@ -10,6 +13,10 @@ pub struct WorkspaceManager {
     pub max_open: usize,
     pub colour_counter: usize,
     pub theme: Theme,
+    /// Tracks which patient tab is currently hovered
+    pub hovered_tab: HoverState<usize>,
+    /// Detects double-clicks on patient tabs
+    pub double_click_detector: DoubleClickDetector,
 }
 
 impl WorkspaceManager {
@@ -20,6 +27,8 @@ impl WorkspaceManager {
             max_open,
             colour_counter: 0,
             theme,
+            hovered_tab: HoverState::new(),
+            double_click_detector: DoubleClickDetector::default(),
         }
     }
 
@@ -117,6 +126,43 @@ impl WorkspaceManager {
 
     pub fn is_subtab_loaded(&self, subtab: SubtabKind) -> bool {
         self.active().map(|w| w.is_loaded(subtab)).unwrap_or(false)
+    }
+
+    pub fn handle_patient_tab_mouse(&mut self, mouse: MouseEvent, tab_area: Rect) -> Option<usize> {
+        if !tab_area.contains(Position::new(mouse.column, mouse.row)) {
+            self.hovered_tab.clear_hover();
+            return None;
+        }
+
+        match mouse.kind {
+            MouseEventKind::Moved => {
+                if !self.workspaces.is_empty() {
+                    let tab_width = (tab_area.width as usize / self.workspaces.len()).max(1);
+                    let hovered_idx =
+                        (mouse.column.saturating_sub(tab_area.x)) as usize / tab_width;
+                    if hovered_idx < self.workspaces.len() {
+                        self.hovered_tab.set_hovered(hovered_idx, (mouse.column, mouse.row));
+                    } else {
+                        self.hovered_tab.clear_hover();
+                    }
+                }
+                None
+            }
+            MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
+                if !self.workspaces.is_empty() {
+                    let tab_width = (tab_area.width as usize / self.workspaces.len()).max(1);
+                    let clicked_idx = (mouse.column.saturating_sub(tab_area.x)) as usize / tab_width;
+                    if clicked_idx < self.workspaces.len() {
+                        if self.double_click_detector.check_double_click(&mouse, &crate::ui::input::SystemClock) {
+                            self.active_index = Some(clicked_idx);
+                            return Some(clicked_idx);
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
     }
 }
 

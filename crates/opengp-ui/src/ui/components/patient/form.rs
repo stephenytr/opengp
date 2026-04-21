@@ -19,9 +19,9 @@ use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Paragraph, Widget};
 use uuid::Uuid;
 
-use crate::ui::input::to_ratatui_key;
+use crate::ui::input::{to_ratatui_key, HoverState};
 use crate::ui::layout::LABEL_WIDTH;
-use crate::ui::shared::FormAction;
+use crate::ui::shared::{FormAction, hover_style};
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
 use crate::ui::widgets::{
@@ -239,6 +239,7 @@ pub struct PatientForm {
     form_state: FormState<PatientFormField>,
     validator: FormValidator,
     date_picker: DatePickerPopup,
+    hovered_field: HoverState<String>,
 }
 
 impl Clone for PatientForm {
@@ -254,6 +255,7 @@ impl Clone for PatientForm {
             form_state: self.form_state.clone(),
             validator: build_validator(&self.field_configs),
             date_picker: self.date_picker.clone(),
+            hovered_field: self.hovered_field.clone(),
         }
     }
 }
@@ -432,6 +434,7 @@ impl PatientForm {
             form_state,
             validator: FormValidator::new(&HashMap::new()),
             date_picker: DatePickerPopup::new(theme),
+            hovered_field: HoverState::new(),
         };
 
         form.validator = build_validator(&form.field_configs);
@@ -1036,6 +1039,45 @@ impl PatientForm {
     }
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<PatientFormAction> {
+        // Handle hover state tracking for Moved events
+        if mouse.kind == MouseEventKind::Moved {
+            let mouse_pos = Position::new(mouse.column, mouse.row);
+            
+            if !area.contains(mouse_pos) {
+                self.hovered_field.clear_hover();
+                return None;
+            }
+            
+            let inner = Rect::new(area.x + 1, area.y + 1, area.width - 2, area.height - 2);
+            if !inner.contains(mouse_pos) {
+                self.hovered_field.clear_hover();
+                return None;
+            }
+            
+            let mut y = inner.y + 1;
+            let max_y = inner.y + inner.height - 2;
+            
+            for field_id in &self.field_ids {
+                if y > max_y {
+                    break;
+                }
+                
+                let field_height = self.get_field_height(field_id);
+                let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
+                
+                if field_area.contains(mouse_pos) {
+                    self.hovered_field.set_hovered(field_id.clone(), (mouse.column, mouse.row));
+                    return None;
+                }
+                
+                y += field_height;
+            }
+            
+            self.hovered_field.clear_hover();
+            return None;
+        }
+        
+        // Handle left-click for focus changes
         if mouse.kind != MouseEventKind::Up(crossterm::event::MouseButton::Left) {
             return None;
         }
@@ -1344,14 +1386,24 @@ impl Widget for PatientForm {
                 let width_percent = field_config.map(|fc| fc.width_percent).unwrap_or(100);
                 let field_height = self.get_field_height(&field_id) as i32;
                 let is_focused = field_id == self.focused_field;
+                let is_hovered = self.hovered_field.element_id.as_ref() == Some(&field_id);
 
                 if width_percent == 100 {
-                    // Full-width field
                     let y = max(left_y, right_y);
                     if y < max_y {
                         if let Some(dropdown) = self.form_state.dropdowns.get(&field_id).cloned() {
                             let dropdown_area =
                                 Rect::new(inner.x + 1, y as u16, inner.width - 2, 3);
+                            
+                            if is_hovered {
+                                let bg_style = hover_style(&self.form_state.theme);
+                                for row in dropdown_area.y..dropdown_area.bottom() {
+                                    for col in dropdown_area.x..dropdown_area.right() {
+                                        buf[(col, row)].set_style(bg_style);
+                                    }
+                                }
+                            }
+                            
                             if dropdown.is_open() {
                                 open_dropdown = Some((dropdown.clone(), dropdown_area));
                             }
@@ -1363,16 +1415,24 @@ impl Widget for PatientForm {
                                 inner.width - 2,
                                 textarea.height(),
                             );
+                            
+                            if is_hovered {
+                                let bg_style = hover_style(&self.form_state.theme);
+                                for row in textarea_area.y..textarea_area.bottom() {
+                                    for col in textarea_area.x..textarea_area.right() {
+                                        buf[(col, row)].set_style(bg_style);
+                                    }
+                                }
+                            }
+                            
                             TextareaWidget::new(textarea, self.form_state.theme.clone())
                                 .focused(is_focused)
                                 .render(textarea_area, buf);
                         }
                     }
-                    // Advance both columns
                     left_y += field_height;
                     right_y += field_height;
                 } else if column == 0 {
-                    // Left column
                     if left_y < max_y {
                         if let Some(dropdown) = self.form_state.dropdowns.get(&field_id).cloned() {
                             let dropdown_area = Rect::new(
@@ -1381,6 +1441,16 @@ impl Widget for PatientForm {
                                 left_col.width.saturating_sub(2),
                                 3,
                             );
+                            
+                            if is_hovered {
+                                let bg_style = hover_style(&self.form_state.theme);
+                                for row in dropdown_area.y..dropdown_area.bottom() {
+                                    for col in dropdown_area.x..dropdown_area.right() {
+                                        buf[(col, row)].set_style(bg_style);
+                                    }
+                                }
+                            }
+                            
                             if dropdown.is_open() {
                                 open_dropdown = Some((dropdown.clone(), dropdown_area));
                             }
@@ -1392,6 +1462,16 @@ impl Widget for PatientForm {
                                 left_col.width.saturating_sub(2),
                                 textarea.height(),
                             );
+                            
+                            if is_hovered {
+                                let bg_style = hover_style(&self.form_state.theme);
+                                for row in textarea_area.y..textarea_area.bottom() {
+                                    for col in textarea_area.x..textarea_area.right() {
+                                        buf[(col, row)].set_style(bg_style);
+                                    }
+                                }
+                            }
+                            
                             TextareaWidget::new(textarea, self.form_state.theme.clone())
                                 .focused(is_focused)
                                 .render(textarea_area, buf);
@@ -1399,7 +1479,6 @@ impl Widget for PatientForm {
                     }
                     left_y += field_height;
                 } else if column == 1 {
-                    // Right column
                     if right_y < max_y {
                         if let Some(dropdown) = self.form_state.dropdowns.get(&field_id).cloned() {
                             let dropdown_area = Rect::new(
@@ -1408,6 +1487,16 @@ impl Widget for PatientForm {
                                 right_col.width.saturating_sub(2),
                                 3,
                             );
+                            
+                            if is_hovered {
+                                let bg_style = hover_style(&self.form_state.theme);
+                                for row in dropdown_area.y..dropdown_area.bottom() {
+                                    for col in dropdown_area.x..dropdown_area.right() {
+                                        buf[(col, row)].set_style(bg_style);
+                                    }
+                                }
+                            }
+                            
                             if dropdown.is_open() {
                                 open_dropdown = Some((dropdown.clone(), dropdown_area));
                             }
@@ -1419,6 +1508,16 @@ impl Widget for PatientForm {
                                 right_col.width.saturating_sub(2),
                                 textarea.height(),
                             );
+                            
+                            if is_hovered {
+                                let bg_style = hover_style(&self.form_state.theme);
+                                for row in textarea_area.y..textarea_area.bottom() {
+                                    for col in textarea_area.x..textarea_area.right() {
+                                        buf[(col, row)].set_style(bg_style);
+                                    }
+                                }
+                            }
+                            
                             TextareaWidget::new(textarea, self.form_state.theme.clone())
                                 .focused(is_focused)
                                 .render(textarea_area, buf);
@@ -1457,10 +1556,21 @@ impl Widget for PatientForm {
                 }
 
                 let is_focused = field_id == self.focused_field;
+                let is_hovered = self.hovered_field.element_id.as_ref() == Some(&field_id);
 
                 if let Some(dropdown) = self.form_state.dropdowns.get(&field_id).cloned() {
                     if y >= inner.y as i32 && y < max_y {
                         let dropdown_area = Rect::new(inner.x + 1, y as u16, inner.width - 2, 3);
+                        
+                        if is_hovered {
+                            let bg_style = hover_style(&self.form_state.theme);
+                            for row in dropdown_area.y..dropdown_area.bottom() {
+                                for col in dropdown_area.x..dropdown_area.right() {
+                                    buf[(col, row)].set_style(bg_style);
+                                }
+                            }
+                        }
+                        
                         if dropdown.is_open() {
                             open_dropdown = Some((dropdown.clone(), dropdown_area));
                         }
@@ -1479,6 +1589,16 @@ impl Widget for PatientForm {
                             inner.width - 2,
                             textarea_height as u16,
                         );
+                        
+                        if is_hovered {
+                            let bg_style = hover_style(&self.form_state.theme);
+                            for row in textarea_area.y..textarea_area.bottom() {
+                                for col in textarea_area.x..textarea_area.right() {
+                                    buf[(col, row)].set_style(bg_style);
+                                }
+                            }
+                        }
+                        
                         TextareaWidget::new(textarea, self.form_state.theme.clone())
                             .focused(is_focused)
                             .render(textarea_area, buf);

@@ -32,6 +32,18 @@ pub fn error_style(theme: &Theme) -> Style {
         .add_modifier(Modifier::BOLD)
 }
 
+pub fn hover_style(theme: &Theme) -> Style {
+    Style::default()
+        .fg(theme.colors.foreground)
+        .bg(theme.colors.highlight)
+}
+
+pub fn selected_hover_style(theme: &Theme) -> Style {
+    Style::default()
+        .fg(theme.colors.selected)
+        .bg(theme.colors.highlight)
+}
+
 pub fn border_block<'a>(title: &'a str, theme: &Theme, focused: bool) -> Block<'a> {
     let border_style = if focused {
         Style::default().fg(theme.colors.primary)

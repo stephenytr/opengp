@@ -14,6 +14,14 @@ impl App {
             return;
         }
 
+        if !self.workspace_manager.workspaces.is_empty() {
+            if self.workspace_manager.handle_patient_tab_mouse(mouse, tab_bar_area).is_some() {
+                self.refresh_status_bar();
+                self.refresh_context();
+                return;
+            }
+        }
+
         if let Some(ref mut form) = self.patient_form {
             if let Some(action) = form.handle_mouse(mouse, area) {
                 match action {

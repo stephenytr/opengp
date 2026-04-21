@@ -11,6 +11,8 @@ use ratatui::{buffer::Buffer, layout::Rect};
 use std::collections::HashMap;
 use time::{Date, Month};
 
+use crate::ui::input::DoubleClickDetector;
+use crate::ui::shared::hover_style;
 use crate::ui::theme::Theme;
 
 /// Actions that can be triggered by the calendar widget
@@ -64,6 +66,10 @@ pub struct CalendarWidget {
     pub errors: HashMap<String, String>,
     /// Theme for styling
     pub theme: Theme,
+    /// Tracks hovered day index (0-41 for 6x7 grid)
+    pub hovered_day_index: Option<usize>,
+    /// Detects double-click on calendar days
+    pub double_click_detector: DoubleClickDetector,
 }
 
 impl CalendarWidget {
@@ -76,6 +82,8 @@ impl CalendarWidget {
             focused_date: today,
             errors: HashMap::new(),
             theme,
+            hovered_day_index: None,
+            double_click_detector: DoubleClickDetector::default(),
         }
     }
 
@@ -87,6 +95,8 @@ impl CalendarWidget {
             focused_date: date,
             errors: HashMap::new(),
             theme,
+            hovered_day_index: None,
+            double_click_detector: DoubleClickDetector::default(),
         }
     }
 
@@ -128,17 +138,40 @@ impl CalendarWidget {
     }
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<CalendarAction> {
-        if let MouseEventKind::Up(MouseButton::Left) = mouse.kind {
-            if let Some(day_index) = self.get_day_index_at(mouse.column, mouse.row, area) {
-                if let Some(date) = self.day_at_index(day_index) {
-                    self.focused_date = date;
-                    self.selected_date = Some(date);
-                    return Some(CalendarAction::SelectDate);
-                }
+        match mouse.kind {
+            MouseEventKind::Moved => {
+                // Track hover state for visual feedback
+                self.hovered_day_index = self.get_day_index_at(mouse.column, mouse.row, area);
+                None
             }
+            MouseEventKind::Up(MouseButton::Left) => {
+                // Single-click selects date without triggering action
+                if let Some(day_index) = self.get_day_index_at(mouse.column, mouse.row, area) {
+                    if let Some(date) = self.day_at_index(day_index) {
+                        self.focused_date = date;
+                        self.selected_date = Some(date);
+                        return Some(CalendarAction::SelectDate);
+                    }
+                }
+                None
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                // Double-click detection
+                if self.double_click_detector.check_double_click_now(&mouse) {
+                    if let Some(day_index) = self.get_day_index_at(mouse.column, mouse.row, area) {
+                        if let Some(date) = self.day_at_index(day_index) {
+                            self.focused_date = date;
+                            self.selected_date = Some(date);
+                            // Clear hover on click to prevent lingering state
+                            self.hovered_day_index = None;
+                            return Some(CalendarAction::SelectDate);
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
         }
-
-        None
     }
 
     /// Create a date picker mode calendar with the given initial date
@@ -150,6 +183,8 @@ impl CalendarWidget {
             focused_date: initial_date,
             errors: HashMap::new(),
             theme,
+            hovered_day_index: None,
+            double_click_detector: DoubleClickDetector::default(),
         }
     }
 
@@ -264,7 +299,10 @@ impl CalendarWidget {
                     break;
                 }
 
-                let style = if Some(date) == self.selected_date {
+                let style = if self.hovered_day_index == Some(day_index) {
+                    // Hover state takes priority for visual feedback
+                    hover_style(&self.theme)
+                } else if Some(date) == self.selected_date {
                     Style::default()
                         .bg(self.theme.colors.selected)
                         .fg(self.theme.colors.background_dark)
@@ -306,7 +344,10 @@ impl CalendarWidget {
                     break;
                 }
 
-                let style = if Some(date) == self.selected_date {
+                let style = if self.hovered_day_index == Some(day_index) {
+                    // Hover state takes priority for visual feedback
+                    hover_style(&self.theme)
+                } else if Some(date) == self.selected_date {
                     Style::default()
                         .bg(self.theme.colors.secondary)
                         .fg(self.theme.colors.foreground)
@@ -331,7 +372,7 @@ impl CalendarWidget {
         }
     }
 
-    fn day_at_index(&self, index: usize) -> Option<NaiveDate> {
+    pub fn day_at_index(&self, index: usize) -> Option<NaiveDate> {
         let (year, month) = self.current_month;
         let first_of_month = NaiveDate::from_ymd_opt(year, month, 1)?;
         let first_weekday = (first_of_month.weekday().number_from_monday() - 1) as i32;
@@ -344,7 +385,7 @@ impl CalendarWidget {
         NaiveDate::from_ymd_opt(year, month, day_number as u32)
     }
 
-    fn get_day_index_at(&self, column: u16, row: u16, area: Rect) -> Option<usize> {
+    pub fn get_day_index_at(&self, column: u16, row: u16, area: Rect) -> Option<usize> {
         let border_left = 2u16;
         let start_y = area.y.saturating_add(3);
         let start_x = area.x.saturating_add(border_left);

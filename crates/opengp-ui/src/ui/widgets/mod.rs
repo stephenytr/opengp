@@ -5,6 +5,7 @@
 
 mod calendar;
 mod clinical_table_list;
+mod context_menu;
 mod date_picker_popup;
 mod date_utils;
 mod dropdown;
@@ -28,6 +29,7 @@ mod validation;
 
 pub use calendar::{AppointmentStyler, CalendarAction, CalendarMode, CalendarWidget};
 pub use clinical_table_list::{ClinicalTableList, ColumnDef, ListAction};
+pub use context_menu::{ContextMenuAction, ContextMenuItem, ContextMenuState};
 pub use date_picker_popup::{DatePickerAction, DatePickerPopup};
 pub use date_utils::{format_date, format_user_input, is_valid_date, parse_date};
 pub use dropdown::{DropdownAction, DropdownOption, DropdownState, DropdownWidget};
@@ -42,7 +44,7 @@ pub use list_nav::{list_handle_key, list_handle_mouse, ListNavAction};
 pub use loading::{LoadingIndicator, LoadingState, SpinnerStyle};
 pub use modal_state::{ModalButton, ModalState};
 pub use navigation::{migration_guide, scroll_management};
-pub use scrollable::ScrollableState;
+pub use scrollable::{ScrollableState, SCROLL_LINES};
 pub use scrollable_form::ScrollableFormState;
 pub use searchable_list::{Searchable, SearchableList, SearchableListAction, SearchableListState};
 pub use textarea::{HeightMode, TextareaState, TextareaWidget};

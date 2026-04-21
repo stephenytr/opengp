@@ -15,6 +15,9 @@ pub struct ScrollableState {
     item_count: usize,
 }
 
+/// Standard scroll increment for list components (3 lines per scroll event)
+pub const SCROLL_LINES: usize = 3;
+
 impl ScrollableState {
     /// Creates a new ScrollableState with index and offset at 0
     pub fn new() -> Self {

@@ -8,6 +8,7 @@ use opengp_config::CalendarConfig;
 use opengp_domain::domain::appointment::{AppointmentType, CalendarAppointment, CalendarDayView};
 use opengp_domain::domain::user::Practitioner;
 
+use crate::ui::input::{DoubleClickDetector, HoverState};
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
 use crate::ui::view_models::PractitionerViewItem;
 use crate::ui::widgets::LoadingState;
@@ -21,7 +22,7 @@ pub enum AppointmentView {
     Schedule,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AppointmentState {
     pub current_view: AppointmentView,
     pub calendar: Calendar,
@@ -43,6 +44,37 @@ pub struct AppointmentState {
     pub focused: bool,
     pub config: CalendarConfig,
     pub debug_overlay_visible: bool,
+    pub hovered_slot: HoverState<(usize, u8)>,
+    pub schedule_double_click_detector: DoubleClickDetector,
+}
+
+impl std::fmt::Debug for AppointmentState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AppointmentState")
+            .field("current_view", &self.current_view)
+            .field("calendar", &self.calendar)
+            .field("schedule", &"<Schedule widget>")
+            .field("selected_date", &self.selected_date)
+            .field("schedule_data", &self.schedule_data)
+            .field("practitioners", &self.practitioners)
+            .field("selected_practitioner", &self.selected_practitioner)
+            .field("selected_appointment", &self.selected_appointment)
+            .field("loading_state", &self.loading_state)
+            .field("loading", &self.loading)
+            .field("hidden_columns", &self.hidden_columns)
+            .field("practitioners_view", &self.practitioners_view)
+            .field("selected_practitioner_index", &self.selected_practitioner_index)
+            .field("selected_time_slot", &self.selected_time_slot)
+            .field("viewport_start_hour", &self.viewport_start_hour)
+            .field("viewport_end_hour", &self.viewport_end_hour)
+            .field("last_inner_height", &self.last_inner_height)
+            .field("focused", &self.focused)
+            .field("config", &self.config)
+            .field("debug_overlay_visible", &self.debug_overlay_visible)
+            .field("hovered_slot", &"<HoverState>")
+            .field("schedule_double_click_detector", &"<DoubleClickDetector>")
+            .finish()
+    }
 }
 
 impl AppointmentState {
@@ -98,6 +130,8 @@ impl AppointmentState {
             focused: false,
             config,
             debug_overlay_visible: false,
+            hovered_slot: HoverState::new(),
+            schedule_double_click_detector: DoubleClickDetector::default(),
         }
     }
 
@@ -466,10 +500,46 @@ impl AppointmentState {
         slot >= start_slot && slot <= end_slot
     }
 
-    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ScheduleAction> {
+     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ScheduleAction> {
         use crate::ui::layout::TIME_COLUMN_WIDTH;
 
         match mouse.kind {
+            MouseEventKind::Moved => {
+                // Track which slot is hovered
+                let time_column_width = TIME_COLUMN_WIDTH;
+                let inner = area.inner(ratatui::layout::Margin {
+                    horizontal: 1,
+                    vertical: 1,
+                });
+
+                // Check if mouse is within schedule area
+                if mouse.column < inner.x || mouse.row < inner.y {
+                    self.hovered_slot.clear_hover();
+                    return None;
+                }
+
+                let y = mouse.row.saturating_sub(inner.y);
+                let slot = (y as u8 / 2).min(self.max_time_slot());
+
+                // Only set hover if not in time column
+                if mouse.column >= inner.x + time_column_width {
+                    let col = mouse.column.saturating_sub(inner.x + time_column_width);
+                    let practitioner_cols = inner.width.saturating_sub(time_column_width);
+
+                    if practitioner_cols > 0 && !self.practitioners_view.is_empty() {
+                        let col_width = practitioner_cols / self.practitioners_view.len() as u16;
+                        if col_width > 0 {
+                            let practitioner_index = (col / col_width) as usize;
+                            if practitioner_index < self.practitioners_view.len() {
+                                self.hovered_slot.set_hovered((practitioner_index, slot), (mouse.column, mouse.row));
+                                return None;
+                            }
+                        }
+                    }
+                }
+                self.hovered_slot.clear_hover();
+                None
+            }
             MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
                 let time_column_width = TIME_COLUMN_WIDTH;
                 let inner = area.inner(ratatui::layout::Margin {
@@ -505,6 +575,96 @@ impl AppointmentState {
                             return Some(ScheduleAction::SelectPractitioner(
                                 self.practitioners_view[practitioner_index].id,
                             ));
+                        }
+                    }
+                }
+                None
+            }
+            MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
+                // Check for double-click
+                if self.schedule_double_click_detector.check_double_click_now(&mouse) {
+                    let time_column_width = TIME_COLUMN_WIDTH;
+                    let inner = area.inner(ratatui::layout::Margin {
+                        horizontal: 1,
+                        vertical: 1,
+                    });
+
+                    let y = mouse.row.saturating_sub(inner.y);
+                    let slot = (y as u8 / 2).min(self.max_time_slot());
+                    self.selected_time_slot = slot;
+
+                    if mouse.column >= inner.x + time_column_width {
+                        let col = mouse.column.saturating_sub(inner.x + time_column_width);
+                        let practitioner_cols = inner.width.saturating_sub(time_column_width);
+
+                        if practitioner_cols > 0 && !self.practitioners_view.is_empty() {
+                            let col_width = practitioner_cols / self.practitioners_view.len() as u16;
+                            if col_width > 0 {
+                                let practitioner_index = (col / col_width) as usize;
+                                if practitioner_index < self.practitioners_view.len() {
+                                    self.selected_practitioner_index = practitioner_index;
+
+                                    // Try to select existing appointment, or trigger new creation
+                                    if let Some(apt) = self.get_appointment_at_slot_for_practitioner(
+                                        slot,
+                                        self.selected_practitioner_index,
+                                    ) {
+                                        return Some(ScheduleAction::SelectAppointment(apt.id));
+                                    } else {
+                                        // Create new appointment at this slot
+                                        let time_str = self.slot_to_time(slot);
+                                        return Some(ScheduleAction::CreateAtSlot {
+                                            practitioner_id: self.practitioners_view[practitioner_index].id,
+                                            date: self.selected_date.unwrap_or_else(|| chrono::Utc::now().date_naive()),
+                                            time: time_str,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            MouseEventKind::Down(crossterm::event::MouseButton::Right) => {
+                // Right-click context menu
+                let time_column_width = TIME_COLUMN_WIDTH;
+                let inner = area.inner(ratatui::layout::Margin {
+                    horizontal: 1,
+                    vertical: 1,
+                });
+
+                let y = mouse.row.saturating_sub(inner.y);
+                let slot = (y as u8 / 2).min(self.max_time_slot());
+
+                if mouse.column >= inner.x + time_column_width {
+                    let col = mouse.column.saturating_sub(inner.x + time_column_width);
+                    let practitioner_cols = inner.width.saturating_sub(time_column_width);
+
+                    if practitioner_cols > 0 && !self.practitioners_view.is_empty() {
+                        let col_width = practitioner_cols / self.practitioners_view.len() as u16;
+                        if col_width > 0 {
+                            let practitioner_index = (col / col_width) as usize;
+                            if practitioner_index < self.practitioners_view.len() {
+                                self.selected_practitioner_index = practitioner_index;
+                                self.selected_time_slot = slot;
+
+                                // For context menu, try to select appointment or prepare new creation
+                                if let Some(apt) = self.get_appointment_at_slot_for_practitioner(
+                                    slot,
+                                    practitioner_index,
+                                ) {
+                                    return Some(ScheduleAction::SelectAppointment(apt.id));
+                                } else {
+                                    // Return new creation action for context menu
+                                    let time_str = self.slot_to_time(slot);
+                                    return Some(ScheduleAction::CreateAtSlot {
+                                        practitioner_id: self.practitioners_view[practitioner_index].id,
+                                        date: self.selected_date.unwrap_or_else(|| chrono::Utc::now().date_naive()),
+                                        time: time_str,
+                                    });
+                                }
+                            }
                         }
                     }
                 }

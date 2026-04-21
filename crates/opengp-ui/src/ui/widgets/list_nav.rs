@@ -9,7 +9,7 @@
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::layout::{Position, Rect};
 
-use crate::ui::widgets::scrollable::ScrollableState;
+use crate::ui::widgets::scrollable::{ScrollableState, SCROLL_LINES};
 
 /// Actions that can result from list navigation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,14 +96,14 @@ pub fn list_handle_mouse(
 ) -> Option<ListNavAction> {
     // Handle mouse wheel scrolling
     if let MouseEventKind::ScrollUp = mouse.kind {
-        for _ in 0..3 {
+        for _ in 0..SCROLL_LINES {
             scrollable.scroll_up();
         }
         return Some(ListNavAction::SelectionChanged);
     }
     if let MouseEventKind::ScrollDown = mouse.kind {
         let max_scroll = scrollable.item_count().saturating_sub(visible_rows);
-        for _ in 0..3 {
+        for _ in 0..SCROLL_LINES {
             if scrollable.scroll_offset() < max_scroll {
                 scrollable.scroll_down();
             }
