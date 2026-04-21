@@ -162,13 +162,30 @@ impl App {
 
         match tab {
             Tab::PatientSearch => {
-                if let Some(workspace) = self.workspace_manager.active() {
-                    self.render_workspace(frame, area, workspace.clone());
+                if self.workspace_manager.active().is_some() {
+                    self.sync_clinical_view_to_menu();
+                    self.render_workspace_clinical(frame, area);
                 } else {
                     self.render_welcome_panel(frame, area);
                 }
             }
             Tab::Schedule => self.render_appointment_tab(frame, area),
+        }
+    }
+
+    fn sync_clinical_view_to_menu(&mut self) {
+        if let Some(workspace) = self.workspace_manager.active_mut() {
+            let menu = workspace.active_clinical_menu;
+            if let Some(ref mut clinical) = workspace.clinical {
+                match menu {
+                    ClinicalMenuKind::Consultations => clinical.show_consultations(),
+                    ClinicalMenuKind::Vitals => clinical.show_vital_signs(),
+                    ClinicalMenuKind::Allergies => clinical.show_allergies(),
+                    ClinicalMenuKind::MedicalHistory => clinical.show_medical_history(),
+                    ClinicalMenuKind::FamilyHistory => clinical.show_family_history(),
+                    ClinicalMenuKind::SocialHistory => clinical.show_social_history(),
+                }
+            }
         }
     }
 
@@ -280,51 +297,7 @@ impl App {
         }
     }
 
-    fn render_workspace(
-        &mut self,
-        frame: &mut Frame,
-        area: Rect,
-        mut workspace: crate::ui::components::workspace::PatientWorkspace,
-    ) {
-        match workspace.active_clinical_menu {
-            ClinicalMenuKind::Consultations => {
-                if let Some(ref mut clinical) = workspace.clinical {
-                    clinical.show_consultations();
-                }
-                self.render_workspace_clinical(frame, area);
-            }
-            ClinicalMenuKind::Vitals => {
-                if let Some(ref mut clinical) = workspace.clinical {
-                    clinical.show_vital_signs();
-                }
-                self.render_workspace_clinical(frame, area);
-            }
-            ClinicalMenuKind::Allergies => {
-                if let Some(ref mut clinical) = workspace.clinical {
-                    clinical.show_allergies();
-                }
-                self.render_workspace_clinical(frame, area);
-            }
-            ClinicalMenuKind::MedicalHistory => {
-                if let Some(ref mut clinical) = workspace.clinical {
-                    clinical.show_medical_history();
-                }
-                self.render_workspace_clinical(frame, area);
-            }
-            ClinicalMenuKind::FamilyHistory => {
-                if let Some(ref mut clinical) = workspace.clinical {
-                    clinical.show_family_history();
-                }
-                self.render_workspace_clinical(frame, area);
-            }
-            ClinicalMenuKind::SocialHistory => {
-                if let Some(ref mut clinical) = workspace.clinical {
-                    clinical.show_social_history();
-                }
-                self.render_workspace_clinical(frame, area);
-            }
-        }
-    }
+
 
     fn render_workspace_summary(&mut self, frame: &mut Frame, area: Rect) {
         use crate::ui::components::workspace::SummaryView;
