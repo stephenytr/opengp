@@ -310,7 +310,9 @@ impl App {
                 }
 
                 Action::SelectPatientTab(n) => {
-                    let _ = self.workspace_manager.select_by_index(n);
+                    if self.workspace_manager.select_by_index(n).is_ok() {
+                        self.tab_bar.select(Tab::PatientSearch);
+                    }
                     self.refresh_status_bar();
                     self.refresh_context();
                 }
