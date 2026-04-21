@@ -21,6 +21,9 @@ impl App {
                         self.current_context = KeyContext::PatientList;
                     }
                 }
+                crate::ui::components::patient::PatientListAction::ContextMenu { x: _, y: _, patient_id: _ } => {
+                    // Context menu support to be implemented in future
+                }
             }
             return Action::Enter;
         }

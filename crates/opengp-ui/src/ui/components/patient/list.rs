@@ -2,7 +2,7 @@
 //!
 //! Displays a searchable list of patients with pagination.
 
-use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Constraint;
 use ratatui::layout::{Position, Rect};
@@ -12,10 +12,12 @@ use ratatui::widgets::{Block, Borders, Row, Table, Widget};
 use sublime_fuzzy::best_match;
 use uuid::Uuid;
 
+use crate::ui::input::DoubleClickDetector;
 use crate::ui::layout::{
     HEADER_HEIGHT, PATIENT_COL_DOB, PATIENT_COL_LAST_VISIT, PATIENT_COL_MEDICARE, PATIENT_COL_NAME,
     PATIENT_COL_PHONE,
 };
+use crate::ui::shared::{hover_style, selected_hover_style};
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientListItem;
 use crate::ui::widgets::{LoadingState, ScrollableState};
@@ -29,6 +31,8 @@ pub struct PatientList {
     loading: bool,
     loading_state: LoadingState,
     theme: Theme,
+    hovered_index: Option<usize>,
+    double_click_detector: DoubleClickDetector,
 }
 
 impl Clone for PatientList {
@@ -42,6 +46,8 @@ impl Clone for PatientList {
             loading: self.loading,
             loading_state: self.loading_state.clone(),
             theme: self.theme.clone(),
+            hovered_index: self.hovered_index,
+            double_click_detector: self.double_click_detector.clone(),
         }
     }
 }
@@ -57,6 +63,8 @@ impl PatientList {
             loading: false,
             loading_state: LoadingState::new().message("Loading patients..."),
             theme,
+            hovered_index: None,
+            double_click_detector: DoubleClickDetector::default(),
         }
     }
 
@@ -295,6 +303,7 @@ impl PatientList {
             for _ in 0..3 {
                 self.scrollable.scroll_up();
             }
+            self.hovered_index = None;
             return Some(PatientListAction::SelectionChanged);
         }
         if let MouseEventKind::ScrollDown = mouse.kind {
@@ -305,10 +314,83 @@ impl PatientList {
                     self.scrollable.scroll_down();
                 }
             }
+            self.hovered_index = None;
             return Some(PatientListAction::SelectionChanged);
         }
 
-        if mouse.kind != MouseEventKind::Up(crossterm::event::MouseButton::Left) {
+        // Track hover state on mouse movement
+        if let MouseEventKind::Moved = mouse.kind {
+            if area.contains(Position::new(mouse.column, mouse.row))
+                && mouse.row >= area.y + HEADER_HEIGHT
+            {
+                let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
+                let actual_index = self.scrollable.scroll_offset() + row_index;
+                if actual_index < self.filtered.len() {
+                    self.hovered_index = Some(actual_index);
+                } else {
+                    self.hovered_index = None;
+                }
+            } else {
+                self.hovered_index = None;
+            }
+            return None;
+        }
+
+        // Handle right-click for context menu
+        if let MouseEventKind::Down(MouseButton::Right) = mouse.kind {
+            if !area.contains(Position::new(mouse.column, mouse.row)) {
+                return None;
+            }
+
+            if mouse.row < area.y + HEADER_HEIGHT {
+                return None;
+            }
+
+            let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
+            let actual_index = self.scrollable.scroll_offset() + row_index;
+            if actual_index < self.filtered.len() {
+                let current_index = self.scrollable.selected_index();
+                let offset = actual_index as isize - current_index as isize;
+                self.scrollable.move_by(offset);
+                if let Some(patient) = self.filtered.get(actual_index) {
+                    return Some(PatientListAction::ContextMenu {
+                        x: mouse.column,
+                        y: mouse.row,
+                        patient_id: patient.id,
+                    });
+                }
+            }
+            return None;
+        }
+
+        // Handle double-click for open action
+        if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+            if !area.contains(Position::new(mouse.column, mouse.row)) {
+                return None;
+            }
+
+            if mouse.row < area.y + HEADER_HEIGHT {
+                return None;
+            }
+
+            let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
+            let actual_index = self.scrollable.scroll_offset() + row_index;
+
+            if actual_index >= self.filtered.len() {
+                return None;
+            }
+
+            // Check for double-click
+            if self.double_click_detector.check_double_click_now(&mouse) {
+                if let Some(patient) = self.filtered.get(actual_index) {
+                    return Some(PatientListAction::OpenPatient(patient.id));
+                }
+            }
+            return None;
+        }
+
+        // Only process left mouse up for normal selection
+        if mouse.kind != MouseEventKind::Up(MouseButton::Left) {
             return None;
         }
 
@@ -341,6 +423,7 @@ pub enum PatientListAction {
     OpenPatient(Uuid),
     FocusSearch,
     SearchChanged,
+    ContextMenu { x: u16, y: u16, patient_id: Uuid },
 }
 
 fn format_name(patient: &PatientListItem) -> String {
@@ -433,12 +516,16 @@ impl Widget for PatientList {
             .enumerate()
             .map(|(i, patient)| {
                 let actual_index = scroll_offset + i;
-                let style = if actual_index == selected_index {
-                    Style::default()
+                let is_selected = actual_index == selected_index;
+                let is_hovered = self.hovered_index == Some(actual_index);
+
+                let style = match (is_selected, is_hovered) {
+                    (true, true) => selected_hover_style(&self.theme),
+                    (true, false) => Style::default()
                         .bg(self.theme.colors.selected)
-                        .fg(self.theme.colors.foreground)
-                } else {
-                    Style::default().fg(self.theme.colors.foreground)
+                        .fg(self.theme.colors.foreground),
+                    (false, true) => hover_style(&self.theme),
+                    (false, false) => Style::default().fg(self.theme.colors.foreground),
                 };
 
                 Row::new(vec![

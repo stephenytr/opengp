@@ -78,6 +78,9 @@ impl App {
                     }
                     crate::ui::components::patient::PatientListAction::FocusSearch => {}
                     crate::ui::components::patient::PatientListAction::SearchChanged => {}
+                    crate::ui::components::patient::PatientListAction::ContextMenu { x: _, y: _, patient_id: _ } => {
+                        // Context menu support to be implemented in future
+                    }
                 }
                 return Action::Enter;
             }
