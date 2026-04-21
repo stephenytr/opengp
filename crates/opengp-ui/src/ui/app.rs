@@ -234,7 +234,7 @@ impl App {
             theme: theme.clone(),
             keybinds: KeybindRegistry::global(),
             tab_bar: TabBar::new(theme.clone()),
-            previous_tab: Tab::Patient,
+            previous_tab: Tab::PatientSearch,
             status_bar: StatusBar::patient_list(theme.clone()),
             help_overlay: HelpOverlay::new(theme.clone()),
             login_screen: crate::ui::screens::LoginScreen::new(theme.clone()),
@@ -362,27 +362,27 @@ impl App {
 
     fn refresh_status_bar(&mut self) {
         self.status_bar = match self.tab_bar.selected() {
-            Tab::Patient => {
+            Tab::PatientSearch => {
                 if let Some(workspace) = self.workspace_manager.active() {
                     StatusBar::patient_workspace(self.theme.clone(), &workspace.patient_snapshot.full_name)
                 } else {
                     StatusBar::patient_list(self.theme.clone())
                 }
             }
-            Tab::Appointment => StatusBar::schedule(self.theme.clone()),
+            Tab::Schedule => StatusBar::schedule(self.theme.clone()),
         };
     }
 
     fn refresh_context(&mut self) {
         self.current_context = match self.tab_bar.selected() {
-            Tab::Patient => {
+            Tab::PatientSearch => {
                 if self.workspace_manager.active().is_some() {
                     KeyContext::PatientWorkspace
                 } else {
                     KeyContext::PatientList
                 }
             }
-            Tab::Appointment => {
+            Tab::Schedule => {
                 if self.appointment_form.is_some() || self.appointment_detail_modal.is_some() {
                     KeyContext::Schedule
                 } else {
@@ -467,7 +467,7 @@ mod tests {
     #[test]
     fn test_app_creation() {
         let app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, None, opengp_config::PracticeConfig::default(), 8);
-        assert_eq!(app.current_tab(), Tab::Patient);
+        assert_eq!(app.current_tab(), Tab::Schedule);
         assert!(!app.should_quit());
     }
 
@@ -480,7 +480,7 @@ mod tests {
         );
         app.handle_key_event(key);
 
-        assert_eq!(app.current_tab(), Tab::Appointment);
+        assert_eq!(app.current_tab(), Tab::PatientSearch);
     }
 
     #[test]
@@ -519,11 +519,11 @@ mod tests {
     fn test_calendar_keybind_routing() {
         let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, None, opengp_config::PracticeConfig::default(), 8);
         let key = crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::F(3),
+            crossterm::event::KeyCode::F(2),
             crossterm::event::KeyModifiers::NONE,
         );
         app.handle_key_event(key);
-        assert_eq!(app.current_tab(), Tab::Appointment);
+        assert_eq!(app.current_tab(), Tab::Schedule);
 
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Esc,
@@ -547,7 +547,7 @@ mod tests {
     fn test_calendar_enter_selects_date() {
         let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, None, opengp_config::PracticeConfig::default(), 8);
         let key = crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::F(3),
+            crossterm::event::KeyCode::F(2),
             crossterm::event::KeyModifiers::NONE,
         );
         app.handle_key_event(key);
@@ -570,7 +570,7 @@ mod tests {
     fn test_schedule_keybind_routing() {
         let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, None, opengp_config::PracticeConfig::default(), 8);
         let key = crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::F(3),
+            crossterm::event::KeyCode::F(2),
             crossterm::event::KeyModifiers::NONE,
         );
         app.handle_key_event(key);
@@ -602,11 +602,11 @@ mod tests {
     fn test_q_does_not_quit_on_appointment() {
         let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, None, opengp_config::PracticeConfig::default(), 8);
         let key = crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::F(3),
+            crossterm::event::KeyCode::F(2),
             crossterm::event::KeyModifiers::NONE,
         );
         app.handle_key_event(key);
-        assert_eq!(app.current_tab(), Tab::Appointment);
+        assert_eq!(app.current_tab(), Tab::Schedule);
 
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('q'),
@@ -640,7 +640,7 @@ mod tests {
     fn test_schedule_escape_returns_to_calendar() {
         let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, None, opengp_config::PracticeConfig::default(), 8);
         let key = crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::F(3),
+            crossterm::event::KeyCode::F(2),
             crossterm::event::KeyModifiers::NONE,
         );
         app.handle_key_event(key);
@@ -671,15 +671,15 @@ mod tests {
     #[test]
     fn test_patient_keybind_regression() {
         let mut app = App::new(None, CalendarConfig::default(), Theme::dark(), opengp_config::healthcare::HealthcareConfig::default(), opengp_config::PatientConfig::default(), opengp_config::AllergyConfig::default(), opengp_config::ClinicalConfig::default(), opengp_config::SocialHistoryConfig::default(), None, None, opengp_config::PracticeConfig::default(), 8);
-        assert_eq!(app.current_tab(), Tab::Patient);
+        assert_eq!(app.current_tab(), Tab::Schedule);
         let key = crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('q'),
             crossterm::event::KeyModifiers::NONE,
         );
         app.handle_key_event(key);
         assert!(
-            app.should_quit(),
-            "Bare 'q' should still quit from Patient tab"
+            !app.should_quit(),
+            "Bare 'q' should NOT quit from Schedule tab (only from PatientSearch)"
         );
     }
 
@@ -701,5 +701,37 @@ mod tests {
             }
             _ => panic!("Expected SignConsultation variant"),
         }
+    }
+
+    #[test]
+    fn test_tab_navigation_redesign() {
+        let mut app = App::new(
+            None,
+            CalendarConfig::default(),
+            Theme::dark(),
+            opengp_config::healthcare::HealthcareConfig::default(),
+            opengp_config::PatientConfig::default(),
+            opengp_config::AllergyConfig::default(),
+            opengp_config::ClinicalConfig::default(),
+            opengp_config::SocialHistoryConfig::default(),
+            None,
+            None,
+            opengp_config::PracticeConfig::default(),
+            8,
+        );
+
+        assert_eq!(app.current_tab(), Tab::Schedule);
+
+        let f2 = crossterm::event::KeyEvent::new(crossterm::event::KeyCode::F(2), crossterm::event::KeyModifiers::NONE);
+        app.handle_key_event(f2);
+        assert_eq!(app.current_tab(), Tab::Schedule, "F2 should activate Schedule tab");
+
+        let f3 = crossterm::event::KeyEvent::new(crossterm::event::KeyCode::F(3), crossterm::event::KeyModifiers::NONE);
+        app.handle_key_event(f3);
+        assert_eq!(app.current_tab(), Tab::PatientSearch, "F3 should activate Patient Search tab");
+
+        let f2_again = crossterm::event::KeyEvent::new(crossterm::event::KeyCode::F(2), crossterm::event::KeyModifiers::NONE);
+        app.handle_key_event(f2_again);
+        assert_eq!(app.current_tab(), Tab::Schedule, "F2 should return to Schedule tab");
     }
 }

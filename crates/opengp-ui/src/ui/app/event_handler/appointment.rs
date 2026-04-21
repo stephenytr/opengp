@@ -64,8 +64,8 @@ impl App {
                         self.appointment_detail_modal = None;
                         if let Some(patient_item) = self.patient_list.get_patient_by_id(patient_id) {
                             let _ = self.workspace_manager.open_patient(patient_item.clone());
-                            self.tab_bar.select(Tab::Patient);
-                            self.previous_tab = Tab::Patient;
+                            self.tab_bar.select(Tab::PatientSearch);
+                            self.previous_tab = Tab::PatientSearch;
                             self.refresh_status_bar();
                             self.refresh_context();
                         }
@@ -90,7 +90,7 @@ impl App {
                                         workspace.active_subtab = crate::ui::components::SubtabKind::Clinical;
                                     }
                                     
-                                    // Switch context to PatientWorkspace (not Tab::Patient)
+                                    // Switch context to PatientWorkspace (not Tab::PatientSearch)
                                     self.current_context = crate::ui::keybinds::KeyContext::PatientWorkspace;
                                     
                                     // Trigger lazy load of clinical data

@@ -15,48 +15,48 @@ use crate::ui::theme::Theme;
 /// Available tabs in the application
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Tab {
-    /// Patient management tab
+    /// Schedule/Appointments tab
     #[default]
-    Patient,
-    /// Appointments tab
-    Appointment,
+    Schedule,
+    /// Patient search tab
+    PatientSearch,
 }
 
 impl Tab {
     /// Get the display name for the tab
     pub fn name(&self) -> &'static str {
         match self {
-            Tab::Patient => "Patients",
-            Tab::Appointment => "Appointments",
+            Tab::Schedule => "Schedule",
+            Tab::PatientSearch => "Patient Search",
         }
     }
 
     /// Get the shortcut key for the tab
     pub fn shortcut(&self) -> &'static str {
         match self {
-            Tab::Patient => "F2",
-            Tab::Appointment => "F3",
+            Tab::Schedule => "F2",
+            Tab::PatientSearch => "F3",
         }
     }
 
     /// Get all tabs
     pub fn all() -> [Tab; 2] {
-        [Tab::Patient, Tab::Appointment]
+        [Tab::Schedule, Tab::PatientSearch]
     }
 
     /// Get the index of this tab
     pub fn index(&self) -> usize {
         match self {
-            Tab::Patient => 0,
-            Tab::Appointment => 1,
+            Tab::Schedule => 0,
+            Tab::PatientSearch => 1,
         }
     }
 
     /// Get tab from index
     pub fn from_index(index: usize) -> Option<Tab> {
         match index {
-            0 => Some(Tab::Patient),
-            1 => Some(Tab::Appointment),
+            0 => Some(Tab::Schedule),
+            1 => Some(Tab::PatientSearch),
             _ => None,
         }
     }
@@ -129,8 +129,8 @@ impl TabBar {
     #[allow(clippy::unwrap_used)]
     pub fn next(&mut self) {
         let current_index = self.selected.index();
-        let next_index = (current_index + 1) % 2;
-        // SAFETY: next_index is 0-1 due to % 2 operation
+        let tab_count = Tab::all().len();
+        let next_index = (current_index + 1) % tab_count;
         self.selected = Tab::from_index(next_index).unwrap();
     }
 
@@ -138,12 +138,12 @@ impl TabBar {
     #[allow(clippy::unwrap_used)]
     pub fn prev(&mut self) {
         let current_index = self.selected.index();
+        let tab_count = Tab::all().len();
         let prev_index = if current_index == 0 {
-            1
+            tab_count - 1
         } else {
             current_index - 1
         };
-        // SAFETY: prev_index is 0-1 by conditional logic
         self.selected = Tab::from_index(prev_index).unwrap();
     }
 
@@ -307,37 +307,37 @@ mod tests {
     #[test]
     fn test_tab_selection() {
         let mut tab_bar = TabBar::new(Theme::dark());
-        assert_eq!(tab_bar.selected(), Tab::Patient);
+        assert_eq!(tab_bar.selected(), Tab::Schedule);
 
-        tab_bar.select(Tab::Appointment);
-        assert_eq!(tab_bar.selected(), Tab::Appointment);
+        tab_bar.select(Tab::PatientSearch);
+        assert_eq!(tab_bar.selected(), Tab::PatientSearch);
     }
 
     #[test]
     fn test_tab_navigation() {
         let mut tab_bar = TabBar::new(Theme::dark());
-        assert_eq!(tab_bar.selected(), Tab::Patient);
+        assert_eq!(tab_bar.selected(), Tab::Schedule);
 
         tab_bar.next();
-        assert_eq!(tab_bar.selected(), Tab::Appointment);
+        assert_eq!(tab_bar.selected(), Tab::PatientSearch);
 
         tab_bar.next();
-        assert_eq!(tab_bar.selected(), Tab::Patient); // Wrap around
+        assert_eq!(tab_bar.selected(), Tab::Schedule);
 
         tab_bar.prev();
-        assert_eq!(tab_bar.selected(), Tab::Appointment);
+        assert_eq!(tab_bar.selected(), Tab::PatientSearch);
     }
 
     #[test]
     fn test_tab_from_index() {
-        assert_eq!(Tab::from_index(0), Some(Tab::Patient));
-        assert_eq!(Tab::from_index(1), Some(Tab::Appointment));
+        assert_eq!(Tab::from_index(0), Some(Tab::Schedule));
+        assert_eq!(Tab::from_index(1), Some(Tab::PatientSearch));
         assert_eq!(Tab::from_index(2), None);
     }
 
     #[test]
     fn test_tab_names() {
-        assert_eq!(Tab::Patient.name(), "Patients");
-        assert_eq!(Tab::Appointment.name(), "Appointments");
+        assert_eq!(Tab::Schedule.name(), "Schedule");
+        assert_eq!(Tab::PatientSearch.name(), "Patient Search");
     }
 }

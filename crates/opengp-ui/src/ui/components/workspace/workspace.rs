@@ -6,6 +6,7 @@ use crate::ui::components::clinical::ClinicalState;
 use crate::ui::components::billing::PatientBillingState;
 use crate::ui::app::PendingBillingSaveData;
 use crate::ui::components::SubtabKind;
+use crate::ui::components::clinical_row::ClinicalMenuKind;
 use super::appointment_state::PatientAppointmentState;
 
 #[derive(Debug, Clone)]
@@ -35,6 +36,7 @@ pub struct PatientWorkspace {
     pub patient_snapshot: PatientListItem,
     pub colour: Color,
     pub active_subtab: SubtabKind,
+    pub active_clinical_menu: ClinicalMenuKind,
     pub loaded: HashSet<SubtabKind>,
     pub clinical: Option<ClinicalState>,
     pub billing: Option<PatientBillingState>,
@@ -52,6 +54,7 @@ impl PatientWorkspace {
             patient_snapshot,
             colour,
             active_subtab: SubtabKind::Clinical,
+            active_clinical_menu: ClinicalMenuKind::Consultations,
             loaded: HashSet::new(),
             clinical: None,
             billing: None,
