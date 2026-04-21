@@ -101,7 +101,7 @@ fn map_action(action: ListAction<FamilyHistory>) -> Option<FamilyHistoryListActi
         ListAction::Open(entry) => Some(FamilyHistoryListAction::Open(entry)),
         ListAction::New => Some(FamilyHistoryListAction::New),
         ListAction::Delete(entry) => Some(FamilyHistoryListAction::Delete(entry)),
-        ListAction::Edit(_) | ListAction::ToggleInactive => None,
+        ListAction::Edit(_) | ListAction::ToggleInactive | ListAction::ContextMenu { .. } => None,
     }
 }
 fn columns() -> Vec<ColumnDef<FamilyHistory>> {

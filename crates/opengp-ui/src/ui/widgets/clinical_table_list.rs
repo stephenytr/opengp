@@ -8,6 +8,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
 
 const TABLE_HEADER_ROWS: u16 = 1;
+use crate::ui::input::DoubleClickDetector;
+use crate::ui::shared::{hover_style, selected_hover_style};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::LoadingIndicator;
 
@@ -36,6 +38,8 @@ pub enum ListAction<T> {
     Delete(T),
     /// The user toggled whether inactive items are shown.
     ToggleInactive,
+    /// User right-clicked on a row - show context menu
+    ContextMenu { index: usize, x: u16, y: u16 },
 }
 
 /// Generic table widget used for clinical lists such as allergies or medical history.
@@ -48,6 +52,10 @@ pub struct ClinicalTableList<T> {
     pub title: String,
     pub loading: bool,
     pub empty_message: String,
+    /// Tracks the hovered row index for visual feedback
+    pub hovered_index: Option<usize>,
+    /// Detects double-click interactions on rows
+    pub double_click_detector: DoubleClickDetector,
 }
 
 impl<T> ClinicalTableList<T> {
@@ -76,6 +84,8 @@ impl<T> ClinicalTableList<T> {
             title: title.into(),
             loading: false,
             empty_message: "No entries found. Press n to add an entry.".to_string(),
+            hovered_index: None,
+            double_click_detector: DoubleClickDetector::default(),
         }
     }
 
@@ -187,11 +197,15 @@ impl<T> ClinicalTableList<T> {
     ///
     /// Returns a [`ListAction`] when the mouse event changes selection,
     /// or `None` for events that are outside the list or ignored.
-    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ListAction<T>> {
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ListAction<T>>
+    where
+        T: Clone,
+    {
         if let MouseEventKind::ScrollUp = mouse.kind {
             if self.scroll_offset > 0 {
                 self.scroll_offset = self.scroll_offset.saturating_sub(3);
             }
+            self.hovered_index = None;
             return Some(ListAction::Select(self.selected_index));
         }
 
@@ -199,9 +213,78 @@ impl<T> ClinicalTableList<T> {
             let visible_rows = area.height.saturating_sub(3) as usize;
             let max_scroll = self.items.len().saturating_sub(visible_rows);
             self.scroll_offset = (self.scroll_offset + 3).min(max_scroll);
+            self.hovered_index = None;
             return Some(ListAction::Select(self.selected_index));
         }
 
+        // Track hover state on mouse movement
+        if let MouseEventKind::Moved = mouse.kind {
+            if area.contains(Position::new(mouse.column, mouse.row))
+                && mouse.row >= area.y + TABLE_HEADER_ROWS
+            {
+                let row_index = (mouse.row - area.y - TABLE_HEADER_ROWS) as usize;
+                let actual_index = self.scroll_offset + row_index;
+                if actual_index < self.items.len() {
+                    self.hovered_index = Some(actual_index);
+                } else {
+                    self.hovered_index = None;
+                }
+            } else {
+                self.hovered_index = None;
+            }
+            return None;
+        }
+
+        // Handle right-click for context menu
+        if let MouseEventKind::Down(MouseButton::Right) = mouse.kind {
+            if !area.contains(Position::new(mouse.column, mouse.row)) {
+                return None;
+            }
+
+            if mouse.row < area.y + TABLE_HEADER_ROWS {
+                return None;
+            }
+
+            let row_index = (mouse.row - area.y - TABLE_HEADER_ROWS) as usize;
+            let actual_index = self.scroll_offset + row_index;
+            if actual_index < self.items.len() {
+                self.selected_index = actual_index;
+                return Some(ListAction::ContextMenu {
+                    index: actual_index,
+                    x: mouse.column,
+                    y: mouse.row,
+                });
+            }
+            return None;
+        }
+
+        // Handle double-click for open action
+        if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+            if !area.contains(Position::new(mouse.column, mouse.row)) {
+                return None;
+            }
+
+            if mouse.row < area.y + TABLE_HEADER_ROWS {
+                return None;
+            }
+
+            let row_index = (mouse.row - area.y - TABLE_HEADER_ROWS) as usize;
+            let actual_index = self.scroll_offset + row_index;
+
+            if actual_index >= self.items.len() {
+                return None;
+            }
+
+            // Check for double-click
+            if self.double_click_detector.check_double_click_now(&mouse) {
+                if let Some(item) = self.items.get(actual_index).cloned() {
+                    return Some(ListAction::Open(item));
+                }
+            }
+            return None;
+        }
+
+        // Only process left mouse up for normal selection
         if mouse.kind != MouseEventKind::Up(MouseButton::Left) {
             return None;
         }
@@ -284,12 +367,16 @@ impl<T> Widget for ClinicalTableList<T> {
             .enumerate()
             .map(|(i, item)| {
                 let actual_index = scroll_offset + i;
-                let style = if actual_index == self.selected_index {
-                    Style::default()
+                let is_selected = actual_index == self.selected_index;
+                let is_hovered = self.hovered_index == Some(actual_index);
+
+                let style = match (is_selected, is_hovered) {
+                    (true, true) => selected_hover_style(&self.theme),
+                    (true, false) => Style::default()
                         .bg(self.theme.colors.selected)
-                        .fg(self.theme.colors.foreground)
-                } else {
-                    Style::default().fg(self.theme.colors.foreground)
+                        .fg(self.theme.colors.foreground),
+                    (false, true) => hover_style(&self.theme),
+                    (false, false) => Style::default().fg(self.theme.colors.foreground),
                 };
 
                 let cells = self

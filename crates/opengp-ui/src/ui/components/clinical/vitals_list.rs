@@ -136,11 +136,11 @@ impl VitalSignsList {
             }
         }
         let mut table = self.table();
-        let action = table.handle_key(key).map(|a| match a {
-            ListAction::Select(i) => VitalSignsListAction::Select(i),
-            ListAction::Open(v) => VitalSignsListAction::Open(v),
-            ListAction::New => VitalSignsListAction::New,
-            _ => unreachable!("unexpected clinical table action for vitals"),
+        let action = table.handle_key(key).and_then(|a| match a {
+            ListAction::Select(i) => Some(VitalSignsListAction::Select(i)),
+            ListAction::Open(v) => Some(VitalSignsListAction::Open(v)),
+            ListAction::New => Some(VitalSignsListAction::New),
+            ListAction::Edit(_) | ListAction::Delete(_) | ListAction::ToggleInactive | ListAction::ContextMenu { .. } => None,
         });
         self.vitals = table.items;
         self.selected_index = table.selected_index;
@@ -150,9 +150,9 @@ impl VitalSignsList {
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<VitalSignsListAction> {
         let mut table = self.table();
-        let action = table.handle_mouse(mouse, area).map(|a| match a {
-            ListAction::Select(i) => VitalSignsListAction::Select(i),
-            _ => unreachable!("unexpected clinical table mouse action for vitals"),
+        let action = table.handle_mouse(mouse, area).and_then(|a| match a {
+            ListAction::Select(i) => Some(VitalSignsListAction::Select(i)),
+            ListAction::Open(_) | ListAction::New | ListAction::Edit(_) | ListAction::Delete(_) | ListAction::ToggleInactive | ListAction::ContextMenu { .. } => None,
         });
         self.vitals = table.items;
         self.selected_index = table.selected_index;
