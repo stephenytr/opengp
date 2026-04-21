@@ -8,6 +8,7 @@ use ratatui::widgets::Widget;
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{CalendarMode, CalendarWidget};
+use crate::ui::input::DoubleClickDetector;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -37,6 +38,8 @@ pub struct Calendar {
     pub current_month: NaiveDate,
     pub selected_date: Option<NaiveDate>,
     pub focused_date: NaiveDate,
+    pub hovered_day: Option<NaiveDate>,
+    pub double_click_detector: DoubleClickDetector,
 }
 
 impl Calendar {
@@ -57,6 +60,8 @@ impl Calendar {
             current_month,
             selected_date: Some(today),
             focused_date: today,
+            hovered_day: None,
+            double_click_detector: DoubleClickDetector::default(),
         };
         calendar.rebuild_days();
         calendar
@@ -206,15 +211,53 @@ impl Calendar {
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<CalendarAction> {
         match mouse.kind {
+            MouseEventKind::Moved => {
+                // Track which day cell is being hovered
+                if let Some(day) = self.widget.day_at_index(
+                    self.widget
+                        .get_day_index_at(mouse.column, mouse.row, area)
+                        .unwrap_or(0),
+                ) {
+                    if day.month() == self.current_month.month() {
+                        self.hovered_day = Some(day);
+                    } else {
+                        self.hovered_day = None;
+                    }
+                } else {
+                    self.hovered_day = None;
+                }
+                None
+            }
             MouseEventKind::ScrollUp => {
                 self.widget.next_month();
                 self.rebuild_days();
+                self.hovered_day = None;
                 Some(CalendarAction::MonthChanged(self.current_month))
             }
             MouseEventKind::ScrollDown => {
                 self.widget.prev_month();
                 self.rebuild_days();
+                self.hovered_day = None;
                 Some(CalendarAction::MonthChanged(self.current_month))
+            }
+            MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
+                // Double-click detection
+                if self.double_click_detector.check_double_click_now(&mouse) {
+                    if let Some(day) = self.widget.day_at_index(
+                        self.widget
+                            .get_day_index_at(mouse.column, mouse.row, area)
+                            .unwrap_or(0),
+                    ) {
+                        self.widget.set_selected_date(day);
+                        self.hovered_day = None;
+                        self.rebuild_days();
+                        Some(CalendarAction::SelectDate(day))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
             }
             MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
                 if let Some(_action) = self.widget.handle_mouse(mouse, area) {
@@ -225,13 +268,30 @@ impl Calendar {
                     None
                 }
             }
-            _ => None,
+            _ => {
+                // Clear hover when mouse leaves
+                self.hovered_day = None;
+                None
+            }
         }
     }
 }
 
 impl Widget for Calendar {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+    fn render(mut self, area: Rect, buf: &mut Buffer) {
+        // Sync hovered_day to widget's hovered_day_index for proper hover styling
+        if let Some(hovered) = self.hovered_day {
+            // Find the index of the hovered day in the 42-day grid
+            for (index, day) in self.days.iter().enumerate() {
+                if day.date == hovered {
+                    self.widget.hovered_day_index = Some(index);
+                    break;
+                }
+            }
+        } else {
+            self.widget.hovered_day_index = None;
+        }
+        
         self.widget
             .render_calendar(area, buf, CalendarMode::Scheduling);
     }

@@ -400,6 +400,7 @@ impl AppointmentDetailModal {
                                 None
                             }
                             DropdownAction::Opened | DropdownAction::FocusChanged => None,
+                            DropdownAction::ContextMenu { .. } => None,
                         };
                     }
                 }
@@ -436,7 +437,8 @@ impl AppointmentDetailModal {
                             DropdownAction::Selected(_) => return self.get_dropdown_action(),
                             DropdownAction::Closed
                             | DropdownAction::Opened
-                            | DropdownAction::FocusChanged => return None,
+                            | DropdownAction::FocusChanged
+                            | DropdownAction::ContextMenu { .. } => return None,
                         }
                     }
                     return None;

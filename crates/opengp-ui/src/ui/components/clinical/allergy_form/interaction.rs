@@ -112,7 +112,7 @@ impl AllergyForm {
                             self.set_value_by_id(&field_id, value);
                         }
                     }
-                    DropdownAction::Opened | DropdownAction::FocusChanged => {
+                    DropdownAction::Opened | DropdownAction::FocusChanged | DropdownAction::ContextMenu { .. } => {
                         return Some(Some(AllergyFormAction::ValueChanged));
                     }
                 },

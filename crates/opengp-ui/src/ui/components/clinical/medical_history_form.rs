@@ -211,7 +211,8 @@ impl MedicalHistoryForm {
                         }
                         DropdownAction::Opened
                         | DropdownAction::Closed
-                        | DropdownAction::FocusChanged => {
+                        | DropdownAction::FocusChanged
+                        | DropdownAction::ContextMenu { .. } => {
                             return Some(MedicalHistoryFormAction::FocusChanged);
                         }
                     },

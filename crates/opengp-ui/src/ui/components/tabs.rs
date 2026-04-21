@@ -8,6 +8,8 @@ use ratatui::layout::{Position, Rect};
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 
+use crate::ui::input::DoubleClickDetector;
+use crate::ui::shared::hover_style;
 use crate::ui::theme::Theme;
 
 /// Available tabs in the application
@@ -71,6 +73,10 @@ pub struct TabBar {
     tabs: Vec<TabItem>,
     /// Theme for colors
     theme: Theme,
+    /// Currently hovered tab index (None if not hovering)
+    hovered_tab: Option<usize>,
+    /// Double-click detector for tab switching
+    double_click_detector: DoubleClickDetector,
 }
 
 /// Individual tab item
@@ -97,6 +103,8 @@ impl TabBar {
             focused: false,
             tabs,
             theme,
+            hovered_tab: None,
+            double_click_detector: DoubleClickDetector::default(),
         }
     }
 
@@ -174,25 +182,47 @@ impl TabBar {
     /// Handle mouse event
     /// Returns the clicked tab if any
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<Tab> {
-        if mouse.kind != MouseEventKind::Up(crossterm::event::MouseButton::Left) {
-            return None;
-        }
+        use crossterm::event::MouseButton;
 
-        // Check if click is within the tab bar area
+        // Check if mouse is within the tab bar area
         if !area.contains(Position::new(mouse.column, mouse.row)) {
+            self.hovered_tab = None;
             return None;
         }
 
-        // Calculate tab width (each tab has a fixed width)
+        // Calculate tab width and current tab index
         let tab_width = area.width as usize / self.tabs.len().max(1);
-        let click_index = (mouse.column.saturating_sub(area.x)) as usize / tab_width.max(1);
+        let tab_index = (mouse.column.saturating_sub(area.x)) as usize / tab_width.max(1);
 
-        if click_index < self.tabs.len() {
-            self.selected = self.tabs[click_index].tab;
-            return Some(self.selected);
+        match mouse.kind {
+            MouseEventKind::Moved => {
+                // Track hovered tab for visual feedback
+                if tab_index < self.tabs.len() {
+                    self.hovered_tab = Some(tab_index);
+                }
+                None
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                // Check for double-click to switch tabs
+                if self.double_click_detector.check_double_click_now(&mouse) {
+                    if tab_index < self.tabs.len() {
+                        self.selected = self.tabs[tab_index].tab;
+                        self.hovered_tab = None;
+                        return Some(self.selected);
+                    }
+                }
+                None
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                // Single-click also switches tab (existing behavior)
+                if tab_index < self.tabs.len() {
+                    self.selected = self.tabs[tab_index].tab;
+                    return Some(self.selected);
+                }
+                None
+            }
+            _ => None,
         }
-
-        None
     }
 
     /// Get the area occupied by a specific tab
@@ -244,11 +274,15 @@ impl Widget for TabBar {
             if let Some(rect) = tab_area {
                 let is_selected = tab_item.tab == self.selected;
                 let is_focused = self.focused && is_selected;
+                let is_hovered = self.hovered_tab == Some(i);
 
                 // Build the label with shortcut
                 let label = format!(" {} ", tab_item.label);
 
-                let style = if is_selected {
+                let style = if is_hovered {
+                    // Hover state takes priority for visual feedback
+                    hover_style(&self.theme)
+                } else if is_selected {
                     Style::default()
                         .bg(self.theme.colors.primary)
                         .fg(self.theme.colors.background)

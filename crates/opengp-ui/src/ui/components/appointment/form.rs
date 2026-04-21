@@ -895,7 +895,8 @@ impl AppointmentForm {
                         }
                         DropdownAction::Opened
                         | DropdownAction::Closed
-                        | DropdownAction::FocusChanged => {
+                        | DropdownAction::FocusChanged
+                        | DropdownAction::ContextMenu { .. } => {
                             return Some(AppointmentFormAction::FocusChanged);
                         }
                     },

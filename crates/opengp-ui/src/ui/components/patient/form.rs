@@ -1019,7 +1019,7 @@ impl PatientForm {
                         .dropdowns
                         .get(&field_id)
                         .and_then(|dropdown| dropdown.selected_value().map(|v| v.to_string())),
-                    DropdownAction::Opened | DropdownAction::FocusChanged => {
+                    DropdownAction::Opened | DropdownAction::FocusChanged | DropdownAction::ContextMenu { .. } => {
                         return Some(Some(PatientFormAction::ValueChanged));
                     }
                 },

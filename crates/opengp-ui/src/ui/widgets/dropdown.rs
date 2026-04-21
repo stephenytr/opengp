@@ -6,6 +6,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 
+use crate::ui::shared::hover_style;
 use crate::ui::theme::Theme;
 
 /// A single selectable option in a [`DropdownWidget`].
@@ -49,6 +50,8 @@ pub struct DropdownWidget {
     pub error: Option<String>,
     pub theme: Theme,
     pub focused: bool,
+    /// Tracks the hovered option index when dropdown is open.
+    pub hovered_index: Option<usize>,
 }
 
 impl Clone for DropdownWidget {
@@ -64,6 +67,7 @@ impl Clone for DropdownWidget {
             error: self.error.clone(),
             theme: self.theme.clone(),
             focused: self.focused,
+            hovered_index: self.hovered_index,
         }
     }
 }
@@ -82,6 +86,7 @@ impl DropdownWidget {
             error: None,
             theme,
             focused: false,
+            hovered_index: None,
         }
     }
 
@@ -158,6 +163,7 @@ impl DropdownWidget {
     /// Closes the dropdown popup.
     pub fn close(&mut self) {
         self.state = DropdownState::Closed;
+        self.hovered_index = None;
     }
 
     /// Moves the focused option to the next item in the list.
@@ -251,15 +257,64 @@ impl DropdownWidget {
     ///
     /// Returns a [`DropdownAction`] when a click opens, closes, or selects
     /// a value, or `None` when the event is ignored.
+    /// 
+    /// Also tracks hover state when dropdown is open via MouseEventKind::Moved.
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<DropdownAction> {
+        let inner = Rect::new(area.x + 1, area.y + 1, area.width - 2, area.height - 2);
+        
+        // Handle mouse movement for hover tracking when dropdown is open
+        if mouse.kind == MouseEventKind::Moved {
+            if self.is_open() && inner.contains((mouse.column, mouse.row).into()) {
+                let header_height = 1;
+                let options_area_start = inner.y + header_height;
+                let mouse_y = mouse.row;
+                
+                if mouse_y >= options_area_start {
+                    let relative_y = (mouse_y - options_area_start) as usize;
+                    if relative_y < self.options.len() {
+                        self.hovered_index = Some(relative_y);
+                    } else {
+                        self.hovered_index = None;
+                    }
+                } else {
+                    self.hovered_index = None;
+                }
+            } else {
+                self.hovered_index = None;
+            }
+            return None;
+        }
+        
+        // Handle right-click for context menu
+        if let MouseEventKind::Down(crossterm::event::MouseButton::Right) = mouse.kind {
+            if self.is_open() && inner.contains((mouse.column, mouse.row).into()) {
+                let header_height = 1;
+                let options_area_start = inner.y + header_height;
+                let mouse_y = mouse.row;
+                
+                if mouse_y >= options_area_start {
+                    let relative_y = (mouse_y - options_area_start) as usize;
+                    if relative_y < self.options.len() {
+                        return Some(DropdownAction::ContextMenu {
+                            index: relative_y,
+                            x: mouse.column,
+                            y: mouse.row,
+                        });
+                    }
+                }
+            }
+            return None;
+        }
+        
+        // Handle left-click selection
         if mouse.kind != MouseEventKind::Up(crossterm::event::MouseButton::Left) {
             return None;
         }
 
-        let inner = Rect::new(area.x + 1, area.y + 1, area.width - 2, area.height - 2);
         if !inner.contains((mouse.column, mouse.row).into()) {
             if self.is_open() {
                 self.close();
+                self.hovered_index = None;
                 return Some(DropdownAction::Closed);
             }
             return None;
@@ -276,6 +331,7 @@ impl DropdownWidget {
                 if relative_y < self.options.len() {
                     self.focused_index = relative_y;
                     self.confirm_selection();
+                    self.hovered_index = None;
                     return Some(DropdownAction::Selected(self.selected_index));
                 }
             }
@@ -299,6 +355,8 @@ pub enum DropdownAction {
     Selected(Option<usize>),
     /// The focused option changed while the dropdown was open.
     FocusChanged,
+    /// Right-click context menu requested on an option.
+    ContextMenu { index: usize, x: u16, y: u16 },
 }
 
 impl Widget for DropdownWidget {
@@ -427,6 +485,7 @@ impl Widget for DropdownWidget {
                 if (options_inner.y + i as u16) < options_inner.y + options_inner.height {
                     let is_selected = Some(i) == self.selected_index;
                     let is_focused = i == self.focused_index;
+                    let is_hovered = Some(i) == self.hovered_index;
 
                     let prefix = if is_selected { "● " } else { "  " };
                     let style = if is_focused {
@@ -434,6 +493,8 @@ impl Widget for DropdownWidget {
                             .fg(self.theme.colors.primary)
                             .bg(self.theme.colors.background_dark)
                             .add_modifier(Modifier::REVERSED)
+                    } else if is_hovered {
+                        hover_style(&self.theme)
                     } else if is_selected {
                         Style::default()
                             .fg(self.theme.colors.primary)
