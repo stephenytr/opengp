@@ -4,12 +4,13 @@
 //! Provides keyboard-driven date selection with centered overlay rendering.
 
 use chrono::{Datelike, NaiveDate};
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::{Clear, Widget};
 
 use super::CalendarWidget;
+use crate::ui::shared::hover_style;
 use crate::ui::theme::Theme;
 
 /// Actions returned by the date picker popup.
@@ -32,6 +33,8 @@ pub struct DatePickerPopup {
     visible: bool,
     initial_date: Option<NaiveDate>,
     theme: Theme,
+    hovered_index: Option<usize>,
+    popup_area: Option<Rect>,
 }
 
 impl DatePickerPopup {
@@ -42,6 +45,8 @@ impl DatePickerPopup {
             visible: false,
             initial_date: None,
             theme,
+            hovered_index: None,
+            popup_area: None,
         }
     }
 
@@ -55,6 +60,7 @@ impl DatePickerPopup {
     /// Close the date picker.
     pub fn close(&mut self) {
         self.visible = false;
+        self.hovered_index = None;
     }
 
     /// Check if the date picker is currently visible.
@@ -140,8 +146,57 @@ impl DatePickerPopup {
         }
     }
 
+    /// Handle mouse events while the popup is open.
+    ///
+    /// Returns `Some(DatePickerAction)` if user clicked a date.
+    /// Returns `None` for movement or other interactions.
+    pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Option<DatePickerAction> {
+        if !self.visible {
+            self.hovered_index = None;
+            return None;
+        }
+
+        match mouse.kind {
+            MouseEventKind::Moved => {
+                // Track hover state based on popup area
+                if let Some(area) = self.popup_area {
+                    self.hovered_index = self.calendar.get_day_index_at(mouse.column, mouse.row, area);
+                }
+                None
+            }
+            MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
+                // Click selects the date
+                if let Some(area) = self.popup_area {
+                    if let Some(day_index) = self.calendar.get_day_index_at(mouse.column, mouse.row, area) {
+                        if let Some(date) = self.calendar.day_at_index(day_index) {
+                            self.calendar.focused_date = date;
+                            self.calendar.selected_date = Some(date);
+                            self.visible = false;
+                            self.hovered_index = None;
+                            return Some(DatePickerAction::Selected(date));
+                        }
+                    }
+                }
+                None
+            }
+            _ => {
+                // Clear hover on other mouse events (like scroll leaving area)
+                if let Some(area) = self.popup_area {
+                    if mouse.column < area.x
+                        || mouse.column >= area.x + area.width
+                        || mouse.row < area.y
+                        || mouse.row >= area.y + area.height
+                    {
+                        self.hovered_index = None;
+                    }
+                }
+                None
+            }
+        }
+    }
+
     /// Render the date picker popup as a centered overlay.
-    pub fn render(&self, area: Rect, buf: &mut Buffer) {
+    pub fn render(&mut self, area: Rect, buf: &mut Buffer) {
         if !self.visible || area.is_empty() {
             return;
         }
@@ -165,14 +220,118 @@ impl DatePickerPopup {
         };
 
         let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
+        self.popup_area = Some(popup_area);
 
         Clear.render(popup_area, buf);
 
-        self.calendar.render_calendar(
-            popup_area,
-            buf,
-            crate::ui::widgets::CalendarMode::DatePicker,
-        );
+        self.render_calendar_with_hover(popup_area, buf);
+    }
+
+    fn render_calendar_with_hover(&self, area: Rect, buf: &mut Buffer) {
+        use ratatui::style::Style;
+
+        if area.is_empty() || area.width < 21 || area.height < 9 {
+            return;
+        }
+
+        let (year, month) = self.calendar.current_month;
+        let month_name = match month {
+            1 => "January",
+            2 => "February",
+            3 => "March",
+            4 => "April",
+            5 => "May",
+            6 => "June",
+            7 => "July",
+            8 => "August",
+            9 => "September",
+            10 => "October",
+            11 => "November",
+            12 => "December",
+            _ => "Unknown",
+        };
+        let title = format!("{} {}", month_name, year);
+
+        let block = ratatui::widgets::Block::default()
+            .title(format!(" {} ", title))
+            .borders(ratatui::widgets::Borders::ALL)
+            .border_style(Style::default().fg(self.theme.colors.warning));
+
+        block.clone().render(area, buf);
+        let inner = block.inner(area);
+
+        self.render_weekday_header(inner, buf);
+        self.render_dates_with_hover(inner, buf);
+    }
+
+    fn render_weekday_header(&self, area: Rect, buf: &mut Buffer) {
+        if area.height < 2 {
+            return;
+        }
+
+        let cell_width = (area.width as usize / 7).max(2);
+        let weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Sun"];
+        let style = ratatui::style::Style::default()
+            .fg(self.theme.colors.foreground)
+            .add_modifier(ratatui::style::Modifier::BOLD);
+
+        for (i, weekday) in weekdays.iter().enumerate() {
+            let x = area.x + (i as u16 * cell_width as u16);
+            if x < area.right() {
+                let label = if cell_width >= 3 {
+                    *weekday
+                } else {
+                    &weekday[..2]
+                };
+                buf.set_string(x, area.y, label, style);
+            }
+        }
+    }
+
+    fn render_dates_with_hover(&self, area: Rect, buf: &mut Buffer) {
+        let start_y = area.y.saturating_add(2);
+        if start_y >= area.bottom() {
+            return;
+        }
+
+        let cell_width = (area.width as usize / 7).max(2);
+        let row_height = 2usize;
+        let (_year, month) = self.calendar.current_month;
+
+        for day_index in 0..42 {
+            if let Some(date) = self.calendar.day_at_index(day_index) {
+                let row = start_y + (day_index as u16 / 7) * row_height as u16;
+                let col = area.x + ((day_index % 7) as u16 * cell_width as u16);
+
+                if row >= area.bottom() || col + 2 > area.right() {
+                    break;
+                }
+
+                let style = if self.hovered_index == Some(day_index) {
+                    hover_style(&self.theme)
+                } else if Some(date) == self.calendar.selected_date {
+                    ratatui::style::Style::default()
+                        .bg(self.theme.colors.secondary)
+                        .fg(self.theme.colors.foreground)
+                        .add_modifier(ratatui::style::Modifier::UNDERLINED)
+                } else if date == self.calendar.focused_date {
+                    ratatui::style::Style::default()
+                        .fg(self.theme.colors.primary)
+                        .add_modifier(ratatui::style::Modifier::UNDERLINED)
+                } else if date.month() != month {
+                    ratatui::style::Style::default().fg(self.theme.colors.text_dim)
+                } else {
+                    ratatui::style::Style::default().fg(self.theme.colors.foreground)
+                };
+
+                buf.set_string(
+                    col,
+                    row,
+                    format!("{:>width$}", date.day(), width = cell_width),
+                    style,
+                );
+            }
+        }
     }
 
     /// Helper to calculate days in a month.

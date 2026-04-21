@@ -103,7 +103,7 @@ impl InlinePicker {
 }
 
 impl Widget for InlinePicker {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+    fn render(mut self, area: Rect, buf: &mut Buffer) {
         // Render the date picker if visible
         if self.date_picker.is_visible() {
             self.date_picker.render(area, buf);

@@ -4,7 +4,7 @@
 //! Provides keyboard-driven time selection with centered overlay rendering.
 
 use chrono::{NaiveDate, NaiveTime, Timelike};
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use opengp_config::CalendarConfig;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -12,6 +12,7 @@ use ratatui::style::Style;
 use ratatui::symbols::border;
 use ratatui::widgets::{Block, Clear, Widget};
 
+use crate::ui::shared::hover_style;
 use crate::ui::theme::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +35,8 @@ pub struct TimePickerPopup {
     scroll_offset: u8,
     config: CalendarConfig,
     theme: Theme,
+    hovered_index: Option<usize>,
+    popup_area: Option<Rect>,
 }
 
 const GRID_COLS: u8 = 4;
@@ -57,6 +60,8 @@ impl TimePickerPopup {
             scroll_offset: 0,
             config,
             theme: Theme::default(),
+            hovered_index: None,
+            popup_area: None,
         }
     }
 
@@ -77,6 +82,8 @@ impl TimePickerPopup {
             scroll_offset: 0,
             config,
             theme,
+            hovered_index: None,
+            popup_area: None,
         }
     }
 
@@ -98,6 +105,7 @@ impl TimePickerPopup {
 
     pub fn close(&mut self) {
         self.is_visible = false;
+        self.hovered_index = None;
     }
 
     pub fn is_visible(&self) -> bool {
@@ -191,6 +199,86 @@ impl TimePickerPopup {
         }
     }
 
+    /// Handle mouse events while the popup is open.
+    ///
+    /// Returns `Some(TimePickerAction)` if user clicked a time slot.
+    /// Returns `None` for movement or other interactions.
+    pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Option<TimePickerAction> {
+        if !self.is_visible {
+            self.hovered_index = None;
+            return None;
+        }
+
+        match mouse.kind {
+            MouseEventKind::Moved => {
+                if let Some(area) = self.popup_area {
+                    let available = self.get_available_slots();
+                    self.hovered_index = self.get_time_index_at(mouse.column, mouse.row, area);
+                    if let Some(idx) = self.hovered_index {
+                        if idx < available.len() {
+                            self.selected_time = available[idx];
+                        }
+                    }
+                }
+                None
+            }
+            MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
+                if let Some(area) = self.popup_area {
+                    if let Some(idx) = self.get_time_index_at(mouse.column, mouse.row, area) {
+                        let available = self.get_available_slots();
+                        if idx < available.len() && !self.is_slot_booked(available[idx]) {
+                            let selected = available[idx];
+                            self.selected_time = selected;
+                            self.is_visible = false;
+                            self.hovered_index = None;
+                            return Some(TimePickerAction::Selected(selected));
+                        }
+                    }
+                }
+                None
+            }
+            _ => {
+                if let Some(area) = self.popup_area {
+                    if mouse.column < area.x
+                        || mouse.column >= area.x + area.width
+                        || mouse.row < area.y
+                        || mouse.row >= area.y + area.height
+                    {
+                        self.hovered_index = None;
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    fn get_time_index_at(&self, column: u16, row: u16, area: Rect) -> Option<usize> {
+        let block = Block::bordered();
+        let inner = block.inner(area);
+
+        if inner.is_empty() {
+            return None;
+        }
+
+        let cell_width = 10u16;
+        let start_x = inner.x + 1;
+        let start_y = inner.y + 1;
+        let cols = GRID_COLS as u16;
+
+        if column < start_x || row < start_y || column >= inner.right() {
+            return None;
+        }
+
+        let col = (column - start_x) / cell_width;
+        let row = (row - start_y) / 2;
+
+        if col >= cols {
+            return None;
+        }
+
+        Some((row as usize * GRID_COLS as usize) + col as usize)
+    }
+
     fn move_selection_up(&mut self) {
         let available = self.get_available_slots();
         if available.is_empty() {
@@ -248,7 +336,7 @@ impl TimePickerPopup {
         }
     }
 
-    pub fn render(&self, area: Rect, buf: &mut Buffer) {
+    pub fn render(&mut self, area: Rect, buf: &mut Buffer) {
         if !self.is_visible || area.is_empty() {
             return;
         }
@@ -272,6 +360,7 @@ impl TimePickerPopup {
         };
 
         let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
+        self.popup_area = Some(popup_area);
 
         Clear.render(popup_area, buf);
 
@@ -330,9 +419,12 @@ impl TimePickerPopup {
             let col = index % cols as usize;
 
             let is_selected = index == current_index;
+            let is_hovered = self.hovered_index == Some(index);
             let time_str = format!("{:02}:{:02}", time.hour(), time.minute());
 
-            let style = if is_selected {
+            let style = if is_hovered {
+                hover_style(&self.theme)
+            } else if is_selected {
                 Style::new().fg(self.theme.colors.primary).bold().reversed()
             } else {
                 Style::new().fg(self.theme.colors.foreground)
