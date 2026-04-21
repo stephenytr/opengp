@@ -49,7 +49,9 @@ impl App {
         // Render main TabBar on line 1
         self.tab_bar.clone().render(tab_bar_line_1, frame.buffer_mut());
 
-        // Render PatientTabBar on line 2 (only when patients are open)
+        let patient_workspace_active = self.tab_bar.selected() == Tab::PatientSearch
+            && self.workspace_manager.active().is_some();
+
         if !self.workspace_manager.workspaces.is_empty() {
             let patient_tabs = self.workspace_manager.workspaces
                 .iter()
@@ -62,26 +64,19 @@ impl App {
 
             let active_idx = self.workspace_manager.active_index.unwrap_or(0);
 
-            let patient_tab_bar = PatientTabBar::new(
-                patient_tabs,
-                active_idx,
-                self.theme.clone(),
-            );
+            let patient_tab_bar = if patient_workspace_active {
+                PatientTabBar::new(patient_tabs, active_idx, self.theme.clone())
+            } else {
+                PatientTabBar::new(patient_tabs, active_idx, self.theme.clone()).with_no_active()
+            };
             patient_tab_bar.render(tab_bar_line_2, frame.buffer_mut());
         }
 
-        if self.workspace_manager.active().is_some() {
+        if patient_workspace_active {
             let active_workspace = self.workspace_manager.active().unwrap();
             let patient_colour = active_workspace.colour;
             let clinical_items = ClinicalMenuKind::all();
-            let active_clinical_idx = match active_workspace.active_clinical_menu {
-                ClinicalMenuKind::Consultations => 0,
-                ClinicalMenuKind::Vitals => 1,
-                ClinicalMenuKind::Allergies => 2,
-                ClinicalMenuKind::MedicalHistory => 3,
-                ClinicalMenuKind::FamilyHistory => 4,
-                ClinicalMenuKind::SocialHistory => 5,
-            };
+            let active_clinical_idx = active_workspace.active_clinical_menu.index();
             let clinical_row = ClinicalRow::new(
                 clinical_items,
                 active_clinical_idx,

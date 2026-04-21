@@ -42,18 +42,13 @@ impl PatientTab {
 
 /// PatientTabBar widget
 pub struct PatientTabBar {
-    /// Open patient tabs
     patients: Vec<PatientTab>,
-    /// Index of active patient
-    active_index: usize,
-    /// Theme for styling
+    active_index: Option<usize>,
     theme: Theme,
-    /// Index of currently hovered patient tab
     hovered_index: Option<usize>,
 }
 
 impl PatientTabBar {
-    /// Create a new patient tab bar
     pub fn new(
         patients: Vec<PatientTab>,
         active_index: usize,
@@ -61,10 +56,15 @@ impl PatientTabBar {
     ) -> Self {
         Self {
             patients,
-            active_index,
+            active_index: Some(active_index),
             theme,
             hovered_index: None,
         }
+    }
+
+    pub fn with_no_active(mut self) -> Self {
+        self.active_index = None;
+        self
     }
 
     /// Set the hovered tab index for hover styling
@@ -105,9 +105,8 @@ impl PatientTabBar {
         }
     }
 
-    /// Get the active patient
     pub fn active_patient(&self) -> Option<&PatientTab> {
-        self.patients.get(self.active_index)
+        self.active_index.and_then(|i| self.patients.get(i))
     }
 }
 
@@ -143,7 +142,7 @@ impl PatientTabBar {
         let max_x = area.x + area.width;
 
         for (idx, patient) in self.patients.iter().enumerate() {
-            let is_active = idx == self.active_index;
+            let is_active = self.active_index == Some(idx);
             let tab_text = format!("■ {}", patient.truncated_name());
             let tab_width = (tab_text.len() + 2) as u16; // +2 for padding
 
