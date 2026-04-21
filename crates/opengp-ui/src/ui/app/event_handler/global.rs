@@ -1,5 +1,6 @@
 use crate::ui::app::App;
 use crate::ui::components::appointment::AppointmentView;
+use crate::ui::components::clinical_row::{ClinicalMenuKind, ClinicalRow};
 use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
 use crate::ui::components::tabs::Tab;
 use crossterm::event::MouseEvent;
@@ -20,6 +21,25 @@ impl App {
                 self.refresh_context();
                 return;
             }
+
+            if let Some(workspace) = self.workspace_manager.active_mut() {
+                let clinical_row_area = Rect::new(area.x, area.y + 2, area.width, 1);
+                let clinical_items = ClinicalMenuKind::all();
+                let active_clinical_idx = workspace.active_clinical_menu.index();
+                let mut clinical_row = ClinicalRow::new(
+                    clinical_items,
+                    active_clinical_idx,
+                    workspace.colour,
+                    self.theme.clone(),
+                );
+                if let Some(idx) = clinical_row.handle_mouse(mouse, clinical_row_area) {
+                    if let Some(kind) = ClinicalMenuKind::from_index(idx) {
+                        workspace.active_clinical_menu = kind;
+                        self.refresh_status_bar();
+                        return;
+                    }
+                }
+            }
         }
 
         if let Some(ref mut form) = self.patient_form {
@@ -37,12 +57,14 @@ impl App {
             }
         }
 
-        if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+        let clinical_row_offset = if self.workspace_manager.active().is_some() { 3 } else { 2 };
+
+        if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
             let content_area = Rect::new(
                 area.x,
-                area.y + 2,
+                area.y + clinical_row_offset,
                 area.width,
-                area.height.saturating_sub(2 + STATUS_BAR_HEIGHT),
+                area.height.saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
             );
             if let Some(action) = self.patient_list.handle_mouse(mouse, content_area) {
                 match action {
@@ -53,20 +75,19 @@ impl App {
                     crate::ui::components::patient::PatientListAction::FocusSearch => {}
                     crate::ui::components::patient::PatientListAction::SearchChanged => {}
                     crate::ui::components::patient::PatientListAction::ContextMenu { x: _, y: _, patient_id: _ } => {
-                        // Context menu support to be implemented in future
                     }
                 }
             }
         }
 
-        if self.tab_bar.selected() == Tab::Appointment {
+        if self.tab_bar.selected() == Tab::Schedule {
             use crate::ui::components::appointment::schedule::ScheduleAction;
 
             let appointment_content_area = Rect::new(
                 area.x,
-                area.y + 2,
+                area.y + clinical_row_offset,
                 area.width,
-                area.height.saturating_sub(2 + STATUS_BAR_HEIGHT),
+                area.height.saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
             );
 
             match self.appointment_state.current_view {

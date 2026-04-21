@@ -1,8 +1,7 @@
 //! Patient Tab Bar Component
 //!
-//! Two-tier, colour-coded patient tabs with wrapping and subtab bar.
+//! Colour-coded patient tabs with wrapping.
 //! Row 1: Coloured blocks + truncated patient names (wrap if overflow)
-//! Row 2: SubtabBar for active patient
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -11,7 +10,6 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Widget};
 use uuid::Uuid;
 
-use crate::ui::components::subtab_bar::{SubtabBar, SubtabKind};
 use crate::ui::theme::Theme;
 use crate::ui::shared::{hover_style, selected_hover_style};
 
@@ -48,10 +46,6 @@ pub struct PatientTabBar {
     patients: Vec<PatientTab>,
     /// Index of active patient
     active_index: usize,
-    /// Subtabs to show for active patient
-    subtabs: Vec<SubtabKind>,
-    /// Active subtab index
-    active_subtab_index: usize,
     /// Theme for styling
     theme: Theme,
     /// Index of currently hovered patient tab
@@ -63,15 +57,11 @@ impl PatientTabBar {
     pub fn new(
         patients: Vec<PatientTab>,
         active_index: usize,
-        subtabs: Vec<SubtabKind>,
-        active_subtab_index: usize,
         theme: Theme,
     ) -> Self {
         Self {
             patients,
             active_index,
-            subtabs,
-            active_subtab_index,
             theme,
             hovered_index: None,
         }
@@ -83,35 +73,31 @@ impl PatientTabBar {
         self
     }
 
-    /// Get the number of rows needed (patient tabs + 1 for subtab bar)
+    /// Get the number of rows needed for patient tabs
     pub fn row_count(&self) -> u16 {
         if self.patients.is_empty() {
             1
         } else {
-            // Calculate rows needed for patient tabs + 1 for subtab bar
-            let patient_row_count = self.calculate_patient_rows() as u16;
-            patient_row_count + 1
+            self.calculate_patient_rows() as u16
         }
     }
 
     /// Calculate how many rows of patient tabs are needed
     fn calculate_patient_rows(&self) -> usize {
         if self.patients.is_empty() {
-            0
+            1
         } else {
-            // Each tab is "■ name" (1 block + 1 space + name, min 4 chars)
-            // Simple heuristic: max 120 chars per row, ~4-5 tabs typically fit
             let mut current_row = 0;
             let mut current_width = 0;
             let max_width = 120;
 
             for patient in &self.patients {
-                let tab_width = 3 + patient.truncated_name().len(); // "■ " + name
+                let tab_width = 3 + patient.truncated_name().len();
                 if current_width + tab_width > max_width && current_width > 0 {
                     current_row += 1;
-                    current_width = tab_width + 2; // +2 for spacing
+                    current_width = tab_width + 2;
                 } else {
-                    current_width += tab_width + 2; // +2 for spacing between tabs
+                    current_width += tab_width + 2;
                 }
             }
 
@@ -131,35 +117,16 @@ impl Widget for PatientTabBar {
             return;
         }
 
-        // Split into patient tabs area and subtab bar area
         let patient_rows = self.calculate_patient_rows() as u16;
-        let vertical_split = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(patient_rows),
-                Constraint::Min(1),
-            ])
-            .split(area);
+        let patient_area = Rect::new(
+            area.x,
+            area.y,
+            area.width,
+            patient_rows,
+        );
 
-        let patient_area = vertical_split[0];
-        let subtab_area = vertical_split[1];
-
-        // Render patient tabs
         if !self.patients.is_empty() && !patient_area.is_empty() {
             self.render_patient_tabs(patient_area, buf);
-        }
-
-        // Render subtab bar
-        if !self.subtabs.is_empty() && !subtab_area.is_empty() {
-            if let Some(patient) = self.active_patient() {
-                let subtab_bar = SubtabBar::new(
-                    self.subtabs.clone(),
-                    self.active_subtab_index,
-                    patient.colour,
-                    self.theme.clone(),
-                );
-                subtab_bar.render(subtab_area, buf);
-            }
         }
     }
 }
@@ -255,8 +222,6 @@ mod tests {
         let bar = PatientTabBar::new(
             patients,
             0,
-            vec![SubtabKind::Summary],
-            0,
             theme,
         );
 
@@ -275,9 +240,8 @@ mod tests {
         }
 
         let theme = create_test_theme();
-        let bar = PatientTabBar::new(patients, 0, vec![SubtabKind::Summary], 0, theme);
+        let bar = PatientTabBar::new(patients, 0, theme);
 
-        // 4 short names should fit in one row (max 120 chars)
         assert_eq!(bar.calculate_patient_rows(), 1);
     }
 
@@ -293,9 +257,8 @@ mod tests {
         }
 
         let theme = create_test_theme();
-        let bar = PatientTabBar::new(patients, 0, vec![SubtabKind::Summary], 0, theme);
+        let bar = PatientTabBar::new(patients, 0, theme);
 
-        // 15 long names should require > 1 row
         assert!(bar.calculate_patient_rows() > 1);
     }
 
@@ -307,7 +270,7 @@ mod tests {
         ];
 
         let theme = create_test_theme();
-        let bar = PatientTabBar::new(patients.clone(), 1, vec![SubtabKind::Summary], 0, theme);
+        let bar = PatientTabBar::new(patients.clone(), 1, theme);
 
         let active = bar.active_patient();
         assert!(active.is_some());
@@ -315,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn test_row_count_includes_subtab_bar() {
+    fn test_row_count() {
         let patients = vec![PatientTab::new(
             Uuid::new_v4(),
             "John Doe".to_string(),
@@ -326,21 +289,18 @@ mod tests {
         let bar = PatientTabBar::new(
             patients,
             0,
-            vec![SubtabKind::Summary, SubtabKind::Demographics],
-            0,
             theme,
         );
 
-        // 1 patient row + 1 subtab bar row = 2 total
-        assert_eq!(bar.row_count(), 2);
+        assert_eq!(bar.row_count(), 1);
     }
 
     #[test]
     fn test_empty_patients() {
         let theme = create_test_theme();
-        let bar = PatientTabBar::new(vec![], 0, vec![], 0, theme);
+        let bar = PatientTabBar::new(vec![], 0, theme);
 
-        assert_eq!(bar.calculate_patient_rows(), 0);
+        assert_eq!(bar.calculate_patient_rows(), 1);
         assert_eq!(bar.row_count(), 1);
     }
 }

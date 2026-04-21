@@ -63,7 +63,7 @@ impl App {
             return Action::Unknown;
         }
 
-        if self.tab_bar.selected() == Tab::Patient
+        if self.tab_bar.selected() == Tab::PatientSearch
             && self.patient_form.is_none()
             && self.patient_list.is_searching()
         {
@@ -73,7 +73,7 @@ impl App {
                     crate::ui::components::patient::PatientListAction::OpenPatient(id) => {
                         if let Some(patient_item) = self.patient_list.get_patient_by_id(id) {
                             let _ = self.workspace_manager.open_patient(patient_item.clone());
-                            self.tab_bar.select(Tab::Patient);
+                            self.tab_bar.select(Tab::PatientSearch);
                         }
                     }
                     crate::ui::components::patient::PatientListAction::FocusSearch => {}
@@ -148,21 +148,20 @@ impl App {
 
         if let Some(action) = action {
             match action {
-                Action::SwitchToPatient => {
-                    self.tab_bar.select(Tab::Patient);
-                    self.previous_tab = Tab::Patient;
+                Action::SwitchToSchedule => {
+                    self.tab_bar.select(Tab::Schedule);
+                    self.previous_tab = Tab::Schedule;
                     self.refresh_status_bar();
                     self.refresh_context();
                 }
-                Action::SwitchToAppointments => {
-                    self.tab_bar.select(Tab::Appointment);
+                Action::SwitchToPatientSearch => {
+                    self.tab_bar.select(Tab::PatientSearch);
                     let today = chrono::Utc::now().date_naive();
                     self.appointment_state.selected_date = Some(today);
-                    // Auto-refresh appointments when switching to Appointment tab
-                    if self.previous_tab != Tab::Appointment {
+                    if self.previous_tab != Tab::PatientSearch {
                         self.request_refresh_appointments(today);
                     }
-                    self.previous_tab = Tab::Appointment;
+                    self.previous_tab = Tab::PatientSearch;
                     self.refresh_status_bar();
                     self.refresh_context();
                 }
@@ -174,12 +173,12 @@ impl App {
                     let is_ctrl_q = key
                         .modifiers
                         .contains(crossterm::event::KeyModifiers::CONTROL);
-                    if is_ctrl_q || self.tab_bar.selected() == Tab::Patient {
+                    if is_ctrl_q || self.tab_bar.selected() == Tab::PatientSearch {
                         self.should_quit = true;
                     }
                 }
                 Action::New => {
-                    if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
                         self.patient_form = Some(crate::ui::components::patient::PatientForm::new(
                             self.theme.clone(),
                             &self.patient_config,
@@ -188,7 +187,7 @@ impl App {
                     }
                 }
                 Action::Edit => {
-                    if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
                         if let Some(patient_id) = self.patient_list.selected_patient_id() {
                             self.request_edit_patient(patient_id);
                         }
@@ -203,7 +202,7 @@ impl App {
                     if self.appointment_form.is_some() {
                         self.appointment_form = None;
                     }
-                    if self.tab_bar.selected() == Tab::Appointment
+                    if self.tab_bar.selected() == Tab::Schedule
                         && self.appointment_state.current_view == AppointmentView::Schedule
                         && self.appointment_form.is_none()
                     {
@@ -215,8 +214,8 @@ impl App {
                 }
                 Action::Save => {}
                 Action::Refresh => match self.tab_bar.selected() {
-                    Tab::Patient => self.request_refresh_patients(),
-                    Tab::Appointment => {
+                    Tab::PatientSearch => self.request_refresh_patients(),
+                    Tab::Schedule => {
                         let date = self
                             .appointment_state
                             .selected_date
@@ -225,13 +224,13 @@ impl App {
                     }
                 },
                 Action::NavigateDown => {
-                    if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
                         let visible_rows = self.calculate_visible_patient_rows();
                         self.patient_list.move_down_and_scroll(visible_rows);
                     }
                 }
                 Action::NavigateUp => {
-                    if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
                         let visible_rows = self.calculate_visible_patient_rows();
                         self.patient_list.move_up_and_scroll(visible_rows);
                     }
@@ -242,7 +241,7 @@ impl App {
                 | Action::PrevMonth
                 | Action::NextMonth
                 | Action::SelectDate => {
-                    if self.tab_bar.selected() == Tab::Appointment {
+                    if self.tab_bar.selected() == Tab::Schedule {
                         return self.handle_appointment_keys(key);
                     }
                 }
@@ -252,20 +251,20 @@ impl App {
                 | Action::NextTimeSlot
                 | Action::ScrollViewportUp
                 | Action::ScrollViewportDown => {
-                    if self.tab_bar.selected() == Tab::Appointment {
+                    if self.tab_bar.selected() == Tab::Schedule {
                         return self.handle_appointment_keys(key);
                     }
                 }
                 Action::Enter => {
-                    if self.tab_bar.selected() == Tab::Patient {
+                    if self.tab_bar.selected() == Tab::PatientSearch {
                         return self.handle_patient_keys(key);
                     }
-                    if self.tab_bar.selected() == Tab::Appointment {
+                    if self.tab_bar.selected() == Tab::Schedule {
                         return self.handle_appointment_keys(key);
                     }
                 }
                 Action::NewAppointment => {
-                    if self.tab_bar.selected() == Tab::Appointment
+                    if self.tab_bar.selected() == Tab::Schedule
                         && self.appointment_form.is_none()
                     {
                         self.appointment_form = Some(AppointmentForm::new(
@@ -316,69 +315,22 @@ impl App {
                     self.refresh_context();
                 }
 
-                Action::NextSubtab => {
+                Action::NextClinicalMenu => {
                     if let Some(workspace) = self.workspace_manager.active_mut() {
-                        let current = workspace.active_subtab;
-                        let next = match current {
-                            crate::ui::components::SubtabKind::Clinical => {
-                                crate::ui::components::SubtabKind::Billing
-                            }
-                            crate::ui::components::SubtabKind::Billing => {
-                                crate::ui::components::SubtabKind::Appointments
-                            }
-                            crate::ui::components::SubtabKind::Appointments => {
-                                crate::ui::components::SubtabKind::Clinical
-                            }
-                            _ => current,
-                        };
-                        workspace.active_subtab = next;
-                        
-                        // Lazy load if subtab not yet loaded
-                        if !workspace.is_loaded(next) {
-                            if let Some(patient_id) = self.workspace_manager.active().map(|w| w.patient_id) {
-                                // Send command to load workspace data for this subtab
-                                let _ = self.command_tx.send(AppCommand::LoadPatientWorkspaceData {
-                                    patient_id,
-                                    subtab: next,
-                                });
-                            }
-                        }
+                        workspace.active_clinical_menu = workspace.active_clinical_menu.next();
                         self.refresh_status_bar();
                     }
                 }
 
-                Action::PrevSubtab => {
+                Action::PrevClinicalMenu => {
                     if let Some(workspace) = self.workspace_manager.active_mut() {
-                        let current = workspace.active_subtab;
-                        let prev = match current {
-                            crate::ui::components::SubtabKind::Clinical => {
-                                crate::ui::components::SubtabKind::Appointments
-                            }
-                            crate::ui::components::SubtabKind::Billing => {
-                                crate::ui::components::SubtabKind::Clinical
-                            }
-                            crate::ui::components::SubtabKind::Appointments => {
-                                crate::ui::components::SubtabKind::Billing
-                            }
-                            _ => current,
-                        };
-                        workspace.active_subtab = prev;
-                        
-                        // Lazy load if subtab not yet loaded
-                        if !workspace.is_loaded(prev) {
-                            if let Some(patient_id) = self.workspace_manager.active().map(|w| w.patient_id) {
-                                let _ = self.command_tx.send(AppCommand::LoadPatientWorkspaceData {
-                                    patient_id,
-                                    subtab: prev,
-                                });
-                            }
-                        }
+                        workspace.active_clinical_menu = workspace.active_clinical_menu.prev();
                         self.refresh_status_bar();
                     }
                 }
 
                 Action::OpenPatientFromList => {
-                    if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
                         if let Some(patient) = self.patient_list.selected_patient() {
                             match self.workspace_manager.open_patient(patient.clone()) {
                                 Ok(index) => {
@@ -414,7 +366,7 @@ impl App {
             return Action::Enter;
         }
 
-        if self.tab_bar.selected() == Tab::Patient && self.patient_form.is_none() {
+        if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
             if let Some(workspace) = self.workspace_manager.active() {
                 match workspace.active_subtab {
                     crate::ui::components::SubtabKind::Clinical => {
@@ -436,7 +388,7 @@ impl App {
             }
         }
 
-        if self.tab_bar.selected() == Tab::Appointment {
+        if self.tab_bar.selected() == Tab::Schedule {
             return self.handle_appointment_keys(key);
         }
 

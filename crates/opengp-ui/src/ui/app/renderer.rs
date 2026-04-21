@@ -1,6 +1,7 @@
 use crate::ui::app::App;
 use crate::ui::components::appointment::AppointmentView;
 use crate::ui::components::clinical::ClinicalView;
+use crate::ui::components::clinical_row::{ClinicalMenuKind, ClinicalRow};
 use crate::ui::components::patient_tab_bar::PatientTabBar;
 use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
 use crate::ui::components::tabs::Tab;
@@ -25,17 +26,18 @@ impl App {
         let main_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),
+                Constraint::Length(2),
+                Constraint::Length(1),
                 Constraint::Min(0),
                 Constraint::Length(STATUS_BAR_HEIGHT),
             ])
             .split(terminal);
 
         let tab_bar_area = main_layout[0];
-        let content_area = main_layout[1];
-        let status_bar_area = main_layout[2];
+        let clinical_row_area = main_layout[1];
+        let content_area = main_layout[2];
+        let status_bar_area = main_layout[3];
 
-        // Render two-tier tab bar with patient tabs and subtab bar
         let patient_tabs = self.workspace_manager.workspaces
             .iter()
             .map(|ws| crate::ui::components::patient_tab_bar::PatientTab::new(
@@ -44,38 +46,36 @@ impl App {
                 ws.colour,
             ))
             .collect::<Vec<_>>();
-        
+
         let active_idx = self.workspace_manager.active_index.unwrap_or(0);
-        let subtabs = if self.workspace_manager.active().is_some() {
-            vec![
-                crate::ui::components::subtab_bar::SubtabKind::Summary,
-                crate::ui::components::subtab_bar::SubtabKind::Demographics,
-                crate::ui::components::subtab_bar::SubtabKind::Clinical,
-                crate::ui::components::subtab_bar::SubtabKind::Billing,
-            ]
-        } else {
-            vec![]
-        };
-        
-        let active_subtab_idx = if let Some(workspace) = self.workspace_manager.active() {
-            match workspace.active_subtab {
-                crate::ui::components::SubtabKind::Clinical => 2,
-                crate::ui::components::SubtabKind::Billing => 3,
-                crate::ui::components::SubtabKind::Appointments => 1,
-                _ => 0,
-            }
-        } else {
-            0
-        };
 
         let tab_bar = PatientTabBar::new(
             patient_tabs,
             active_idx,
-            subtabs,
-            active_subtab_idx,
             self.theme.clone(),
         );
         tab_bar.render(tab_bar_area, frame.buffer_mut());
+
+        if self.workspace_manager.active().is_some() {
+            let active_workspace = self.workspace_manager.active().unwrap();
+            let patient_colour = active_workspace.colour;
+            let clinical_items = ClinicalMenuKind::all();
+            let active_clinical_idx = match active_workspace.active_clinical_menu {
+                ClinicalMenuKind::Consultations => 0,
+                ClinicalMenuKind::Vitals => 1,
+                ClinicalMenuKind::Allergies => 2,
+                ClinicalMenuKind::MedicalHistory => 3,
+                ClinicalMenuKind::FamilyHistory => 4,
+                ClinicalMenuKind::SocialHistory => 5,
+            };
+            let clinical_row = ClinicalRow::new(
+                clinical_items,
+                active_clinical_idx,
+                patient_colour,
+                self.theme.clone(),
+            );
+            clinical_row.render(clinical_row_area, frame.buffer_mut());
+        }
 
         self.render_content(frame, content_area);
 
@@ -147,14 +147,14 @@ impl App {
         let tab = self.tab_bar.selected();
 
         match tab {
-            Tab::Patient => {
+            Tab::PatientSearch => {
                 if let Some(workspace) = self.workspace_manager.active() {
                     self.render_workspace(frame, area, workspace.clone());
                 } else {
                     self.render_welcome_panel(frame, area);
                 }
             }
-            Tab::Appointment => self.render_appointment_tab(frame, area),
+            Tab::Schedule => self.render_appointment_tab(frame, area),
         }
     }
 

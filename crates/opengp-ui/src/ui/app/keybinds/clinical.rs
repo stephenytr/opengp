@@ -17,6 +17,12 @@ impl App {
             return Action::Unknown;
         };
 
+        // Tab/Shift+Tab must pass through to the keybind system for clinical row cycling.
+        // Do NOT trap these keys here - let them reach NextClinicalMenu/PrevClinicalMenu.
+        if key.code == KeyCode::Tab || key.code == KeyCode::BackTab {
+            return Action::Unknown;
+        }
+
         if active_workspace.active_subtab != SubtabKind::Clinical {
             return Action::Unknown;
         }
