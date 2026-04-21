@@ -19,6 +19,7 @@ impl App {
 
         if !self.workspace_manager.workspaces.is_empty() {
             if self.workspace_manager.handle_patient_tab_mouse(mouse, patient_tab_bar_area).is_some() {
+                self.tab_bar.select(Tab::PatientSearch);
                 self.refresh_status_bar();
                 self.refresh_context();
                 return;
