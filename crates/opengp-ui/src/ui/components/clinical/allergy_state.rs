@@ -8,7 +8,6 @@ use opengp_config::AllergyConfig;
 use opengp_domain::domain::clinical::Allergy;
 
 use crate::ui::components::clinical::{AllergyDetailModal, AllergyForm, AllergyList};
-use crate::ui::components::clinical::ClinicalSubState;
 
 /// Allergy state management component
 ///
@@ -140,36 +139,6 @@ impl AllergyState {
         self.allergy_list.prev();
     }
 
-}
-
-impl ClinicalSubState for AllergyState {
-    fn set_loading(&mut self, loading: bool) {
-        AllergyState::set_loading(self, loading);
-    }
-
-    fn set_error(&mut self, error: Option<String>) {
-        AllergyState::set_error(self, error);
-    }
-
-    fn clear_error(&mut self) {
-        AllergyState::clear_error(self);
-    }
-
-    fn clear(&mut self) {
-        AllergyState::clear(self);
-    }
-
-    fn is_form_open(&self) -> bool {
-        AllergyState::is_form_open(self)
-    }
-
-    fn next_item(&mut self) {
-        AllergyState::next_item(self);
-    }
-
-    fn prev_item(&mut self) {
-        AllergyState::prev_item(self);
-    }
 }
 
 #[cfg(test)]

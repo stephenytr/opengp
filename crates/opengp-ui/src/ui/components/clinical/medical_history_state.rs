@@ -8,7 +8,6 @@ use opengp_config::ClinicalConfig;
 use opengp_domain::domain::clinical::MedicalHistory;
 
 use super::{MedicalHistoryDetailModal, MedicalHistoryForm, MedicalHistoryList};
-use crate::ui::components::clinical::ClinicalSubState;
 
 /// Medical History state management.
 ///
@@ -126,36 +125,6 @@ impl MedicalHistoryState {
     }
 
 
-}
-
-impl ClinicalSubState for MedicalHistoryState {
-    fn set_loading(&mut self, loading: bool) {
-        MedicalHistoryState::set_loading(self, loading);
-    }
-
-    fn set_error(&mut self, error: Option<String>) {
-        MedicalHistoryState::set_error(self, error);
-    }
-
-    fn clear_error(&mut self) {
-        MedicalHistoryState::clear_error(self);
-    }
-
-    fn clear(&mut self) {
-        MedicalHistoryState::clear(self);
-    }
-
-    fn is_form_open(&self) -> bool {
-        MedicalHistoryState::is_form_open(self)
-    }
-
-    fn next_item(&mut self) {
-        MedicalHistoryState::next_item(self);
-    }
-
-    fn prev_item(&mut self) {
-        MedicalHistoryState::prev_item(self);
-    }
 }
 
 #[cfg(test)]

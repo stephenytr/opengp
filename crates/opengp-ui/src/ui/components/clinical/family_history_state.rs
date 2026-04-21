@@ -7,7 +7,6 @@ use crate::ui::theme::Theme;
 use opengp_domain::domain::clinical::FamilyHistory;
 
 use crate::ui::components::clinical::{FamilyHistoryDetailModal, FamilyHistoryForm, FamilyHistoryList};
-use crate::ui::components::clinical::ClinicalSubState;
 
 /// Family history state management component
 ///
@@ -137,36 +136,6 @@ impl FamilyHistoryState {
     /// Navigate to the previous family history entry in the list.
     pub fn prev_item(&mut self) {
         self.family_history_list.prev();
-    }
-}
-
-impl ClinicalSubState for FamilyHistoryState {
-    fn set_loading(&mut self, loading: bool) {
-        FamilyHistoryState::set_loading(self, loading);
-    }
-
-    fn set_error(&mut self, error: Option<String>) {
-        FamilyHistoryState::set_error(self, error);
-    }
-
-    fn clear_error(&mut self) {
-        FamilyHistoryState::clear_error(self);
-    }
-
-    fn clear(&mut self) {
-        FamilyHistoryState::clear(self);
-    }
-
-    fn is_form_open(&self) -> bool {
-        FamilyHistoryState::is_form_open(self)
-    }
-
-    fn next_item(&mut self) {
-        FamilyHistoryState::next_item(self);
-    }
-
-    fn prev_item(&mut self) {
-        FamilyHistoryState::prev_item(self);
     }
 }
 
