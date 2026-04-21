@@ -8,7 +8,7 @@ use crate::ui::app::App;
 
 impl App {
     pub fn set_status_error(&mut self, message: impl Into<String>) {
-        self.status_bar.set_error(message);
+        self.status_bar.set_error(Some(message.into()));
     }
 
     pub fn set_status_success(&mut self, message: impl Into<String>) {

@@ -26,7 +26,7 @@ pub struct LoginScreen {
     password: String,
     focus: LoginFocus,
     loading: bool,
-    error_message: Option<String>,
+    error: Option<String>,
 }
 
 impl LoginScreen {
@@ -37,7 +37,7 @@ impl LoginScreen {
             password: String::new(),
             focus: LoginFocus::Username,
             loading: false,
-            error_message: None,
+            error: None,
         }
     }
 
@@ -86,11 +86,11 @@ impl LoginScreen {
                 }
 
                 if self.username.trim().is_empty() || self.password.is_empty() {
-                    self.error_message = Some("Username and password are required".to_string());
+                    self.error = Some("Username and password are required".to_string());
                     return None;
                 }
 
-                self.error_message = None;
+                self.error = None;
                 self.loading = true;
 
                 Some(LoginAction::Submit {
@@ -114,13 +114,13 @@ impl LoginScreen {
         self.loading = loading;
     }
 
-    pub fn set_error(&mut self, message: impl Into<String>) {
-        self.error_message = Some(message.into());
+    pub fn set_error(&mut self, error: Option<String>) {
+        self.error = error;
         self.loading = false;
     }
 
     pub fn clear_error(&mut self) {
-        self.error_message = None;
+        self.error = None;
     }
 
     #[cfg(test)]
@@ -214,7 +214,7 @@ impl Widget for LoginScreen {
             .style(button_style);
         button.render(rows[4], buf);
 
-        if let Some(error) = self.error_message {
+        if let Some(error) = self.error {
             let error_paragraph = Paragraph::new(Text::from(error))
                 .style(Style::default().fg(self.theme.colors.error))
                 .alignment(Alignment::Center);
@@ -250,7 +250,7 @@ mod tests {
 
         assert!(result.is_none());
         assert_eq!(
-            login.error_message.as_deref(),
+            login.error.as_deref(),
             Some("Username and password are required")
         );
     }

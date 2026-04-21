@@ -380,7 +380,7 @@ async fn run_tui(
                         }
                         Err(ref msg) => {
                             tracing::warn!("AppointmentSaveResult: Err — {}", msg);
-                            app.appointment_form_set_save_error(result.unwrap_err());
+                            app.appointment_form_set_error(result.unwrap_err());
                         }
                     }
                 }

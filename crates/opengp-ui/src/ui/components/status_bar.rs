@@ -10,7 +10,7 @@ pub struct StatusBar {
     left: String,
     center: String,
     right: String,
-    error_message: Option<String>,
+    error: Option<String>,
     visible: bool,
     theme: Theme,
 }
@@ -21,7 +21,7 @@ impl StatusBar {
             left: String::new(),
             center: String::new(),
             right: String::new(),
-            error_message: None,
+            error: None,
             visible: true,
             theme,
         }
@@ -55,13 +55,13 @@ impl StatusBar {
     }
 
     /// Set an error message (displayed in red, overrides center section)
-    pub fn set_error(&mut self, message: impl Into<String>) {
-        self.error_message = Some(message.into());
+    pub fn set_error(&mut self, error: Option<String>) {
+        self.error = error;
     }
 
     /// Clear the error message
     pub fn clear_error(&mut self) {
-        self.error_message = None;
+        self.error = None;
     }
 
     /// Clear all content
@@ -69,7 +69,7 @@ impl StatusBar {
         self.left.clear();
         self.center.clear();
         self.right.clear();
-        self.error_message = None;
+        self.error = None;
     }
 
     /// Set visibility
@@ -181,7 +181,7 @@ impl Widget for StatusBar {
         }
 
         let center_start = area.x + (side_width as u16);
-        if let Some(ref error) = self.error_message {
+        if let Some(ref error) = self.error {
             let error_text = if error.len() > center_width {
                 &error[..center_width]
             } else {
@@ -280,7 +280,7 @@ mod tests {
         let mut terminal = Terminal::new(TestBackend::new(80, 3)).unwrap();
         let mut bar = StatusBar::new(Theme::dark());
         bar.set_left("Patients");
-        bar.set_error("Error: Patient not found");
+        bar.set_error(Some("Error: Patient not found".to_string()));
         bar.set_right("F1 Help");
 
         terminal

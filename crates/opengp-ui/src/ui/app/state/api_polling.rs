@@ -41,15 +41,15 @@ impl App {
                         if let Some(retry_operation) = retry_operation {
                             self.show_server_unavailable_error(message, retry_operation);
                         }
-                        self.login_screen.set_error("Cannot connect to server");
+                        self.login_screen.set_error(Some("Cannot connect to server".to_string()));
                     }
                     other => {
-                        self.login_screen.set_error(other.to_string());
+                        self.login_screen.set_error(Some(other.to_string()));
                     }
                 },
                 Err(err) => {
                     self.login_screen
-                        .set_error(format!("Login task failed: {}", err));
+                        .set_error(Some(format!("Login task failed: {}", err)));
                 }
             }
         }
@@ -194,13 +194,13 @@ impl App {
                 }
                 Ok(Err((msg, is_conflict))) => {
                     if is_conflict {
-                        self.status_bar.set_error(format!("Schedule conflict: {}", msg));
+                        self.status_bar.set_error(Some(format!("Schedule conflict: {}", msg)));
                     } else {
-                        self.status_bar.set_error(msg);
+                        self.status_bar.set_error(Some(msg));
                     }
                 }
                 Err(err) => {
-                    self.status_bar.set_error(format!("Reschedule failed: {}", err));
+                    self.status_bar.set_error(Some(format!("Reschedule failed: {}", err)));
                 }
             }
         }
@@ -225,7 +225,7 @@ impl App {
                 self.appointment_state.set_loading(false);
                 self.login_screen.set_loading(false);
                 self.login_screen
-                    .set_error("Session expired. Please log in again.");
+                    .set_error(Some("Session expired. Please log in again.".to_string()));
             }
             ApiTaskError::ServerUnavailable(message) => {
                 if let Some(retry_operation) = retry {
@@ -324,7 +324,7 @@ impl App {
         }
 
         let Some(api_client) = self.api_client.clone() else {
-            self.login_screen.set_error("API client is not configured");
+            self.login_screen.set_error(Some("API client is not configured".to_string()));
             return;
         };
 
@@ -350,7 +350,7 @@ impl App {
         }
 
         let Some(appointment_service) = self.appointment_ui_service.clone() else {
-            self.status_bar.set_error("Appointment service not configured");
+            self.status_bar.set_error(Some("Appointment service not configured".to_string()));
             self.pending_reschedule = Some(reschedule_data);
             return;
         };

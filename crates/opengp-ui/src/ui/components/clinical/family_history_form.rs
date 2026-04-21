@@ -155,7 +155,14 @@ impl FormNavigation for FamilyHistoryForm {
     }
 
     fn validate(&mut self) -> bool {
-        <Self as crate::ui::widgets::DynamicForm>::validate(self)
+        self.form_state.errors.clear();
+
+        for field in self.form_state.field_order.clone() {
+            self.validate_field_by_id(field.id());
+        }
+
+        self.is_valid = self.form_state.errors.is_empty();
+        self.is_valid
     }
 
     fn current_field(&self) -> Self::FormField {
@@ -168,71 +175,6 @@ impl FormNavigation for FamilyHistoryForm {
 
     fn set_current_field(&mut self, field: Self::FormField) {
         self.form_state.focused_field = field;
-    }
-}
-
-impl crate::ui::widgets::DynamicFormMeta for FamilyHistoryForm {
-    fn label(&self, field_id: &str) -> String {
-        FamilyHistoryFormField::from_id(field_id)
-            .map(|field| field.label().to_string())
-            .unwrap_or_else(|| field_id.to_string())
-    }
-
-    fn is_required(&self, field_id: &str) -> bool {
-        FamilyHistoryFormField::from_id(field_id)
-            .map(|field| field.is_required())
-            .unwrap_or(false)
-    }
-
-    fn field_type(&self, _field_id: &str) -> crate::ui::widgets::FieldType {
-        crate::ui::widgets::FieldType::Text
-    }
-}
-
-impl crate::ui::widgets::DynamicForm for FamilyHistoryForm {
-    fn field_ids(&self) -> &[String] {
-        &self.field_ids
-    }
-
-    fn current_field(&self) -> &str {
-        self.form_state.focused_field.id()
-    }
-
-    fn set_current_field(&mut self, field_id: &str) {
-        if !self.field_ids.iter().any(|id| id == field_id) {
-            return;
-        }
-
-        if let Some(field) = FamilyHistoryFormField::from_id(field_id) {
-            self.form_state.focused_field = field;
-        }
-    }
-
-    fn get_value(&self, field_id: &str) -> String {
-        self.get_value_by_id(field_id)
-    }
-
-    fn set_value(&mut self, field_id: &str, value: String) {
-        self.set_value_by_id(field_id, value)
-    }
-
-    fn validate(&mut self) -> bool {
-        self.form_state.errors.clear();
-
-        for field in self.form_state.field_order.clone() {
-            self.validate_field_by_id(field.id());
-        }
-
-        self.is_valid = self.form_state.errors.is_empty();
-        self.is_valid
-    }
-
-    fn get_error(&self, field_id: &str) -> Option<&str> {
-        self.form_state.errors.get(field_id).map(|s| s.as_str())
-    }
-
-    fn set_error(&mut self, field_id: &str, error: Option<String>) {
-        self.set_error_by_id(field_id, error);
     }
 }
 
@@ -699,16 +641,9 @@ mod tests {
         let theme = Theme::dark();
         let mut form = FamilyHistoryForm::new(theme);
 
-        <FamilyHistoryForm as crate::ui::widgets::DynamicForm>::set_value(
-            &mut form,
-            FIELD_RELATIONSHIP,
-            "Sibling".to_string(),
-        );
+        form.set_value_by_id(FIELD_RELATIONSHIP, "Sibling".to_string());
 
-        let by_string = <FamilyHistoryForm as crate::ui::widgets::DynamicForm>::get_value(
-            &form,
-            FIELD_RELATIONSHIP,
-        );
+        let by_string = form.get_value_by_id(FIELD_RELATIONSHIP);
         let by_enum = form.get_value(FamilyHistoryFormField::Relationship);
         assert_eq!(by_string, by_enum);
     }

@@ -19,7 +19,7 @@ use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::{
     format_date, parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption,
-    DropdownWidget, DynamicForm, DynamicFormMeta, FieldType, FormFieldMeta, FormNavigation,
+    DropdownWidget, FieldType, FormFieldMeta, FormNavigation,
     HeightMode, ScrollableFormState, SearchableListAction, SearchableListState, TextareaState,
     TextareaWidget, TimePickerAction, TimePickerPopup,
 };
@@ -193,7 +193,7 @@ pub struct AppointmentForm {
     mode: FormMode,
     data: AppointmentFormData,
     errors: HashMap<String, String>,
-    save_error: Option<String>,
+    error: Option<String>,
     focused_field: String,
     field_ids: Vec<String>,
     textareas: HashMap<String, TextareaState>,
@@ -232,7 +232,7 @@ impl Clone for AppointmentForm {
             mode: self.mode,
             data: self.data.clone(),
             errors: self.errors.clone(),
-            save_error: self.save_error.clone(),
+            error: self.error.clone(),
             focused_field: self.focused_field.clone(),
             field_ids: self.field_ids.clone(),
             textareas: self.textareas.clone(),
@@ -369,7 +369,7 @@ impl AppointmentForm {
             mode: FormMode::Create,
             data,
             errors: HashMap::new(),
-            save_error: None,
+            error: None,
             focused_field: FIELD_PATIENT.to_string(),
             field_ids,
             textareas,
@@ -460,12 +460,12 @@ impl AppointmentForm {
     pub fn set_saving(&mut self, saving: bool) {
         self.saving = saving;
         if saving {
-            self.save_error = None;
+            self.error = None;
         }
     }
 
-    pub fn set_save_error(&mut self, error: String) {
-        self.save_error = Some(error);
+    pub fn set_error(&mut self, error: String) {
+        self.error = Some(error);
     }
 
     /// Set the selected patient (called after patient search resolves).
@@ -1371,7 +1371,7 @@ impl Widget for AppointmentForm {
                     .fg(self.theme.colors.warning)
                     .add_modifier(Modifier::BOLD),
             );
-        } else if let Some(ref err) = self.save_error {
+        } else if let Some(ref err) = self.error {
             let msg = format!("Error: {}", err);
             buf.set_string(
                 inner.x + 1,
@@ -1410,75 +1410,6 @@ impl FormFieldMeta for AppointmentFormField {
     }
 }
 
-impl DynamicFormMeta for AppointmentForm {
-    fn label(&self, field_id: &str) -> String {
-        AppointmentFormField::from_id(field_id)
-            .map(|field| field.label().to_string())
-            .unwrap_or_else(|| field_id.to_string())
-    }
-
-    fn is_required(&self, field_id: &str) -> bool {
-        AppointmentFormField::from_id(field_id)
-            .map(|field| field.is_required())
-            .unwrap_or(false)
-    }
-
-    fn field_type(&self, field_id: &str) -> FieldType {
-        match AppointmentFormField::from_id(field_id) {
-            Some(AppointmentFormField::Date) => FieldType::Date,
-            Some(AppointmentFormField::AppointmentType) => FieldType::Select(vec![]),
-            _ => FieldType::Text,
-        }
-    }
-}
-
-impl DynamicForm for AppointmentForm {
-    fn field_ids(&self) -> &[String] {
-        &self.field_ids
-    }
-
-    fn current_field(&self) -> &str {
-        &self.focused_field
-    }
-
-    fn set_current_field(&mut self, field_id: &str) {
-        if self.field_ids.iter().any(|id| id == field_id) {
-            self.focused_field = field_id.to_string();
-        }
-    }
-
-    fn get_value(&self, field_id: &str) -> String {
-        self.get_value_by_id(field_id)
-    }
-
-    fn set_value(&mut self, field_id: &str, value: String) {
-        self.set_value_by_id(field_id, value);
-    }
-
-    fn validate(&mut self) -> bool {
-        self.errors.clear();
-        for field_id in self.field_ids.clone() {
-            self.validate_field_by_id(&field_id);
-        }
-        self.errors.is_empty()
-    }
-
-    fn get_error(&self, field_id: &str) -> Option<&str> {
-        self.errors.get(field_id).map(|s| s.as_str())
-    }
-
-    fn set_error(&mut self, field_id: &str, error: Option<String>) {
-        match error {
-            Some(msg) => {
-                self.errors.insert(field_id.to_string(), msg);
-            }
-            None => {
-                self.errors.remove(field_id);
-            }
-        }
-    }
-}
-
 impl FormNavigation for AppointmentForm {
     type FormField = AppointmentFormField;
 
@@ -1487,11 +1418,22 @@ impl FormNavigation for AppointmentForm {
     }
 
     fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
-        <Self as DynamicForm>::set_error(self, field.id(), error);
+        match error {
+            Some(msg) => {
+                self.errors.insert(field.id().to_string(), msg);
+            }
+            None => {
+                self.errors.remove(field.id());
+            }
+        }
     }
 
     fn validate(&mut self) -> bool {
-        <Self as DynamicForm>::validate(self)
+        self.errors.clear();
+        for field_id in self.field_ids.clone() {
+            self.validate_field_by_id(&field_id);
+        }
+        self.errors.is_empty()
     }
 
     fn current_field(&self) -> Self::FormField {

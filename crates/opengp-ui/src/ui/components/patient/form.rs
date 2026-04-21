@@ -282,7 +282,12 @@ impl FormNavigation for PatientForm {
     }
 
     fn validate(&mut self) -> bool {
-        <Self as crate::ui::widgets::DynamicForm>::validate(self)
+        self.form_state.errors.clear();
+        for field_id in self.field_ids.clone() {
+            self.validate_field_by_id(&field_id);
+        }
+        self.is_valid = self.form_state.errors.is_empty();
+        self.is_valid
     }
 
     fn current_field(&self) -> Self::FormField {
@@ -299,78 +304,6 @@ impl FormNavigation for PatientForm {
     fn set_current_field(&mut self, field: Self::FormField) {
         self.focused_field = field.id().to_string();
         self.form_state.focused_field = field;
-    }
-}
-
-impl crate::ui::widgets::DynamicFormMeta for PatientForm {
-    fn label(&self, field_id: &str) -> String {
-        self.field_configs
-            .get(field_id)
-            .map(|field| field.label.clone())
-            .unwrap_or_else(|| field_id.to_string())
-    }
-
-    fn is_required(&self, field_id: &str) -> bool {
-        self.field_configs
-            .get(field_id)
-            .map(|field| field.required)
-            .unwrap_or(false)
-    }
-
-    fn field_type(&self, field_id: &str) -> crate::ui::widgets::FieldType {
-        match self
-            .field_configs
-            .get(field_id)
-            .map(|field| &field.field_type)
-        {
-            Some(ConfigFieldType::Date) => crate::ui::widgets::FieldType::Date,
-            Some(ConfigFieldType::Select) => crate::ui::widgets::FieldType::Select(vec![]),
-            _ => crate::ui::widgets::FieldType::Text,
-        }
-    }
-}
-
-impl crate::ui::widgets::DynamicForm for PatientForm {
-    fn field_ids(&self) -> &[String] {
-        &self.field_ids
-    }
-
-    fn current_field(&self) -> &str {
-        &self.focused_field
-    }
-
-    fn set_current_field(&mut self, field_id: &str) {
-        if self.field_ids.iter().any(|id| id == field_id) {
-            self.focused_field = field_id.to_string();
-            if let Some(field) = PatientFormField::from_id(field_id) {
-                self.form_state.focused_field = field;
-            }
-        }
-    }
-
-    fn get_value(&self, field_id: &str) -> String {
-        self.get_value_by_id(field_id)
-    }
-
-    fn set_value(&mut self, field_id: &str, value: String) {
-        self.set_value_by_id(field_id, value)
-    }
-
-    fn validate(&mut self) -> bool {
-        self.form_state.errors.clear();
-        for field_id in self.field_ids.clone() {
-            self.validate_field_by_id(&field_id);
-        }
-        self.is_valid = self.form_state.errors.is_empty();
-        self.is_valid
-    }
-
-    fn get_error(&self, field_id: &str) -> Option<&str> {
-        self.form_state.errors.get(field_id).map(|s| s.as_str())
-    }
-
-    fn set_error(&mut self, field_id: &str, error: Option<String>) {
-        self.set_error_by_id(field_id, error);
     }
 }
 
@@ -1691,14 +1624,9 @@ mod tests {
         let theme = Theme::dark();
         let mut form = PatientForm::new(theme, &PatientConfig::default());
 
-        <PatientForm as crate::ui::widgets::DynamicForm>::set_value(
-            &mut form,
-            FIELD_FIRST_NAME,
-            "John".to_string(),
-        );
+        form.set_value_by_id(FIELD_FIRST_NAME, "John".to_string());
 
-        let by_string =
-            <PatientForm as crate::ui::widgets::DynamicForm>::get_value(&form, FIELD_FIRST_NAME);
+        let by_string = form.get_value_by_id(FIELD_FIRST_NAME);
         let by_enum = form.get_value(PatientFormField::FirstName);
         assert_eq!(by_string, by_enum);
     }

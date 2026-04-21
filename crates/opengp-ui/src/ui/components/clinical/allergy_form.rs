@@ -14,7 +14,7 @@ use crate::ui::shared::{FormAction, FormMode};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
     format_date, impl_form_field_wrapper, parse_date, DatePickerPopup, DropdownOption,
-    DropdownWidget, DynamicForm, DynamicFormMeta, FormField, FormFieldMeta, FormNavigation,
+    DropdownWidget, FormField, FormFieldMeta, FormNavigation,
     FormState, FormValidator, HeightMode, TextareaState,
 };
 
@@ -302,71 +302,6 @@ impl FormFieldMeta for AllergyFormField {
 
     fn is_required(&self) -> bool {
         AllergyFormField::is_required(self)
-    }
-}
-
-impl DynamicFormMeta for AllergyForm {
-    fn label(&self, field_id: &str) -> String {
-        AllergyFormField::from_id(field_id)
-            .map(|field| field.label().to_string())
-            .unwrap_or_else(|| field_id.to_string())
-    }
-
-    fn is_required(&self, field_id: &str) -> bool {
-        AllergyFormField::from_id(field_id)
-            .map(|field| field.is_required())
-            .unwrap_or(false)
-    }
-
-    fn field_type(&self, field_id: &str) -> crate::ui::widgets::FieldType {
-        match AllergyFormField::from_id(field_id) {
-            Some(AllergyFormField::AllergyType | AllergyFormField::Severity) => {
-                crate::ui::widgets::FieldType::Select(vec![])
-            }
-            Some(AllergyFormField::OnsetDate) => crate::ui::widgets::FieldType::Date,
-            _ => crate::ui::widgets::FieldType::Text,
-        }
-    }
-}
-
-impl DynamicForm for AllergyForm {
-    fn field_ids(&self) -> &[String] {
-        &self.field_ids
-    }
-
-    fn current_field(&self) -> &str {
-        self.form_state.focused_field.id()
-    }
-
-    fn set_current_field(&mut self, field_id: &str) {
-        if let Some(field) = AllergyFormField::from_id(field_id) {
-            self.form_state.focused_field = field;
-        }
-    }
-
-    fn get_value(&self, field_id: &str) -> String {
-        self.get_value_by_id(field_id)
-    }
-
-    fn set_value(&mut self, field_id: &str, value: String) {
-        self.set_value_by_id(field_id, value)
-    }
-
-    fn validate(&mut self) -> bool {
-        self.form_state.errors.clear();
-        for field_id in self.field_ids.clone() {
-            self.validate_field_by_id(&field_id);
-        }
-        self.is_valid = self.form_state.errors.is_empty();
-        self.is_valid
-    }
-
-    fn get_error(&self, field_id: &str) -> Option<&str> {
-        self.form_state.errors.get(field_id).map(|s| s.as_str())
-    }
-
-    fn set_error(&mut self, field_id: &str, error: Option<String>) {
-        self.set_error_by_id(field_id, error);
     }
 }
 

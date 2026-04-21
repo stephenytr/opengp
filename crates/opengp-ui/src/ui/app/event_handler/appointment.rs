@@ -21,7 +21,7 @@ impl App {
                                 let msg = form
                                     .first_error()
                                     .unwrap_or_else(|| "Check required fields".to_string());
-                                self.status_bar.set_error(msg);
+                                self.status_bar.set_error(Some(msg));
                             }
                         }
                     }
@@ -108,10 +108,10 @@ impl App {
                                         "Max open patients reached (max: {}). Close a tab first.",
                                         max
                                     );
-                                    self.status_bar.set_error(error_msg);
+                                    self.status_bar.set_error(Some(error_msg));
                                 }
                                 Err(err) => {
-                                    self.status_bar.set_error(err.to_string());
+                                    self.status_bar.set_error(Some(err.to_string()));
                                 }
                             }
                         }

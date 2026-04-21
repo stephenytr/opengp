@@ -290,7 +290,7 @@ impl App {
 
                     if blocked {
                         self.status_bar
-                            .set_error("Cannot close: form open or timer active");
+                            .set_error(Some("Cannot close: form open or timer active".to_string()));
                     } else {
                         let _ = self.workspace_manager.close_active();
                         self.refresh_status_bar();
@@ -393,10 +393,10 @@ impl App {
                                         "Max open patients reached (max: {}). Close a tab first.",
                                         max
                                     );
-                                    self.status_bar.set_error(error_msg);
+                                    self.status_bar.set_error(Some(error_msg));
                                 }
                                 Err(err) => {
-                                    self.status_bar.set_error(err.to_string());
+                                    self.status_bar.set_error(Some(err.to_string()));
                                 }
                             }
                         }

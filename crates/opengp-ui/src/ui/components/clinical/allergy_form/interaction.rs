@@ -7,7 +7,7 @@ use super::{
 use crate::ui::input::to_ratatui_key;
 use crate::ui::shared::FormAction;
 use crate::ui::widgets::{
-    format_date, parse_date, DatePickerAction, DropdownAction, DropdownWidget, DynamicForm,
+    format_date, parse_date, DatePickerAction, DropdownAction, DropdownWidget, FormNavigation,
     TextareaState,
 };
 
@@ -132,7 +132,7 @@ impl AllergyForm {
     }
 
     pub fn validate(&mut self) -> bool {
-        <Self as DynamicForm>::validate(self)
+        <Self as FormNavigation>::validate(self)
     }
 
     pub fn next_field(&mut self) {

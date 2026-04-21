@@ -88,10 +88,10 @@ impl App {
         self.appointment_form.as_ref()?.appointment_id()
     }
 
-    pub fn appointment_form_set_save_error(&mut self, error: String) {
+    pub fn appointment_form_set_error(&mut self, error: String) {
         if let Some(ref mut form) = self.appointment_form {
             form.set_saving(false);
-            form.set_save_error(error);
+            form.set_error(error);
         }
     }
 

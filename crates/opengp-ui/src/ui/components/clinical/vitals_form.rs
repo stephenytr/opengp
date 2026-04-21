@@ -18,7 +18,7 @@ use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::shared::{FormAction, FormMode};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    DynamicForm, DynamicFormMeta, FormField, FormFieldMeta, FormNavigation, FormRuleEngine,
+    FormField, FormFieldMeta, FormNavigation, FormRuleEngine,
     FormState, FormValidator, HeightMode, TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::VitalSigns;
@@ -412,7 +412,7 @@ impl VitalSignsForm {
                 if let Some(action) = self.form_state.handle_navigation_key(key) {
                     self.focused_field = self.form_state.focused_field;
                     if matches!(action, FormAction::Submit) {
-                        let _ = DynamicForm::validate(self);
+                        let _ = FormNavigation::validate(self);
                     }
                     return Some(action);
                 }
@@ -443,44 +443,32 @@ impl VitalSignsForm {
     }
 }
 
-impl DynamicFormMeta for VitalSignsForm {
-    fn label(&self, field_id: &str) -> String {
-        VitalSignsFormField::from_id(field_id)
-            .map(|field| field.label().to_string())
-            .unwrap_or_else(|| field_id.to_string())
+impl FormFieldMeta for VitalSignsFormField {
+    fn label(&self) -> &'static str {
+        VitalSignsFormField::label(self)
     }
 
-    fn is_required(&self, _field_id: &str) -> bool {
-        false
-    }
-
-    fn field_type(&self, _field_id: &str) -> crate::ui::widgets::FieldType {
-        crate::ui::widgets::FieldType::Text
+    fn is_required(&self) -> bool {
+        VitalSignsFormField::is_required(self)
     }
 }
 
-impl DynamicForm for VitalSignsForm {
-    fn field_ids(&self) -> &[String] {
-        &self.field_ids
+impl FormNavigation for VitalSignsForm {
+    type FormField = VitalSignsFormField;
+
+    fn get_error(&self, field: Self::FormField) -> Option<&str> {
+        self.form_state.errors.get(field.id()).map(|s| s.as_str())
     }
 
-    fn current_field(&self) -> &str {
-        self.focused_field.id()
-    }
-
-    fn set_current_field(&mut self, field_id: &str) {
-        if let Some(field) = VitalSignsFormField::from_id(field_id) {
-            self.focused_field = field;
-            self.form_state.focused_field = field;
+    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
+        match error {
+            Some(msg) => {
+                self.form_state.errors.insert(field.id().to_string(), msg);
+            }
+            None => {
+                self.form_state.errors.remove(field.id());
+            }
         }
-    }
-
-    fn get_value(&self, field_id: &str) -> String {
-        self.get_value_by_id(field_id)
-    }
-
-    fn set_value(&mut self, field_id: &str, value: String) {
-        self.set_value_by_id(field_id, value);
     }
 
     fn validate(&mut self) -> bool {
@@ -502,47 +490,6 @@ impl DynamicForm for VitalSignsForm {
         }
 
         self.form_state.errors.is_empty()
-    }
-
-    fn get_error(&self, field_id: &str) -> Option<&str> {
-        self.form_state.errors.get(field_id).map(|s| s.as_str())
-    }
-
-    fn set_error(&mut self, field_id: &str, error: Option<String>) {
-        match error {
-            Some(msg) => {
-                self.form_state.errors.insert(field_id.to_string(), msg);
-            }
-            None => {
-                self.form_state.errors.remove(field_id);
-            }
-        }
-    }
-}
-
-impl FormFieldMeta for VitalSignsFormField {
-    fn label(&self) -> &'static str {
-        VitalSignsFormField::label(self)
-    }
-
-    fn is_required(&self) -> bool {
-        VitalSignsFormField::is_required(self)
-    }
-}
-
-impl FormNavigation for VitalSignsForm {
-    type FormField = VitalSignsFormField;
-
-    fn get_error(&self, field: Self::FormField) -> Option<&str> {
-        self.form_state.errors.get(field.id()).map(|s| s.as_str())
-    }
-
-    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
-        <Self as DynamicForm>::set_error(self, field.id(), error);
-    }
-
-    fn validate(&mut self) -> bool {
-        <Self as DynamicForm>::validate(self)
     }
 
     fn current_field(&self) -> Self::FormField {

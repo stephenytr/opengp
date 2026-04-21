@@ -362,65 +362,6 @@ impl ConsultationForm {
     }
 }
 
-impl crate::ui::widgets::DynamicFormMeta for ConsultationForm {
-    fn label(&self, field_id: &str) -> String {
-        ConsultationFormField::from_id(field_id)
-            .map(|field| field.label().to_string())
-            .unwrap_or_else(|| field_id.to_string())
-    }
-
-    fn is_required(&self, field_id: &str) -> bool {
-        ConsultationFormField::from_id(field_id)
-            .map(|field| field.is_required())
-            .unwrap_or(false)
-    }
-
-    fn field_type(&self, _field_id: &str) -> FieldType {
-        FieldType::Text
-    }
-}
-
-impl crate::ui::widgets::DynamicForm for ConsultationForm {
-    fn field_ids(&self) -> &[String] {
-        &self.field_ids
-    }
-
-    fn current_field(&self) -> &str {
-        self.state.focused_field.id()
-    }
-
-    fn set_current_field(&mut self, field_id: &str) {
-        if let Some(field) = ConsultationFormField::from_id(field_id) {
-            self.state.focused_field = field;
-        }
-    }
-
-    fn get_value(&self, field_id: &str) -> String {
-        self.get_value_by_id(field_id)
-    }
-
-    fn set_value(&mut self, field_id: &str, value: String) {
-        self.set_value_by_id(field_id, value);
-    }
-
-    fn validate(&mut self) -> bool {
-        for field_id in self.field_ids.clone() {
-            self.set_error_by_id(&field_id, None);
-        }
-        self.state.errors.clear();
-        self.is_valid = true;
-        self.is_valid
-    }
-
-    fn get_error(&self, field_id: &str) -> Option<&str> {
-        self.state.errors.get(field_id).map(|s| s.as_str())
-    }
-
-    fn set_error(&mut self, field_id: &str, error: Option<String>) {
-        self.set_error_by_id(field_id, error);
-    }
-}
-
 impl FormFieldMeta for ConsultationFormField {
     fn label(&self) -> &'static str {
         ConsultationFormField::label(self)
@@ -443,7 +384,12 @@ impl FormNavigation for ConsultationForm {
     }
 
     fn validate(&mut self) -> bool {
-        <Self as crate::ui::widgets::DynamicForm>::validate(self)
+        for field_id in self.field_ids.clone() {
+            self.set_error_by_id(&field_id, None);
+        }
+        self.state.errors.clear();
+        self.is_valid = true;
+        self.is_valid
     }
 
     fn current_field(&self) -> Self::FormField {
