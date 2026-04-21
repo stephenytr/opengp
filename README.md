@@ -9,6 +9,15 @@ OpenGP is an open-source, terminal-first general practice management system for 
 - **Architecture**: Domain / Infrastructure / UI layers with trait-based boundaries
 - **Database**: PostgreSQL (via SQLx)
 - **Focus**: Australian clinical, billing, and compliance workflows
+- **Platform**: Currently Linux only, i dont really know whats gonna break on windows tbh.
+
+## What this plans to accomplish over current programs (Best Practice)
+
+- Simple lightweight terminal interface - Fast.
+- Ability to port to web browser with WASM.
+- The main problem with Best Practice for me is just the amount of clicking you have to do to accomplish anything, i'm hoping to make the clinical workflow much simpler.
+- SSH!!! - not sure why anyone would need this.
+- Simple single window interface with the ability to have multiple patients open in tabs.
 
 ## Workspace layout
 
@@ -34,7 +43,7 @@ opengp/
 
 - Rust toolchain (stable)
 - PostgreSQL 14+
-- Redis (optional — caching only)
+- Redis (optional — caching only) - Feeling cute might remove.
 
 ### 1) Database setup
 
@@ -55,28 +64,16 @@ cp .env.example .env
 
 See [Configuration Guide](wiki/Configuration.md) for all options.
 
-### 3) Build
-
-```bash
-cargo build --release
-```
-
-### 4) Run tests
-
-```bash
-cargo test
-```
-
-### 5) Run the TUI
-
-```bash
-cargo run --release
-```
-
-### 6) Run the API server (separate binary)
+### 3) Run the API server (separate binary)
 
 ```bash
 cargo run --release -p opengp-api
+```
+
+### 4) Run the TUI
+
+```bash
+cargo run --release -p opengp
 ```
 
 ## Development workflow
@@ -88,7 +85,7 @@ cargo run --release -p opengp-api
 5. Connect dependencies in `src/main.rs`
 6. Run tests and verify build
 
-## Redis setup (optional)
+## Redis setup (optional) - Probably uneccessary.
 
 Redis improves performance for patient search, appointment calendars, and permission checks. Without Redis the system falls back to direct database queries.
 
@@ -121,6 +118,7 @@ REDIS_URL=redis://localhost:6379
 
 ## Project status
 
+- Very early in development.
 - Core TUI workflows (patients, appointments, clinical, billing) are active.
 - Australian integrations (Medicare/PBS/AIR) are partially implemented — MBS XML importer exists; end-to-end claiming is in progress.
 - REST API (`opengp-api`) is functional but not production-hardened.
