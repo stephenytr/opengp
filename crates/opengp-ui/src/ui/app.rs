@@ -178,7 +178,7 @@ pub enum PendingClinicalSaveData {
       },
   }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PendingBillingSaveData {
     AwaitingMbsSelection {
         consultation_id: uuid::Uuid,

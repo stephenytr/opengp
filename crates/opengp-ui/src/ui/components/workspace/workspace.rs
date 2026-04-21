@@ -4,6 +4,7 @@ use ratatui::style::Color;
 use crate::ui::view_models::PatientListItem;
 use crate::ui::components::clinical::ClinicalState;
 use crate::ui::components::billing::PatientBillingState;
+use crate::ui::app::PendingBillingSaveData;
 use crate::ui::components::SubtabKind;
 use super::appointment_state::PatientAppointmentState;
 
@@ -38,6 +39,7 @@ pub struct PatientWorkspace {
     pub clinical: Option<ClinicalState>,
     pub billing: Option<PatientBillingState>,
     pub appointments: Option<PatientAppointmentState>,
+    pub pending_billing: Option<PendingBillingSaveData>,
 }
 
 impl PatientWorkspace {
@@ -54,6 +56,7 @@ impl PatientWorkspace {
             clinical: None,
             billing: None,
             appointments: None,
+            pending_billing: None,
         }
     }
 
