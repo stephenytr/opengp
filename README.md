@@ -2,6 +2,8 @@
 
 OpenGP is an open-source, terminal-first general practice management system for Australian healthcare providers.
 
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/0886f666-5ab4-4417-8e42-20b49d99bedd" />
+
 ## What this project is
 
 - **Language**: Rust (workspace-based)
