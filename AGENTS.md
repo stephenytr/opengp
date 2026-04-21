@@ -194,3 +194,45 @@ cargo test -p opengp-cache
 - **Complex orchestration**: `crates/opengp-domain/src/domain/clinical/` — multi-repo service, suggest_mbs_level helper
 - **API DTOs**: `crates/opengp-domain/src/domain/api/dto.rs` — shared request/response types used by TUI↔API
 - **Cache usage**: `crates/opengp-cache/src/service.rs` + `patient_cache.rs` for pattern
+
+## UI CONSISTENCY PATTERNS (Validated)
+
+### A. Error Field Pattern
+
+- Standard: each form or state uses an `error: Option<String>` field and exposes a `set_error(&mut self, error: Option<String>)` method.
+- Deprecated names: `save_error`, `error_message` and similar variants were renamed to the standard pattern.
+- Current validated usages live in `appointment/form.rs`, `login.rs`, and `status_bar.rs`.
+
+### B. Form Trait Pattern
+
+- Canonical form navigation uses the `FormNavigation` trait plus the `FormState<F>` enum for type-safe state transitions.
+- `DynamicForm` is deprecated and has been removed from all forms, with six forms migrated to the canonical pattern.
+- Do not implement both `FormNavigation` and `DynamicForm` on the same form type.
+
+### C. Pagination Patterns
+
+Three pagination patterns are in active use and are intentionally distinct:
+
+- `PaginatedState` provides page-based offsets for patient, appointment, and billing lists.
+- `PaginatedList<T>` provides scroll-based pagination with wrapping for small billing selection lists.
+- `ClinicalTableList<T>` provides scroll-based pagination for clinical records with richer interaction.
+
+Do not mix these pagination patterns within the same component.
+
+### D. Error Mapping at Domain Boundaries
+
+- Use `map_ui_err()` when mapping `ServiceError` and other domain-level errors into UI errors.
+- Use `map_ui_repo_err()` when mapping repository-level errors into UI errors.
+- These functions are intentionally separate because they handle different error types and layering concerns.
+
+### E. ClinicalState Architecture
+
+- `ClinicalState` is an orchestrator that coordinates clinical sub-states, not a monolith to be flattened.
+- It is intentionally heavy on orchestration and delegation, with roughly two thirds orchestration and one third direct state.
+- Do not refactor or collapse the clinical sub-state types; they are first-class units of behavior.
+- Sub-states such as Vitals, Allergy, FamilyHistory, and MedicalHistory each own and manage their internal state.
+
+### F. Removed Dead Code
+
+- The `ClinicalSubState` trait was removed as dead code; it had four implementations and no polymorphic call sites.
+- Nine unused `AppCommand` variants were removed; only three variants remain active in the TUI event loop.
