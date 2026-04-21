@@ -38,23 +38,37 @@ impl App {
         let content_area = main_layout[2];
         let status_bar_area = main_layout[3];
 
-        let patient_tabs = self.workspace_manager.workspaces
-            .iter()
-            .map(|ws| crate::ui::components::patient_tab_bar::PatientTab::new(
-                ws.patient_id,
-                ws.patient_snapshot.full_name.clone(),
-                ws.colour,
-            ))
-            .collect::<Vec<_>>();
+        // Split tab_bar_area (height=2) into two lines:
+        // Line 1: Main TabBar (Schedule | Patient Search)
+        // Line 2: PatientTabBar (open patient colour tabs)
+        let [tab_bar_line_1, tab_bar_line_2] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ]).areas(tab_bar_area);
 
-        let active_idx = self.workspace_manager.active_index.unwrap_or(0);
+        // Render main TabBar on line 1
+        self.tab_bar.clone().render(tab_bar_line_1, frame.buffer_mut());
 
-        let tab_bar = PatientTabBar::new(
-            patient_tabs,
-            active_idx,
-            self.theme.clone(),
-        );
-        tab_bar.render(tab_bar_area, frame.buffer_mut());
+        // Render PatientTabBar on line 2 (only when patients are open)
+        if !self.workspace_manager.workspaces.is_empty() {
+            let patient_tabs = self.workspace_manager.workspaces
+                .iter()
+                .map(|ws| crate::ui::components::patient_tab_bar::PatientTab::new(
+                    ws.patient_id,
+                    ws.patient_snapshot.full_name.clone(),
+                    ws.colour,
+                ))
+                .collect::<Vec<_>>();
+
+            let active_idx = self.workspace_manager.active_index.unwrap_or(0);
+
+            let patient_tab_bar = PatientTabBar::new(
+                patient_tabs,
+                active_idx,
+                self.theme.clone(),
+            );
+            patient_tab_bar.render(tab_bar_line_2, frame.buffer_mut());
+        }
 
         if self.workspace_manager.active().is_some() {
             let active_workspace = self.workspace_manager.active().unwrap();
@@ -270,39 +284,44 @@ impl App {
         &mut self,
         frame: &mut Frame,
         area: Rect,
-        workspace: crate::ui::components::workspace::PatientWorkspace,
+        mut workspace: crate::ui::components::workspace::PatientWorkspace,
     ) {
-        match workspace.active_subtab {
-            crate::ui::components::SubtabKind::Summary => {
-                self.render_workspace_summary(frame, area);
-            }
-            crate::ui::components::SubtabKind::Demographics => {
-                self.render_workspace_demographics(frame, area);
-            }
-            crate::ui::components::SubtabKind::Clinical => {
+        match workspace.active_clinical_menu {
+            ClinicalMenuKind::Consultations => {
+                if let Some(ref mut clinical) = workspace.clinical {
+                    clinical.show_consultations();
+                }
                 self.render_workspace_clinical(frame, area);
             }
-            crate::ui::components::SubtabKind::Billing => {
-                self.render_workspace_billing(frame, area);
+            ClinicalMenuKind::Vitals => {
+                if let Some(ref mut clinical) = workspace.clinical {
+                    clinical.show_vital_signs();
+                }
+                self.render_workspace_clinical(frame, area);
             }
-            crate::ui::components::SubtabKind::Appointments => {
-                self.render_workspace_appointments(frame, area);
+            ClinicalMenuKind::Allergies => {
+                if let Some(ref mut clinical) = workspace.clinical {
+                    clinical.show_allergies();
+                }
+                self.render_workspace_clinical(frame, area);
             }
-            #[cfg(feature = "pathology")]
-            crate::ui::components::SubtabKind::Pathology => {
-                self.render_workspace_pathology(frame, area);
+            ClinicalMenuKind::MedicalHistory => {
+                if let Some(ref mut clinical) = workspace.clinical {
+                    clinical.show_medical_history();
+                }
+                self.render_workspace_clinical(frame, area);
             }
-            #[cfg(feature = "prescription")]
-            crate::ui::components::SubtabKind::Prescription => {
-                self.render_workspace_prescription(frame, area);
+            ClinicalMenuKind::FamilyHistory => {
+                if let Some(ref mut clinical) = workspace.clinical {
+                    clinical.show_family_history();
+                }
+                self.render_workspace_clinical(frame, area);
             }
-            #[cfg(feature = "referral")]
-            crate::ui::components::SubtabKind::Referral => {
-                self.render_workspace_referral(frame, area);
-            }
-            #[cfg(feature = "immunisation")]
-            crate::ui::components::SubtabKind::Immunisation => {
-                self.render_workspace_immunisation(frame, area);
+            ClinicalMenuKind::SocialHistory => {
+                if let Some(ref mut clinical) = workspace.clinical {
+                    clinical.show_social_history();
+                }
+                self.render_workspace_clinical(frame, area);
             }
         }
     }

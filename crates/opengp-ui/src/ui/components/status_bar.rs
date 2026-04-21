@@ -140,7 +140,7 @@ impl StatusBar {
     pub fn patient_workspace(theme: Theme, patient_name: &str) -> Self {
         let mut bar = Self::new(theme);
         bar.set_left(patient_name.to_string());
-        bar.set_center("Tab/Shift+Tab: Subtabs | n: Next | p: Prev | w: Close | 1-7: Views");
+        bar.set_center("Tab/Shift+Tab: Clinical menu | w: Close | F4-F9: Switch patient");
         bar.set_right("F1 Help");
         bar
     }
