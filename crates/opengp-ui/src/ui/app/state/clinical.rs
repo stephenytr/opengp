@@ -1,17 +1,6 @@
 use crate::ui::app::App;
 
 impl App {
-    pub fn request_refresh_consultations(&mut self, patient_id: uuid::Uuid) {
-        self.pending_consultation_list_refresh = Some(patient_id);
-    }
-
-    pub fn take_pending_clinical_patient_id(&mut self) -> Option<uuid::Uuid> {
-        if !self.authenticated {
-            return None;
-        }
-        self.workspace_manager_mut().active_mut().map(|w| w.patient_snapshot.id)
-    }
-
     pub fn take_pending_clinical_save_data(&mut self) -> Option<crate::ui::app::PendingClinicalSaveData> {
         if !self.authenticated {
             return None;
@@ -69,16 +58,6 @@ mod tests {
             opengp_config::PracticeConfig::default(),
             8,
         )
-    }
-
-    #[test]
-    fn request_refresh_consultations_sets_pending_patient() {
-        let mut app = make_app();
-        let patient_id = uuid::Uuid::new_v4();
-
-        app.request_refresh_consultations(patient_id);
-
-        assert_eq!(app.pending_consultation_list_refresh, Some(patient_id));
     }
 
     #[test]

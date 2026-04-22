@@ -122,7 +122,7 @@ pub struct App {
     consultation_page_limit: u32,
     pending_patient_list_refresh: bool,
     pending_appointment_list_refresh: Option<NaiveDate>,
-    pending_consultation_list_refresh: Option<uuid::Uuid>,
+    pub pending_consultation_list_refresh: Option<uuid::Uuid>,
     pending_practitioners_list_refresh: bool,
      patient_list_fetch_task: Option<PatientListFetchTask>,
       appointment_list_fetch_task: Option<AppointmentListFetchTask>,
@@ -500,7 +500,7 @@ impl App {
                     self.request_refresh_appointments(date);
                 }
                 RetryOperation::RefreshConsultations { patient_id } => {
-                    self.request_refresh_consultations(patient_id);
+                    self.pending_consultation_list_refresh = Some(patient_id);
                 }
             }
             self.clear_server_unavailable_error();

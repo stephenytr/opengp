@@ -776,7 +776,7 @@ async fn run_tui(
                                     patient_id: consultation.patient_id,
                                 });
                             }
-                            app.request_refresh_consultations(patient_id);
+                            app.pending_consultation_list_refresh = Some(patient_id);
                         }
                         Err(e) => {
                             tracing::error!("Failed to create consultation: {}", e);
@@ -1025,80 +1025,7 @@ async fn run_tui(
             }
         }
 
-        if let Some(patient_id) = app.take_pending_clinical_patient_id() {
-            use opengp_ui::ui::components::clinical::ClinicalSubDomain;
 
-            app.request_refresh_consultations(patient_id);
-
-            // Allergies - scoped loading
-            app.clinical_state_mut().set_sub_loading(ClinicalSubDomain::Allergies, true);
-            match api_client.get_allergies(patient_id).await {
-                Ok(allergies) => {
-                    app.clinical_state_mut().allergies.allergies = allergies
-                        .into_iter()
-                        .map(conversions::domain_allergy_from_api_response)
-                        .collect();
-                    tracing::info!("Loaded allergies for clinical view");
-                }
-                Err(e) => tracing::error!("Failed to load allergies: {}", e),
-            }
-            app.clinical_state_mut().set_sub_loading(ClinicalSubDomain::Allergies, false);
-
-            // Medical History - scoped loading
-            app.clinical_state_mut().set_sub_loading(ClinicalSubDomain::MedicalHistory, true);
-            match api_client.get_medical_history(patient_id).await {
-                Ok(conditions) => {
-                    app.clinical_state_mut().medical_history.medical_history = conditions
-                        .into_iter()
-                        .map(conversions::domain_medical_history_from_api_response)
-                        .collect();
-                    tracing::info!("Loaded medical history for clinical view");
-                }
-                Err(e) => tracing::error!("Failed to load medical history: {}", e),
-            }
-            app.clinical_state_mut().set_sub_loading(ClinicalSubDomain::MedicalHistory, false);
-
-            // Vitals - scoped loading
-            app.clinical_state_mut().set_sub_loading(ClinicalSubDomain::Vitals, true);
-            match api_client.get_vitals(patient_id).await {
-                Ok(vitals) => {
-                    app.clinical_state_mut().vitals.vital_signs = vitals
-                        .into_iter()
-                        .map(conversions::domain_vital_signs_from_api_response)
-                        .collect();
-                    tracing::info!("Loaded vital signs for clinical view");
-                }
-                Err(e) => tracing::error!("Failed to load vital signs: {}", e),
-            }
-            app.clinical_state_mut().set_sub_loading(ClinicalSubDomain::Vitals, false);
-
-            // Social History - scoped loading
-            app.clinical_state_mut().set_sub_loading(ClinicalSubDomain::SocialHistory, true);
-            match api_client.get_social_history(patient_id).await {
-                Ok(history) => {
-                    app.clinical_state_mut().social_history.social_history = Some(
-                        conversions::domain_social_history_from_api_response(history),
-                    );
-                    tracing::info!("Loaded social history for clinical view");
-                }
-                Err(e) => tracing::error!("Failed to load social history: {}", e),
-            }
-            app.clinical_state_mut().set_sub_loading(ClinicalSubDomain::SocialHistory, false);
-
-            // Family History - scoped loading
-            app.clinical_state_mut().set_sub_loading(ClinicalSubDomain::FamilyHistory, true);
-            match api_client.get_family_history(patient_id).await {
-                Ok(entries) => {
-                    app.clinical_state_mut().family_history.family_history = entries
-                        .into_iter()
-                        .map(conversions::domain_family_history_from_api_response)
-                        .collect();
-                    tracing::info!("Loaded family history for clinical view");
-                }
-                Err(e) => tracing::error!("Failed to load family history: {}", e),
-            }
-            app.clinical_state_mut().set_sub_loading(ClinicalSubDomain::FamilyHistory, false);
-        }
 
         if crossterm::event::poll(std::time::Duration::from_millis(ui_config.tick_rate_ms))? {
             if let Ok(event) = crossterm::event::read() {
