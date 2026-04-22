@@ -528,7 +528,7 @@ impl BillingGenerator {
 mod tests {
     use super::{BillingGenerator, BillingGeneratorConfig};
     use chrono::NaiveDate;
-    use opengp_domain::domain::billing::{BillingType, ClaimType};
+    use opengp_domain::domain::billing::{BillingType, ClaimType, InvoiceStatus};
     use uuid::Uuid;
 
     fn approx_equal(lhs: f64, rhs: f64) {
@@ -642,6 +642,307 @@ mod tests {
             if invoice.billing_type == BillingType::BulkBilling {
                 approx_equal(invoice.amount_outstanding, 0.0);
             }
+        }
+    }
+
+    #[test]
+    fn test_invoice_status_consistency() {
+        let mut generator = BillingGenerator::new(BillingGeneratorConfig::default());
+        let service_date = NaiveDate::from_ymd_opt(2026, 3, 20).expect("valid date");
+
+        // Test Paid invoices have no outstanding
+        let paid_invoice = generator.generate_invoice(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            None,
+            BillingType::PrivateBilling,
+            service_date,
+        );
+        if paid_invoice.status == InvoiceStatus::Paid {
+            approx_equal(paid_invoice.amount_outstanding, 0.0);
+        }
+
+        // Test Draft invoices have no payments
+        let draft_invoice = generator.generate_invoice(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            None,
+            BillingType::PrivateBilling,
+            service_date,
+        );
+        if draft_invoice.status == InvoiceStatus::Draft {
+            approx_equal(draft_invoice.amount_paid, 0.0);
+        }
+    }
+
+    #[test]
+    fn test_claim_status_temporal_order() {
+        let mut generator = BillingGenerator::new(BillingGeneratorConfig::default());
+        let service_date = NaiveDate::from_ymd_opt(2026, 2, 15).expect("valid date");
+
+        // Test Medicare claim temporal order
+        let claim = generator.generate_medicare_claim(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            None,
+            None,
+            service_date,
+            ClaimType::PatientClaim,
+        );
+
+        if let (Some(submitted), Some(processed)) = (claim.submitted_at, claim.processed_at) {
+            assert!(
+                submitted < processed,
+                "submitted_at must be before processed_at"
+            );
+        }
+
+        // Test DVA claim temporal order
+        let dva_claim = generator.generate_dva_claim(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            None,
+            "NVAA0001A",
+            opengp_domain::domain::billing::DVACardType::Gold,
+            service_date,
+        );
+
+        if let (Some(submitted), Some(processed)) = (dva_claim.submitted_at, dva_claim.processed_at)
+        {
+            assert!(
+                submitted < processed,
+                "DVA submitted_at must be before processed_at"
+            );
+        }
+    }
+
+    #[test]
+    fn test_generate_batch_produces_correct_counts() {
+        let mut generator = BillingGenerator::new(BillingGeneratorConfig::default());
+        let patient_id = Uuid::new_v4();
+        let practitioner_id = Uuid::new_v4();
+        let consultation_ids = vec![Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
+
+        let data = generator.generate_for_patient(patient_id, practitioner_id, consultation_ids);
+
+        // Should have 1-3 invoices
+        assert!(!data.invoices.is_empty() && data.invoices.len() <= 3);
+
+        // Should have at least one claim per invoice
+        let total_claims = data.medicare_claims.len() + data.dva_claims.len();
+        assert!(total_claims >= data.invoices.len());
+
+        // Payments should only exist for paid invoices
+        let paid_invoices = data
+            .invoices
+            .iter()
+            .filter(|inv| inv.status == InvoiceStatus::Paid)
+            .count();
+        assert!(data.payments.len() <= paid_invoices);
+    }
+
+    #[test]
+    fn test_billing_data_correlations() {
+        let mut generator = BillingGenerator::new(BillingGeneratorConfig::default());
+        let patient_id = Uuid::new_v4();
+        let practitioner_id = Uuid::new_v4();
+        let consultation_ids = vec![Uuid::new_v4(), Uuid::new_v4()];
+
+        let data = generator.generate_for_patient(patient_id, practitioner_id, consultation_ids);
+
+        // All invoices should have matching patient_id
+        for invoice in &data.invoices {
+            assert_eq!(invoice.patient_id, patient_id);
+            assert_eq!(invoice.practitioner_id, practitioner_id);
+        }
+
+        // All Medicare claims should have matching patient_id
+        for claim in &data.medicare_claims {
+            assert_eq!(claim.patient_id, patient_id);
+            assert_eq!(claim.practitioner_id, practitioner_id);
+        }
+
+        // All DVA claims should have matching patient_id
+        for claim in &data.dva_claims {
+            assert_eq!(claim.patient_id, patient_id);
+            assert_eq!(claim.practitioner_id, practitioner_id);
+        }
+
+        // All payments should have matching patient_id
+        for payment in &data.payments {
+            assert_eq!(payment.patient_id, patient_id);
+        }
+
+        // Payment invoice_ids should match invoice ids
+        for payment in &data.payments {
+            assert!(data.invoices.iter().any(|inv| inv.id == payment.invoice_id));
+        }
+    }
+
+    #[test]
+    fn test_medicare_claim_bulk_bill_zero_contribution() {
+        let mut generator = BillingGenerator::new(BillingGeneratorConfig::default());
+        let service_date = NaiveDate::from_ymd_opt(2026, 3, 10).expect("valid date");
+
+        let claim = generator.generate_medicare_claim(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            None,
+            None,
+            service_date,
+            ClaimType::BulkBill,
+        );
+
+        // Bulk bill claims should have zero patient contribution
+        approx_equal(claim.patient_contribution, 0.0);
+    }
+
+    #[test]
+    fn test_invoice_items_have_valid_amounts() {
+        let mut generator = BillingGenerator::new(BillingGeneratorConfig::default());
+        let service_date = NaiveDate::from_ymd_opt(2026, 3, 25).expect("valid date");
+
+        let invoice = generator.generate_invoice(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            None,
+            BillingType::PrivateBilling,
+            service_date,
+        );
+
+        // All items should have positive amounts
+        for item in &invoice.items {
+            assert!(item.amount > 0.0, "Item amount must be positive");
+            assert!(item.unit_price > 0.0, "Unit price must be positive");
+            assert!(item.quantity > 0, "Quantity must be positive");
+            approx_equal(item.amount, item.unit_price * f64::from(item.quantity));
+        }
+    }
+
+    #[test]
+    fn test_mbs_item_benefit_percentages() {
+        let mut generator = BillingGenerator::new(BillingGeneratorConfig::default());
+        let service_date = NaiveDate::from_ymd_opt(2026, 2, 20).expect("valid date");
+
+        // Generate multiple claims to check benefit percentages
+        for _ in 0..10 {
+            let claim = generator.generate_medicare_claim(
+                Uuid::new_v4(),
+                Uuid::new_v4(),
+                None,
+                None,
+                service_date,
+                ClaimType::PatientClaim,
+            );
+
+            // Verify benefit is less than or equal to fee (75%, 85%, or 100%)
+            for item in &claim.items {
+                assert!(
+                    item.benefit <= item.fee,
+                    "Benefit must not exceed fee: {} > {}",
+                    item.benefit,
+                    item.fee
+                );
+                // Benefit should be approximately 75%, 85%, or 100% of fee
+                let benefit_ratio = item.benefit / item.fee;
+                assert!(
+                    (benefit_ratio - 0.75).abs() < 0.01
+                        || (benefit_ratio - 0.85).abs() < 0.01
+                        || (benefit_ratio - 1.0).abs() < 0.01,
+                    "Benefit ratio {} should be ~75%, ~85%, or ~100%",
+                    benefit_ratio
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_dva_file_number_format_validation() {
+        let mut generator = BillingGenerator::new(BillingGeneratorConfig::default());
+
+        // Generate multiple file numbers and validate format
+        for _ in 0..20 {
+            let file_number = generator.generate_dva_file_number();
+
+            // Must start with DVA
+            assert!(file_number.starts_with("DVA"), "File number must start with DVA");
+
+            // Must be exactly 11 characters (DVA + 8 digits)
+            assert_eq!(file_number.len(), 11, "File number must be 11 chars");
+
+            // Characters after DVA must all be digits
+            let digits_part = &file_number[3..];
+            assert!(
+                digits_part.chars().all(|c| c.is_ascii_digit()),
+                "Digits part must contain only digits: {}",
+                digits_part
+            );
+        }
+    }
+
+    #[test]
+    fn test_payment_amounts_match_invoice_totals() {
+        let mut generator = BillingGenerator::new(BillingGeneratorConfig::default());
+        let patient_id = Uuid::new_v4();
+        let practitioner_id = Uuid::new_v4();
+        let consultation_ids = vec![Uuid::new_v4()];
+
+        let data = generator.generate_for_patient(patient_id, practitioner_id, consultation_ids);
+
+        // For each payment, verify it matches the invoice total
+        for payment in &data.payments {
+            let invoice = data
+                .invoices
+                .iter()
+                .find(|inv| inv.id == payment.invoice_id)
+                .expect("Payment must reference existing invoice");
+
+            approx_equal(payment.amount, invoice.total_amount);
+        }
+    }
+
+    #[test]
+    fn test_invoice_number_format() {
+        let mut generator = BillingGenerator::new(BillingGeneratorConfig::default());
+        let service_date = NaiveDate::from_ymd_opt(2026, 4, 5).expect("valid date");
+
+        let invoice = generator.generate_invoice(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            None,
+            BillingType::PrivateBilling,
+            service_date,
+        );
+
+        // Invoice number should follow format INV-YYYYMMDD-XXXXXX
+        assert!(invoice.invoice_number.starts_with("INV-"));
+        let parts: Vec<&str> = invoice.invoice_number.split('-').collect();
+        assert_eq!(parts.len(), 3, "Invoice number should have 3 parts");
+        assert_eq!(parts[1].len(), 8, "Date part should be 8 digits");
+        assert_eq!(parts[2].len(), 6, "Sequence part should be 6 digits");
+    }
+
+    #[test]
+    fn test_claim_reference_format() {
+        let mut generator = BillingGenerator::new(BillingGeneratorConfig::default());
+        let service_date = NaiveDate::from_ymd_opt(2026, 3, 5).expect("valid date");
+
+        let claim = generator.generate_medicare_claim(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            None,
+            None,
+            service_date,
+            ClaimType::PatientClaim,
+        );
+
+        // Claim reference should follow format MC-YYYYMMDD-XXXXXX
+        if let Some(ref_num) = claim.claim_reference {
+            assert!(ref_num.starts_with("MC-"));
+            let parts: Vec<&str> = ref_num.split('-').collect();
+            assert_eq!(parts.len(), 3, "Claim reference should have 3 parts");
+            assert_eq!(parts[1].len(), 8, "Date part should be 8 digits");
+            assert_eq!(parts[2].len(), 6, "Sequence part should be 6 digits");
         }
     }
 }
