@@ -71,10 +71,11 @@ impl App {
 
             let active_idx = self.workspace_manager.active_index.unwrap_or(0);
 
+            let theme = self.theme.clone();
             let patient_tab_bar = if patient_workspace_active {
-                PatientTabBar::new(patient_tabs, active_idx, self.theme.clone())
+                PatientTabBar::new(patient_tabs, active_idx, theme)
             } else {
-                PatientTabBar::new(patient_tabs, active_idx, self.theme.clone()).with_no_active()
+                PatientTabBar::new(patient_tabs, active_idx, theme).with_no_active()
             };
             patient_tab_bar.render(patient_tab_area, frame.buffer_mut());
         }
