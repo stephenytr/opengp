@@ -4,6 +4,7 @@
 //! testing, and seeding databases.
 
 pub mod appointment_generator;
+pub mod appointment_history_generator;
 pub mod audit_generator;
 pub mod billing_generator;
 pub mod clinical_generator;
@@ -18,6 +19,9 @@ pub mod working_hours_generator;
 
 pub use appointment_generator::{
     AppointmentGenerator, AppointmentGeneratorConfig, GenerationStats,
+};
+pub use appointment_history_generator::{
+    AppointmentHistoryGenerator, AppointmentHistoryGeneratorConfig,
 };
 pub use audit_generator::{AuditGenerator, AuditGeneratorConfig};
 pub use billing_generator::{BillingData, BillingGenerator, BillingGeneratorConfig};
