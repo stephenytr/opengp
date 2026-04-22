@@ -136,12 +136,12 @@ impl LoadingState {
     }
 
     /// Converts this state into a [`LoadingIndicator`] widget.
-    pub fn to_indicator(&self, theme: Theme) -> LoadingIndicator {
+    pub fn to_indicator(&self, theme: &Theme) -> LoadingIndicator {
         LoadingIndicator {
             message: self.message.clone(),
             frame_index: self.frame_index,
             style: self.style,
-            theme,
+            theme: theme.clone(),
         }
     }
 }
@@ -206,7 +206,7 @@ mod tests {
         assert_eq!(state.message, "Saving...");
 
         state.tick();
-        let indicator = state.to_indicator(theme);
+        let indicator = state.to_indicator(&theme);
         assert_eq!(indicator.frame_index, 1);
     }
 

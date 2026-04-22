@@ -761,7 +761,7 @@ impl Widget for SocialHistoryComponent {
         if self.loading {
             let mut loading_state = self.loading_state.clone();
             loading_state.tick();
-            let indicator = loading_state.to_indicator(self.theme.clone());
+            let indicator = loading_state.to_indicator(&self.theme);
             indicator.render(inner, buf);
             return;
         }

@@ -253,7 +253,7 @@ impl App {
 
                     let mut loading_state = self.appointment_state.loading_state.clone();
                     loading_state.tick();
-                    let indicator = loading_state.to_indicator(self.theme.clone());
+                    let indicator = loading_state.to_indicator(&self.theme);
 
                     let block = Block::default()
                         .title(" Schedule ")
