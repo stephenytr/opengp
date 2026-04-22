@@ -12,7 +12,7 @@ pub struct VitalSignsList {
     pub selected_index: usize,
     pub scroll_offset: usize,
     pub loading: bool,
-    theme: Theme,
+    pub theme: Theme,
 }
 
 #[derive(Debug, Clone)]

@@ -4,6 +4,7 @@ use crate::ui::components::clinical::ClinicalView;
 use crate::ui::components::clinical_row::{ClinicalMenuKind, ClinicalRow};
 use crate::ui::components::clinical::consultation_list::ConsultationList;
 use crate::ui::components::clinical::allergy_list::AllergyList;
+use crate::ui::components::clinical::vitals_list::VitalSignsList;
 use crate::ui::components::patient_tab_bar::PatientTabBar;
 use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
 use crate::ui::components::tabs::Tab;
@@ -399,7 +400,10 @@ impl App {
                         frame.render_widget(allergy_list, area);
                     }
                     ClinicalView::VitalSigns => {
-                        let mut vitals_list = clinical_state.vitals.vitals_list.clone();
+                        let existing = &clinical_state.vitals.vitals_list;
+                        let mut vitals_list = VitalSignsList::new(existing.theme.clone());
+                        vitals_list.selected_index = existing.selected_index;
+                        vitals_list.scroll_offset = existing.scroll_offset;
                         vitals_list.vitals = clinical_state.vitals.vital_signs.clone();
 
                         frame.render_widget(vitals_list, area);
