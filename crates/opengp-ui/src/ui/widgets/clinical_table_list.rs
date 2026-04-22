@@ -11,7 +11,7 @@ const TABLE_HEADER_ROWS: u16 = 1;
 use crate::ui::input::DoubleClickDetector;
 use crate::ui::shared::{hover_style, selected_hover_style};
 use crate::ui::theme::Theme;
-use crate::ui::widgets::LoadingIndicator;
+use crate::ui::widgets::{LoadingIndicator, SCROLL_LINES};
 
 /// Configuration for a single column in a [`ClinicalTableList`].
 pub struct ColumnDef<T> {
@@ -203,16 +203,16 @@ impl<T> ClinicalTableList<T> {
     {
         if let MouseEventKind::ScrollUp = mouse.kind {
             if self.scroll_offset > 0 {
-                self.scroll_offset = self.scroll_offset.saturating_sub(3);
+                self.scroll_offset = self.scroll_offset.saturating_sub(SCROLL_LINES);
             }
             self.hovered_index = None;
             return Some(ListAction::Select(self.selected_index));
         }
 
         if let MouseEventKind::ScrollDown = mouse.kind {
-            let visible_rows = area.height.saturating_sub(3) as usize;
+            let visible_rows = area.height.saturating_sub(SCROLL_LINES as u16) as usize;
             let max_scroll = self.items.len().saturating_sub(visible_rows);
-            self.scroll_offset = (self.scroll_offset + 3).min(max_scroll);
+            self.scroll_offset = (self.scroll_offset + SCROLL_LINES).min(max_scroll);
             self.hovered_index = None;
             return Some(ListAction::Select(self.selected_index));
         }

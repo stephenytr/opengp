@@ -20,7 +20,7 @@ use crate::ui::layout::{
 use crate::ui::shared::{hover_style, selected_hover_style};
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientListItem;
-use crate::ui::widgets::{LoadingState, ScrollableState};
+use crate::ui::widgets::{LoadingState, ScrollableState, SCROLL_LINES};
 
 pub struct PatientList {
     patients: Vec<PatientListItem>,
@@ -300,16 +300,16 @@ impl PatientList {
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<PatientListAction> {
         // Handle mouse wheel for scrolling
         if let MouseEventKind::ScrollUp = mouse.kind {
-            for _ in 0..3 {
+            for _ in 0..SCROLL_LINES {
                 self.scrollable.scroll_up();
             }
             self.hovered_index = None;
             return Some(PatientListAction::SelectionChanged);
         }
         if let MouseEventKind::ScrollDown = mouse.kind {
-            let visible_rows = area.height.saturating_sub(3) as usize;
+            let visible_rows = area.height.saturating_sub(SCROLL_LINES as u16) as usize;
             let max_scroll = self.filtered.len().saturating_sub(visible_rows);
-            for _ in 0..3 {
+            for _ in 0..SCROLL_LINES {
                 if self.scrollable.scroll_offset() < max_scroll {
                     self.scrollable.scroll_down();
                 }

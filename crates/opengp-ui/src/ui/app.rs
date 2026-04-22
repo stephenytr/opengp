@@ -127,6 +127,7 @@ pub struct App {
     terminal_size: Rect,
     pub command_tx: tokio::sync::mpsc::UnboundedSender<AppCommand>,
     command_rx: Option<tokio::sync::mpsc::UnboundedReceiver<AppCommand>>,
+    context_menu_state: Option<crate::ui::widgets::ContextMenuState<AppContextMenuAction>>,
 }
 
 pub enum PendingPatientData {
@@ -213,6 +214,48 @@ pub struct PendingRescheduleData {
     pub duration_minutes: i64,
 }
 
+/// Unified action types for all context menus in the application.
+#[derive(Debug, Clone)]
+pub enum AppContextMenuAction {
+    // Patient actions
+    PatientEdit(uuid::Uuid),
+    PatientDelete(uuid::Uuid),
+    PatientViewHistory(uuid::Uuid),
+    // Appointment actions
+    AppointmentEdit(uuid::Uuid),
+    AppointmentCancel(uuid::Uuid),
+    AppointmentReschedule(uuid::Uuid),
+    // Clinical actions
+    ClinicalEdit(uuid::Uuid),
+    ClinicalDelete(uuid::Uuid),
+    // Billing actions
+    BillingEdit(uuid::Uuid),
+    BillingViewInvoice(uuid::Uuid),
+}
+
+/// Tracks which context menu is currently active and its target.
+#[derive(Debug)]
+pub enum ActiveContextMenu {
+    Patient {
+        patient_id: uuid::Uuid,
+        x: u16,
+        y: u16,
+    },
+    Clinical {
+        patient_id: uuid::Uuid,
+        clinical_kind: String,  // "allergy", "vitals", "consultation", etc.
+        item_id: uuid::Uuid,
+        x: u16,
+        y: u16,
+    },
+    Billing {
+        billing_type: String,  // "claim", "invoice", "payment"
+        item_id: uuid::Uuid,
+        x: u16,
+        y: u16,
+    },
+}
+
 impl App {
     pub fn new(
         api_client: Option<Arc<crate::api::ApiClient>>,
@@ -287,6 +330,7 @@ impl App {
             terminal_size: Rect::new(0, 0, 80, 24),
             command_tx,
             command_rx: Some(command_rx),
+            context_menu_state: None,
         };
 
         app.refresh_status_bar();
@@ -438,6 +482,76 @@ impl App {
     #[cfg(test)]
     pub fn server_unavailable_error_message(&self) -> Option<&str> {
         self.server_unavailable_error.as_deref()
+    }
+
+    pub fn show_context_menu(&mut self, menu: ActiveContextMenu) {
+        use crate::ui::widgets::{ContextMenuItem, ContextMenuState};
+        use ratatui::layout::Position;
+
+        let items = match &menu {
+            ActiveContextMenu::Patient { patient_id, .. } => vec![
+                ContextMenuItem {
+                    label: "Edit Patient".into(),
+                    action: AppContextMenuAction::PatientEdit(*patient_id),
+                    enabled: true,
+                },
+                ContextMenuItem {
+                    label: "View History".into(),
+                    action: AppContextMenuAction::PatientViewHistory(*patient_id),
+                    enabled: true,
+                },
+                ContextMenuItem {
+                    label: "Delete Patient".into(),
+                    action: AppContextMenuAction::PatientDelete(*patient_id),
+                    enabled: true,
+                },
+            ],
+            ActiveContextMenu::Clinical { item_id, .. } => vec![
+                ContextMenuItem {
+                    label: "Edit".into(),
+                    action: AppContextMenuAction::ClinicalEdit(*item_id),
+                    enabled: true,
+                },
+                ContextMenuItem {
+                    label: "Delete".into(),
+                    action: AppContextMenuAction::ClinicalDelete(*item_id),
+                    enabled: true,
+                },
+            ],
+            ActiveContextMenu::Billing { item_id, .. } => vec![
+                ContextMenuItem {
+                    label: "Edit".into(),
+                    action: AppContextMenuAction::BillingEdit(*item_id),
+                    enabled: true,
+                },
+                ContextMenuItem {
+                    label: "View Invoice".into(),
+                    action: AppContextMenuAction::BillingViewInvoice(*item_id),
+                    enabled: true,
+                },
+            ],
+        };
+
+        let position = match &menu {
+            ActiveContextMenu::Patient { x, y, .. } => Position::new(*x, *y),
+            ActiveContextMenu::Clinical { x, y, .. } => Position::new(*x, *y),
+            ActiveContextMenu::Billing { x, y, .. } => Position::new(*x, *y),
+        };
+
+        let mut state = ContextMenuState::new(self.theme.clone(), items);
+        state.show_at(position);
+        self.context_menu_state = Some(state);
+    }
+
+    pub fn hide_context_menu(&mut self) {
+        self.context_menu_state = None;
+    }
+
+    pub fn is_context_menu_visible(&self) -> bool {
+        self.context_menu_state
+            .as_ref()
+            .map(|s| s.is_visible())
+            .unwrap_or(false)
     }
 }
 

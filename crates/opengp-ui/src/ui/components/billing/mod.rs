@@ -28,7 +28,7 @@ pub use invoice_detail::InvoiceDetail;
 
 pub use invoice_form::InvoiceForm;
 
-pub use invoice_list::InvoiceList;
+pub use invoice_list::{InvoiceList, InvoiceListAction};
 
 pub use payment_form::{PaymentForm, PaymentFormAction};
 

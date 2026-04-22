@@ -423,7 +423,8 @@ impl App {
                         }
                         crate::ui::components::clinical::ConsultationListAction::Select(_)
                         | crate::ui::components::clinical::ConsultationListAction::NextPage
-                        | crate::ui::components::clinical::ConsultationListAction::PrevPage => {}
+                        | crate::ui::components::clinical::ConsultationListAction::PrevPage
+                        | crate::ui::components::clinical::ConsultationListAction::ContextMenu { .. } => {}
                     }
                     return Action::Enter;
                 }
@@ -444,7 +445,8 @@ impl App {
                         }
                         crate::ui::components::clinical::AllergyListAction::Select(_)
                         | crate::ui::components::clinical::AllergyListAction::ToggleInactive
-                        | crate::ui::components::clinical::AllergyListAction::Delete(_) => {}
+                        | crate::ui::components::clinical::AllergyListAction::Delete(_)
+                        | crate::ui::components::clinical::AllergyListAction::ContextMenu { .. } => {}
                     }
                     return Action::Enter;
                 }
@@ -485,7 +487,8 @@ impl App {
                         }
                         crate::ui::components::clinical::VitalSignsListAction::Select(_)
                         | crate::ui::components::clinical::VitalSignsListAction::NextPage
-                        | crate::ui::components::clinical::VitalSignsListAction::PrevPage => {}
+                        | crate::ui::components::clinical::VitalSignsListAction::PrevPage
+                        | crate::ui::components::clinical::VitalSignsListAction::ContextMenu { .. } => {}
                     }
                     return Action::Enter;
                 }
@@ -512,7 +515,8 @@ impl App {
                             self.clinical_state_mut().open_family_history_form();
                         }
                         crate::ui::components::clinical::FamilyHistoryListAction::Select(_)
-                        | crate::ui::components::clinical::FamilyHistoryListAction::Delete(_) => {}
+                        | crate::ui::components::clinical::FamilyHistoryListAction::Delete(_)
+                        | crate::ui::components::clinical::FamilyHistoryListAction::ContextMenu { .. } => {}
                     }
                     return Action::Enter;
                 }

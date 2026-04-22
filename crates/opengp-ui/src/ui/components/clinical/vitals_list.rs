@@ -22,6 +22,7 @@ pub enum VitalSignsListAction {
     New,
     NextPage,
     PrevPage,
+    ContextMenu { index: usize, x: u16, y: u16 },
 }
 
 fn fmt_date(v: &VitalSigns) -> String {
@@ -152,7 +153,8 @@ impl VitalSignsList {
         let mut table = self.table();
         let action = table.handle_mouse(mouse, area).and_then(|a| match a {
             ListAction::Select(i) => Some(VitalSignsListAction::Select(i)),
-            ListAction::Open(_) | ListAction::New | ListAction::Edit(_) | ListAction::Delete(_) | ListAction::ToggleInactive | ListAction::ContextMenu { .. } => None,
+            ListAction::ContextMenu { index, x, y } => Some(VitalSignsListAction::ContextMenu { index, x, y }),
+            ListAction::Open(_) | ListAction::New | ListAction::Edit(_) | ListAction::Delete(_) | ListAction::ToggleInactive => None,
         });
         self.vitals = table.items;
         self.selected_index = table.selected_index;

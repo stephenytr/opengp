@@ -15,7 +15,7 @@ pub struct InvoiceList {
     filtered: Vec<Invoice>,
     search_query: String,
     scroll_state: ListState,
-    selected_index: usize,
+    pub selected_index: usize,
     hovered_index: Option<usize>,
     double_click_detector: DoubleClickDetector,
     theme: Theme,

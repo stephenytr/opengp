@@ -90,6 +90,11 @@ impl App {
 
         self.render_server_unavailable_banner(frame, content_area);
 
+        // Render context menu if visible
+        if let Some(ref ctx_menu) = self.context_menu_state {
+            ctx_menu.render(terminal, frame.buffer_mut());
+        }
+
         frame.render_widget(self.status_bar.clone(), status_bar_area);
 
         if self.patient_list.is_searching() {

@@ -20,6 +20,7 @@ pub enum FamilyHistoryListAction {
     Open(FamilyHistory),
     New,
     Delete(FamilyHistory),
+    ContextMenu { index: usize, x: u16, y: u16 },
 }
 impl FamilyHistoryList {
     pub fn new(theme: Theme) -> Self {
@@ -101,7 +102,8 @@ fn map_action(action: ListAction<FamilyHistory>) -> Option<FamilyHistoryListActi
         ListAction::Open(entry) => Some(FamilyHistoryListAction::Open(entry)),
         ListAction::New => Some(FamilyHistoryListAction::New),
         ListAction::Delete(entry) => Some(FamilyHistoryListAction::Delete(entry)),
-        ListAction::Edit(_) | ListAction::ToggleInactive | ListAction::ContextMenu { .. } => None,
+        ListAction::ContextMenu { index, x, y } => Some(FamilyHistoryListAction::ContextMenu { index, x, y }),
+        ListAction::Edit(_) | ListAction::ToggleInactive => None,
     }
 }
 fn columns() -> Vec<ColumnDef<FamilyHistory>> {

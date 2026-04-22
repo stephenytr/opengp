@@ -37,6 +37,59 @@ impl App {
             return Action::Unknown;
         }
 
+        // Route key events to context menu if visible
+        if self.is_context_menu_visible() {
+            if let Some(ref mut ctx_menu) = self.context_menu_state {
+                if let Some(action) = ctx_menu.handle_key(key) {
+                    match action {
+                        crate::ui::widgets::ContextMenuAction::Selected(app_action) => {
+                            self.hide_context_menu();
+                            // Handle the AppContextMenuAction
+                            match app_action {
+                                crate::ui::app::AppContextMenuAction::PatientEdit(id) => {
+                                    self.request_edit_patient(id);
+                                }
+                                crate::ui::app::AppContextMenuAction::PatientDelete(id) => {
+                                    // TODO: Implement delete patient
+                                }
+                                crate::ui::app::AppContextMenuAction::PatientViewHistory(id) => {
+                                    // TODO: Implement view history
+                                }
+                                crate::ui::app::AppContextMenuAction::AppointmentEdit(id) => {
+                                    // TODO: Implement edit appointment
+                                }
+                                crate::ui::app::AppContextMenuAction::AppointmentCancel(id) => {
+                                    // TODO: Implement cancel appointment
+                                }
+                                crate::ui::app::AppContextMenuAction::AppointmentReschedule(id) => {
+                                    // TODO: Implement reschedule appointment
+                                }
+                                crate::ui::app::AppContextMenuAction::ClinicalEdit(id) => {
+                                    // TODO: Implement edit clinical record
+                                }
+                                crate::ui::app::AppContextMenuAction::ClinicalDelete(id) => {
+                                    // TODO: Implement delete clinical record
+                                }
+                                crate::ui::app::AppContextMenuAction::BillingEdit(id) => {
+                                    // TODO: Implement edit billing record
+                                }
+                                crate::ui::app::AppContextMenuAction::BillingViewInvoice(id) => {
+                                    // TODO: Implement view invoice
+                                }
+                            }
+                        }
+                        crate::ui::widgets::ContextMenuAction::Dismissed => {
+                            self.hide_context_menu();
+                        }
+                        crate::ui::widgets::ContextMenuAction::FocusChanged => {
+                            // Just update focus, no state change
+                        }
+                    }
+                    return Action::Enter;
+                }
+            }
+        }
+
         if !self.authenticated {
             if let Some(crate::ui::screens::LoginAction::Submit { username, password }) =
                 self.login_screen.handle_key(key)

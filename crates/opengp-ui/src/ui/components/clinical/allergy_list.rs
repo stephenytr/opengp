@@ -21,6 +21,7 @@ pub enum AllergyListAction {
     New,
     ToggleInactive,
     Delete(Allergy),
+    ContextMenu { index: usize, x: u16, y: u16 },
 }
 
 impl AllergyList {
@@ -87,7 +88,8 @@ impl AllergyList {
             ListAction::Select(i) => Some(AllergyListAction::Select(i)),
             ListAction::Open(allergy) => Some(AllergyListAction::Open(allergy)),
             ListAction::New => Some(AllergyListAction::New),
-            ListAction::Edit(_) | ListAction::Delete(_) | ListAction::ToggleInactive | ListAction::ContextMenu { .. } => None,
+            ListAction::ContextMenu { index, x, y } => Some(AllergyListAction::ContextMenu { index, x, y }),
+            ListAction::Edit(_) | ListAction::Delete(_) | ListAction::ToggleInactive => None,
         });
         self.selected_index = table.selected_index;
         self.scroll_offset = table.scroll_offset;

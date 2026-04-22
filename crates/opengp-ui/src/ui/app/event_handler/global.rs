@@ -1,5 +1,8 @@
 use crate::ui::app::App;
 use crate::ui::components::appointment::AppointmentView;
+use crate::ui::components::clinical::{
+    AllergyListAction, ConsultationListAction, FamilyHistoryListAction, VitalSignsListAction,
+};
 use crate::ui::components::clinical_row::{ClinicalMenuKind, ClinicalRow};
 use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
 use crate::ui::components::tabs::Tab;
@@ -165,6 +168,177 @@ impl App {
             }
         }
 
+        if self.tab_bar.selected() == Tab::PatientSearch {
+            if let Some(workspace) = self.workspace_manager.active_mut() {
+                if let Some(ref mut billing_state) = workspace.billing {
+                    use crate::ui::components::billing::{ClaimList, InvoiceList, PaymentList, BillingView};
+                    use crossterm::event::MouseEventKind;
+
+                    let billing_content_area = Rect::new(
+                        area.x,
+                        area.y + clinical_row_offset,
+                        area.width,
+                        area.height.saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
+                    );
+
+                    if matches!(mouse.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
+                        match billing_state.view {
+                            BillingView::ClaimList => {
+                                for _ in 0..3 {
+                                    if matches!(mouse.kind, MouseEventKind::ScrollUp) {
+                                        billing_state.claim_selected_index = billing_state.claim_selected_index.saturating_sub(1);
+                                    } else if billing_state.claim_selected_index < billing_state.claims.len().saturating_sub(1) {
+                                        billing_state.claim_selected_index += 1;
+                                    }
+                                }
+                                return;
+                            }
+                            BillingView::InvoiceList => {
+                                for _ in 0..3 {
+                                    if matches!(mouse.kind, MouseEventKind::ScrollUp) {
+                                        billing_state.invoice_selected_index = billing_state.invoice_selected_index.saturating_sub(1);
+                                    } else if billing_state.invoice_selected_index < billing_state.invoices.len().saturating_sub(1) {
+                                        billing_state.invoice_selected_index += 1;
+                                    }
+                                }
+                                return;
+                            }
+                            BillingView::PaymentList => {
+                                for _ in 0..3 {
+                                    if matches!(mouse.kind, MouseEventKind::ScrollUp) {
+                                        billing_state.payment_selected_index = billing_state.payment_selected_index.saturating_sub(1);
+                                    } else if billing_state.payment_selected_index < billing_state.payments.len().saturating_sub(1) {
+                                        billing_state.payment_selected_index += 1;
+                                    }
+                                }
+                                return;
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    match billing_state.view {
+                        BillingView::ClaimList => {
+                            let mut claim_list = ClaimList::new(billing_state.claims.clone(), self.theme.clone());
+                            claim_list.selected_index = billing_state.claim_selected_index;
+                            if let Some(action) = claim_list.handle_mouse(mouse, billing_content_area) {
+                                match action {
+                                    crate::ui::components::billing::ClaimListAction::Select(_) => {
+                                        billing_state.claim_selected_index = claim_list.selected_index;
+                                    }
+                                    crate::ui::components::billing::ClaimListAction::ContextMenu { x, y, claim_id } => {
+                                        billing_state.claim_selected_index = claim_list.selected_index;
+                                        self.show_context_menu(crate::ui::app::ActiveContextMenu::Billing {
+                                            billing_type: "claim".into(),
+                                            item_id: claim_id,
+                                            x,
+                                            y,
+                                        });
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        BillingView::InvoiceList => {
+                            let mut invoice_list = InvoiceList::new(self.theme.clone());
+                            invoice_list.set_invoices(billing_state.invoices.clone());
+                            invoice_list.selected_index = billing_state.invoice_selected_index;
+                            if let Some(action) = invoice_list.handle_mouse(mouse, billing_content_area) {
+                                match action {
+                                    crate::ui::components::billing::InvoiceListAction::Select(_) => {
+                                        billing_state.invoice_selected_index = invoice_list.selected_index;
+                                    }
+                                    crate::ui::components::billing::InvoiceListAction::ContextMenu { x, y, invoice_id } => {
+                                        billing_state.invoice_selected_index = invoice_list.selected_index;
+                                        self.show_context_menu(crate::ui::app::ActiveContextMenu::Billing {
+                                            billing_type: "invoice".into(),
+                                            item_id: invoice_id,
+                                            x,
+                                            y,
+                                        });
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        BillingView::PaymentList => {
+                            let mut payment_list = PaymentList::new(billing_state.payments.clone(), self.theme.clone());
+                            payment_list.selected_index = billing_state.payment_selected_index;
+                            if let Some(action) = payment_list.handle_mouse(mouse, billing_content_area) {
+                                match action {
+                                    crate::ui::components::billing::PaymentListAction::Select(_) => {
+                                        billing_state.payment_selected_index = payment_list.selected_index;
+                                    }
+                                    crate::ui::components::billing::PaymentListAction::ContextMenu { x, y, payment_id } => {
+                                        billing_state.payment_selected_index = payment_list.selected_index;
+                                        self.show_context_menu(crate::ui::app::ActiveContextMenu::Billing {
+                                            billing_type: "payment".into(),
+                                            item_id: payment_id,
+                                            x,
+                                            y,
+                                        });
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        if self.tab_bar.selected() == Tab::PatientSearch {
+            if let Some(workspace) = self.workspace_manager.active_mut() {
+                if let Some(ref mut clinical_state) = workspace.clinical {
+                    let clinical_content_area = Rect::new(
+                        area.x,
+                        area.y + clinical_row_offset,
+                        area.width,
+                        area.height.saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
+                    );
+
+                    match clinical_state.view {
+                        crate::ui::components::clinical::ClinicalView::Consultations => {
+                            if let Some(action) = clinical_state.consultations.consultation_list.handle_mouse(mouse, clinical_content_area) {
+                                match action {
+                                    _ => {}
+                                }
+                            }
+                        }
+                        crate::ui::components::clinical::ClinicalView::VitalSigns => {
+                            if let Some(action) = clinical_state.vitals.vitals_list.handle_mouse(mouse, clinical_content_area) {
+                                match action {
+                                    _ => {}
+                                }
+                            }
+                        }
+                        crate::ui::components::clinical::ClinicalView::Allergies => {
+                            if let Some(action) = clinical_state.allergies.allergy_list.handle_mouse(mouse, clinical_content_area) {
+                                match action {
+                                    _ => {}
+                                }
+                            }
+                        }
+                        crate::ui::components::clinical::ClinicalView::MedicalHistory => {
+                            if let Some(action) = clinical_state.medical_history.medical_history_list.handle_mouse(mouse, clinical_content_area) {
+                                match action {
+                                    _ => {}
+                                }
+                            }
+                        }
+                        crate::ui::components::clinical::ClinicalView::FamilyHistory => {
+                            if let Some(action) = clinical_state.family_history.family_history_list.handle_mouse(mouse, clinical_content_area) {
+                                match action {
+                                    _ => {}
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
 
     }
 }

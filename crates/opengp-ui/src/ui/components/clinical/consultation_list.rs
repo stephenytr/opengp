@@ -20,6 +20,7 @@ pub enum ConsultationListAction {
     New,
     NextPage,
     PrevPage,
+    ContextMenu { index: usize, x: u16, y: u16 },
 }
 
 impl ConsultationList {
@@ -141,7 +142,8 @@ impl ConsultationList {
             ListAction::Select(i) => Some(ConsultationListAction::Select(i)),
             ListAction::Open(consultation) => Some(ConsultationListAction::Open(Box::new(consultation))),
             ListAction::New => Some(ConsultationListAction::New),
-            ListAction::Edit(_) | ListAction::Delete(_) | ListAction::ToggleInactive | ListAction::ContextMenu { .. } => None,
+            ListAction::ContextMenu { index, x, y } => Some(ConsultationListAction::ContextMenu { index, x, y }),
+            ListAction::Edit(_) | ListAction::Delete(_) | ListAction::ToggleInactive => None,
         });
         self.selected_index = table.selected_index;
         self.scroll_offset = table.scroll_offset;

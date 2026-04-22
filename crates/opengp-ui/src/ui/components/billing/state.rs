@@ -21,6 +21,9 @@ pub struct BillingState {
     pub pagination: PaginatedState,
     pub loading: bool,
     pub error: Option<String>,
+    pub invoice_selected_index: usize,
+    pub claim_selected_index: usize,
+    pub payment_selected_index: usize,
 }
 
 impl BillingState {
