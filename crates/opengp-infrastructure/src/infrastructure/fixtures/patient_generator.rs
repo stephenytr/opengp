@@ -336,7 +336,9 @@ impl PatientGenerator {
     fn generate_medicare_number(&mut self) -> String {
         let mut digits = Vec::with_capacity(10);
 
-        for _ in 0..9 {
+        digits.push(self.rng.gen_range(2..=6));
+
+        for _ in 1..9 {
             digits.push(self.rng.gen_range(0..=9));
         }
 
@@ -965,6 +967,114 @@ mod tests {
 
         for patient in &patients {
             assert!(patient.emergency_contact.is_none());
+        }
+    }
+
+    #[test]
+    fn test_medicare_first_digit_range() {
+        let config = PatientGeneratorConfig {
+            count: 100,
+            medicare_percentage: 1.0,
+            ..Default::default()
+        };
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        for patient in &patients {
+            if let Some(medicare) = &patient.medicare_number {
+                let first_digit = medicare
+                    .as_str()
+                    .chars()
+                    .next()
+                    .and_then(|c| c.to_digit(10))
+                    .expect("Medicare number should start with a digit");
+
+                assert!(
+                    (2..=6).contains(&first_digit),
+                    "First digit of Medicare number should be 2-6, got {}",
+                    first_digit
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_family_medicare_different_expiry_same_base() {
+        let config = PatientGeneratorConfig {
+            count: 100,
+            family_medicare_percentage: 1.0,
+            ..Default::default()
+        };
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        let mut groups: std::collections::HashMap<String, Vec<&Patient>> =
+            std::collections::HashMap::new();
+
+        for patient in &patients {
+            if let Some(medicare) = &patient.medicare_number {
+                groups
+                    .entry(medicare.as_str().to_string())
+                    .or_insert_with(Vec::new)
+                    .push(patient);
+            }
+        }
+
+        for (base_number, members) in groups.iter() {
+            if members.len() > 1 {
+                for member in members {
+                    assert_eq!(
+                        member.medicare_number.as_ref().unwrap().as_str(),
+                        base_number,
+                        "Family members should share the same base Medicare number"
+                    );
+                }
+
+                let mut irns: Vec<u8> = members
+                    .iter()
+                    .filter_map(|m| m.medicare_irn)
+                    .collect();
+                irns.sort_unstable();
+
+                for (idx, &irn) in irns.iter().enumerate() {
+                    assert_eq!(
+                        irn as usize, idx + 1,
+                        "Family member IRNs should be sequential starting from 1"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_ihi_format() {
+        let config = PatientGeneratorConfig {
+            count: 50,
+            ihi_percentage: 1.0,
+            ..Default::default()
+        };
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        for patient in &patients {
+            if let Some(ihi) = &patient.ihi {
+                let ihi_str = ihi.as_str();
+                assert_eq!(
+                    ihi_str.len(),
+                    16,
+                    "IHI should be 16 digits, got {}",
+                    ihi_str.len()
+                );
+                assert!(
+                    ihi_str.starts_with("800360816669"),
+                    "IHI should start with 800360816669, got {}",
+                    ihi_str
+                );
+                assert!(
+                    ihi_str.chars().all(|c| c.is_ascii_digit()),
+                    "IHI should contain only digits"
+                );
+            }
         }
     }
 }
