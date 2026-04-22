@@ -5,6 +5,7 @@ use crate::ui::components::clinical_row::{ClinicalMenuKind, ClinicalRow};
 use crate::ui::components::clinical::consultation_list::ConsultationList;
 use crate::ui::components::clinical::allergy_list::AllergyList;
 use crate::ui::components::clinical::vitals_list::VitalSignsList;
+use crate::ui::components::clinical::medical_history_list::MedicalHistoryList;
 use crate::ui::components::patient_tab_bar::PatientTabBar;
 use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
 use crate::ui::components::tabs::Tab;
@@ -409,10 +410,11 @@ impl App {
                         frame.render_widget(vitals_list, area);
                     }
                     ClinicalView::MedicalHistory => {
-                        let mut medical_history_list = clinical_state.medical_history.medical_history_list.clone();
-                        medical_history_list.conditions =
-                            clinical_state.medical_history.medical_history.clone();
-
+                        let existing = &clinical_state.medical_history.medical_history_list;
+                        let mut medical_history_list = MedicalHistoryList::new(existing.theme.clone());
+                        medical_history_list.selected_index = existing.selected_index;
+                        medical_history_list.scroll_offset = existing.scroll_offset;
+                        medical_history_list.conditions = clinical_state.medical_history.medical_history.clone();
                         frame.render_widget(medical_history_list, area);
                     }
                     ClinicalView::FamilyHistory => {
