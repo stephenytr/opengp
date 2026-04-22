@@ -1,4 +1,5 @@
 use crate::ui::app::App;
+use crate::ui::components::tabs::Tab;
 use crate::ui::keybinds::{Action, KeyContext};
 use crossterm::event::KeyEvent;
 
@@ -16,6 +17,7 @@ impl App {
                             Ok(index) => {
                                 self.workspace_manager.active_index = Some(index);
                                 self.current_context = KeyContext::PatientWorkspace;
+                                self.tab_bar.select(Tab::PatientWorkspace);
                                 self.refresh_status_bar();
                                 self.refresh_context();
                             }
