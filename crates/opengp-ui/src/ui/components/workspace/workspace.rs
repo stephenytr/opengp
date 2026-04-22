@@ -38,6 +38,7 @@ pub struct PatientWorkspace {
     pub active_subtab: SubtabKind,
     pub active_clinical_menu: ClinicalMenuKind,
     pub loaded: HashSet<SubtabKind>,
+    pub loading: HashSet<SubtabKind>,
     pub clinical: Option<ClinicalState>,
     pub billing: Option<PatientBillingState>,
     pub appointments: Option<PatientAppointmentState>,
@@ -56,6 +57,7 @@ impl PatientWorkspace {
             active_subtab: SubtabKind::Clinical,
             active_clinical_menu: ClinicalMenuKind::Consultations,
             loaded: HashSet::new(),
+            loading: HashSet::new(),
             clinical: None,
             billing: None,
             appointments: None,
@@ -69,6 +71,18 @@ impl PatientWorkspace {
 
     pub fn is_loaded(&self, subtab: SubtabKind) -> bool {
         self.loaded.contains(&subtab)
+    }
+
+    pub fn start_loading(&mut self, subtab: SubtabKind) {
+        self.loading.insert(subtab);
+    }
+
+    pub fn finish_loading(&mut self, subtab: SubtabKind) {
+        self.loading.remove(&subtab);
+    }
+
+    pub fn is_loading(&self, subtab: SubtabKind) -> bool {
+        self.loading.contains(&subtab)
     }
 }
 
@@ -101,6 +115,7 @@ mod tests {
         assert_eq!(workspace.colour, colour);
         assert_eq!(workspace.active_subtab, SubtabKind::Clinical);
         assert!(workspace.loaded.is_empty());
+        assert!(workspace.loading.is_empty());
         assert!(workspace.clinical.is_none());
         assert!(workspace.billing.is_none());
         assert!(workspace.appointments.is_none());

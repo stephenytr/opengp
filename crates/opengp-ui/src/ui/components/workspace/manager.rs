@@ -128,6 +128,10 @@ impl WorkspaceManager {
         self.active().map(|w| w.is_loaded(subtab)).unwrap_or(false)
     }
 
+    pub fn is_subtab_loading(&self, subtab: SubtabKind) -> bool {
+        self.active().map(|w| w.is_loading(subtab)).unwrap_or(false)
+    }
+
     pub fn handle_patient_tab_mouse(&mut self, mouse: MouseEvent, tab_area: Rect) -> Option<usize> {
         if !tab_area.contains(Position::new(mouse.column, mouse.row)) {
             self.hovered_tab.clear_hover();

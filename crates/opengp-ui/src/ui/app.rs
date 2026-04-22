@@ -48,6 +48,17 @@ type LoginTask = tokio::task::JoinHandle<
     Result<opengp_domain::domain::api::LoginResponse, crate::api::ApiClientError>,
 >;
 
+pub struct ClinicalWorkspaceLoadResult {
+    pub patient_id: uuid::Uuid,
+    pub allergies: Result<Vec<opengp_domain::domain::clinical::Allergy>, crate::api::ApiClientError>,
+    pub medical_history: Result<Vec<opengp_domain::domain::clinical::MedicalHistory>, crate::api::ApiClientError>,
+    pub vitals: Result<Vec<opengp_domain::domain::clinical::VitalSigns>, crate::api::ApiClientError>,
+    pub social_history: Result<opengp_domain::domain::clinical::SocialHistory, crate::api::ApiClientError>,
+    pub family_history: Result<Vec<opengp_domain::domain::clinical::FamilyHistory>, crate::api::ApiClientError>,
+}
+
+type ClinicalWorkspaceLoadTask = tokio::task::JoinHandle<ClinicalWorkspaceLoadResult>;
+
 pub(super) enum ApiTaskError {
     Unauthorized,
     ServerUnavailable(String),
@@ -114,12 +125,13 @@ pub struct App {
     pending_consultation_list_refresh: Option<uuid::Uuid>,
     pending_practitioners_list_refresh: bool,
      patient_list_fetch_task: Option<PatientListFetchTask>,
-     appointment_list_fetch_task: Option<AppointmentListFetchTask>,
-     consultation_list_fetch_task: Option<ConsultationListFetchTask>,
-     practitioners_list_fetch_task: Option<PractitionerListFetchTask>,
-     reschedule_task: Option<RescheduleTask>,
-     pending_login_request: Option<(String, String)>,
-     login_task: Option<LoginTask>,
+      appointment_list_fetch_task: Option<AppointmentListFetchTask>,
+      consultation_list_fetch_task: Option<ConsultationListFetchTask>,
+      practitioners_list_fetch_task: Option<PractitionerListFetchTask>,
+      reschedule_task: Option<RescheduleTask>,
+      pending_login_request: Option<(String, String)>,
+      login_task: Option<LoginTask>,
+      clinical_workspace_load_task: Option<(uuid::Uuid, ClinicalWorkspaceLoadTask)>,
     server_unavailable_error: Option<String>,
     server_unavailable_retry: Option<RetryOperation>,
     active_login_attempt: Option<(String, String)>,
@@ -321,10 +333,11 @@ impl App {
              appointment_list_fetch_task: None,
              consultation_list_fetch_task: None,
              practitioners_list_fetch_task: None,
-             reschedule_task: None,
-             pending_login_request: None,
-            login_task: None,
-            server_unavailable_error: None,
+              reschedule_task: None,
+              pending_login_request: None,
+             login_task: None,
+             clinical_workspace_load_task: None,
+             server_unavailable_error: None,
             server_unavailable_retry: None,
             active_login_attempt: None,
             active_appointment_refresh_date: None,

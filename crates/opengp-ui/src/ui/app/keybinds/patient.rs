@@ -1,5 +1,7 @@
 use crate::ui::app::App;
+use crate::ui::app::command::AppCommand;
 use crate::ui::components::tabs::Tab;
+use crate::ui::components::SubtabKind;
 use crate::ui::keybinds::{Action, KeyContext};
 use crossterm::event::KeyEvent;
 
@@ -20,6 +22,18 @@ impl App {
                                 self.tab_bar.select(Tab::PatientWorkspace);
                                 self.refresh_status_bar();
                                 self.refresh_context();
+
+                                // Dispatch lazy load of clinical data if not already loaded or loading
+                                if !self.workspace_manager.is_subtab_loaded(SubtabKind::Clinical)
+                                    && !self.workspace_manager.is_subtab_loading(SubtabKind::Clinical)
+                                {
+                                    let _ = self.command_tx.send(AppCommand::LoadPatientWorkspaceData {
+                                        patient_id: id,
+                                        subtab: SubtabKind::Clinical,
+                                    }).map_err(|_| {
+                                        tracing::error!("Failed to send LoadPatientWorkspaceData command");
+                                    });
+                                }
                             }
                             Err(crate::ui::components::workspace::WorkspaceError::AlreadyAtLimit) => {
                                 let max = self.workspace_manager.max_open;
