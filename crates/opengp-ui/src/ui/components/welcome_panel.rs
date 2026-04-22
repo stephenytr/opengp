@@ -82,7 +82,7 @@ impl Widget for WelcomePanel {
                 .fg(self.theme.colors.secondary)
                 .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(" — Search patients"),
+            Span::raw(" — Appointments calendar"),
         ]));
 
         lines.push(Line::from(vec![Span::styled(
@@ -91,7 +91,7 @@ impl Widget for WelcomePanel {
                 .fg(self.theme.colors.secondary)
                 .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(" — Appointments calendar"),
+            Span::raw(" — Search patients"),
         ]));
 
         // Render content
