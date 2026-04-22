@@ -439,9 +439,9 @@ async fn fetch_patients(
                 full_name: format!("{} {}", patient.first_name, patient.last_name),
                 date_of_birth: patient.date_of_birth,
                 gender: parse_gender(&patient.gender),
-                medicare_number: None,
-                medicare_irn: None,
-                ihi: None,
+                medicare_number: patient.medicare_number,
+                medicare_irn: patient.medicare_irn,
+                ihi: patient.ihi,
                 phone_mobile: patient.phone_mobile,
             });
         }
