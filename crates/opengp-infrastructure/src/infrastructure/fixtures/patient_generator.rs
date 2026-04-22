@@ -35,6 +35,10 @@ pub struct PatientGeneratorConfig {
     pub middle_name_percentage: f32,
     /// Use realistic Australian name distribution (true) or generic names (false)
     pub use_australian_names: bool,
+    /// Percentage of patients that should be part of a family Medicare group (0.0-1.0)
+    pub family_medicare_percentage: f32,
+    /// Average family size for family Medicare groups (default 2.5)
+    pub avg_family_size: f32,
 }
 
 impl Default for PatientGeneratorConfig {
@@ -56,6 +60,8 @@ impl Default for PatientGeneratorConfig {
             preferred_name_percentage: 0.15,
             middle_name_percentage: 0.60,
             use_australian_names: true,
+            family_medicare_percentage: 0.10,
+            avg_family_size: 2.5,
         }
     }
 }
@@ -74,9 +80,64 @@ impl PatientGenerator {
     }
 
     pub fn generate(&mut self) -> Vec<Patient> {
-        (0..self.config.count)
+        let mut patients: Vec<Patient> = (0..self.config.count)
             .map(|_| self.generate_patient())
-            .collect()
+            .collect();
+
+        self.apply_family_medicare_groups(&mut patients);
+
+        patients
+    }
+
+    fn apply_family_medicare_groups(&mut self, patients: &mut [Patient]) {
+        let target_family_members =
+            (patients.len() as f32 * self.config.family_medicare_percentage).round() as usize;
+
+        if target_family_members < 2 {
+            return;
+        }
+
+        let mut indices: Vec<usize> = (0..patients.len()).collect();
+        indices.shuffle(&mut self.rng);
+
+        let mut cursor = 0usize;
+        let mut assigned = 0usize;
+
+        while assigned + 1 < target_family_members && cursor < indices.len() {
+            let remaining_members = target_family_members - assigned;
+            let remaining_patients = indices.len() - cursor;
+            if remaining_members < 2 || remaining_patients < 2 {
+                break;
+            }
+
+            let desired_family_size = self.sample_family_size();
+            let family_size = desired_family_size
+                .max(2)
+                .min(9)
+                .min(remaining_members)
+                .min(remaining_patients);
+
+            if family_size < 2 {
+                break;
+            }
+
+            let group = self.generate_family_medicare_group(family_size);
+            for (offset, (number, irn, expiry)) in group.into_iter().enumerate() {
+                let patient_idx = indices[cursor + offset];
+                patients[patient_idx].medicare_number = Some(MedicareNumber::new_lenient(number));
+                patients[patient_idx].medicare_irn = Some(irn);
+                patients[patient_idx].medicare_expiry = Some(expiry);
+            }
+
+            cursor += family_size;
+            assigned += family_size;
+        }
+    }
+
+    fn sample_family_size(&mut self) -> usize {
+        let avg = self.config.avg_family_size.clamp(2.0, 9.0);
+        let upper = (avg * 2.0).round() as usize;
+        self.rng.gen_range(2..=upper.clamp(2, 9))
     }
 
     fn generate_patient(&mut self) -> Patient {
@@ -98,7 +159,7 @@ impl PatientGenerator {
         let medicare = if self.rng.gen_bool(self.config.medicare_percentage as f64) {
             Some((
                 self.generate_medicare_number(),
-                self.rng.gen_range(1..=4),
+                self.rng.gen_range(1..=9),
                 Some(self.random_medicare_expiry()),
             ))
         } else {
@@ -188,6 +249,10 @@ impl PatientGenerator {
             emergency_contact,
             concession_type,
             concession_number,
+            occupation: None,
+            employment_status: None,
+            health_fund: None,
+            dva_card_type: None,
             preferred_language,
             interpreter_required,
             aboriginal_torres_strait_islander,
@@ -282,14 +347,26 @@ impl PatientGenerator {
     }
 
     fn calculate_medicare_checksum(&self, digits: &[u8]) -> u8 {
-        let weights = [1, 3, 7, 9, 1, 3, 7, 9, 1];
+        let weights = [1, 3, 7, 9, 1, 3, 7, 9];
         let sum: u32 = digits
             .iter()
+            .take(8)
             .zip(weights.iter())
             .map(|(d, w)| *d as u32 * w)
             .sum();
 
         (sum % 10) as u8
+    }
+
+    fn generate_family_medicare_group(&mut self, size: usize) -> Vec<(String, u8, NaiveDate)> {
+        // Generate base 9-digit number with valid checksum
+        let base_number = self.generate_medicare_number();
+        let expiry = self.random_medicare_expiry();
+        let mut group = Vec::with_capacity(size);
+        for irn in 1..=size.min(9) {
+            group.push((base_number.clone(), irn as u8, expiry));
+        }
+        group
     }
 
     fn generate_ihi(&mut self) -> String {
@@ -560,6 +637,68 @@ mod tests {
 
         assert_eq!(medicare.len(), 10);
         assert!(medicare.chars().all(|c| c.is_ascii_digit()));
+    }
+
+    #[test]
+    fn test_medicare_checksum_validation() {
+        let config = PatientGeneratorConfig::default();
+        let mut generator = PatientGenerator::new(config);
+        let weights = [1u32, 3, 7, 9, 1, 3, 7, 9];
+
+        for _ in 0..100 {
+            let medicare = generator.generate_medicare_number();
+            let digits: Vec<u32> = medicare
+                .chars()
+                .map(|c| c.to_digit(10).expect("generated medicare should be numeric"))
+                .collect();
+
+            let sum: u32 = digits
+                .iter()
+                .take(8)
+                .zip(weights.iter())
+                .map(|(d, w)| *d * w)
+                .sum();
+            let expected_checksum = (sum % 10) as u32;
+
+            assert_eq!(digits[9], expected_checksum);
+        }
+    }
+
+    #[test]
+    fn test_medicare_irn_range() {
+        let config = PatientGeneratorConfig {
+            count: 1000,
+            medicare_percentage: 1.0,
+            ..Default::default()
+        };
+        let mut generator = PatientGenerator::new(config);
+        let patients = generator.generate();
+
+        for patient in &patients {
+            let irn = patient
+                .medicare_irn
+                .expect("all patients should have Medicare IRN with medicare_percentage=1.0");
+            assert!((1..=9).contains(&irn));
+        }
+    }
+
+    #[test]
+    fn test_family_medicare_group() {
+        let config = PatientGeneratorConfig::default();
+        let mut generator = PatientGenerator::new(config);
+
+        let group = generator.generate_family_medicare_group(5);
+
+        assert_eq!(group.len(), 5);
+
+        let first_number = group[0].0.clone();
+        let first_expiry = group[0].2;
+
+        for (idx, (number, irn, expiry)) in group.iter().enumerate() {
+            assert_eq!(number, &first_number);
+            assert_eq!(*expiry, first_expiry);
+            assert_eq!(*irn, (idx + 1) as u8);
+        }
     }
 
     #[test]

@@ -126,6 +126,10 @@ mod tests {
             Some("English".to_string()),
             Some(false),
             None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("valid test patient")
     }

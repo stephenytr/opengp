@@ -145,6 +145,10 @@ impl PatientForm {
             preferred_language: Some(self.get_value(FormField::PreferredLanguage)),
             interpreter_required: Some(self.get_value(FormField::InterpreterRequired) == "Yes"),
             aboriginal_torres_strait_islander: self.get_value(FormField::AtsiStatus).parse().ok(),
+            occupation: None,
+            employment_status: None,
+            health_fund: None,
+            dva_card_type: None,
         })
     }
 

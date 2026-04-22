@@ -6,6 +6,17 @@ use uuid::Uuid;
 use super::dto::{NewPatientData, UpdatePatientData};
 use super::error::ValidationError;
 use super::{Ihi, MedicareNumber, PhoneNumber};
+use crate::domain::billing::DVACardType as DvaCardType;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
+pub enum EmploymentStatus {
+    Employed,
+    SelfEmployed,
+    Unemployed,
+    Student,
+    Retiree,
+    Other,
+}
 
 /// Demographic and identifier details for a patient in an Australian general practice.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +48,10 @@ pub struct Patient {
     pub preferred_language: String,
     pub interpreter_required: bool,
     pub aboriginal_torres_strait_islander: Option<AtsiStatus>,
+    pub occupation: Option<String>,
+    pub employment_status: Option<EmploymentStatus>,
+    pub health_fund: Option<String>,
+    pub dva_card_type: Option<DvaCardType>,
 
     pub is_active: bool,
     pub is_deceased: bool,
@@ -75,6 +90,10 @@ impl Patient {
         preferred_language: Option<String>,
         interpreter_required: Option<bool>,
         aboriginal_torres_strait_islander: Option<AtsiStatus>,
+        occupation: Option<String>,
+        employment_status: Option<EmploymentStatus>,
+        health_fund: Option<String>,
+        dva_card_type: Option<DvaCardType>,
     ) -> Result<Self, ValidationError> {
         Self::validate_names(&first_name, &last_name)?;
         Self::validate_date_of_birth(date_of_birth)?;
@@ -102,6 +121,10 @@ impl Patient {
             preferred_language: preferred_language.unwrap_or_else(|| "English".to_string()),
             interpreter_required: interpreter_required.unwrap_or(false),
             aboriginal_torres_strait_islander,
+            occupation,
+            employment_status,
+            health_fund,
+            dva_card_type,
             is_active: true,
             is_deceased: false,
             deceased_date: None,
@@ -138,6 +161,10 @@ impl Patient {
             data.preferred_language,
             data.interpreter_required,
             data.aboriginal_torres_strait_islander,
+            data.occupation,
+            data.employment_status,
+            data.health_fund,
+            data.dva_card_type,
         )
     }
 
@@ -214,6 +241,10 @@ impl Patient {
         self.aboriginal_torres_strait_islander = data
             .aboriginal_torres_strait_islander
             .or(self.aboriginal_torres_strait_islander);
+        self.occupation = data.occupation.or(self.occupation.clone());
+        self.employment_status = data.employment_status.or(self.employment_status);
+        self.health_fund = data.health_fund.or(self.health_fund.clone());
+        self.dva_card_type = data.dva_card_type.or(self.dva_card_type);
 
         self.updated_at = Utc::now();
         self.version += 1;

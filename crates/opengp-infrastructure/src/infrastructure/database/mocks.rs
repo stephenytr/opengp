@@ -663,6 +663,10 @@ mod tests {
             preferred_language: Some("English".to_string()),
             interpreter_required: Some(false),
             aboriginal_torres_strait_islander: None,
+            occupation: None,
+            employment_status: None,
+            health_fund: None,
+            dva_card_type: None,
         };
 
         let patient = Patient::new(
@@ -687,6 +691,10 @@ mod tests {
             patient_data.preferred_language,
             patient_data.interpreter_required,
             patient_data.aboriginal_torres_strait_islander,
+            patient_data.occupation,
+            patient_data.employment_status,
+            patient_data.health_fund,
+            patient_data.dva_card_type,
         )
         .unwrap();
         let patient_id = patient.id;
@@ -734,6 +742,10 @@ mod tests {
             preferred_language: Some("English".to_string()),
             interpreter_required: Some(false),
             aboriginal_torres_strait_islander: None,
+            occupation: None,
+            employment_status: None,
+            health_fund: None,
+            dva_card_type: None,
         };
 
         let patient = Patient::new(
@@ -758,6 +770,10 @@ mod tests {
             patient_data.preferred_language,
             patient_data.interpreter_required,
             patient_data.aboriginal_torres_strait_islander,
+            patient_data.occupation,
+            patient_data.employment_status,
+            patient_data.health_fund,
+            patient_data.dva_card_type,
         )
         .unwrap();
         repo.create(patient).await.unwrap();

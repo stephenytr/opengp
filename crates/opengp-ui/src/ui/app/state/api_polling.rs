@@ -1011,6 +1011,10 @@ mod tests {
                 preferred_language: None,
                 interpreter_required: None,
                 aboriginal_torres_strait_islander: None,
+                occupation: None,
+                employment_status: None,
+                health_fund: None,
+                dva_card_type: None,
             },
         ));
 

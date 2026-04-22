@@ -598,6 +598,9 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
+            None,
         )
         .unwrap();
         PatientListItem::from(patient)

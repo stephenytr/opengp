@@ -78,6 +78,10 @@ async fn test_create_patient_with_database() {
         preferred_language: None,
         interpreter_required: None,
         aboriginal_torres_strait_islander: None,
+        occupation: None,
+        employment_status: None,
+        health_fund: None,
+        dva_card_type: None,
     };
 
     let result = service.register_patient(data).await;
@@ -134,6 +138,10 @@ async fn test_duplicate_medicare_number() {
         preferred_language: None,
         interpreter_required: None,
         aboriginal_torres_strait_islander: None,
+        occupation: None,
+        employment_status: None,
+        health_fund: None,
+        dva_card_type: None,
     };
 
     let first_result = service.register_patient(data.clone()).await;
@@ -179,6 +187,10 @@ async fn test_find_patient_by_id() {
         preferred_language: None,
         interpreter_required: None,
         aboriginal_torres_strait_islander: None,
+        occupation: None,
+        employment_status: None,
+        health_fund: None,
+        dva_card_type: None,
     };
 
     let created = service.register_patient(data).await.unwrap();

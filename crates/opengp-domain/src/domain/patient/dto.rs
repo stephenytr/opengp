@@ -1,8 +1,11 @@
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
-use super::model::{Address, AtsiStatus, ConcessionType, EmergencyContact, Gender};
+use super::model::{
+    Address, AtsiStatus, ConcessionType, EmergencyContact, EmploymentStatus, Gender,
+};
 use super::{Ihi, MedicareNumber, PhoneNumber};
+use crate::domain::billing::DVACardType as DvaCardType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewPatientData {
@@ -31,6 +34,10 @@ pub struct NewPatientData {
     pub preferred_language: Option<String>,
     pub interpreter_required: Option<bool>,
     pub aboriginal_torres_strait_islander: Option<AtsiStatus>,
+    pub occupation: Option<String>,
+    pub employment_status: Option<EmploymentStatus>,
+    pub health_fund: Option<String>,
+    pub dva_card_type: Option<DvaCardType>,
 }
 
 /// Data for updating an existing patient - all fields optional for partial updates
@@ -61,4 +68,8 @@ pub struct UpdatePatientData {
     pub preferred_language: Option<String>,
     pub interpreter_required: Option<bool>,
     pub aboriginal_torres_strait_islander: Option<AtsiStatus>,
+    pub occupation: Option<String>,
+    pub employment_status: Option<EmploymentStatus>,
+    pub health_fund: Option<String>,
+    pub dva_card_type: Option<DvaCardType>,
 }

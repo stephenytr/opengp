@@ -90,6 +90,10 @@ pub fn create_test_patient() -> Patient {
         preferred_language: Some("English".to_string()),
         interpreter_required: Some(false),
         aboriginal_torres_strait_islander: None,
+        occupation: None,
+        employment_status: None,
+        health_fund: None,
+        dva_card_type: None,
     };
 
     Patient::new(
@@ -114,6 +118,10 @@ pub fn create_test_patient() -> Patient {
         data.preferred_language,
         data.interpreter_required,
         data.aboriginal_torres_strait_islander,
+        data.occupation,
+        data.employment_status,
+        data.health_fund,
+        data.dva_card_type,
     )
     .expect("Failed to create test patient")
 }

@@ -65,6 +65,10 @@ impl PatientService {
             data.preferred_language,
             data.interpreter_required,
             data.aboriginal_torres_strait_islander,
+            data.occupation,
+            data.employment_status,
+            data.health_fund,
+            data.dva_card_type,
         )?;
 
         info!("Saving patient to database with ID: {}", patient.id);
@@ -274,6 +278,10 @@ mod tests {
             preferred_language: Some("English".to_string()),
             interpreter_required: Some(false),
             aboriginal_torres_strait_islander: None,
+            occupation: None,
+            employment_status: None,
+            health_fund: None,
+            dva_card_type: None,
         }
     }
 
@@ -299,6 +307,10 @@ mod tests {
             None,
             Some("English".to_string()),
             Some(false),
+            None,
+            None,
+            None,
+            None,
             None,
         )
         .expect("valid existing patient")
@@ -366,6 +378,10 @@ mod tests {
             preferred_language: None,
             interpreter_required: None,
             aboriginal_torres_strait_islander: None,
+            occupation: None,
+            employment_status: None,
+            health_fund: None,
+            dva_card_type: None,
         }
     }
 

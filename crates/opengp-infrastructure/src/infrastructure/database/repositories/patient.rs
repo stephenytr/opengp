@@ -164,6 +164,10 @@ impl PatientRow {
             aboriginal_torres_strait_islander: self.atsi_status
                 .as_deref()
                 .and_then(|s| s.parse::<AtsiStatus>().ok()),
+            occupation: None,
+            employment_status: None,
+            health_fund: None,
+            dva_card_type: None,
             is_active: self.is_active,
             is_deceased: self.is_deceased,
             deceased_date: None,

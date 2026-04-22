@@ -754,6 +754,10 @@ impl PatientForm {
                 self.get_value(PatientFormField::InterpreterRequired) == "Yes",
             ),
             aboriginal_torres_strait_islander: atsi_status,
+            occupation: None,
+            employment_status: None,
+            health_fund: None,
+            dva_card_type: None,
         })
     }
 
@@ -850,6 +854,10 @@ impl PatientForm {
                 self.get_value(PatientFormField::InterpreterRequired) == "Yes",
             ),
             aboriginal_torres_strait_islander: atsi_status,
+            occupation: None,
+            employment_status: None,
+            health_fund: None,
+            dva_card_type: None,
         };
 
         Some((patient_id, data))

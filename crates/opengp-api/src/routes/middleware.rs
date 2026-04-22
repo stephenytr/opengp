@@ -331,6 +331,10 @@ pub(super) fn patient_request_to_new_data(
         preferred_language: Some(payload.preferred_language.unwrap_or_else(|| "English".to_string())),
         interpreter_required: Some(payload.interpreter_required.unwrap_or(false)),
         aboriginal_torres_strait_islander: payload.atsi_status.as_deref().and_then(|s| s.parse().ok()),
+        occupation: None,
+        employment_status: None,
+        health_fund: None,
+        dva_card_type: None,
     })
 }
 
@@ -377,6 +381,10 @@ pub(super) fn patient_request_to_update_data(
         preferred_language: payload.preferred_language,
         interpreter_required: payload.interpreter_required,
         aboriginal_torres_strait_islander: payload.atsi_status.as_deref().and_then(|s| s.parse().ok()),
+        occupation: None,
+        employment_status: None,
+        health_fund: None,
+        dva_card_type: None,
     })
 }
 
