@@ -208,6 +208,9 @@ impl App {
                     self.refresh_context();
                 }
                 Action::SwitchToPatientSearch => {
+                    if self.workspace_manager.active().is_some() {
+                        self.workspace_manager.active_index = None;
+                    }
                     self.tab_bar.select(Tab::PatientSearch);
                     let today = chrono::Utc::now().date_naive();
                     self.appointment_state.selected_date = Some(today);

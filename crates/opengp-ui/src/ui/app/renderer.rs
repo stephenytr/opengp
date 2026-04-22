@@ -163,15 +163,12 @@ impl App {
         let tab = self.tab_bar.selected();
 
         match tab {
-            Tab::PatientSearch | Tab::PatientWorkspace => {
-                if self.workspace_manager.active().is_some() {
-                    self.sync_clinical_view_to_menu();
-                    self.render_workspace_clinical(frame, area);
-                } else {
-                    self.render_patient_tab(frame, area);
-                }
-            }
             Tab::Schedule => self.render_appointment_tab(frame, area),
+            Tab::PatientSearch => self.render_patient_tab(frame, area),
+            Tab::PatientWorkspace => {
+                self.sync_clinical_view_to_menu();
+                self.render_workspace_clinical(frame, area);
+            }
         }
     }
 
