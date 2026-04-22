@@ -491,13 +491,14 @@ impl App {
 
         if let Some(workspace) = self.workspace_manager.active() {
             if let Some(ref appt_state) = workspace.appointments {
+                let theme = self.theme.clone();
                 if appt_state.appointments.is_empty() && !appt_state.loading {
-                    let view = PatientAppointmentsView::new(self.theme.clone());
+                    let view = PatientAppointmentsView::new(theme.clone());
                     frame.render_widget(view, area);
                 } else if appt_state.loading {
                     frame.render_widget(Paragraph::new("Loading appointments..."), area);
                 } else {
-                    let view = PatientAppointmentsView::new(self.theme.clone());
+                    let view = PatientAppointmentsView::new(theme);
                     frame.render_widget(view, area);
                 }
             } else {
