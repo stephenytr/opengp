@@ -64,6 +64,8 @@ fn main() {
         preferred_name_percentage: 0.15,
         middle_name_percentage: 0.60,
         use_australian_names: true,
+        family_medicare_percentage: 0.10,
+        avg_family_size: 2.5,
     };
 
     let clinical_config = ClinicalDataGeneratorConfig {

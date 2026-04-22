@@ -43,6 +43,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         preferred_name_percentage: 0.30,
         middle_name_percentage: 0.60,
         use_australian_names: true,
+        family_medicare_percentage: 0.10,
+        avg_family_size: 2.5,
     };
 
     println!("Generating {} fresh patients...", gen_config.count);
