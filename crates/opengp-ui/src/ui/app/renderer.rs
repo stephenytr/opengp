@@ -161,7 +161,7 @@ impl App {
                     self.sync_clinical_view_to_menu();
                     self.render_workspace_clinical(frame, area);
                 } else {
-                    self.render_welcome_panel(frame, area);
+                    self.render_patient_tab(frame, area);
                 }
             }
             Tab::Schedule => self.render_appointment_tab(frame, area),
