@@ -6,6 +6,7 @@ use crate::ui::components::clinical::consultation_list::ConsultationList;
 use crate::ui::components::clinical::allergy_list::AllergyList;
 use crate::ui::components::clinical::vitals_list::VitalSignsList;
 use crate::ui::components::clinical::medical_history_list::MedicalHistoryList;
+use crate::ui::components::clinical::family_history_list::FamilyHistoryList;
 use crate::ui::components::patient_tab_bar::PatientTabBar;
 use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
 use crate::ui::components::tabs::Tab;
@@ -418,10 +419,11 @@ impl App {
                         frame.render_widget(medical_history_list, area);
                     }
                     ClinicalView::FamilyHistory => {
-                        let mut family_history_list = clinical_state.family_history.family_history_list.clone();
-                        family_history_list.entries =
-                            clinical_state.family_history.family_history.clone();
-
+                        let existing = &clinical_state.family_history.family_history_list;
+                        let mut family_history_list = FamilyHistoryList::new(existing.theme.clone());
+                        family_history_list.selected_index = existing.selected_index;
+                        family_history_list.scroll_offset = existing.scroll_offset;
+                        family_history_list.entries = clinical_state.family_history.family_history.clone();
                         frame.render_widget(family_history_list, area);
                     }
                     ClinicalView::SocialHistory => {
