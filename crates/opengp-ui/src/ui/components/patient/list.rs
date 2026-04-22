@@ -9,6 +9,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
+use std::time::{Duration, Instant};
 use sublime_fuzzy::best_match;
 use uuid::Uuid;
 
@@ -33,6 +34,7 @@ pub struct PatientList {
     theme: Theme,
     hovered_index: Option<usize>,
     double_click_detector: DoubleClickDetector,
+    last_filter_instant: Option<Instant>,
 }
 
 impl Clone for PatientList {
@@ -48,6 +50,7 @@ impl Clone for PatientList {
             theme: self.theme.clone(),
             hovered_index: self.hovered_index,
             double_click_detector: self.double_click_detector.clone(),
+            last_filter_instant: self.last_filter_instant,
         }
     }
 }
@@ -65,6 +68,7 @@ impl PatientList {
             theme,
             hovered_index: None,
             double_click_detector: DoubleClickDetector::default(),
+            last_filter_instant: None,
         }
     }
 
@@ -226,17 +230,30 @@ impl PatientList {
                 }
                 KeyCode::Backspace => {
                     self.search_query.pop();
-                    self.apply_filter();
-                    self.scrollable = ScrollableState::new();
-                    self.scrollable.set_item_count(self.filtered.len());
+                    // Only re-filter if enough time has passed
+                    if self.last_filter_instant.map_or(true, |t| t.elapsed() > Duration::from_millis(150)) {
+                        self.apply_filter();
+                        self.last_filter_instant = Some(Instant::now());
+                        self.scrollable = ScrollableState::new();
+                        self.scrollable.set_item_count(self.filtered.len());
+                    }
                 }
                 KeyCode::Char(c) => {
                     self.search_query.push(c);
-                    self.apply_filter();
-                    self.scrollable = ScrollableState::new();
-                    self.scrollable.set_item_count(self.filtered.len());
+                    // Only re-filter if enough time has passed
+                    if self.last_filter_instant.map_or(true, |t| t.elapsed() > Duration::from_millis(150)) {
+                        self.apply_filter();
+                        self.last_filter_instant = Some(Instant::now());
+                        self.scrollable = ScrollableState::new();
+                        self.scrollable.set_item_count(self.filtered.len());
+                    }
                 }
                 KeyCode::Enter => {
+                    // Force final filter pass on Enter (flush debounce)
+                    self.apply_filter();
+                    self.last_filter_instant = Some(Instant::now());
+                    self.scrollable = ScrollableState::new();
+                    self.scrollable.set_item_count(self.filtered.len());
                     self.searching = false;
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
