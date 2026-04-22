@@ -115,6 +115,10 @@ impl ClinicalRow {
         self
     }
 
+    pub fn hovered_index(&self) -> Option<usize> {
+        self.hovered_index
+    }
+
     pub fn active_item(&self) -> Option<ClinicalMenuKind> {
         self.items.get(self.active_index).copied()
     }

@@ -90,7 +90,7 @@ pub struct TabBar {
 struct TabItem {
     tab: Tab,
     label: String,
-    _shortcut: String,
+    shortcut: String,
 }
 
 impl TabBar {
@@ -99,7 +99,7 @@ impl TabBar {
             .iter()
             .map(|&tab| TabItem {
                 label: tab.name().to_string(),
-                _shortcut: tab.shortcut().to_string(),
+                shortcut: tab.shortcut().to_string(),
                 tab,
             })
             .collect();
@@ -283,7 +283,11 @@ impl Widget for TabBar {
                 let is_hovered = self.hovered_tab == Some(i);
 
                 // Build the label with shortcut
-                let label = format!(" {} ", tab_item.label);
+                let label = if tab_item.shortcut.is_empty() {
+                    format!(" {} ", tab_item.label)
+                } else {
+                    format!(" {} {} ", tab_item.label, tab_item.shortcut)
+                };
 
                 let style = if is_hovered {
                     // Hover state takes priority for visual feedback

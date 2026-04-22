@@ -142,6 +142,7 @@ pub struct App {
     command_rx: Option<tokio::sync::mpsc::UnboundedReceiver<AppCommand>>,
     context_menu_state: Option<crate::ui::widgets::ContextMenuState<AppContextMenuAction>>,
     last_billing_render: Option<Instant>,
+    hovered_clinical_menu: Option<usize>,
 }
 
 pub enum PendingPatientData {
@@ -347,6 +348,7 @@ impl App {
             command_rx: Some(command_rx),
             context_menu_state: None,
             last_billing_render: None,
+            hovered_clinical_menu: None,
         };
 
         app.refresh_status_bar();

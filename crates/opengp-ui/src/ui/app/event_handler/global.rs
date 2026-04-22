@@ -11,7 +11,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 impl App {
     pub fn handle_global_mouse_event(&mut self, mouse: MouseEvent, area: Rect) {
-        const MAIN_TAB_WIDTH: u16 = 25;
+        const MAIN_TAB_WIDTH: u16 = 38;
         let main_tab_bar_area = Rect::new(area.x, area.y, MAIN_TAB_WIDTH, 1);
         let patient_tab_bar_area = Rect::new(area.x + MAIN_TAB_WIDTH, area.y, area.width.saturating_sub(MAIN_TAB_WIDTH), 1);
 
@@ -46,6 +46,7 @@ impl App {
                         return;
                     }
                 }
+                self.hovered_clinical_menu = clinical_row.hovered_index();
             }
         }
 

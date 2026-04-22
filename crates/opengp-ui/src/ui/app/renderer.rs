@@ -46,7 +46,7 @@ impl App {
         // Split tab_bar_area horizontally:
         // Left: Main TabBar (Schedule | Patient Search) - fixed ~25 chars
         // Right: PatientTabBar (open patient colour tabs) - fills remaining space
-        const MAIN_TAB_WIDTH: u16 = 25;
+        const MAIN_TAB_WIDTH: u16 = 38;
         let [main_tab_area, patient_tab_area] = Layout::horizontal([
             Constraint::Length(MAIN_TAB_WIDTH),
             Constraint::Min(0),
@@ -55,8 +55,7 @@ impl App {
         // Render main TabBar on left portion
         self.tab_bar.clone().render(main_tab_area, frame.buffer_mut());
 
-        let patient_workspace_active = (self.tab_bar.selected() == Tab::PatientSearch
-            || self.tab_bar.selected() == Tab::PatientWorkspace)
+        let patient_workspace_active = self.tab_bar.selected() == Tab::PatientWorkspace
             && self.workspace_manager.active().is_some();
 
         if !self.workspace_manager.workspaces.is_empty() {
@@ -70,12 +69,13 @@ impl App {
                 .collect::<Vec<_>>();
 
             let active_idx = self.workspace_manager.active_index.unwrap_or(0);
+            let hovered_patient = self.workspace_manager.hovered_tab.element_id;
 
             let theme = self.theme.clone();
             let patient_tab_bar = if patient_workspace_active {
-                PatientTabBar::new(patient_tabs, active_idx, theme)
+                PatientTabBar::new(patient_tabs, active_idx, theme).with_hovered(hovered_patient)
             } else {
-                PatientTabBar::new(patient_tabs, active_idx, theme).with_no_active()
+                PatientTabBar::new(patient_tabs, active_idx, theme).with_no_active().with_hovered(hovered_patient)
             };
             patient_tab_bar.render(patient_tab_area, frame.buffer_mut());
         }
@@ -90,7 +90,7 @@ impl App {
                 active_clinical_idx,
                 patient_colour,
                 self.theme.clone(),
-            );
+            ).with_hovered(self.hovered_clinical_menu);
             clinical_row.render(clinical_row_area, frame.buffer_mut());
         }
 
