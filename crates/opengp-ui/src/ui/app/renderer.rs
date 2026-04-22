@@ -3,6 +3,7 @@ use crate::ui::components::appointment::AppointmentView;
 use crate::ui::components::clinical::ClinicalView;
 use crate::ui::components::clinical_row::{ClinicalMenuKind, ClinicalRow};
 use crate::ui::components::clinical::consultation_list::ConsultationList;
+use crate::ui::components::clinical::allergy_list::AllergyList;
 use crate::ui::components::patient_tab_bar::PatientTabBar;
 use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
 use crate::ui::components::tabs::Tab;
@@ -389,7 +390,10 @@ impl App {
                         frame.render_widget(consultation_list, area);
                     }
                     ClinicalView::Allergies => {
-                        let mut allergy_list = clinical_state.allergies.allergy_list.clone();
+                        let existing = &clinical_state.allergies.allergy_list;
+                        let mut allergy_list = AllergyList::new(existing.theme.clone());
+                        allergy_list.selected_index = existing.selected_index;
+                        allergy_list.scroll_offset = existing.scroll_offset;
                         allergy_list.allergies = clinical_state.allergies.allergies.clone();
 
                         frame.render_widget(allergy_list, area);

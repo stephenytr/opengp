@@ -11,7 +11,7 @@ pub struct AllergyList {
     pub show_inactive: bool,
     pub scroll_offset: usize,
     pub loading: bool,
-    theme: Theme,
+    pub theme: Theme,
 }
 
 #[derive(Debug, Clone)]
