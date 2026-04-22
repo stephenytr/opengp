@@ -223,8 +223,8 @@ impl AppointmentGenerator {
         let start_hour = self.config.business_hours_start as u32;
         let end_hour = self.config.business_hours_end as u32;
 
-        let mut current_date = start_date.date_naive();
-        let end_naive = end_date.date_naive();
+        let mut current_date = start_date.naive_utc().date();
+        let end_naive = end_date.naive_utc().date();
 
         while current_date <= end_naive {
             let weekday = current_date.weekday();
@@ -249,11 +249,8 @@ impl AppointmentGenerator {
                     let minute = slot_idx * self.config.slot_duration_minutes as u32;
 
                     if let Some(naive_dt) = current_date.and_hms_opt(hour, minute, 0) {
-                        let start_time = chrono::Local
-                            .from_local_datetime(&naive_dt)
-                            .single()
-                            .map(|dt| dt.with_timezone(&chrono::Utc))
-                            .unwrap_or_else(|| naive_dt.and_utc());
+                        // Create UTC datetime by assuming the naive datetime is in UTC
+                        let start_time = DateTime::from_naive_utc_and_offset(naive_dt, Utc);
                         slots.push(TimeSlot {
                             start_time,
                             duration: slot_duration,
@@ -500,11 +497,7 @@ impl AppointmentGenerator {
                     .and_hms_opt(9, 0, 0)
                     .expect("9:00:00 is valid")
             });
-        chrono::Local
-            .from_local_datetime(&naive_dt)
-            .single()
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|| naive_dt.and_utc())
+        DateTime::from_naive_utc_and_offset(naive_dt, Utc)
     }
 
     /// Generate a random appointment reason based on appointment type
