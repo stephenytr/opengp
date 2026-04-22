@@ -1,9 +1,11 @@
 use chrono::Utc;
 use opengp_domain::domain::api::{
-    AllergyResponse, AppointmentRequest, FamilyHistoryResponse, MedicalHistoryResponse,
-    PatientRequest, PatientResponse, SocialHistoryResponse, VitalSignsResponse,
+    AllergyResponse, AppointmentRequest, ConsultationResponse, FamilyHistoryResponse,
+    MedicalHistoryResponse, PatientRequest, PatientResponse, SocialHistoryResponse,
+    VitalSignsResponse,
 };
 use opengp_domain::domain::appointment::AppointmentType;
+use opengp_domain::domain::clinical::Consultation;
 use opengp_domain::domain::patient::{Gender, Patient, PhoneNumber};
 
 pub fn patient_request_from_new(
@@ -290,6 +292,28 @@ pub fn domain_vital_signs_from_api_response(
         notes: response.notes,
         created_at: response.measured_at,
         created_by: uuid::Uuid::nil(),
+    }
+}
+
+pub fn domain_consultation_from_api_response(response: ConsultationResponse) -> Consultation {
+    Consultation {
+        id: response.id,
+        patient_id: response.patient_id,
+        practitioner_id: response.practitioner_id,
+        appointment_id: response.appointment_id,
+        consultation_date: response.consultation_date,
+        reason: response.reason,
+        clinical_notes: response.clinical_notes,
+        is_signed: response.is_signed,
+        signed_at: None,
+        signed_by: None,
+        consultation_started_at: response.consultation_started_at,
+        consultation_ended_at: response.consultation_ended_at,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        version: response.version,
+        created_by: uuid::Uuid::nil(),
+        updated_by: None,
     }
 }
 

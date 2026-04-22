@@ -467,19 +467,21 @@ async fn run_tui(
 
                                 // Spawn concurrent fetch — does NOT block the command handler
                                 let task = tokio::spawn(async move {
-                                    let (
-                                        allergies,
-                                        medical_history,
-                                        vitals,
-                                        social_history,
-                                        family_history,
-                                    ) = tokio::join!(
-                                        api_client.get_allergies(patient_id),
-                                        api_client.get_medical_history(patient_id),
-                                        api_client.get_vitals(patient_id),
-                                        api_client.get_social_history(patient_id),
-                                        api_client.get_family_history(patient_id),
-                                    );
+                                let (
+                                    allergies,
+                                    medical_history,
+                                    vitals,
+                                    social_history,
+                                    family_history,
+                                    consultations,
+                                ) = tokio::join!(
+                                    api_client.get_allergies(patient_id),
+                                    api_client.get_medical_history(patient_id),
+                                    api_client.get_vitals(patient_id),
+                                    api_client.get_social_history(patient_id),
+                                    api_client.get_family_history(patient_id),
+                                    api_client.get_consultations(patient_id, 1, 100),
+                                );
 
                                     ClinicalWorkspaceLoadResult {
                                         patient_id,
@@ -507,6 +509,12 @@ async fn run_tui(
                                             family_history
                                                 .into_iter()
                                                 .map(conversions::domain_family_history_from_api_response)
+                                                .collect()
+                                        }),
+                                        consultations: consultations.map(|paginated| {
+                                            paginated.data
+                                                .into_iter()
+                                                .map(conversions::domain_consultation_from_api_response)
                                                 .collect()
                                         }),
                                     }

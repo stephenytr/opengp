@@ -122,39 +122,6 @@ impl App {
         }
 
         if self
-            .consultation_list_fetch_task
-            .as_ref()
-            .is_some_and(tokio::task::JoinHandle::is_finished)
-        {
-            #[allow(clippy::expect_used)]
-            let handle = self.consultation_list_fetch_task.take().expect("task exists");
-            let retry_patient_id = self.active_consultation_refresh_patient_id;
-             self.active_consultation_refresh_patient_id = None;
-
-            match handle.await {
-                Ok(Ok(_consultations)) => {
-                    self.clear_server_unavailable_error();
-                    self.status_bar.clear_error();
-                }
-                Ok(Err(err)) => {
-                    self.handle_api_task_error(
-                        err,
-                        retry_patient_id
-                            .map(|patient_id| RetryOperation::RefreshConsultations { patient_id }),
-                    )
-                    .await
-                }
-                Err(err) => {
-                    self.handle_api_task_error(
-                        ApiTaskError::message(format!("Failed to load consultations: {}", err)),
-                        None,
-                    )
-                    .await;
-                }
-            }
-        }
-
-        if self
             .practitioners_list_fetch_task
             .as_ref()
             .is_some_and(tokio::task::JoinHandle::is_finished)
@@ -200,6 +167,7 @@ impl App {
                                 vitals,
                                 social_history,
                                 family_history,
+                                consultations,
                             } = result;
 
                             // Apply each subdomain independently (partial success OK)
@@ -222,6 +190,10 @@ impl App {
                             if let Ok(entries) = family_history {
                                 self.clinical_state_mut().family_history.family_history = entries;
                                 tracing::info!("Loaded family history for clinical view");
+                            }
+                            if let Ok(consultations) = consultations {
+                                self.clinical_state_mut().consultations.consultations = consultations;
+                                tracing::info!("Loaded consultations for clinical view");
                             }
                             if let Some(workspace) = self.workspace_manager_mut().active_mut() {
                                 workspace.finish_loading(SubtabKind::Clinical);
@@ -283,7 +255,6 @@ impl App {
                 self.pending_consultation_list_refresh = None;
                 self.active_login_attempt = None;
                 self.active_appointment_refresh_date = None;
-                self.active_consultation_refresh_patient_id = None;
                 self.patient_list.set_loading(false);
                 self.appointment_state.set_loading(false);
                 self.login_screen.set_loading(false);
@@ -349,19 +320,6 @@ impl App {
                 }));
             } else {
                 self.pending_appointment_list_refresh = Some(date);
-            }
-        }
-
-        if let Some(patient_id) = self.pending_consultation_list_refresh.take() {
-            if self.consultation_list_fetch_task.is_none() {
-                let page_limit = self.consultation_page_limit;
-                self.active_consultation_refresh_patient_id = Some(patient_id);
-
-                #[allow(clippy::expect_used)]
-                let api_client = self.api_client.clone().expect("api client already checked");
-                self.consultation_list_fetch_task = Some(tokio::spawn(async move {
-                    fetch_consultations(api_client, patient_id, page_limit).await
-                }));
             }
         }
 
