@@ -2,6 +2,7 @@ use crate::ui::app::App;
 use crate::ui::components::appointment::AppointmentView;
 use crate::ui::components::clinical::ClinicalView;
 use crate::ui::components::clinical_row::{ClinicalMenuKind, ClinicalRow};
+use crate::ui::components::clinical::consultation_list::ConsultationList;
 use crate::ui::components::patient_tab_bar::PatientTabBar;
 use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
 use crate::ui::components::tabs::Tab;
@@ -370,16 +371,20 @@ impl App {
                         frame.render_widget(summary, area);
                     }
                     ClinicalView::Consultations => {
-                        let mut consultation_list = clinical_state.consultations.consultation_list.clone();
-                        consultation_list.consultations =
-                            clinical_state.consultations.consultations.clone();
+                        let existing = &clinical_state.consultations.consultation_list;
+                        let mut consultation_list = ConsultationList::new(existing.theme.clone());
+                        consultation_list.selected_index = existing.selected_index;
+                        consultation_list.scroll_offset = existing.scroll_offset;
+                        consultation_list.consultations = clinical_state.consultations.consultations.clone();
 
                         frame.render_widget(consultation_list, area);
                     }
                     ClinicalView::ConsultationSummary => {
-                        let mut consultation_list = clinical_state.consultations.consultation_list.clone();
-                        consultation_list.consultations =
-                            clinical_state.consultations.consultations.clone();
+                        let existing = &clinical_state.consultations.consultation_list;
+                        let mut consultation_list = ConsultationList::new(existing.theme.clone());
+                        consultation_list.selected_index = existing.selected_index;
+                        consultation_list.scroll_offset = existing.scroll_offset;
+                        consultation_list.consultations = clinical_state.consultations.consultations.clone();
 
                         frame.render_widget(consultation_list, area);
                     }
