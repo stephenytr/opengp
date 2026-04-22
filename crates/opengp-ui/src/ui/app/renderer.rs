@@ -26,7 +26,7 @@ impl App {
         let main_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(2),
+                Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Min(0),
                 Constraint::Length(STATUS_BAR_HEIGHT),
@@ -38,18 +38,20 @@ impl App {
         let content_area = main_layout[2];
         let status_bar_area = main_layout[3];
 
-        // Split tab_bar_area (height=2) into two lines:
-        // Line 1: Main TabBar (Schedule | Patient Search)
-        // Line 2: PatientTabBar (open patient colour tabs)
-        let [tab_bar_line_1, tab_bar_line_2] = Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Length(1),
+        // Split tab_bar_area horizontally:
+        // Left: Main TabBar (Schedule | Patient Search) - fixed ~25 chars
+        // Right: PatientTabBar (open patient colour tabs) - fills remaining space
+        const MAIN_TAB_WIDTH: u16 = 25;
+        let [main_tab_area, patient_tab_area] = Layout::horizontal([
+            Constraint::Length(MAIN_TAB_WIDTH),
+            Constraint::Min(0),
         ]).areas(tab_bar_area);
 
-        // Render main TabBar on line 1
-        self.tab_bar.clone().render(tab_bar_line_1, frame.buffer_mut());
+        // Render main TabBar on left portion
+        self.tab_bar.clone().render(main_tab_area, frame.buffer_mut());
 
-        let patient_workspace_active = self.tab_bar.selected() == Tab::PatientSearch
+        let patient_workspace_active = (self.tab_bar.selected() == Tab::PatientSearch
+            || self.tab_bar.selected() == Tab::PatientWorkspace)
             && self.workspace_manager.active().is_some();
 
         if !self.workspace_manager.workspaces.is_empty() {
@@ -69,7 +71,7 @@ impl App {
             } else {
                 PatientTabBar::new(patient_tabs, active_idx, self.theme.clone()).with_no_active()
             };
-            patient_tab_bar.render(tab_bar_line_2, frame.buffer_mut());
+            patient_tab_bar.render(patient_tab_area, frame.buffer_mut());
         }
 
         if patient_workspace_active {
@@ -161,7 +163,7 @@ impl App {
         let tab = self.tab_bar.selected();
 
         match tab {
-            Tab::PatientSearch => {
+            Tab::PatientSearch | Tab::PatientWorkspace => {
                 if self.workspace_manager.active().is_some() {
                     self.sync_clinical_view_to_menu();
                     self.render_workspace_clinical(frame, area);

@@ -406,7 +406,7 @@ impl App {
 
     fn refresh_status_bar(&mut self) {
         self.status_bar = match self.tab_bar.selected() {
-            Tab::PatientSearch => {
+            Tab::PatientSearch | Tab::PatientWorkspace => {
                 if let Some(workspace) = self.workspace_manager.active() {
                     StatusBar::patient_workspace(self.theme.clone(), &workspace.patient_snapshot.full_name)
                 } else {
@@ -419,7 +419,7 @@ impl App {
 
     fn refresh_context(&mut self) {
         self.current_context = match self.tab_bar.selected() {
-            Tab::PatientSearch => {
+            Tab::PatientSearch | Tab::PatientWorkspace => {
                 if self.workspace_manager.active().is_some() {
                     KeyContext::PatientWorkspace
                 } else {

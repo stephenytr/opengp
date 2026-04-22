@@ -11,8 +11,9 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 impl App {
     pub fn handle_global_mouse_event(&mut self, mouse: MouseEvent, area: Rect) {
-        let main_tab_bar_area = Rect::new(area.x, area.y, area.width, 1);
-        let patient_tab_bar_area = Rect::new(area.x, area.y + 1, area.width, 1);
+        const MAIN_TAB_WIDTH: u16 = 25;
+        let main_tab_bar_area = Rect::new(area.x, area.y, MAIN_TAB_WIDTH, 1);
+        let patient_tab_bar_area = Rect::new(area.x + MAIN_TAB_WIDTH, area.y, area.width.saturating_sub(MAIN_TAB_WIDTH), 1);
 
         if self.tab_bar.handle_mouse(mouse, main_tab_bar_area).is_some() {
             self.refresh_status_bar();
@@ -22,14 +23,14 @@ impl App {
 
         if !self.workspace_manager.workspaces.is_empty() {
             if self.workspace_manager.handle_patient_tab_mouse(mouse, patient_tab_bar_area).is_some() {
-                self.tab_bar.select(Tab::PatientSearch);
+                self.tab_bar.select(Tab::PatientWorkspace);
                 self.refresh_status_bar();
                 self.refresh_context();
                 return;
             }
 
             if let Some(workspace) = self.workspace_manager.active_mut() {
-                let clinical_row_area = Rect::new(area.x, area.y + 2, area.width, 1);
+                let clinical_row_area = Rect::new(area.x, area.y + 1, area.width, 1);
                 let clinical_items = ClinicalMenuKind::all();
                 let active_clinical_idx = workspace.active_clinical_menu.index();
                 let mut clinical_row = ClinicalRow::new(
@@ -63,7 +64,7 @@ impl App {
             }
         }
 
-        let clinical_row_offset = if self.workspace_manager.active().is_some() { 3 } else { 2 };
+        let clinical_row_offset = if self.workspace_manager.active().is_some() { 2 } else { 1 };
 
         if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
             let content_area = Rect::new(

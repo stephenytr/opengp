@@ -20,14 +20,17 @@ pub enum Tab {
     Schedule,
     /// Patient search tab
     PatientSearch,
+    /// Patient workspace tab (when patient workspace is open)
+    PatientWorkspace,
 }
 
 impl Tab {
-    /// Get the display name for the tab
+/// Get the display name for the tab
     pub fn name(&self) -> &'static str {
         match self {
             Tab::Schedule => "Schedule",
             Tab::PatientSearch => "Patient Search",
+            Tab::PatientWorkspace => "Patient Workspace",
         }
     }
 
@@ -36,10 +39,11 @@ impl Tab {
         match self {
             Tab::Schedule => "F2",
             Tab::PatientSearch => "F3",
+            Tab::PatientWorkspace => "",
         }
     }
 
-    /// Get all tabs
+    /// Get all tabs (visible in main tab bar)
     pub fn all() -> [Tab; 2] {
         [Tab::Schedule, Tab::PatientSearch]
     }
@@ -49,6 +53,7 @@ impl Tab {
         match self {
             Tab::Schedule => 0,
             Tab::PatientSearch => 1,
+            Tab::PatientWorkspace => 2,
         }
     }
 
@@ -57,6 +62,7 @@ impl Tab {
         match index {
             0 => Some(Tab::Schedule),
             1 => Some(Tab::PatientSearch),
+            2 => Some(Tab::PatientWorkspace),
             _ => None,
         }
     }
@@ -332,7 +338,8 @@ mod tests {
     fn test_tab_from_index() {
         assert_eq!(Tab::from_index(0), Some(Tab::Schedule));
         assert_eq!(Tab::from_index(1), Some(Tab::PatientSearch));
-        assert_eq!(Tab::from_index(2), None);
+        assert_eq!(Tab::from_index(2), Some(Tab::PatientWorkspace));
+        assert_eq!(Tab::from_index(3), None);
     }
 
     #[test]

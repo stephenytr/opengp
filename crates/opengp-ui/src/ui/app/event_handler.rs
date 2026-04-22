@@ -126,7 +126,7 @@ impl App {
                     crate::ui::components::patient::PatientListAction::OpenPatient(id) => {
                         if let Some(patient_item) = self.patient_list.get_patient_by_id(id) {
                             let _ = self.workspace_manager.open_patient(patient_item.clone());
-                            self.tab_bar.select(Tab::PatientSearch);
+                            self.tab_bar.select(Tab::PatientWorkspace);
                         }
                     }
                     crate::ui::components::patient::PatientListAction::FocusSearch => {}
@@ -267,7 +267,7 @@ impl App {
                 }
                 Action::Save => {}
                 Action::Refresh => match self.tab_bar.selected() {
-                    Tab::PatientSearch => self.request_refresh_patients(),
+                    Tab::PatientSearch | Tab::PatientWorkspace => self.request_refresh_patients(),
                     Tab::Schedule => {
                         let date = self
                             .appointment_state
@@ -277,13 +277,13 @@ impl App {
                     }
                 },
                 Action::NavigateDown => {
-                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
+                    if (self.tab_bar.selected() == Tab::PatientSearch || self.tab_bar.selected() == Tab::PatientWorkspace) && self.patient_form.is_none() {
                         let visible_rows = self.calculate_visible_patient_rows();
                         self.patient_list.move_down_and_scroll(visible_rows);
                     }
                 }
                 Action::NavigateUp => {
-                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
+                    if (self.tab_bar.selected() == Tab::PatientSearch || self.tab_bar.selected() == Tab::PatientWorkspace) && self.patient_form.is_none() {
                         let visible_rows = self.calculate_visible_patient_rows();
                         self.patient_list.move_up_and_scroll(visible_rows);
                     }
@@ -309,7 +309,7 @@ impl App {
                     }
                 }
                 Action::Enter => {
-                    if self.tab_bar.selected() == Tab::PatientSearch {
+                    if self.tab_bar.selected() == Tab::PatientSearch || self.tab_bar.selected() == Tab::PatientWorkspace {
                         return self.handle_patient_keys(key);
                     }
                     if self.tab_bar.selected() == Tab::Schedule {
@@ -345,6 +345,11 @@ impl App {
                             .set_error(Some("Cannot close: form open or timer active".to_string()));
                     } else {
                         let _ = self.workspace_manager.close_active();
+                        if self.workspace_manager.active().is_some() {
+                            self.tab_bar.select(Tab::PatientWorkspace);
+                        } else {
+                            self.tab_bar.select(Tab::PatientSearch);
+                        }
                         self.refresh_status_bar();
                         self.refresh_context();
                     }
@@ -364,7 +369,7 @@ impl App {
 
                 Action::SelectPatientTab(n) => {
                     if self.workspace_manager.select_by_index(n).is_ok() {
-                        self.tab_bar.select(Tab::PatientSearch);
+                        self.tab_bar.select(Tab::PatientWorkspace);
                     }
                     self.refresh_status_bar();
                     self.refresh_context();
@@ -391,6 +396,7 @@ impl App {
                                 Ok(index) => {
                                     self.workspace_manager.active_index = Some(index);
                                     self.current_context = KeyContext::PatientWorkspace;
+                                    self.tab_bar.select(Tab::PatientWorkspace);
                                     self.refresh_status_bar();
                                     self.refresh_context();
                                 }
@@ -421,7 +427,7 @@ impl App {
             return Action::Enter;
         }
 
-        if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
+        if self.tab_bar.selected() == Tab::PatientSearch || self.tab_bar.selected() == Tab::PatientWorkspace && self.patient_form.is_none() {
             if let Some(workspace) = self.workspace_manager.active() {
                 match workspace.active_subtab {
                     crate::ui::components::SubtabKind::Clinical => {
