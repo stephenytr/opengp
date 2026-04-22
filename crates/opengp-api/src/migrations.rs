@@ -3,12 +3,20 @@ use std::path::Path;
 use tracing::info;
 
 pub async fn run_migrations(pool: &PgPool) -> Result<(), crate::ApiError> {
-    let migrations_dir = Path::new("/app/migrations");
-
-    if !migrations_dir.exists() {
-        info!("Migrations directory not found at /app/migrations, skipping");
+    // Try Docker path first, then local development path
+    let migrations_dir = if Path::new("/app/migrations").exists() {
+        Path::new("/app/migrations")
+    } else if Path::new("./migrations").exists() {
+        Path::new("./migrations")
+    } else {
+        info!("No migrations directory found at /app/migrations or ./migrations, skipping");
         return Ok(());
-    }
+    };
+
+    info!(
+        "Running migrations from: {}",
+        migrations_dir.display()
+    );
 
     let mut entries = std::fs::read_dir(migrations_dir)
         .map_err(|e| crate::ApiError::Configuration(e.to_string()))?

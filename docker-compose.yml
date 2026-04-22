@@ -37,6 +37,7 @@ services:
       - "8080:8080"
     volumes:
       - "./MBS-XML-20260301-version 2.XML:/app/MBS-XML-20260301-version 2.XML:ro"
+      - "./migrations:/app/migrations:ro"
     depends_on:
       postgres:
         condition: service_healthy
