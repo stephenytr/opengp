@@ -314,6 +314,76 @@ impl KeybindRegistry {
             description: "Switch to Patient Search tab",
         });
 
+        // Tab switching (Calendar context)
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE),
+            action: Action::SwitchToSchedule,
+            context: KeyContext::Calendar,
+            description: "Switch to Schedule tab",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::F(3), KeyModifiers::NONE),
+            action: Action::SwitchToPatientSearch,
+            context: KeyContext::Calendar,
+            description: "Switch to Patient Search tab",
+        });
+
+        // Tab switching (Schedule context)
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE),
+            action: Action::SwitchToSchedule,
+            context: KeyContext::Schedule,
+            description: "Switch to Schedule tab",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::F(3), KeyModifiers::NONE),
+            action: Action::SwitchToPatientSearch,
+            context: KeyContext::Schedule,
+            description: "Switch to Patient Search tab",
+        });
+
+        // Tab switching (PatientList context)
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE),
+            action: Action::SwitchToSchedule,
+            context: KeyContext::PatientList,
+            description: "Switch to Schedule tab",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::F(3), KeyModifiers::NONE),
+            action: Action::SwitchToPatientSearch,
+            context: KeyContext::PatientList,
+            description: "Switch to Patient Search tab",
+        });
+
+        // Tab switching (PatientWorkspace context)
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE),
+            action: Action::SwitchToSchedule,
+            context: KeyContext::PatientWorkspace,
+            description: "Switch to Schedule tab",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::F(3), KeyModifiers::NONE),
+            action: Action::SwitchToPatientSearch,
+            context: KeyContext::PatientWorkspace,
+            description: "Switch to Patient Search tab",
+        });
+
+        // Tab switching (Search context)
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE),
+            action: Action::SwitchToSchedule,
+            context: KeyContext::Search,
+            description: "Switch to Schedule tab",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::F(3), KeyModifiers::NONE),
+            action: Action::SwitchToPatientSearch,
+            context: KeyContext::Search,
+            description: "Switch to Patient Search tab",
+        });
+
         // Patient workspace tab navigation
         self.register(Keybind {
             key: KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL),
