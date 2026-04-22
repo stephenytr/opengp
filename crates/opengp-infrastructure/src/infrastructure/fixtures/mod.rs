@@ -5,6 +5,7 @@
 
 pub mod appointment_generator;
 pub mod audit_generator;
+pub mod billing_generator;
 pub mod clinical_generator;
 pub mod comprehensive_generator;
 #[cfg(feature = "immunisation")]
@@ -19,6 +20,7 @@ pub use appointment_generator::{
     AppointmentGenerator, AppointmentGeneratorConfig, GenerationStats,
 };
 pub use audit_generator::{AuditGenerator, AuditGeneratorConfig};
+pub use billing_generator::{BillingData, BillingGenerator, BillingGeneratorConfig};
 pub use clinical_generator::{ClinicalDataGenerator, ClinicalDataGeneratorConfig};
 pub use comprehensive_generator::{
     ComprehensivePatientGenerator, ComprehensivePatientGeneratorConfig, ComprehensivePatientProfile,
