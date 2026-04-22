@@ -5,7 +5,7 @@
 
 use chrono::Datelike;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Rect};
+use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Widget};
@@ -21,43 +21,30 @@ use super::appointment_state::PatientAppointmentState;
 /// Renders a read-only overview panel with:
 /// - Left column: Patient demographics (name, DOB, Medicare, gender)
 /// - Right column: Clinical summary (vitals, allergies, next appointment, last consultation)
-#[derive(Clone)]
-pub struct SummaryView {
-    pub patient_snapshot: PatientListItem,
-    pub clinical_state: Option<ClinicalState>,
-    pub billing_state: Option<PatientBillingState>,
-    pub appointment_state: Option<PatientAppointmentState>,
-    theme: Theme,
+pub struct SummaryView<'a> {
+    pub patient_snapshot: &'a PatientListItem,
+    pub clinical_state: &'a Option<ClinicalState>,
+    pub billing_state: &'a Option<PatientBillingState>,
+    pub appointment_state: &'a Option<PatientAppointmentState>,
+    theme: &'a Theme,
 }
 
-impl SummaryView {
-    /// Create a new summary view
-    pub fn new(patient_snapshot: PatientListItem, theme: Theme) -> Self {
+impl<'a> SummaryView<'a> {
+    /// Create a new summary view with all required references
+    pub fn new(
+        patient_snapshot: &'a PatientListItem,
+        clinical_state: &'a Option<ClinicalState>,
+        billing_state: &'a Option<PatientBillingState>,
+        appointment_state: &'a Option<PatientAppointmentState>,
+        theme: &'a Theme,
+    ) -> Self {
         Self {
             patient_snapshot,
-            clinical_state: None,
-            billing_state: None,
-            appointment_state: None,
+            clinical_state,
+            billing_state,
+            appointment_state,
             theme,
         }
-    }
-
-    /// Set clinical state (optional)
-    pub fn with_clinical(mut self, clinical_state: Option<ClinicalState>) -> Self {
-        self.clinical_state = clinical_state;
-        self
-    }
-
-    /// Set billing state (optional)
-    pub fn with_billing(mut self, billing_state: Option<PatientBillingState>) -> Self {
-        self.billing_state = billing_state;
-        self
-    }
-
-    /// Set appointment state (optional)
-    pub fn with_appointments(mut self, appointment_state: Option<PatientAppointmentState>) -> Self {
-        self.appointment_state = appointment_state;
-        self
     }
 
     /// Get text color based on theme
@@ -78,7 +65,7 @@ impl SummaryView {
     }
 }
 
-impl Widget for SummaryView {
+impl<'a> Widget for SummaryView<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         if area.is_empty() {
             return;
@@ -116,7 +103,7 @@ impl Widget for SummaryView {
     }
 }
 
-impl SummaryView {
+impl<'a> SummaryView<'a> {
     /// Render left column: demographics
     fn render_demographics(&self, area: Rect, buf: &mut Buffer) {
         let block = Block::default()
@@ -373,7 +360,10 @@ mod tests {
     fn test_summary_view_new() {
         let patient = create_test_patient();
         let theme = Theme::dark();
-        let view = SummaryView::new(patient.clone(), theme);
+        let clinical = None;
+        let billing = None;
+        let appointments = None;
+        let view = SummaryView::new(&patient, &clinical, &billing, &appointments, &theme);
 
         assert_eq!(view.patient_snapshot.id, patient.id);
         assert_eq!(view.patient_snapshot.full_name, "John Doe");
@@ -386,10 +376,10 @@ mod tests {
     fn test_summary_view_with_states() {
         let patient = create_test_patient();
         let theme = Theme::dark();
-        let view = SummaryView::new(patient, theme)
-            .with_clinical(None)
-            .with_billing(None)
-            .with_appointments(None);
+        let clinical = None;
+        let billing = None;
+        let appointments = None;
+        let view = SummaryView::new(&patient, &clinical, &billing, &appointments, &theme);
 
         assert!(view.clinical_state.is_none());
         assert!(view.billing_state.is_none());
@@ -400,7 +390,10 @@ mod tests {
     fn test_summary_view_patient_snapshot_data() {
         let patient = create_test_patient();
         let theme = Theme::dark();
-        let view = SummaryView::new(patient.clone(), theme);
+        let clinical = None;
+        let billing = None;
+        let appointments = None;
+        let view = SummaryView::new(&patient, &clinical, &billing, &appointments, &theme);
 
         assert_eq!(view.patient_snapshot.full_name, "John Doe");
         assert_eq!(

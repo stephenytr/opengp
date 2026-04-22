@@ -335,10 +335,13 @@ impl App {
         use crate::ui::components::workspace::SummaryView;
 
         if let Some(workspace) = self.workspace_manager.active() {
-            let summary = SummaryView::new(workspace.patient_snapshot.clone(), self.theme.clone())
-                .with_clinical(workspace.clinical.clone())
-                .with_billing(workspace.billing.clone())
-                .with_appointments(workspace.appointments.clone());
+            let summary = SummaryView::new(
+                &workspace.patient_snapshot,
+                &workspace.clinical,
+                &workspace.billing,
+                &workspace.appointments,
+                &self.theme,
+            );
 
             frame.render_widget(summary, area);
         }
