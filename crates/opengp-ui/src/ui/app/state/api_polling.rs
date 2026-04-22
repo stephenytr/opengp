@@ -2,7 +2,8 @@ use chrono::NaiveDate;
 use chrono::TimeZone;
 use std::collections::HashMap;
 
-use crate::ui::app::{ApiTaskError, App, RetryOperation};
+use crate::ui::app::{ApiTaskError, App, ClinicalWorkspaceLoadResult, RetryOperation};
+use crate::ui::components::SubtabKind;
 use crate::ui::view_models::PatientListItem;
 use opengp_domain::domain::appointment::{
     AppointmentStatus, AppointmentType, CalendarAppointment, CalendarDayView, PractitionerSchedule,
@@ -175,6 +176,68 @@ impl App {
                     )
                     .await;
                 }
+            }
+        }
+
+        if let Some((patient_id, handle)) = self.clinical_workspace_load_task.take() {
+            if handle.is_finished() {
+                let result = handle.await;
+
+                // RC-1: validate patient_id matches active workspace before writing
+                let current_patient = self.workspace_manager().active().map(|w| w.patient_id);
+                if current_patient != Some(patient_id) {
+                    tracing::debug!("Clinical load completed for non-active workspace, dropping");
+                    if let Some(workspace) = self.workspace_manager_mut().active_mut() {
+                        workspace.finish_loading(SubtabKind::Clinical);
+                    }
+                } else {
+                    match result {
+                        Ok(result) => {
+                            let ClinicalWorkspaceLoadResult {
+                                patient_id: _,
+                                allergies,
+                                medical_history,
+                                vitals,
+                                social_history,
+                                family_history,
+                            } = result;
+
+                            // Apply each subdomain independently (partial success OK)
+                            if let Ok(allergies) = allergies {
+                                self.clinical_state_mut().allergies.allergies = allergies;
+                                tracing::info!("Loaded allergies for clinical view");
+                            }
+                            if let Ok(conditions) = medical_history {
+                                self.clinical_state_mut().medical_history.medical_history = conditions;
+                                tracing::info!("Loaded medical history for clinical view");
+                            }
+                            if let Ok(vitals) = vitals {
+                                self.clinical_state_mut().vitals.vital_signs = vitals;
+                                tracing::info!("Loaded vital signs for clinical view");
+                            }
+                            if let Ok(history) = social_history {
+                                self.clinical_state_mut().social_history.social_history = Some(history);
+                                tracing::info!("Loaded social history for clinical view");
+                            }
+                            if let Ok(entries) = family_history {
+                                self.clinical_state_mut().family_history.family_history = entries;
+                                tracing::info!("Loaded family history for clinical view");
+                            }
+                            if let Some(workspace) = self.workspace_manager_mut().active_mut() {
+                                workspace.finish_loading(SubtabKind::Clinical);
+                            }
+                        }
+                        Err(err) => {
+                            tracing::error!("Clinical workspace load failed: {}", err);
+                            if let Some(workspace) = self.workspace_manager_mut().active_mut() {
+                                workspace.finish_loading(SubtabKind::Clinical);
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Task still running — put it back
+                self.clinical_workspace_load_task = Some((patient_id, handle));
             }
         }
 

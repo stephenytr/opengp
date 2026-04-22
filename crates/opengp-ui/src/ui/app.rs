@@ -379,6 +379,18 @@ impl App {
         &mut self.workspace_manager
     }
 
+    pub fn has_clinical_workspace_load_task(&self) -> bool {
+        self.clinical_workspace_load_task.is_some()
+    }
+
+    pub fn set_clinical_workspace_load_task(
+        &mut self,
+        patient_id: uuid::Uuid,
+        task: tokio::task::JoinHandle<ClinicalWorkspaceLoadResult>,
+    ) {
+        self.clinical_workspace_load_task = Some((patient_id, task));
+    }
+
     pub fn billing_ui_service(&self) -> Option<Arc<BillingUiService>> {
         self.billing_ui_service.clone()
     }

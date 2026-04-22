@@ -9,7 +9,7 @@ use opengp_domain::domain::api::{
     SocialHistoryRequest, VitalSignsRequest,
 };
 use opengp_ui::api::ApiClient;
-use opengp_ui::ui::app::{App, AppCommand, PendingBillingSaveData};
+use opengp_ui::ui::app::{App, AppCommand, ClinicalWorkspaceLoadResult, PendingBillingSaveData};
 use opengp_ui::ui::services::{BillingUiService, ClinicalUiService, AppointmentUiService};
 use opengp_domain::domain::billing::{BillingRepository, BillingService, BillingType};
 use opengp_domain::domain::clinical::{
@@ -439,32 +439,80 @@ async fn run_tui(
                 }
                 AppCommand::LoadPatientWorkspaceData { patient_id, subtab } => {
                     tracing::info!("LoadPatientWorkspaceData command received for patient {} subtab {:?}", patient_id, subtab);
-                    // Find workspace and lazily initialise subtab state
+
+                    // Guard: don't reload if already loaded or in-flight
+                    if app.workspace_manager().is_subtab_loaded(subtab)
+                        || app.workspace_manager().is_subtab_loading(subtab)
+                    {
+                        tracing::debug!("Skipping LoadPatientWorkspaceData — already loaded/loading");
+                        continue;
+                    }
+
+                    // Guard against double-dispatch (RC-3)
+                    if app.has_clinical_workspace_load_task() {
+                        tracing::warn!("clinical_workspace_load_task already in flight");
+                        continue;
+                    }
+
+                    // Find workspace and mark as loading
                     if let Some(workspace_idx) = app.workspace_manager_mut().find_patient(patient_id) {
                         match app.workspace_manager_mut().select_by_index(workspace_idx) {
                             Ok(()) => {
-                                tracing::debug!("Selected workspace for patient {}", patient_id);
-                                // Convert from the full SubtabKind to workspace-specific SubtabKind
-                                let workspace_subtab = match subtab {
-                                    opengp_ui::ui::components::SubtabKind::Clinical => {
-                                        opengp_ui::ui::components::workspace::SubtabKind::Clinical
+                                if let Some(workspace) = app.workspace_manager_mut().active_mut() {
+                                    workspace.start_loading(subtab);
+                                }
+                                app.workspace_manager_mut().mark_subtab_loaded(subtab);
+
+                                let api_client = Arc::clone(&api_client);
+
+                                // Spawn concurrent fetch — does NOT block the command handler
+                                let task = tokio::spawn(async move {
+                                    let (
+                                        allergies,
+                                        medical_history,
+                                        vitals,
+                                        social_history,
+                                        family_history,
+                                    ) = tokio::join!(
+                                        api_client.get_allergies(patient_id),
+                                        api_client.get_medical_history(patient_id),
+                                        api_client.get_vitals(patient_id),
+                                        api_client.get_social_history(patient_id),
+                                        api_client.get_family_history(patient_id),
+                                    );
+
+                                    ClinicalWorkspaceLoadResult {
+                                        patient_id,
+                                        allergies: allergies.map(|allergies| {
+                                            allergies
+                                                .into_iter()
+                                                .map(conversions::domain_allergy_from_api_response)
+                                                .collect()
+                                        }),
+                                        medical_history: medical_history.map(|medical_history| {
+                                            medical_history
+                                                .into_iter()
+                                                .map(conversions::domain_medical_history_from_api_response)
+                                                .collect()
+                                        }),
+                                        vitals: vitals.map(|vitals| {
+                                            vitals
+                                                .into_iter()
+                                                .map(conversions::domain_vital_signs_from_api_response)
+                                                .collect()
+                                        }),
+                                        social_history: social_history
+                                            .map(conversions::domain_social_history_from_api_response),
+                                        family_history: family_history.map(|family_history| {
+                                            family_history
+                                                .into_iter()
+                                                .map(conversions::domain_family_history_from_api_response)
+                                                .collect()
+                                        }),
                                     }
-                                    opengp_ui::ui::components::SubtabKind::Billing => {
-                                        opengp_ui::ui::components::workspace::SubtabKind::Billing
-                                    }
-                                    opengp_ui::ui::components::SubtabKind::Appointments => {
-                                        opengp_ui::ui::components::workspace::SubtabKind::Appointments
-                                    }
-                                    _ => {
-                                        tracing::warn!("Unsupported subtab kind for workspace: {:?}", subtab);
-                                        opengp_ui::ui::components::workspace::SubtabKind::Clinical
-                                    }
-                                };
-                                // Mark subtab as loaded to prevent re-fetching
-                                app.workspace_manager_mut().mark_subtab_loaded(workspace_subtab);
-                                // In a full implementation, we would initialise the subtab state here
-                                // For now, this is a placeholder that will be completed when subtab
-                                // lazy-loading workflow is fully wired in the renderer
+                                });
+
+                                app.set_clinical_workspace_load_task(patient_id, task);
                             }
                             Err(e) => {
                                 tracing::error!("Failed to select workspace for patient {}: {}", patient_id, e);
