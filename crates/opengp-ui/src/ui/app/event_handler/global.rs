@@ -218,6 +218,18 @@ impl App {
                         }
                     }
 
+                    // Debounce mouse move events (16ms = ~60fps) — only for widget reconstruction
+                    // Click events (Down, Up) and scrolls bypass debounce and work immediately
+                    if matches!(mouse.kind, MouseEventKind::Moved) {
+                        use std::time::Duration;
+                        if let Some(last) = self.last_billing_render {
+                            if last.elapsed() < Duration::from_millis(16) {
+                                return; // Skip reconstruction for this frame
+                            }
+                        }
+                        self.last_billing_render = Some(std::time::Instant::now());
+                    }
+
                     match billing_state.view {
                         BillingView::ClaimList => {
                             let mut claim_list = ClaimList::new(billing_state.claims.clone(), self.theme.clone());

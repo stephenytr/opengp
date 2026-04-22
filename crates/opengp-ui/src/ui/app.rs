@@ -1,5 +1,6 @@
 use chrono::{NaiveDate, NaiveTime};
 use std::sync::Arc;
+use std::time::Instant;
 
 use ratatui::layout::Rect;
 use ratatui::style::Color;
@@ -128,6 +129,7 @@ pub struct App {
     pub command_tx: tokio::sync::mpsc::UnboundedSender<AppCommand>,
     command_rx: Option<tokio::sync::mpsc::UnboundedReceiver<AppCommand>>,
     context_menu_state: Option<crate::ui::widgets::ContextMenuState<AppContextMenuAction>>,
+    last_billing_render: Option<Instant>,
 }
 
 pub enum PendingPatientData {
@@ -331,6 +333,7 @@ impl App {
             command_tx,
             command_rx: Some(command_rx),
             context_menu_state: None,
+            last_billing_render: None,
         };
 
         app.refresh_status_bar();
