@@ -1408,6 +1408,7 @@ mod tests {
         PractitionerResponse {
             id: sample_practitioner_id(),
             name: "Sarah Smith".to_string(),
+            title: "Dr".to_string(),
             specialty: "General Practice".to_string(),
         }
     }

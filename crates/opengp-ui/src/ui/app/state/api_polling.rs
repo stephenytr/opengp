@@ -633,23 +633,16 @@ async fn fetch_appointments_for_day(
             let appointments = grouped.remove(&p.id).unwrap_or_default();
             PractitionerSchedule {
                 practitioner_id: p.id,
-                practitioner_name: p.display_name(),
+                practitioner_name: if p.title.is_empty() {
+                    p.full_name()
+                } else {
+                    format!("{} {}", p.title, p.full_name())
+                },
                 appointments,
                 working_hours: None,
             }
         })
         .collect();
-
-    // Also include any appointments for practitioners not in the practitioners list
-    // (edge case: appointment exists for unknown practitioner)
-    for (practitioner_id, appointments) in grouped {
-        practitioners.push(PractitionerSchedule {
-            practitioner_id,
-            practitioner_name: format!("Practitioner {}", &practitioner_id.to_string()[..8]),
-            appointments,
-            working_hours: None,
-        });
-    }
 
     practitioners.sort_by(|a, b| a.practitioner_name.cmp(&b.practitioner_name));
 
@@ -749,7 +742,7 @@ async fn fetch_practitioners(
                 first_name,
                 middle_name: None,
                 last_name,
-                title: String::new(),
+                title: p.title,
                 hpi_i: None,
                 ahpra_registration: None,
                 prescriber_number: None,

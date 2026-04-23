@@ -171,7 +171,11 @@ impl AppointmentUiService {
 
             schedules.push(PractitionerSchedule {
                 practitioner_id: p.id,
-                practitioner_name: format!("{} {}", p.title, p.full_name()),
+                practitioner_name: if p.title.is_empty() {
+                    p.full_name()
+                } else {
+                    format!("{} {}", p.title, p.full_name())
+                },
                 appointments: practitioner_appointments,
                 working_hours,
             });

@@ -26,10 +26,19 @@ pub(super) async fn list_practitioners(
     let practitioners = users
         .into_iter()
         .filter(|user| user.is_active)
-        .map(|user| PractitionerResponse {
-            id: user.id,
-            name: user.full_name(),
-            specialty: practitioner_specialty(user.role).to_string(),
+        .filter(|user| matches!(user.role, opengp_domain::domain::user::Role::Doctor | opengp_domain::domain::user::Role::Nurse))
+        .map(|user| {
+            let title = match user.role {
+                opengp_domain::domain::user::Role::Doctor => "Dr".to_string(),
+                opengp_domain::domain::user::Role::Nurse => "Nurse".to_string(),
+                _ => String::new(),
+            };
+            PractitionerResponse {
+                id: user.id,
+                name: user.full_name(),
+                title,
+                specialty: practitioner_specialty(user.role).to_string(),
+            }
         })
         .collect();
 

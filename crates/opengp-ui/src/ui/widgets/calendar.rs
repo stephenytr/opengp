@@ -190,7 +190,7 @@ impl CalendarWidget {
 
     /// Render the calendar widget with mode-specific styling
     pub fn render_calendar(&self, area: Rect, buf: &mut Buffer, mode: CalendarMode) {
-        if area.is_empty() || area.width < 21 || area.height < 9 {
+        if area.is_empty() || area.width < 23 || area.height < 9 {
             return;
         }
 
@@ -261,7 +261,7 @@ impl CalendarWidget {
             return;
         }
 
-        let cell_width = (area.width as usize / 7).max(2);
+        let cell_width = (area.width as usize / 7).max(3);
         let weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Sun"];
         let style = Style::default()
             .fg(self.theme.colors.foreground)
@@ -286,7 +286,7 @@ impl CalendarWidget {
             return;
         }
 
-        let cell_width = (area.width as usize / 7).max(2);
+        let cell_width = (area.width as usize / 7).max(3);
         let row_height = 2usize;
         let (_year, month) = self.current_month;
 
@@ -331,7 +331,7 @@ impl CalendarWidget {
             return;
         }
 
-        let cell_width = (area.width as usize / 7).max(2);
+        let cell_width = (area.width as usize / 7).max(3);
         let row_height = 2usize;
         let (_year, month) = self.current_month;
 
@@ -390,7 +390,7 @@ impl CalendarWidget {
         let start_y = area.y.saturating_add(3);
         let start_x = area.x.saturating_add(border_left);
         let inner_width = area.width.saturating_sub(2);
-        let cell_width = ((inner_width as usize) / 7).max(2) as u16;
+        let cell_width = ((inner_width as usize) / 7).max(3) as u16;
         let row_height = 2u16;
 
         if row < start_y {
@@ -654,7 +654,7 @@ mod tests {
         let first_of_month = NaiveDate::from_ymd_opt(2026, 2, 1).unwrap();
         let offset = (first_of_month.weekday().number_from_monday() - 1) as u16;
         let inner_width = area.width.saturating_sub(2);
-        let cell_width = ((inner_width as usize) / 7).max(2) as u16;
+        let cell_width = ((inner_width as usize) / 7).max(3) as u16;
         let column = area.x + 2 + offset * cell_width;
         let row = area.y + 3;
         let mouse = MouseEvent {

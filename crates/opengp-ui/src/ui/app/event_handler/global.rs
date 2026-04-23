@@ -126,7 +126,7 @@ impl App {
                 AppointmentView::Schedule => {
                     let chunks = Layout::default()
                         .direction(Direction::Horizontal)
-                        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+                        .constraints([Constraint::Length(23), Constraint::Min(0)])
                         .split(appointment_content_area);
 
                     use crossterm::event::MouseEventKind;

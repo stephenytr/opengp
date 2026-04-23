@@ -206,6 +206,8 @@ pub struct PractitionerResponse {
     pub id: Uuid,
     #[schema(example = "Sarah Smith")]
     pub name: String,
+    #[schema(example = "Dr")]
+    pub title: String,
     #[schema(example = "General Practice")]
     pub specialty: String,
 }
