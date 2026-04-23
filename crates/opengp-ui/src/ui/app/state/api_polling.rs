@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 use chrono::TimeZone;
 use std::collections::HashMap;
 
-use crate::ui::app::{ApiTaskError, App, ClinicalWorkspaceLoadResult, RetryOperation};
+use crate::ui::app::{ApiTaskError, App, AppointmentStatusTransition, ClinicalWorkspaceLoadResult, RetryOperation};
 use crate::ui::components::SubtabKind;
 use crate::ui::view_models::PatientListItem;
 use opengp_domain::domain::appointment::{
@@ -57,6 +57,7 @@ impl App {
 
         self.start_pending_api_requests();
         self.start_pending_reschedule_request();
+        self.start_pending_appointment_status_transition_request();
 
         if self
             .patient_list_fetch_task
@@ -239,6 +240,29 @@ impl App {
                 }
             }
         }
+
+        if self
+            .status_update_task
+            .as_ref()
+            .is_some_and(tokio::task::JoinHandle::is_finished)
+        {
+            #[allow(clippy::expect_used)]
+            let handle = self.status_update_task.take().expect("task exists");
+
+            match handle.await {
+                Ok(Ok((_, date))) => {
+                    self.appointment_detail_modal = None;
+                    self.request_refresh_appointments(date);
+                    self.status_bar.clear_error();
+                }
+                Ok(Err(msg)) => {
+                    self.status_bar.set_error(Some(format!("Status update failed: {}", msg)));
+                }
+                Err(err) => {
+                    self.status_bar.set_error(Some(format!("Status update task failed: {}", err)));
+                }
+            }
+        }
     }
 
     async fn handle_api_task_error(&mut self, error: ApiTaskError, retry: Option<RetryOperation>) {
@@ -411,6 +435,41 @@ impl App {
                     let is_conflict = err_string.contains("Schedule conflict") || err_string.contains("Overlapping");
                     Err((err_string, is_conflict))
                 }
+            }
+        }));
+    }
+
+    fn start_pending_appointment_status_transition_request(&mut self) {
+        if !self.authenticated {
+            return;
+        }
+
+        let Some((appointment_id, transition)) = self.take_pending_appointment_status_transition() else {
+            return;
+        };
+
+        if self.status_update_task.is_some() {
+            self.pending_appointment_status_transition = Some((appointment_id, transition));
+            return;
+        }
+
+        let Some(api_client) = self.api_client.clone() else {
+            self.status_bar.set_error(Some("API client is not configured".to_string()));
+            self.pending_appointment_status_transition = Some((appointment_id, transition));
+            return;
+        };
+
+        let status_str = match &transition {
+            AppointmentStatusTransition::SetStatus(status) => appointment_status_to_api_string(*status),
+        };
+
+        self.status_update_task = Some(tokio::spawn(async move {
+            match api_client.update_appointment_status(appointment_id, &status_str).await {
+                Ok(response) => {
+                    let date = response.start_time.with_timezone(&chrono::Local).date_naive();
+                    Ok((appointment_id, date))
+                }
+                Err(e) => Err(e.to_string()),
             }
         }));
     }
@@ -735,6 +794,20 @@ fn parse_appointment_status(value: &str) -> AppointmentStatus {
         "cancelled" => AppointmentStatus::Cancelled,
         "rescheduled" => AppointmentStatus::Rescheduled,
         _ => AppointmentStatus::Scheduled,
+    }
+}
+
+fn appointment_status_to_api_string(status: AppointmentStatus) -> &'static str {
+    match status {
+        AppointmentStatus::Scheduled => "scheduled",
+        AppointmentStatus::Confirmed => "confirmed",
+        AppointmentStatus::Arrived => "arrived",
+        AppointmentStatus::InProgress => "in_progress",
+        AppointmentStatus::Billing => "billing",
+        AppointmentStatus::Completed => "completed",
+        AppointmentStatus::NoShow => "no_show",
+        AppointmentStatus::Cancelled => "cancelled",
+        AppointmentStatus::Rescheduled => "rescheduled",
     }
 }
 

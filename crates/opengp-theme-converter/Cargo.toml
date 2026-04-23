@@ -17,6 +17,3 @@ clap = { version = "4.5", features = ["derive"] }
 
 [dev-dependencies]
 pretty_assertions = "1.4"
-
-[dependencies.opengp-ui]
-path = "../opengp-ui"

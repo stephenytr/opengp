@@ -44,6 +44,8 @@ type PractitionerListFetchTask =
     tokio::task::JoinHandle<Result<Vec<opengp_domain::domain::user::Practitioner>, ApiTaskError>>;
 type RescheduleTask =
     tokio::task::JoinHandle<Result<(uuid::Uuid, chrono::NaiveDate), (String, bool)>>;
+type StatusUpdateTask =
+    tokio::task::JoinHandle<Result<(uuid::Uuid, NaiveDate), String>>;
 type LoginTask = tokio::task::JoinHandle<
     Result<opengp_domain::domain::api::LoginResponse, crate::api::ApiClientError>,
 >;
@@ -129,6 +131,7 @@ pub struct App {
        appointment_list_fetch_task: Option<AppointmentListFetchTask>,
        practitioners_list_fetch_task: Option<PractitionerListFetchTask>,
       reschedule_task: Option<RescheduleTask>,
+      status_update_task: Option<StatusUpdateTask>,
       pending_login_request: Option<(String, String)>,
       login_task: Option<LoginTask>,
       clinical_workspace_load_task: Option<(uuid::Uuid, ClinicalWorkspaceLoadTask)>,
@@ -333,6 +336,7 @@ impl App {
               appointment_list_fetch_task: None,
               practitioners_list_fetch_task: None,
               reschedule_task: None,
+              status_update_task: None,
               pending_login_request: None,
              login_task: None,
              clinical_workspace_load_task: None,

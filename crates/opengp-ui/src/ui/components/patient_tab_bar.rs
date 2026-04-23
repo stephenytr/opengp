@@ -11,7 +11,7 @@ use ratatui::widgets::{Paragraph, Widget};
 use uuid::Uuid;
 
 use crate::ui::theme::Theme;
-use crate::ui::shared::{hover_style, selected_hover_style};
+use crate::ui::shared::invert_color;
 
 /// Patient data for tab display
 #[derive(Debug, Clone)]
@@ -159,15 +159,11 @@ impl PatientTabBar {
 
             // Render the tab
             let is_hovered = self.hovered_index == Some(idx);
-            let tab_style = if is_active && is_hovered {
-                selected_hover_style(&self.theme).fg(patient.colour)
-            } else if is_active {
+            let tab_style = if is_active || is_hovered {
                 Style::default()
-                    .bg(self.theme.colors.primary)
-                    .fg(patient.colour)
+                    .bg(patient.colour)
+                    .fg(invert_color(patient.colour))
                     .add_modifier(Modifier::BOLD)
-            } else if is_hovered {
-                hover_style(&self.theme)
             } else {
                 Style::default().fg(patient.colour)
             };

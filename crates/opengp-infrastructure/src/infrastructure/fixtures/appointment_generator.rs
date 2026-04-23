@@ -249,8 +249,11 @@ impl AppointmentGenerator {
                     let minute = slot_idx * self.config.slot_duration_minutes as u32;
 
                     if let Some(naive_dt) = current_date.and_hms_opt(hour, minute, 0) {
-                        // Create UTC datetime by assuming the naive datetime is in UTC
-                        let start_time = DateTime::from_naive_utc_and_offset(naive_dt, Utc);
+                        let start_time = chrono::Local
+                            .from_local_datetime(&naive_dt)
+                            .single()
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .unwrap_or_else(Utc::now);
                         slots.push(TimeSlot {
                             start_time,
                             duration: slot_duration,
@@ -463,10 +466,10 @@ impl AppointmentGenerator {
             .unwrap_or(AppointmentStatus::Scheduled)
     }
 
-    /// Generate a random start time (9am-5pm on weekdays)
+    /// Generate a random start time (9am-5pm on weekdays, in local timezone)
     #[allow(clippy::expect_used)]
     fn random_start_time(&mut self) -> chrono::DateTime<Utc> {
-        let now = Utc::now();
+        let local_now = chrono::Local::now();
         let is_future = self.rng.gen_bool(self.config.future_percentage as f64);
 
         // Generate a date (future or past)
@@ -476,7 +479,7 @@ impl AppointmentGenerator {
             -self.rng.gen_range(1..30)
         };
 
-        let appointment_date = (now + Duration::days(days_offset)).date_naive();
+        let appointment_date = (local_now + Duration::days(days_offset)).date_naive();
 
         // Find next weekday if weekend
         let weekday = appointment_date.weekday();
@@ -486,7 +489,6 @@ impl AppointmentGenerator {
             _ => appointment_date,
         };
 
-        // Generate time between 9am and 5pm
         let hour = self.rng.gen_range(9..17);
         let minute = self.rng.gen_range(0..60);
 
@@ -497,7 +499,12 @@ impl AppointmentGenerator {
                     .and_hms_opt(9, 0, 0)
                     .expect("9:00:00 is valid")
             });
-        DateTime::from_naive_utc_and_offset(naive_dt, Utc)
+
+        chrono::Local
+            .from_local_datetime(&naive_dt)
+            .single()
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(Utc::now)
     }
 
     /// Generate a random appointment reason based on appointment type
@@ -751,14 +758,15 @@ mod tests {
         let appointments = generator.generate();
 
         for appointment in &appointments {
-            let hour = appointment.start_time.hour();
+            let local = appointment.start_time.with_timezone(&chrono::Local);
+            let hour = local.hour();
             assert!(
                 hour >= 9 && hour < 17,
                 "Appointment hour {} not in business hours",
                 hour
             );
 
-            let weekday = appointment.start_time.weekday();
+            let weekday = local.weekday();
             assert!(
                 weekday != Weekday::Sat && weekday != Weekday::Sun,
                 "Appointment on weekend: {:?}",
@@ -916,7 +924,8 @@ mod tests {
         let (appointments, _) = generator.generate_schedule();
 
         for appointment in &appointments {
-            let hour = appointment.start_time.hour();
+            let local = appointment.start_time.with_timezone(&chrono::Local);
+            let hour = local.hour();
             assert!(
                 hour >= 10 && hour < 14,
                 "Appointment hour {} should be between 10 and 14",
@@ -942,7 +951,7 @@ mod tests {
         let (appointments, _) = generator.generate_schedule();
 
         for appointment in &appointments {
-            let weekday = appointment.start_time.weekday();
+            let weekday = appointment.start_time.with_timezone(&chrono::Local).weekday();
             assert!(
                 weekday != Weekday::Sat && weekday != Weekday::Sun,
                 "Should not have appointments on weekends"
@@ -1039,12 +1048,12 @@ mod tests {
     #[test]
     fn test_status_distribution_by_time() {
         let now = Utc::now();
-        let yesterday = now - Duration::days(1);
-        let tomorrow = now + Duration::days(1);
+        let three_days_ago = now - Duration::days(3);
+        let three_days_future = now + Duration::days(3);
 
         let config = AppointmentGeneratorConfig {
-            start_date: Some(yesterday),
-            end_date: Some(yesterday + Duration::hours(8)),
+            start_date: Some(three_days_ago),
+            end_date: Some(three_days_ago + Duration::hours(8)),
             fill_rate: 1.0,
             exclude_weekends: false,
             ..Default::default()
@@ -1068,8 +1077,8 @@ mod tests {
         }
 
         let config = AppointmentGeneratorConfig {
-            start_date: Some(tomorrow),
-            end_date: Some(tomorrow + Duration::hours(8)),
+            start_date: Some(three_days_future),
+            end_date: Some(three_days_future + Duration::hours(8)),
             fill_rate: 1.0,
             exclude_weekends: false,
             ..Default::default()
@@ -1217,8 +1226,9 @@ mod tests {
         assert_eq!(appointments.len(), 10);
 
         for appointment in &appointments {
-            assert!(appointment.start_time.hour() >= 9);
-            assert!(appointment.start_time.hour() < 17);
+            let local = appointment.start_time.with_timezone(&chrono::Local);
+            assert!(local.hour() >= 9);
+            assert!(local.hour() < 17);
         }
     }
 }

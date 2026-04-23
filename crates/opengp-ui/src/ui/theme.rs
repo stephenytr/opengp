@@ -4,10 +4,9 @@
 
 use opengp_config::ColorPalette as ThemeThemePalette;
 use ratatui::style::Color;
-use serde::{Serialize, Deserialize}
 
 /// Color palette for OpenGP TUI
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ColorPalette {
     /// Primary brand color
     pub primary: Color,

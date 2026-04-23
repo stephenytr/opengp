@@ -2314,7 +2314,6 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "color-eyre",
- "opengp-ui",
  "pretty_assertions",
  "serde",
  "serde_yaml",

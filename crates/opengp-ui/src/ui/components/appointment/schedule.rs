@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::ui::layout::TIME_COLUMN_WIDTH;
+use crate::ui::shared::invert_color;
 use crate::ui::theme::Theme;
 use opengp_config::CalendarConfig;
 use opengp_domain::domain::appointment::{AppointmentStatus, AppointmentType, CalendarAppointment};
@@ -473,11 +474,12 @@ impl Schedule {
             } else {
                 apt.patient_name.clone()
             };
+            let text_color = invert_color(color);
             buf.set_string(
                 name_x,
                 content_y,
                 &name,
-                Style::default().fg(self.theme.colors.foreground).bold(),
+                Style::default().fg(text_color).bold(),
             );
 
             let line2_y = content_y + 1;
@@ -492,7 +494,7 @@ impl Schedule {
                     name_x,
                     line2_y,
                     &line2,
-                    Style::default().fg(self.theme.colors.foreground).bold(),
+                    Style::default().fg(text_color).bold(),
                 );
             }
         }

@@ -6,95 +6,142 @@ pub mod validation;
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::error::ThemeConverterError;
+pub use crate::mapping::mapper::map_alacritty_to_opengp;
+pub use crate::mapping::color::{parse_hex, to_opengp_color, contrast_ratio};
+pub use crate::output::render_opengp_toml;
+pub use crate::parse::parse_by_extension;
+pub use crate::validation::contrast::{check_contrast, ContrastWarning};
+pub use crate::validation::fallbacks::fallback_for_field;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct AlacrittyTheme { 
-    colors: AlacrittyColors,
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AlacrittyTheme { 
+    pub colors: AlacrittyColors,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct AlacrittyColors { 
-    primary: AlacrittyPrimary,
-    normal: Ansi8,
-    bright: Ansi8,
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AlacrittyColors { 
+    pub primary: AlacrittyPrimary,
+    pub normal: Ansi8,
+    pub bright: Ansi8,
     #[serde(default)]
-    dim: Option<Ansi8>,
+    pub dim: Option<Ansi8>,
     #[serde(default)]
-    cursor: Option<AlacrittyColorPair>,
+    pub cursor: Option<AlacrittyColorPair>,
     #[serde(default)]
-    selection: Option<AlacrittyColorPair>,
+    pub selection: Option<AlacrittyColorPair>,
     #[serde(default)]
-    indexed_colors: Vec<AlacrittyIndexedColor>,
+    pub indexed_colors: Vec<AlacrittyIndexedColor>,
+    #[serde(default)]
+    pub vi_mode_cursor: Option<AlacrittyColorPair>,
+    #[serde(default)]
+    pub search: Option<AlacrittySearch>,
+    #[serde(default)]
+    pub hints: Option<AlacrittyHints>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Ansi8 {
-    black: String,
-    red: String,
-    green: String,
-    yellow: String,
-    blue: String,
-    magenta: String,
-    cyan: String,
-    white: String,
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Ansi8 {
+    pub black: String,
+    pub red: String,
+    pub green: String,
+    pub yellow: String,
+    pub blue: String,
+    pub magenta: String,
+    pub cyan: String,
+    pub white: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct AlacrittyPrimary {
-    background: String,
-    foreground: String,
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AlacrittyPrimary {
+    pub background: String,
+    pub foreground: String,
     #[serde(default)]
-    dim_foreground: Option<String>,
+    pub dim_foreground: Option<String>,
     #[serde(default)]
-    bright_foreground: Option<String>,
+    pub bright_foreground: Option<String>,
 }
 
-struct AlacrittyColorPair {
-    text: String,
-    cursor: String,
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AlacrittyColorPair {
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub cursor: String,
 }
 
-struct AlacrittyIndexedColor {
-    index: u8,
-    color: String,
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AlacrittyIndexedColor {
+    pub index: u8,
+    pub color: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AlacrittyFgBg {
+    pub foreground: String,
+    pub background: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AlacrittySearch {
+    #[serde(default)]
+    pub matches: Option<AlacrittyFgBg>,
+    #[serde(default)]
+    pub focused_match: Option<AlacrittyFgBg>,
+    #[serde(default)]
+    pub line_indicator: Option<AlacrittyFgBg>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AlacrittyHints {
+    #[serde(default)]
+    pub start: Option<AlacrittyFgBg>,
+    #[serde(default)]
+    pub end: Option<AlacrittyFgBg>,
+    #[serde(default)]
+    pub line_indicator: Option<AlacrittyFgBg>,}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OpenGPTheme {
-    schema_version: String,
+    #[serde(default = "default_schema_version")]
+    pub schema_version: String,
     #[serde(default)]
-    dark: OpenGPPalette,
+    pub dark: OpenGPPalette,
     #[serde(default)]
-    light: OpenGPPalette,
+    pub light: OpenGPPalette,
     #[serde(default)]
-    high_contrast: OpenGPPalette,
+    pub high_contrast: OpenGPPalette,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+fn default_schema_version() -> String {
+    "1.0".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OpenGPPalette {
-    primary: String,
-    secondary: String,
-    background: String,
-    foreground: String,
-    error: String,
-    success: String,
-    warning: String,
-    info: String,
-    border: String,
-    selected: String,
-    highlight: String,
-    disabled: String,
-    scrollbar_bg: String,
-    scrollbar_thumb: String,
-    appointment_scheduled: String,
-    appointment_confirmed: String,
-    appointment_arrived: String,
-    appointment_in_progress: String,
-    appointment_completed: String,
-    appointment_cancelled: String,
-    appointment_dna: String,
-    appointment_rescheduled: String,
-    background_dark: String,
-    text_dim: String,
-    text_secondary: String,
+    pub primary: String,
+    pub secondary: String,
+    pub background: String,
+    pub foreground: String,
+    pub error: String,
+    pub success: String,
+    pub warning: String,
+    pub info: String,
+    pub border: String,
+    pub selected: String,
+    pub highlight: String,
+    pub disabled: String,
+    pub scrollbar_bg: String,
+    pub scrollbar_thumb: String,
+    pub appointment_scheduled: String,
+    pub appointment_confirmed: String,
+    pub appointment_arrived: String,
+    pub appointment_in_progress: String,
+    pub appointment_completed: String,
+    pub appointment_cancelled: String,
+    pub appointment_dna: String,
+    pub appointment_rescheduled: String,
+    pub background_dark: String,
+    pub text_dim: String,
+    pub text_secondary: String,
 }

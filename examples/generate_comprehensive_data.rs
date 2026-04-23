@@ -163,7 +163,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut appointment_generator = AppointmentGenerator::new(AppointmentGeneratorConfig {
             count: bounded_count(seed.rotate_left(7), cli.appointments_max),
-            future_percentage: 1.0,
+            future_percentage: 0.5,
             patient_ids: Some(vec![profile.patient.id]),
             practitioner_ids: Some(practitioner_ids.clone()),
             ..Default::default()
