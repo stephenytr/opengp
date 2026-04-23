@@ -1,15 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-## MANDATORY: Use td for Task Management
-
-You must run td usage --new-session at conversation start (or after /clear) to see current work.
-Use td usage -q for subsequent reads.
-
-**Updated:** 2026-04-13
-**Branch:** master
-**Project:** OpenGP - Australian General Practice Management Software
-
-## OVERVIEW
+# OVERVIEW
 
 OpenGP is a Rust, terminal-first GP management platform for Australian healthcare workflows.
 Codebase follows layered domain-driven architecture, organised as a Cargo workspace.

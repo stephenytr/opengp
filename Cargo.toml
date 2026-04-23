@@ -7,6 +7,7 @@ members = [
     "crates/opengp-ui",
     "crates/opengp-api",
     "crates/opengp-cache",
+    "crates/opengp-theme-converter",
 ]
 
 [package]
