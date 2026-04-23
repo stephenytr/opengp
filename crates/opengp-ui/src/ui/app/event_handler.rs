@@ -211,6 +211,7 @@ impl App {
                     if self.workspace_manager.active().is_some() {
                         self.workspace_manager.active_index = None;
                     }
+                    self.patient_list.reset_search();
                     self.tab_bar.select(Tab::PatientSearch);
                     let today = chrono::Utc::now().date_naive();
                     self.appointment_state.selected_date = Some(today);
@@ -351,6 +352,7 @@ impl App {
                         if self.workspace_manager.active().is_some() {
                             self.tab_bar.select(Tab::PatientWorkspace);
                         } else {
+                            self.patient_list.reset_search();
                             self.tab_bar.select(Tab::PatientSearch);
                         }
                         self.refresh_status_bar();

@@ -150,6 +150,14 @@ impl PatientList {
             .collect();
     }
 
+    pub fn reset_search(&mut self) {
+        self.searching = false;
+        self.search_query.clear();
+        self.apply_filter();
+        self.scrollable = ScrollableState::new();
+        self.scrollable.set_item_count(self.filtered.len());
+    }
+
     pub fn move_up(&mut self) {
         self.scrollable.move_up();
     }
@@ -591,6 +599,7 @@ mod tests {
             Some(opengp_domain::domain::patient::PhoneNumber::new_lenient(
                 "0412345678".to_string(),
             )),
+            None,
             None,
             None,
             None,
