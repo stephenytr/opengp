@@ -193,6 +193,13 @@ impl App {
                                 tracing::info!("Loaded family history for clinical view");
                             }
                             if let Ok(consultations) = consultations {
+                                let in_progress_started_at = consultations.iter().find(|c| {
+                                    c.consultation_started_at.is_some()
+                                        && c.consultation_ended_at.is_none()
+                                }).and_then(|c| c.consultation_started_at);
+                                if let Some(started_at) = in_progress_started_at {
+                                    self.clinical_state_mut().set_active_timer_started_at(started_at);
+                                }
                                 self.clinical_state_mut().consultations.consultations = consultations;
                                 tracing::info!("Loaded consultations for clinical view");
                             }

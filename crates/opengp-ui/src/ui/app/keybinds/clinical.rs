@@ -1,6 +1,6 @@
 use crate::ui::app::{App, PendingClinicalSaveData};
 use crate::ui::components::clinical::{
-    AllergyDetailModalAction, ClinicalFormView, ClinicalView, ConsultationDetailModalAction,
+    AllergyDetailModalAction, ClinicalFormView, ClinicalView,
     ConsultationFormAction, FamilyHistoryDetailModalAction, FamilyHistoryFormAction,
     MedicalHistoryDetailModalAction, MedicalHistoryFormAction,
     VitalsDetailModalAction,
@@ -37,45 +37,10 @@ impl App {
 
         if self.clinical_state_mut().has_open_detail_modal() {
             if key.code == KeyCode::Esc {
-                self.clinical_state_mut().close_consultation_detail();
                 self.clinical_state_mut().close_allergy_detail();
                 self.clinical_state_mut().close_medical_history_detail();
                 self.clinical_state_mut().close_vitals_detail();
                 self.clinical_state_mut().close_family_history_detail();
-                return Action::Enter;
-            }
-
-            if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                let consultation_id = {
-                    let clinical_state = self.clinical_state_mut();
-                    clinical_state
-                        .consultations
-                        .consultation_detail_modal
-                        .as_ref()
-                        .filter(|modal| !modal.is_signed())
-                        .map(|modal| modal.consultation_id())
-                };
-
-                if let Some(consultation_id) = consultation_id {
-                    self.pending_clinical_save_data =
-                        Some(PendingClinicalSaveData::SignConsultation {
-                            consultation_id,
-                            user_id: current_user_id,
-                        });
-                    return Action::Enter;
-                }
-            }
-
-            let consultation_action = {
-                let clinical_state = self.clinical_state_mut();
-                clinical_state
-                    .consultations
-                    .consultation_detail_modal
-                    .as_mut()
-                    .and_then(|modal| modal.handle_key(key))
-            };
-            if let Some(action) = consultation_action {
-                self.handle_consultation_modal_action(action);
                 return Action::Enter;
             }
 
@@ -396,8 +361,26 @@ impl App {
 
         let view = self.clinical_state_mut().view.clone();
         match view {
-            ClinicalView::PatientSummary | ClinicalView::ConsultationSummary => {}
+            ClinicalView::PatientSummary => {}
             ClinicalView::Consultations => {
+                if key.code == KeyCode::Char('t') {
+                    let timer_payload = {
+                        let clinical_state = self.clinical_state_mut();
+                        let selected = clinical_state.consultations.consultation_list.selected().cloned();
+                        selected.map(|c| {
+                            if c.consultation_started_at.is_some() && c.consultation_ended_at.is_none() {
+                                PendingClinicalSaveData::TimerStop { consultation_id: c.id }
+                            } else {
+                                PendingClinicalSaveData::TimerStart { consultation_id: c.id }
+                            }
+                        })
+                    };
+                    if let Some(payload) = timer_payload {
+                        self.pending_clinical_save_data = Some(payload);
+                        return Action::Enter;
+                    }
+                }
+
                 let list_action = self
                     .clinical_state_mut()
                     .consultations
@@ -405,19 +388,7 @@ impl App {
                     .handle_key(key);
                 if let Some(action) = list_action {
                     match action {
-                        crate::ui::components::clinical::ConsultationListAction::Open(consultation) => {
-                            let patient_name = self
-                                .workspace_manager()
-                                .active()
-                                .map(|w| w.patient_snapshot.full_name.clone())
-                                .unwrap_or_else(|| "Unknown".to_string());
-                            self.clinical_state_mut().open_consultation_detail(
-                                *consultation,
-                                patient_name,
-                                "Unknown".to_string(),
-                                &theme,
-                            );
-                        }
+                        crate::ui::components::clinical::ConsultationListAction::Open(_) => {}
                         crate::ui::components::clinical::ConsultationListAction::New => {
                             self.clinical_state_mut().open_consultation_form();
                         }
@@ -524,40 +495,6 @@ impl App {
         }
 
         Action::Unknown
-    }
-
-    fn handle_consultation_modal_action(
-        &mut self,
-        action: ConsultationDetailModalAction,
-    ) {
-        match action {
-            ConsultationDetailModalAction::Close => {
-                self.clinical_state_mut().close_consultation_detail();
-            }
-            ConsultationDetailModalAction::Edit => {
-                self.clinical_state_mut().close_consultation_detail();
-                self.clinical_state_mut().open_consultation_form();
-            }
-            ConsultationDetailModalAction::Sign => {
-                let consultation_id = {
-                    let clinical_state = self.clinical_state_mut();
-                    clinical_state
-                        .consultations
-                        .consultation_detail_modal
-                        .as_ref()
-                        .map(|modal| modal.consultation_id())
-                };
-
-                if let Some(consultation_id) = consultation_id {
-                    self.pending_clinical_save_data =
-                        Some(PendingClinicalSaveData::SignConsultation {
-                            consultation_id,
-                            user_id: self.current_user_id,
-                        });
-                }
-            }
-            ConsultationDetailModalAction::StopTimer => {}
-        }
     }
 
     fn handle_allergy_modal_action(

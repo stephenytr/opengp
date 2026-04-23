@@ -778,6 +778,7 @@ async fn run_tui(
                             };
                             app.clinical_state_mut().consultations.consultations.push(domain_consultation);
                             app.clinical_state_mut().set_active_timer_started_at(started_at);
+                            app.clinical_state_mut().show_consultations();
                             if consultation.is_signed {
                                 app.set_pending_billing(PendingBillingSaveData::AwaitingMbsSelection {
                                     consultation_id: consultation.id,
@@ -842,15 +843,46 @@ async fn run_tui(
                 }
                 opengp_ui::ui::app::PendingClinicalSaveData::TimerStart { consultation_id } => {
                     if let Some(ref service) = clinical_ui_service {
-                        if let Err(e) = service.start_timer(consultation_id).await {
-                            app.set_status_error(format!("Timer start failed: {}", e));
+                        match service.start_timer(consultation_id).await {
+                            Ok(()) => {
+                                let now = chrono::Utc::now();
+                                app.clinical_state_mut().set_active_timer_started_at(now);
+                                if let Some(c) = app
+                                    .clinical_state_mut()
+                                    .consultations
+                                    .consultations
+                                    .iter_mut()
+                                    .find(|c| c.id == consultation_id)
+                                {
+                                    c.consultation_started_at = Some(now);
+                                    c.consultation_ended_at = None;
+                                }
+                            }
+                            Err(e) => {
+                                app.set_status_error(format!("Timer start failed: {}", e));
+                            }
                         }
                     }
                 }
                 opengp_ui::ui::app::PendingClinicalSaveData::TimerStop { consultation_id } => {
                     if let Some(ref service) = clinical_ui_service {
-                        if let Err(e) = service.stop_timer(consultation_id).await {
-                            app.set_status_error(format!("Timer stop failed: {}", e));
+                        match service.stop_timer(consultation_id).await {
+                            Ok(_duration) => {
+                                let now = chrono::Utc::now();
+                                app.clinical_state_mut().consultations.clear_active_timer();
+                                if let Some(c) = app
+                                    .clinical_state_mut()
+                                    .consultations
+                                    .consultations
+                                    .iter_mut()
+                                    .find(|c| c.id == consultation_id)
+                                {
+                                    c.consultation_ended_at = Some(now);
+                                }
+                            }
+                            Err(e) => {
+                                app.set_status_error(format!("Timer stop failed: {}", e));
+                            }
                         }
                     }
                 }

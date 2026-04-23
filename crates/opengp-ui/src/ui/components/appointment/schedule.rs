@@ -95,7 +95,7 @@ impl Schedule {
             for x in overlay_area.x..overlay_area.x + overlay_area.width {
                 if let Some(cell) = buf.cell_mut((x, y)) {
                     cell.set_symbol(" ");
-                    cell.set_style(Style::default().bg(Color::DarkGray).fg(Color::White));
+                    cell.set_style(Style::default().bg(self.theme.colors.background_dark).fg(self.theme.colors.foreground));
                 }
             }
         }
@@ -103,7 +103,7 @@ impl Schedule {
         let block = Block::default()
             .title(" DEBUG ")
             .borders(Borders::ALL)
-            .style(Style::default().bg(Color::DarkGray).fg(Color::Yellow));
+            .style(Style::default().bg(self.theme.colors.background_dark).fg(self.theme.colors.warning));
         block.render(overlay_area, buf);
 
         let inner = overlay_area.inner(ratatui::layout::Margin {
@@ -148,7 +148,7 @@ impl Schedule {
                     inner.x,
                     y,
                     line,
-                    Style::default().bg(Color::DarkGray).fg(Color::White),
+                    Style::default().bg(self.theme.colors.background_dark).fg(self.theme.colors.foreground),
                 );
             }
         }

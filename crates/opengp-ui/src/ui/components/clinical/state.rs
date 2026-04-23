@@ -23,7 +23,6 @@ pub enum ClinicalView {
     #[default]
     PatientSummary,
     Consultations,
-    ConsultationSummary,
     Allergies,
     MedicalHistory,
     VitalSigns,
@@ -139,24 +138,6 @@ impl ClinicalState {
         self.form_view = ClinicalFormView::None;
     }
 
-    pub fn open_consultation_detail(
-        &mut self,
-        consultation: opengp_domain::domain::clinical::Consultation,
-        patient_name: String,
-        practitioner_name: String,
-        theme: &Theme,
-    ) {
-        self.consultations.open_consultation_detail(
-            consultation,
-            patient_name,
-            practitioner_name,
-        );
-    }
-
-    pub fn close_consultation_detail(&mut self) {
-        self.consultations.close_consultation_detail();
-    }
-
     pub fn open_allergy_detail(&mut self, allergy: opengp_domain::domain::clinical::Allergy, _theme: &Theme) {
         self.allergies.open_allergy_detail(allergy);
     }
@@ -241,10 +222,6 @@ impl ClinicalState {
         self.view = ClinicalView::Consultations;
     }
 
-    pub fn show_consultation_summary(&mut self) {
-        self.view = ClinicalView::ConsultationSummary;
-    }
-
     pub fn show_allergies(&mut self) {
         self.view = ClinicalView::Allergies;
     }
@@ -273,7 +250,6 @@ impl ClinicalState {
         self.view = match self.view {
             ClinicalView::PatientSummary => ClinicalView::Consultations,
             ClinicalView::Consultations => ClinicalView::Allergies,
-            ClinicalView::ConsultationSummary => ClinicalView::Allergies,
             ClinicalView::Allergies => ClinicalView::MedicalHistory,
             ClinicalView::MedicalHistory => ClinicalView::VitalSigns,
             ClinicalView::VitalSigns => ClinicalView::SocialHistory,
@@ -287,7 +263,6 @@ impl ClinicalState {
         self.view = match self.view {
             ClinicalView::PatientSummary => ClinicalView::FamilyHistory,
             ClinicalView::Consultations => ClinicalView::PatientSummary,
-            ClinicalView::ConsultationSummary => ClinicalView::Consultations,
             ClinicalView::Allergies => ClinicalView::Consultations,
             ClinicalView::MedicalHistory => ClinicalView::Allergies,
             ClinicalView::VitalSigns => ClinicalView::MedicalHistory,
@@ -366,7 +341,6 @@ impl ClinicalState {
         match self.view {
             ClinicalView::PatientSummary => {}
             ClinicalView::Consultations => self.consultations.consultation_list.next(),
-            ClinicalView::ConsultationSummary => {}
             ClinicalView::Allergies => self.allergies.allergy_list.next(),
             ClinicalView::MedicalHistory => {
                 self.medical_history.medical_history_list.selected_index =
@@ -383,7 +357,6 @@ impl ClinicalState {
         match self.view {
             ClinicalView::PatientSummary => {}
             ClinicalView::Consultations => self.consultations.consultation_list.prev(),
-            ClinicalView::ConsultationSummary => {}
             ClinicalView::Allergies => self.allergies.allergy_list.prev(),
             ClinicalView::MedicalHistory => {
                 self.medical_history.medical_history_list.selected_index =
@@ -411,8 +384,7 @@ impl ClinicalState {
     }
 
     pub fn has_open_detail_modal(&self) -> bool {
-        self.consultations.consultation_detail_modal.is_some()
-            || self.allergies.allergy_detail_modal.is_some()
+        self.allergies.allergy_detail_modal.is_some()
             || self.medical_history.medical_history_detail_modal.is_some()
             || self.vitals.vitals_detail_modal.is_some()
             || self.family_history.family_history_detail_modal.is_some()
@@ -425,7 +397,6 @@ impl ClinicalState {
         match self.view {
             ClinicalView::PatientSummary => {}
             ClinicalView::Consultations => self.consultations.consultation_list.adjust_scroll(visible_rows),
-            ClinicalView::ConsultationSummary => {}
             ClinicalView::Allergies => self.allergies.allergy_list.adjust_scroll(visible_rows),
             ClinicalView::MedicalHistory => self.medical_history.medical_history_list.adjust_scroll(visible_rows),
             ClinicalView::VitalSigns => self.vitals.vitals_list.adjust_scroll(visible_rows),
@@ -438,7 +409,6 @@ impl ClinicalState {
         match self.view {
             ClinicalView::PatientSummary => 0,
             ClinicalView::Consultations => self.consultations.consultation_list.selected_index(),
-            ClinicalView::ConsultationSummary => 0,
             ClinicalView::Allergies => self.allergies.allergy_list.selected_index,
             ClinicalView::MedicalHistory => self.medical_history.medical_history_list.selected_index,
             ClinicalView::VitalSigns => self.vitals.vitals_list.selected_index,
@@ -451,7 +421,6 @@ impl ClinicalState {
         match self.view {
             ClinicalView::PatientSummary => 0,
             ClinicalView::Consultations => self.consultations.consultation_list.scroll_offset(),
-            ClinicalView::ConsultationSummary => 0,
             ClinicalView::Allergies => self.allergies.allergy_list.scroll_offset,
             ClinicalView::MedicalHistory => self.medical_history.medical_history_list.scroll_offset,
             ClinicalView::VitalSigns => self.vitals.vitals_list.scroll_offset,
@@ -846,28 +815,8 @@ mod tests {
 
     #[test]
     fn test_has_open_detail_modal() {
-        let mut state = test_state();
-
+        let state = test_state();
         assert!(!state.has_open_detail_modal());
-        assert!(state.consultations.consultation_detail_modal.is_none());
-
-        let consultation = opengp_domain::domain::clinical::Consultation::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            Some(Uuid::new_v4()),
-            Uuid::new_v4(),
-        );
-
-        let theme = state.consultations.theme.clone();
-        let patient_name = "John Doe".to_string();
-        let practitioner_name = "Dr. Smith".to_string();
-        state.open_consultation_detail(consultation, patient_name, practitioner_name, &theme);
-        assert!(state.has_open_detail_modal());
-        assert!(state.consultations.consultation_detail_modal.is_some());
-
-        state.close_consultation_detail();
-        assert!(!state.has_open_detail_modal());
-        assert!(state.consultations.consultation_detail_modal.is_none());
     }
 
     #[test]

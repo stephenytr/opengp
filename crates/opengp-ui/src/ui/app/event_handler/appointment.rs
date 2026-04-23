@@ -1,4 +1,4 @@
-use crate::ui::app::{App, AppCommand, AppointmentStatusTransition};
+use crate::ui::app::{App, AppCommand, AppointmentStatusTransition, PendingClinicalSaveData};
 use crate::ui::components::appointment::{AppointmentDetailModalAction, AppointmentFormAction};
 use crate::ui::components::tabs::Tab;
 use crate::ui::keybinds::Action;
@@ -81,20 +81,29 @@ impl App {
                     }
                     AppointmentDetailModalAction::StartConsultation => {
                         let patient_id = modal.patient_id();
+                        let appointment_id = modal.appointment_id();
+                        let practitioner_id = modal.appointment().practitioner_id;
                         self.appointment_detail_modal = None;
                         if let Some(patient_item) = self.patient_list.get_patient_by_id(patient_id) {
                             match self.workspace_manager.open_patient(patient_item.clone()) {
                                 Ok(_index) => {
-                                    // Set active subtab to Clinical
                                     if let Some(workspace) = self.workspace_manager.active_mut() {
                                         workspace.active_subtab = crate::ui::components::SubtabKind::Clinical;
                                     }
 
-                                    // Switch context to PatientWorkspace (not Tab::PatientSearch)
                                     self.current_context = crate::ui::keybinds::KeyContext::PatientWorkspace;
                                     self.tab_bar.select(Tab::PatientWorkspace);
 
-                                    // Trigger lazy load of clinical data
+                                    self.clinical_state_mut().show_consultations();
+
+                                    self.pending_clinical_save_data = Some(PendingClinicalSaveData::Consultation {
+                                        patient_id,
+                                        practitioner_id,
+                                        appointment_id: Some(appointment_id),
+                                        reason: None,
+                                        clinical_notes: None,
+                                    });
+
                                     let _ = self.command_tx.send(AppCommand::LoadPatientWorkspaceData {
                                         patient_id,
                                         subtab: crate::ui::components::SubtabKind::Clinical,

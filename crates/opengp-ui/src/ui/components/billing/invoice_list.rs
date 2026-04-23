@@ -258,7 +258,7 @@ impl InvoiceList {
         frame.render_widget(block, area);
 
         let header = Row::new(vec!["Invoice #", "Date", "Patient", "Total", "Status"])
-            .style(Style::default().fg(Color::Cyan).bold());
+            .style(Style::default().fg(self.theme.colors.primary).bold());
 
         let widths = [
             Constraint::Length(16),
@@ -278,13 +278,13 @@ impl InvoiceList {
 
                 let row_style = match (is_selected, is_hovered) {
                     (true, true) => selected_hover_style(&self.theme),
-                    (true, false) => Style::default().bg(Color::Blue).fg(Color::White),
+                    (true, false) => Style::default().bg(self.theme.colors.selected).fg(self.theme.colors.background_dark),
                     (false, true) => hover_style(&self.theme),
-                    (false, false) => Style::default().fg(Color::White),
+                    (false, false) => Style::default().fg(self.theme.colors.foreground),
                 };
 
                 let status = invoice.status.to_string();
-                let status_color = status_color(invoice.status);
+                let status_color = status_color(invoice.status, &self.theme);
 
                 Row::new(vec![
                     Cell::from(invoice.invoice_number.clone()),
@@ -306,15 +306,15 @@ impl InvoiceList {
     }
 }
 
-fn status_color(status: InvoiceStatus) -> Color {
+fn status_color(status: InvoiceStatus, theme: &Theme) -> Color {
     match status {
-        InvoiceStatus::Draft => Color::Yellow,
-        InvoiceStatus::Issued => Color::Blue,
-        InvoiceStatus::Paid => Color::Green,
-        InvoiceStatus::Overdue => Color::Red,
-        InvoiceStatus::PartiallyPaid => Color::Cyan,
-        InvoiceStatus::Cancelled => Color::Gray,
-        InvoiceStatus::Refunded => Color::Magenta,
+        InvoiceStatus::Draft => theme.colors.warning,
+        InvoiceStatus::Issued => theme.colors.info,
+        InvoiceStatus::Paid => theme.colors.success,
+        InvoiceStatus::Overdue => theme.colors.error,
+        InvoiceStatus::PartiallyPaid => theme.colors.highlight,
+        InvoiceStatus::Cancelled => theme.colors.disabled,
+        InvoiceStatus::Refunded => theme.colors.secondary,
     }
 }
 

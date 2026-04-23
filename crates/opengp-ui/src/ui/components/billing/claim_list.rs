@@ -177,7 +177,7 @@ impl ClaimList {
 
             let row_style = match (is_selected, is_hovered) {
                 (true, true) => selected_hover_style(&self.theme),
-                (true, false) => Style::default().bg(Color::Blue).fg(Color::White),
+                (true, false) => Style::default().bg(self.theme.colors.selected).fg(self.theme.colors.background_dark),
                 (false, true) => hover_style(&self.theme),
                 (false, false) => Style::default(),
             };
@@ -194,7 +194,7 @@ impl ClaimList {
                 Cell::from(claim.claim_type.to_string()),
                 Cell::from(format!("${:.2}", claim.total_claimed)),
                 Cell::from(claim.status.to_string())
-                    .style(Style::default().fg(claim_status_color(claim.status))),
+                    .style(Style::default().fg(claim_status_color(claim.status, &self.theme))),
             ])
             .style(row_style)
         });
@@ -221,13 +221,13 @@ fn short_patient(claim: &MedicareClaim) -> String {
     claim.patient_id.to_string().chars().take(8).collect()
 }
 
-fn claim_status_color(status: ClaimStatus) -> Color {
+fn claim_status_color(status: ClaimStatus, theme: &Theme) -> Color {
     match status {
-        ClaimStatus::Draft => Color::Yellow,
-        ClaimStatus::Submitted => Color::Blue,
-        ClaimStatus::Processing => Color::Cyan,
-        ClaimStatus::Paid => Color::Green,
-        ClaimStatus::Rejected => Color::Red,
-        ClaimStatus::PartiallyPaid => Color::Magenta,
+        ClaimStatus::Draft => theme.colors.warning,
+        ClaimStatus::Submitted => theme.colors.info,
+        ClaimStatus::Processing => theme.colors.highlight,
+        ClaimStatus::Paid => theme.colors.success,
+        ClaimStatus::Rejected => theme.colors.error,
+        ClaimStatus::PartiallyPaid => theme.colors.secondary,
     }
 }

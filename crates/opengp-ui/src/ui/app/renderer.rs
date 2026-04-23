@@ -85,12 +85,29 @@ impl App {
             let patient_colour = active_workspace.colour;
             let clinical_items = ClinicalMenuKind::all();
             let active_clinical_idx = active_workspace.active_clinical_menu.index();
+
+            let timer_text = active_workspace.clinical.as_ref().and_then(|cs| {
+                let started_at = cs.consultations.consultations
+                    .iter()
+                    .find(|c| c.consultation_started_at.is_some() && c.consultation_ended_at.is_none())
+                    .and_then(|c| c.consultation_started_at)
+                    .or(cs.consultations.active_timer_started_at);
+                started_at.map(|t| {
+                    let elapsed = chrono::Utc::now().signed_duration_since(t);
+                    let mins = elapsed.num_minutes().max(0);
+                    let secs = elapsed.num_seconds().max(0) % 60;
+                    format!("{:02}:{:02}", mins, secs)
+                })
+            });
+
             let clinical_row = ClinicalRow::new(
                 clinical_items,
                 active_clinical_idx,
                 patient_colour,
                 self.theme.clone(),
-            ).with_hovered(self.hovered_clinical_menu);
+            )
+            .with_hovered(self.hovered_clinical_menu)
+            .with_timer(timer_text);
             clinical_row.render(clinical_row_area, frame.buffer_mut());
         }
 
@@ -185,9 +202,7 @@ impl App {
                 match menu {
                     ClinicalMenuKind::Consultations => {
                         match clinical.view {
-                            ClinicalView::PatientSummary
-                            | ClinicalView::Consultations
-                            | ClinicalView::ConsultationSummary => {}
+                            ClinicalView::PatientSummary | ClinicalView::Consultations => {}
                             _ => clinical.show_patient_summary(),
                         }
                     }
@@ -387,15 +402,6 @@ impl App {
 
                         frame.render_widget(consultation_list, area);
                     }
-                    ClinicalView::ConsultationSummary => {
-                        let existing = &clinical_state.consultations.consultation_list;
-                        let mut consultation_list = ConsultationList::new(existing.theme.clone());
-                        consultation_list.selected_index = existing.selected_index;
-                        consultation_list.scroll_offset = existing.scroll_offset;
-                        consultation_list.consultations = clinical_state.consultations.consultations.clone();
-
-                        frame.render_widget(consultation_list, area);
-                    }
                     ClinicalView::Allergies => {
                         let existing = &clinical_state.allergies.allergy_list;
                         let mut allergy_list = AllergyList::new(existing.theme.clone());
@@ -446,6 +452,7 @@ impl App {
             } else {
                 frame.render_widget(Paragraph::new("Loading clinical data..."), area);
             }
+
         }
     }
 

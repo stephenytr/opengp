@@ -92,6 +92,7 @@ pub struct ClinicalRow {
     patient_colour: Color,
     theme: Theme,
     hovered_index: Option<usize>,
+    timer_text: Option<String>,
 }
 
 impl ClinicalRow {
@@ -107,11 +108,17 @@ impl ClinicalRow {
             patient_colour,
             theme,
             hovered_index: None,
+            timer_text: None,
         }
     }
 
     pub fn with_hovered(mut self, hovered_index: Option<usize>) -> Self {
         self.hovered_index = hovered_index;
+        self
+    }
+
+    pub fn with_timer(mut self, timer_text: Option<String>) -> Self {
+        self.timer_text = timer_text;
         self
     }
 
@@ -181,7 +188,10 @@ impl Widget for ClinicalRow {
             return;
         }
 
-        let tab_width = (area.width as usize / self.items.len()).max(1);
+        let timer_label = self.timer_text.as_deref().map(|t| format!(" ● {} ", t));
+        let timer_width = timer_label.as_ref().map(|l| l.len() as u16).unwrap_or(0);
+        let tabs_width = area.width.saturating_sub(timer_width);
+        let tab_width = (tabs_width as usize / self.items.len()).max(1);
 
         for (i, item) in self.items.iter().enumerate() {
             let x = area.x + (i * tab_width) as u16;
@@ -207,6 +217,16 @@ impl Widget for ClinicalRow {
             };
 
             buf.set_string(tab_area.x, tab_area.y, label, style);
+        }
+
+        if let Some(label) = timer_label {
+            let x = area.x + area.width.saturating_sub(timer_width);
+            buf.set_string(
+                x,
+                area.y,
+                &label,
+                Style::default().fg(self.theme.colors.success),
+            );
         }
     }
 }
