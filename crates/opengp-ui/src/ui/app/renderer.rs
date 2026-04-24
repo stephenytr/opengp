@@ -473,7 +473,7 @@ impl App {
                     BillingView::InvoiceList => {
                         let mut invoice_list = InvoiceList::new(self.theme.clone());
                         invoice_list.set_invoices(billing_state.invoices.clone());
-                        invoice_list.render(frame, area);
+                        invoice_list.render(area, frame.buffer_mut());
                     }
                     BillingView::InvoiceDetail(invoice_id) => {
                         let mut invoice_detail = InvoiceDetail::new();
