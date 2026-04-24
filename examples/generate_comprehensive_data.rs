@@ -142,11 +142,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let total_patients = profiles.len();
 
     println!("Inserting records into PostgreSQL...");
+    let mut error_samples: Vec<String> = Vec::new();
+    let mut log_err = |ctx: &str, e: &dyn std::fmt::Display| {
+        if error_samples.len() < 10 {
+            error_samples.push(format!("{ctx}: {e}"));
+        }
+    };
     for (index, profile) in profiles.iter_mut().enumerate() {
         let seed = pseudo_seed(profile.patient.id, index);
 
         let consultation_count = bounded_count(seed, cli.consultations_max);
         profile.consultations.truncate(consultation_count);
+        let valid_consultation_ids: std::collections::HashSet<Uuid> =
+            profile.consultations.iter().map(|c| c.id).collect();
+        for vital in &mut profile.vitals {
+            if let Some(cid) = vital.consultation_id {
+                if !valid_consultation_ids.contains(&cid) {
+                    vital.consultation_id = None;
+                }
+            }
+        }
+        for invoice in &mut profile.billing.invoices {
+            if let Some(cid) = invoice.consultation_id {
+                if !valid_consultation_ids.contains(&cid) {
+                    invoice.consultation_id = None;
+                }
+            }
+        }
+        for claim in &mut profile.billing.medicare_claims {
+            if let Some(cid) = claim.consultation_id {
+                if !valid_consultation_ids.contains(&cid) {
+                    claim.consultation_id = None;
+                }
+            }
+        }
+        for claim in &mut profile.billing.dva_claims {
+            if let Some(cid) = claim.consultation_id {
+                if !valid_consultation_ids.contains(&cid) {
+                    claim.consultation_id = None;
+                }
+            }
+        }
         for consultation in &mut profile.consultations {
             consultation.created_by = default_actor;
             consultation.updated_by = consultation.updated_by.map(|_| default_actor);
@@ -186,97 +222,125 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 stats.patients_created += 1;
 
                 for appointment in &appointments {
-                    if insert_appointment(&pool, appointment).await.is_ok() {
-                        stats.appointments_created += 1;
-                    } else {
-                        stats.record_failures += 1;
+                    match insert_appointment(&pool, appointment).await {
+                        Ok(_) => stats.appointments_created += 1,
+                        Err(e) => {
+                            stats.record_failures += 1;
+                            log_err("appointment", &e);
+                        }
                     }
                 }
 
                 for consultation in &profile.consultations {
-                    if insert_consultation(&pool, &crypto, consultation)
-                        .await
-                        .is_ok()
-                    {
-                        stats.consultations_created += 1;
-                    } else {
-                        stats.record_failures += 1;
+                    match insert_consultation(&pool, &crypto, consultation).await {
+                        Ok(_) => stats.consultations_created += 1,
+                        Err(e) => {
+                            stats.record_failures += 1;
+                            log_err("consultation", &e);
+                        }
                     }
                 }
 
                 for history in &profile.medical_history {
-                    if insert_medical_history(&pool, &crypto, history)
-                        .await
-                        .is_ok()
-                    {
-                        stats.medical_history_created += 1;
-                    } else {
-                        stats.record_failures += 1;
+                    match insert_medical_history(&pool, &crypto, history).await {
+                        Ok(_) => stats.medical_history_created += 1,
+                        Err(e) => {
+                            stats.record_failures += 1;
+                            log_err("medical_history", &e);
+                        }
                     }
                 }
 
                 for allergy in &profile.allergies {
-                    if insert_allergy(&pool, &crypto, allergy).await.is_ok() {
-                        stats.allergies_created += 1;
-                    } else {
-                        stats.record_failures += 1;
+                    match insert_allergy(&pool, &crypto, allergy).await {
+                        Ok(_) => stats.allergies_created += 1,
+                        Err(e) => {
+                            stats.record_failures += 1;
+                            log_err("allergy", &e);
+                        }
                     }
                 }
 
-                if insert_social_history(&pool, &crypto, &social_history)
-                    .await
-                    .is_ok()
-                {
-                    stats.social_history_created += 1;
-                } else {
-                    stats.record_failures += 1;
+                match insert_social_history(&pool, &crypto, &social_history).await {
+                    Ok(_) => stats.social_history_created += 1,
+                    Err(e) => {
+                        stats.record_failures += 1;
+                        log_err("social_history", &e);
+                    }
                 }
 
                 for vital in &profile.vitals {
-                    if insert_vitals(&pool, vital, default_actor).await.is_ok() {
-                        stats.vitals_created += 1;
-                    } else {
-                        stats.record_failures += 1;
+                    match insert_vitals(&pool, vital, default_actor).await {
+                        Ok(_) => stats.vitals_created += 1,
+                        Err(e) => {
+                            stats.record_failures += 1;
+                            log_err("vitals", &e);
+                        }
                     }
                 }
 
                 for fh in &profile.family_history {
-                    if insert_family_history(&pool, fh, default_actor).await.is_ok() {
-                        stats.family_history_created += 1;
-                    } else {
-                        stats.record_failures += 1;
+                    match insert_family_history(&pool, &crypto, fh, default_actor).await {
+                        Ok(_) => stats.family_history_created += 1,
+                        Err(e) => {
+                            stats.record_failures += 1;
+                            log_err("family_history", &e);
+                        }
                     }
                 }
 
+                let mut inserted_invoice_ids: std::collections::HashSet<Uuid> =
+                    std::collections::HashSet::new();
                 for invoice in &profile.billing.invoices {
-                    if insert_invoice(&pool, invoice).await.is_ok() {
-                        stats.invoices_created += 1;
-                    } else {
-                        stats.record_failures += 1;
+                    match insert_invoice(&pool, invoice).await {
+                        Ok(_) => {
+                            stats.invoices_created += 1;
+                            inserted_invoice_ids.insert(invoice.id);
+                        }
+                        Err(e) => {
+                            stats.record_failures += 1;
+                            log_err("invoice", &e);
+                        }
                     }
                 }
 
                 for claim in &profile.billing.medicare_claims {
-                    if insert_medicare_claim(&pool, claim).await.is_ok() {
-                        stats.medicare_claims_created += 1;
-                    } else {
-                        stats.record_failures += 1;
+                    let mut c = claim.clone();
+                    if let Some(iid) = c.invoice_id {
+                        if !inserted_invoice_ids.contains(&iid) {
+                            c.invoice_id = None;
+                        }
+                    }
+                    match insert_medicare_claim(&pool, &c).await {
+                        Ok(_) => stats.medicare_claims_created += 1,
+                        Err(e) => {
+                            stats.record_failures += 1;
+                            log_err("medicare_claim", &e);
+                        }
                     }
                 }
 
                 for claim in &profile.billing.dva_claims {
-                    if insert_dva_claim(&pool, claim).await.is_ok() {
-                        stats.dva_claims_created += 1;
-                    } else {
-                        stats.record_failures += 1;
+                    match insert_dva_claim(&pool, claim).await {
+                        Ok(_) => stats.dva_claims_created += 1,
+                        Err(e) => {
+                            stats.record_failures += 1;
+                            log_err("dva_claim", &e);
+                        }
                     }
                 }
 
                 for payment in &profile.billing.payments {
-                    if insert_payment(&pool, payment).await.is_ok() {
-                        stats.payments_created += 1;
-                    } else {
+                    if !inserted_invoice_ids.contains(&payment.invoice_id) {
                         stats.record_failures += 1;
+                        continue;
+                    }
+                    match insert_payment(&pool, payment, default_actor).await {
+                        Ok(_) => stats.payments_created += 1,
+                        Err(e) => {
+                            stats.record_failures += 1;
+                            log_err("payment", &e);
+                        }
                     }
                 }
             }
@@ -318,6 +382,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ Payments created: {}", stats.payments_created);
     println!("  ✗ Patient insert failures: {}", stats.patient_failures);
     println!("  ✗ Related-record failures: {}", stats.record_failures);
+    if !error_samples.is_empty() {
+        println!();
+        println!("Sample errors (first {}):", error_samples.len());
+        for msg in &error_samples {
+            println!("  • {msg}");
+        }
+    }
     println!();
 
     if stats.patient_failures > 0 || stats.record_failures > 0 {
@@ -485,6 +556,7 @@ async fn normalize_clinical_encrypted_columns(
     ensure_column_is_bytea(pool, "allergies", "reaction").await?;
     ensure_column_is_bytea(pool, "allergies", "notes").await?;
     ensure_column_is_bytea(pool, "social_history", "notes").await?;
+    ensure_column_is_bytea(pool, "family_history", "notes").await?;
     Ok(())
 }
 
@@ -930,9 +1002,17 @@ async fn insert_vitals(pool: &PgPool, vitals: &VitalSigns, actor_id: Uuid) -> Re
 
 async fn insert_family_history(
     pool: &PgPool,
+    crypto: &EncryptionService,
     fh: &FamilyHistory,
     actor_id: Uuid,
 ) -> Result<(), sqlx::Error> {
+    let encrypted_notes = fh
+        .notes
+        .as_ref()
+        .map(|text| crypto.encrypt(text))
+        .transpose()
+        .map_err(|e| sqlx::Error::Protocol(format!("encryption failed: {e}")))?;
+
     sqlx::query(
         r#"
         INSERT INTO family_history (
@@ -950,7 +1030,7 @@ async fn insert_family_history(
     .bind(&fh.relative_relationship)
     .bind(&fh.condition)
     .bind(fh.age_at_diagnosis.map(i32::from))
-    .bind(&fh.notes)
+    .bind(encrypted_notes)
     .bind(fh.created_at)
     .bind(actor_id)
     .execute(pool)
@@ -1100,7 +1180,7 @@ async fn insert_dva_claim(pool: &PgPool, claim: &DVAClaim) -> Result<(), sqlx::E
     Ok(())
 }
 
-async fn insert_payment(pool: &PgPool, payment: &Payment) -> Result<(), sqlx::Error> {
+async fn insert_payment(pool: &PgPool, payment: &Payment, actor_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         INSERT INTO payments (
@@ -1123,7 +1203,7 @@ async fn insert_payment(pool: &PgPool, payment: &Payment) -> Result<(), sqlx::Er
     .bind(payment.payment_date.date_naive())
     .bind(&payment.reference)
     .bind(&payment.notes)
-    .bind(payment.created_by)
+    .bind(actor_id)
     .bind(payment.created_at)
     .execute(pool)
     .await?;
