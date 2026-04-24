@@ -5,9 +5,10 @@
 
 use uuid::Uuid;
 
-use opengp_domain::domain::clinical::{Allergy, Consultation, MedicalHistory};
+use opengp_domain::domain::clinical::{Allergy, Consultation, FamilyHistory, MedicalHistory, VitalSigns};
 use opengp_domain::domain::patient::Patient;
 
+use super::billing_generator::{BillingData, BillingGenerator, BillingGeneratorConfig};
 use super::clinical_generator::{ClinicalDataGenerator, ClinicalDataGeneratorConfig};
 use super::patient_generator::{PatientGenerator, PatientGeneratorConfig};
 
@@ -22,6 +23,12 @@ pub struct ComprehensivePatientProfile {
     pub allergies: Vec<Allergy>,
     /// Consultation records and clinical notes
     pub consultations: Vec<Consultation>,
+    /// Vital signs records
+    pub vitals: Vec<VitalSigns>,
+    /// Family history entries
+    pub family_history: Vec<FamilyHistory>,
+    /// Billing data (invoices, claims, payments)
+    pub billing: BillingData,
 }
 
 /// Configuration for comprehensive patient generation
@@ -31,6 +38,8 @@ pub struct ComprehensivePatientGeneratorConfig {
     pub patient_config: PatientGeneratorConfig,
     /// Clinical data configuration
     pub clinical_config: ClinicalDataGeneratorConfig,
+    /// Billing data configuration
+    pub billing_config: BillingGeneratorConfig,
     /// Number of patients to generate
     pub patient_count: usize,
     /// Practitioner IDs to use for consultations (if empty, generates random)
@@ -45,6 +54,7 @@ impl Default for ComprehensivePatientGeneratorConfig {
                 ..Default::default()
             },
             clinical_config: ClinicalDataGeneratorConfig::default(),
+            billing_config: BillingGeneratorConfig::default(),
             patient_count: 10,
             practitioner_ids: Vec::new(),
         }
@@ -110,7 +120,6 @@ impl ComprehensivePatientGenerator {
     fn generate_profile(&self, patient: Patient) -> ComprehensivePatientProfile {
         let mut clinical_gen = ClinicalDataGenerator::new(self.config.clinical_config.clone());
 
-        // Generate clinical data
         let practitioner_id = if self.config.practitioner_ids.is_empty() {
             Uuid::new_v4()
         } else {
@@ -120,12 +129,21 @@ impl ComprehensivePatientGenerator {
         let medical_history = clinical_gen.generate_medical_history(patient.id);
         let allergies = clinical_gen.generate_allergies(patient.id);
         let consultations = clinical_gen.generate_consultations(patient.id, practitioner_id);
+        let vitals = clinical_gen.generate_vitals(patient.id);
+        let family_history = clinical_gen.generate_family_history(patient.id);
+        let consultation_ids = consultations.iter().map(|c| c.id).collect();
+
+        let mut billing_gen = BillingGenerator::new(self.config.billing_config.clone());
+        let billing = billing_gen.generate_for_patient(patient.id, practitioner_id, consultation_ids);
 
         ComprehensivePatientProfile {
             patient,
             medical_history,
             allergies,
             consultations,
+            vitals,
+            family_history,
+            billing,
         }
     }
 }
@@ -162,6 +180,8 @@ mod tests {
                 consultation_count: 3,
                 medical_history_count: 2,
                 allergy_count: 1,
+                vitals_count: 15,
+                family_history_count: 2,
                 ..Default::default()
             },
             ..Default::default()
@@ -176,6 +196,8 @@ mod tests {
         assert_eq!(profile.consultations.len(), 3);
         assert_eq!(profile.medical_history.len(), 2);
         assert_eq!(profile.allergies.len(), 1);
+        assert_eq!(profile.vitals.len(), 15);
+        assert_eq!(profile.family_history.len(), 2);
     }
 
     #[test]
@@ -254,6 +276,8 @@ mod tests {
             consultation_count: 10,
             medical_history_count: 5,
             allergy_count: 2,
+            vitals_count: 15,
+            family_history_count: 2,
             notes_percentage: 0.90,
             signed_percentage: 0.85,
             severe_allergy_percentage: 0.20,

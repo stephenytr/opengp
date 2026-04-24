@@ -8,16 +8,18 @@ use std::time::Duration;
 use chrono::Utc;
 use opengp::infrastructure::crypto::EncryptionService;
 use opengp::infrastructure::fixtures::{
-    AppointmentGenerator, AppointmentGeneratorConfig, ClinicalDataGeneratorConfig,
-    ComprehensivePatientGenerator, ComprehensivePatientGeneratorConfig, PatientGeneratorConfig,
+    AppointmentGenerator, AppointmentGeneratorConfig, BillingGeneratorConfig,
+    ClinicalDataGeneratorConfig, ComprehensivePatientGenerator, ComprehensivePatientGeneratorConfig,
+    PatientGeneratorConfig,
 };
 use opengp_config::Config;
 use opengp_domain::domain::appointment::Appointment;
 use opengp_domain::domain::clinical::{
-    AlcoholStatus, Allergy, Consultation, ExerciseFrequency, MedicalHistory, SmokingStatus,
-    SocialHistory,
+    AlcoholStatus, Allergy, Consultation, ExerciseFrequency, FamilyHistory, MedicalHistory,
+    SmokingStatus, SocialHistory, VitalSigns,
 };
 use opengp_domain::domain::patient::Patient;
+use opengp_domain::domain::billing::{DVAClaim, Invoice, MedicareClaim, Payment};
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -43,6 +45,12 @@ struct InsertStats {
     medical_history_created: usize,
     allergies_created: usize,
     social_history_created: usize,
+    vitals_created: usize,
+    family_history_created: usize,
+    invoices_created: usize,
+    medicare_claims_created: usize,
+    dva_claims_created: usize,
+    payments_created: usize,
     patient_failures: usize,
     record_failures: usize,
 }
@@ -122,6 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             allergy_count: DEFAULT_ALLERGIES_MAX,
             ..Default::default()
         },
+        billing_config: BillingGeneratorConfig::default(),
     };
 
     println!("Generating comprehensive profiles...");
@@ -222,6 +231,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     stats.record_failures += 1;
                 }
+
+                for vital in &profile.vitals {
+                    if insert_vitals(&pool, vital, default_actor).await.is_ok() {
+                        stats.vitals_created += 1;
+                    } else {
+                        stats.record_failures += 1;
+                    }
+                }
+
+                for fh in &profile.family_history {
+                    if insert_family_history(&pool, fh, default_actor).await.is_ok() {
+                        stats.family_history_created += 1;
+                    } else {
+                        stats.record_failures += 1;
+                    }
+                }
+
+                for invoice in &profile.billing.invoices {
+                    if insert_invoice(&pool, invoice).await.is_ok() {
+                        stats.invoices_created += 1;
+                    } else {
+                        stats.record_failures += 1;
+                    }
+                }
+
+                for claim in &profile.billing.medicare_claims {
+                    if insert_medicare_claim(&pool, claim).await.is_ok() {
+                        stats.medicare_claims_created += 1;
+                    } else {
+                        stats.record_failures += 1;
+                    }
+                }
+
+                for claim in &profile.billing.dva_claims {
+                    if insert_dva_claim(&pool, claim).await.is_ok() {
+                        stats.dva_claims_created += 1;
+                    } else {
+                        stats.record_failures += 1;
+                    }
+                }
+
+                for payment in &profile.billing.payments {
+                    if insert_payment(&pool, payment).await.is_ok() {
+                        stats.payments_created += 1;
+                    } else {
+                        stats.record_failures += 1;
+                    }
+                }
             }
             Err(e) => {
                 stats.patient_failures += 1;
@@ -250,6 +307,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "  ✓ Social history records: {}",
         stats.social_history_created
     );
+    println!("  ✓ Vital signs records: {}", stats.vitals_created);
+    println!("  ✓ Family history records: {}", stats.family_history_created);
+    println!("  ✓ Invoices created: {}", stats.invoices_created);
+    println!(
+        "  ✓ Medicare claims created: {}",
+        stats.medicare_claims_created
+    );
+    println!("  ✓ DVA claims created: {}", stats.dva_claims_created);
+    println!("  ✓ Payments created: {}", stats.payments_created);
     println!("  ✗ Patient insert failures: {}", stats.patient_failures);
     println!("  ✗ Related-record failures: {}", stats.record_failures);
     println!();
@@ -817,6 +883,248 @@ async fn insert_social_history(
     .bind(encrypted_notes)
     .bind(social_history.updated_at)
     .bind(social_history.updated_by)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn insert_vitals(pool: &PgPool, vitals: &VitalSigns, actor_id: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO vital_signs (
+            id, patient_id, consultation_id, measured_at,
+            systolic_bp, diastolic_bp, heart_rate, respiratory_rate,
+            temperature, oxygen_saturation, height_cm, weight_kg, bmi,
+            notes, created_at, created_by
+        ) VALUES (
+            $1, $2, $3, $4,
+            $5, $6, $7, $8,
+            $9, $10, $11, $12, $13,
+            $14, $15, $16
+        )
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .bind(vitals.id)
+    .bind(vitals.patient_id)
+    .bind(vitals.consultation_id)
+    .bind(vitals.measured_at)
+    .bind(vitals.systolic_bp.map(i32::from))
+    .bind(vitals.diastolic_bp.map(i32::from))
+    .bind(vitals.heart_rate.map(i32::from))
+    .bind(vitals.respiratory_rate.map(i32::from))
+    .bind(vitals.temperature)
+    .bind(vitals.oxygen_saturation.map(i32::from))
+    .bind(vitals.height_cm.map(i32::from))
+    .bind(vitals.weight_kg)
+    .bind(vitals.bmi)
+    .bind(&vitals.notes)
+    .bind(vitals.created_at)
+    .bind(actor_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn insert_family_history(
+    pool: &PgPool,
+    fh: &FamilyHistory,
+    actor_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO family_history (
+            id, patient_id, relative_relationship, condition,
+            age_at_diagnosis, notes, created_at, created_by
+        ) VALUES (
+            $1, $2, $3, $4,
+            $5, $6, $7, $8
+        )
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .bind(fh.id)
+    .bind(fh.patient_id)
+    .bind(&fh.relative_relationship)
+    .bind(&fh.condition)
+    .bind(fh.age_at_diagnosis.map(i32::from))
+    .bind(&fh.notes)
+    .bind(fh.created_at)
+    .bind(actor_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn insert_invoice(pool: &PgPool, invoice: &Invoice) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO invoices (
+            id, invoice_number, patient_id, practitioner_id, consultation_id,
+            billing_type, status, issue_date, due_date,
+            subtotal, gst_amount, total_amount, amount_paid, amount_outstanding,
+            notes, created_at, updated_at
+        ) VALUES (
+            $1, $2, $3, $4, $5,
+            $6, $7, $8, $9,
+            $10, $11, $12, $13, $14,
+            $15, $16, $17
+        )
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .bind(invoice.id)
+    .bind(&invoice.invoice_number)
+    .bind(invoice.patient_id)
+    .bind(invoice.practitioner_id)
+    .bind(invoice.consultation_id)
+    .bind(invoice.billing_type.to_string())
+    .bind(invoice.status.to_string())
+    .bind(invoice.invoice_date)
+    .bind(invoice.due_date)
+    .bind(invoice.subtotal)
+    .bind(invoice.gst_amount)
+    .bind(invoice.total_amount)
+    .bind(invoice.amount_paid)
+    .bind(invoice.amount_outstanding)
+    .bind(&invoice.notes)
+    .bind(invoice.created_at)
+    .bind(invoice.updated_at)
+    .execute(pool)
+    .await?;
+
+    for item in &invoice.items {
+        sqlx::query(
+            r#"
+            INSERT INTO invoice_items (
+                id, invoice_id, description, item_code,
+                quantity, unit_price, amount, is_gst_free,
+                created_at
+            ) VALUES (
+                $1, $2, $3, $4,
+                $5, $6, $7, $8,
+                $9
+            )
+            ON CONFLICT (id) DO NOTHING
+            "#,
+        )
+        .bind(item.id)
+        .bind(invoice.id)
+        .bind(&item.description)
+        .bind(&item.item_code)
+        .bind(item.quantity as i32)
+        .bind(item.unit_price)
+        .bind(item.amount)
+        .bind(item.is_gst_free)
+        .bind(Utc::now())
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn insert_medicare_claim(pool: &PgPool, claim: &MedicareClaim) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO medicare_claims (
+            id, invoice_id, patient_id, practitioner_id,
+            claim_type, status, service_date,
+            total_claimed, total_benefit, reference_number,
+            submitted_at, processed_at, created_at
+        ) VALUES (
+            $1, $2, $3, $4,
+            $5, $6, $7,
+            $8, $9, $10,
+            $11, $12, $13
+        )
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .bind(claim.id)
+    .bind(claim.invoice_id)
+    .bind(claim.patient_id)
+    .bind(claim.practitioner_id)
+    .bind(claim.claim_type.to_string())
+    .bind(claim.status.to_string())
+    .bind(claim.service_date)
+    .bind(claim.total_claimed)
+    .bind(claim.total_benefit)
+    .bind(&claim.claim_reference)
+    .bind(claim.submitted_at)
+    .bind(claim.processed_at)
+    .bind(claim.created_at)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn insert_dva_claim(pool: &PgPool, claim: &DVAClaim) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO dva_claims (
+            id, patient_id, practitioner_id, consultation_id,
+            dva_file_number, card_type, service_date,
+            items, total_claimed, status,
+            submitted_at, processed_at, created_at, created_by
+        ) VALUES (
+            $1, $2, $3, $4,
+            $5, $6, $7,
+            $8, $9, $10,
+            $11, $12, $13, $14
+        )
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .bind(claim.id)
+    .bind(claim.patient_id)
+    .bind(claim.practitioner_id)
+    .bind(claim.consultation_id)
+    .bind(&claim.dva_file_number)
+    .bind(claim.card_type.to_string())
+    .bind(claim.service_date)
+    .bind(sqlx::types::Json(&claim.items))
+    .bind(claim.total_claimed)
+    .bind(claim.status.to_string())
+    .bind(claim.submitted_at)
+    .bind(claim.processed_at)
+    .bind(claim.created_at)
+    .bind(claim.created_by)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn insert_payment(pool: &PgPool, payment: &Payment) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO payments (
+            id, invoice_id, patient_id, amount,
+            payment_method, payment_date, reference, notes,
+            created_by, created_at
+        ) VALUES (
+            $1, $2, $3, $4,
+            $5, $6, $7, $8,
+            $9, $10
+        )
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .bind(payment.id)
+    .bind(payment.invoice_id)
+    .bind(payment.patient_id)
+    .bind(payment.amount)
+    .bind(payment.payment_method.to_string())
+    .bind(payment.payment_date.date_naive())
+    .bind(&payment.reference)
+    .bind(&payment.notes)
+    .bind(payment.created_by)
+    .bind(payment.created_at)
     .execute(pool)
     .await?;
 

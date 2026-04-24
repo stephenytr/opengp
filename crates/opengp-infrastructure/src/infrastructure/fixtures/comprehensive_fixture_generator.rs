@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use opengp_domain::domain::appointment::Appointment;
-use opengp_domain::domain::clinical::{Allergy, Consultation, MedicalHistory};
+use opengp_domain::domain::clinical::{Allergy, Consultation, FamilyHistory, MedicalHistory, VitalSigns};
 use opengp_domain::domain::patient::Patient;
 
 use super::appointment_history_generator::{
@@ -40,6 +40,8 @@ pub struct ComprehensiveFixtureProfile {
     pub medical_history: Vec<MedicalHistory>,
     pub allergies: Vec<Allergy>,
     pub consultations: Vec<Consultation>,
+    pub vitals: Vec<VitalSigns>,
+    pub family_history: Vec<FamilyHistory>,
 }
 
 pub struct ComprehensiveFixtureGenerator {
@@ -79,6 +81,8 @@ impl ComprehensiveFixtureGenerator {
         let medical_history = clinical_generator.generate_medical_history(patient.id);
         let allergies = clinical_generator.generate_allergies(patient.id);
         let consultations = clinical_generator.generate_consultations(patient.id, practitioner_id);
+        let vitals = clinical_generator.generate_vitals(patient.id);
+        let family_history = clinical_generator.generate_family_history(patient.id);
         let consultation_ids = consultations.iter().map(|consultation| consultation.id).collect();
 
         let mut billing_generator = BillingGenerator::new(self.billing_config());
@@ -95,6 +99,8 @@ impl ComprehensiveFixtureGenerator {
             medical_history,
             allergies,
             consultations,
+            vitals,
+            family_history,
         }
     }
 
@@ -136,6 +142,8 @@ mod tests {
                 consultation_count: 3,
                 medical_history_count: 2,
                 allergy_count: 1,
+                vitals_count: 15,
+                family_history_count: 2,
                 ..Default::default()
             },
             ..Default::default()
@@ -231,6 +239,14 @@ mod tests {
 
             for consultation in &profile.consultations {
                 assert_eq!(consultation.patient_id, profile.patient.id);
+            }
+
+            for vitals in &profile.vitals {
+                assert_eq!(vitals.patient_id, profile.patient.id);
+            }
+
+            for family_history in &profile.family_history {
+                assert_eq!(family_history.patient_id, profile.patient.id);
             }
         }
     }

@@ -7,6 +7,7 @@ use rand::seq::SliceRandom;
 use rand::Rng;
 use uuid::Uuid;
 
+#[derive(Debug, Clone)]
 pub struct BillingGeneratorConfig {
     pub bulk_billing_percentage: f32,
     pub private_billing_percentage: f32,
@@ -33,6 +34,7 @@ impl Default for BillingGeneratorConfig {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct BillingData {
     pub invoices: Vec<Invoice>,
     pub medicare_claims: Vec<MedicareClaim>,
@@ -59,7 +61,7 @@ impl BillingGenerator {
         practitioner_id: Uuid,
         consultation_ids: Vec<Uuid>,
     ) -> BillingData {
-        let invoice_count = self.rng.gen_range(1..=3);
+        let invoice_count = self.rng.gen_range(5..=10);
 
         let mut invoices = Vec::with_capacity(invoice_count);
         let mut medicare_claims = Vec::new();
@@ -725,8 +727,9 @@ mod tests {
 
         let data = generator.generate_for_patient(patient_id, practitioner_id, consultation_ids);
 
-        // Should have 1-3 invoices
-        assert!(!data.invoices.is_empty() && data.invoices.len() <= 3);
+        // Should have 5-10 invoices
+        assert!(!data.invoices.is_empty() && data.invoices.len() <= 10);
+        assert!(data.invoices.len() >= 5);
 
         // Should have at least one claim per invoice
         let total_claims = data.medicare_claims.len() + data.dva_claims.len();

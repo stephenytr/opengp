@@ -4,7 +4,8 @@ use rand::Rng;
 use uuid::Uuid;
 
 use opengp_domain::domain::clinical::{
-    Allergy, AllergyType, ConditionStatus, Consultation, MedicalHistory, Severity,
+    Allergy, AllergyType, ConditionStatus, Consultation, FamilyHistory, MedicalHistory, Severity,
+    VitalSigns,
 };
 
 /// Configuration for generating synthetic clinical data
@@ -16,6 +17,10 @@ pub struct ClinicalDataGeneratorConfig {
     pub medical_history_count: usize,
     /// Number of allergies to generate
     pub allergy_count: usize,
+    /// Number of vital signs records to generate (10-20 per patient)
+    pub vitals_count: usize,
+    /// Number of family history entries to generate
+    pub family_history_count: usize,
     /// Percentage of consultations with clinical notes (0.0-1.0)
     pub notes_percentage: f32,
     /// Percentage of consultations that are signed (0.0-1.0)
@@ -30,6 +35,8 @@ impl Default for ClinicalDataGeneratorConfig {
             consultation_count: 5,
             medical_history_count: 3,
             allergy_count: 1,
+            vitals_count: 15,
+            family_history_count: 2,
             notes_percentage: 0.80,
             signed_percentage: 0.70,
             severe_allergy_percentage: 0.10,
@@ -75,6 +82,180 @@ impl ClinicalDataGenerator {
         (0..self.config.allergy_count)
             .map(|_| self.generate_allergy(patient_id))
             .collect()
+    }
+
+    /// Generate a collection of vital signs records for a patient
+    pub fn generate_vitals(&mut self, patient_id: Uuid) -> Vec<VitalSigns> {
+        (0..self.config.vitals_count)
+            .map(|_| self.generate_vital_signs(patient_id))
+            .collect()
+    }
+
+    /// Generate a collection of family history entries for a patient
+    pub fn generate_family_history(&mut self, patient_id: Uuid) -> Vec<FamilyHistory> {
+        (0..self.config.family_history_count)
+            .map(|_| self.generate_family_history_entry(patient_id))
+            .collect()
+    }
+
+    fn generate_vital_signs(&mut self, patient_id: Uuid) -> VitalSigns {
+        let created_by = Uuid::new_v4();
+        let measured_at = Utc::now() - Duration::days(self.rng.gen_range(0..=365));
+
+        let height_cm = Some(self.random_height_cm());
+        let weight_kg = Some(self.random_weight_kg());
+
+        let mut vitals = VitalSigns {
+            id: Uuid::new_v4(),
+            patient_id,
+            consultation_id: None,
+            measured_at,
+            systolic_bp: Some(self.random_systolic_bp()),
+            diastolic_bp: Some(self.random_diastolic_bp()),
+            heart_rate: Some(self.random_heart_rate()),
+            respiratory_rate: Some(self.random_respiratory_rate()),
+            temperature: Some(self.random_temperature()),
+            oxygen_saturation: Some(self.random_oxygen_saturation()),
+            height_cm,
+            weight_kg,
+            bmi: None,
+            notes: None,
+            created_at: Utc::now(),
+            created_by,
+        };
+
+        vitals.calculate_bmi();
+        vitals
+    }
+
+    fn generate_family_history_entry(&mut self, patient_id: Uuid) -> FamilyHistory {
+        let created_by = Uuid::new_v4();
+
+        FamilyHistory {
+            id: Uuid::new_v4(),
+            patient_id,
+            relative_relationship: self.random_relative_relationship(),
+            condition: self.random_family_condition(),
+            age_at_diagnosis: Some(self.random_age_at_diagnosis()),
+            notes: if self.rng.gen_bool(0.30) {
+                Some(self.random_family_history_notes())
+            } else {
+                None
+            },
+            created_at: Utc::now() - Duration::days(self.rng.gen_range(30..=3650)),
+            created_by,
+        }
+    }
+
+    fn random_height_cm(&mut self) -> u16 {
+        self.rng.gen_range(150..=195)
+    }
+
+    fn random_weight_kg(&mut self) -> f32 {
+        let base = match self.rng.gen_range(0..4) {
+            0 => 55.0,
+            1 => 70.0,
+            2 => 85.0,
+            _ => 100.0,
+        };
+        base + self.rng.gen_range(-10.0..=10.0)
+    }
+
+    fn random_systolic_bp(&mut self) -> u16 {
+        self.rng.gen_range(100..=160)
+    }
+
+    fn random_diastolic_bp(&mut self) -> u16 {
+        self.rng.gen_range(60..=100)
+    }
+
+    fn random_heart_rate(&mut self) -> u16 {
+        self.rng.gen_range(55..=100)
+    }
+
+    fn random_respiratory_rate(&mut self) -> u16 {
+        self.rng.gen_range(12..=22)
+    }
+
+    fn random_temperature(&mut self) -> f32 {
+        let base = 37.0;
+        base + self.rng.gen_range(-0.5..=1.0)
+    }
+
+    fn random_oxygen_saturation(&mut self) -> u8 {
+        self.rng.gen_range(94..=100)
+    }
+
+    fn random_relative_relationship(&mut self) -> String {
+        let relationships = [
+            "Father",
+            "Mother",
+            "Brother",
+            "Sister",
+            "Paternal Grandfather",
+            "Maternal Grandfather",
+            "Paternal Grandmother",
+            "Maternal Grandmother",
+            "Son",
+            "Daughter",
+            "Uncle",
+            "Aunt",
+            "Cousin",
+        ];
+        relationships
+            .choose(&mut self.rng)
+            .unwrap_or(&"Father")
+            .to_string()
+    }
+
+    fn random_family_condition(&mut self) -> String {
+        let conditions = [
+            "Heart Disease",
+            "Type 2 Diabetes",
+            "Hypertension",
+            "Stroke",
+            "Breast Cancer",
+            "Colorectal Cancer",
+            "Prostate Cancer",
+            "Melanoma",
+            "Asthma",
+            "COPD",
+            "Arthritis",
+            "Osteoporosis",
+            "Alzheimer's Disease",
+            "Parkinson's Disease",
+            "Depression",
+            "Anxiety",
+            "Epilepsy",
+            "Kidney Disease",
+            "Liver Disease",
+            "Thyroid Disorder",
+        ];
+        conditions
+            .choose(&mut self.rng)
+            .unwrap_or(&"Heart Disease")
+            .to_string()
+    }
+
+    fn random_age_at_diagnosis(&mut self) -> u8 {
+        self.rng.gen_range(30..=80)
+    }
+
+    fn random_family_history_notes(&mut self) -> String {
+        let notes = [
+            "Diagnosed in his 50s",
+            "Multiple family members affected",
+            "Early onset, before age 50",
+            "Late onset, after age 70",
+            "Managed with medication",
+            "Required surgery",
+            "Passed away from complications",
+            "Currently under treatment",
+        ];
+        notes
+            .choose(&mut self.rng)
+            .unwrap_or(&"Diagnosed in his 50s")
+            .to_string()
     }
 
     fn generate_consultation(&mut self, patient_id: Uuid, practitioner_id: Uuid) -> Consultation {
