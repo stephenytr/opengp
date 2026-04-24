@@ -1,11 +1,11 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::Widget;
 use crossterm::event::{MouseEvent, MouseEventKind, MouseButton};
 
 use crate::ui::theme::Theme;
-use crate::ui::shared::hover_style;
+use crate::ui::shared::{hover_style, invert_color};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ClinicalMenuKind {
@@ -15,6 +15,7 @@ pub enum ClinicalMenuKind {
     MedicalHistory,
     FamilyHistory,
     SocialHistory,
+    Billing,
 }
 
 impl ClinicalMenuKind {
@@ -26,6 +27,7 @@ impl ClinicalMenuKind {
             ClinicalMenuKind::MedicalHistory => "Medical History",
             ClinicalMenuKind::FamilyHistory => "Family History",
             ClinicalMenuKind::SocialHistory => "Social History",
+            ClinicalMenuKind::Billing => "Billing",
         }
     }
 
@@ -37,6 +39,7 @@ impl ClinicalMenuKind {
             ClinicalMenuKind::MedicalHistory,
             ClinicalMenuKind::FamilyHistory,
             ClinicalMenuKind::SocialHistory,
+            ClinicalMenuKind::Billing,
         ]
     }
 
@@ -48,6 +51,7 @@ impl ClinicalMenuKind {
             ClinicalMenuKind::MedicalHistory => 3,
             ClinicalMenuKind::FamilyHistory => 4,
             ClinicalMenuKind::SocialHistory => 5,
+            ClinicalMenuKind::Billing => 6,
         }
     }
 
@@ -59,6 +63,7 @@ impl ClinicalMenuKind {
             3 => Some(ClinicalMenuKind::MedicalHistory),
             4 => Some(ClinicalMenuKind::FamilyHistory),
             5 => Some(ClinicalMenuKind::SocialHistory),
+            6 => Some(ClinicalMenuKind::Billing),
             _ => None,
         }
     }
@@ -70,18 +75,20 @@ impl ClinicalMenuKind {
             ClinicalMenuKind::Allergies => ClinicalMenuKind::MedicalHistory,
             ClinicalMenuKind::MedicalHistory => ClinicalMenuKind::FamilyHistory,
             ClinicalMenuKind::FamilyHistory => ClinicalMenuKind::SocialHistory,
-            ClinicalMenuKind::SocialHistory => ClinicalMenuKind::Consultations,
+            ClinicalMenuKind::SocialHistory => ClinicalMenuKind::Billing,
+            ClinicalMenuKind::Billing => ClinicalMenuKind::Consultations,
         }
     }
 
     pub fn prev(&self) -> ClinicalMenuKind {
         match self {
-            ClinicalMenuKind::Consultations => ClinicalMenuKind::SocialHistory,
+            ClinicalMenuKind::Consultations => ClinicalMenuKind::Billing,
             ClinicalMenuKind::Vitals => ClinicalMenuKind::Consultations,
             ClinicalMenuKind::Allergies => ClinicalMenuKind::Vitals,
             ClinicalMenuKind::MedicalHistory => ClinicalMenuKind::Allergies,
             ClinicalMenuKind::FamilyHistory => ClinicalMenuKind::MedicalHistory,
             ClinicalMenuKind::SocialHistory => ClinicalMenuKind::FamilyHistory,
+            ClinicalMenuKind::Billing => ClinicalMenuKind::SocialHistory,
         }
     }
 }
@@ -209,11 +216,15 @@ impl Widget for ClinicalRow {
             let style = if is_active {
                 Style::default()
                     .bg(self.patient_colour)
-                    .fg(self.theme.colors.background)
+                    .fg(invert_color(self.patient_colour))
+                    .add_modifier(Modifier::BOLD)
             } else if is_hovered {
-                hover_style(&self.theme)
+                Style::default()
+                    .bg(self.patient_colour)
+                    .fg(invert_color(self.patient_colour))
+                    .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(self.theme.colors.foreground)
+                Style::default().fg(self.patient_colour)
             };
 
             buf.set_string(tab_area.x, tab_area.y, label, style);
@@ -243,24 +254,27 @@ mod tests {
         assert_eq!(ClinicalMenuKind::MedicalHistory.display_name(), "Medical History");
         assert_eq!(ClinicalMenuKind::FamilyHistory.display_name(), "Family History");
         assert_eq!(ClinicalMenuKind::SocialHistory.display_name(), "Social History");
+        assert_eq!(ClinicalMenuKind::Billing.display_name(), "Billing");
     }
 
     #[test]
     fn test_clinical_menu_kind_all_count() {
         let all = ClinicalMenuKind::all();
-        assert_eq!(all.len(), 6);
+        assert_eq!(all.len(), 7);
     }
 
     #[test]
     fn test_clinical_menu_kind_next_wraps() {
         assert_eq!(ClinicalMenuKind::Consultations.next(), ClinicalMenuKind::Vitals);
-        assert_eq!(ClinicalMenuKind::SocialHistory.next(), ClinicalMenuKind::Consultations);
+        assert_eq!(ClinicalMenuKind::SocialHistory.next(), ClinicalMenuKind::Billing);
+        assert_eq!(ClinicalMenuKind::Billing.next(), ClinicalMenuKind::Consultations);
     }
 
     #[test]
     fn test_clinical_menu_kind_prev_wraps() {
         assert_eq!(ClinicalMenuKind::Vitals.prev(), ClinicalMenuKind::Consultations);
-        assert_eq!(ClinicalMenuKind::Consultations.prev(), ClinicalMenuKind::SocialHistory);
+        assert_eq!(ClinicalMenuKind::Consultations.prev(), ClinicalMenuKind::Billing);
+        assert_eq!(ClinicalMenuKind::Billing.prev(), ClinicalMenuKind::SocialHistory);
     }
 
     #[test]
@@ -290,13 +304,13 @@ mod tests {
     #[test]
     fn test_clinical_row_wrap_around() {
         let items = ClinicalMenuKind::all();
-        let mut row = ClinicalRow::new(items, 5, Color::Blue, Theme::dark());
+        let mut row = ClinicalRow::new(items, 6, Color::Blue, Theme::dark());
         
         row.move_next();
         assert_eq!(row.active_item(), Some(ClinicalMenuKind::Consultations));
         
         row.move_prev();
-        assert_eq!(row.active_item(), Some(ClinicalMenuKind::SocialHistory));
+        assert_eq!(row.active_item(), Some(ClinicalMenuKind::Billing));
     }
 
     #[test]

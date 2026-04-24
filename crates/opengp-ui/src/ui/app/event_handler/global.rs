@@ -130,23 +130,22 @@ impl App {
                         .split(appointment_content_area);
 
                     use crossterm::event::MouseEventKind;
-                    if let MouseEventKind::Up(_) | MouseEventKind::Down(_) = mouse.kind {
-                        if let Some(action) = self
-                            .appointment_state
-                            .calendar
-                            .handle_mouse(mouse, chunks[0])
-                        {
-                            self.appointment_state.calendar.focused = true;
-                            self.appointment_state.focused = false;
-                            match action {
-                                crate::ui::components::appointment::CalendarAction::SelectDate(date) => {
-                                    self.appointment_state.selected_date = Some(date);
-                                    self.request_refresh_appointments(date);
-                                }
-                                crate::ui::components::appointment::CalendarAction::FocusDate(_) => {}
-                                crate::ui::components::appointment::CalendarAction::MonthChanged(_) => {}
-                                crate::ui::components::appointment::CalendarAction::GoToToday => {}
+                    // Always forward mouse events to calendar for hover tracking
+                    if let Some(action) = self
+                        .appointment_state
+                        .calendar
+                        .handle_mouse(mouse, chunks[0])
+                    {
+                        self.appointment_state.calendar.focused = true;
+                        self.appointment_state.focused = false;
+                        match action {
+                            crate::ui::components::appointment::CalendarAction::SelectDate(date) => {
+                                self.appointment_state.selected_date = Some(date);
+                                self.request_refresh_appointments(date);
                             }
+                            crate::ui::components::appointment::CalendarAction::FocusDate(_) => {}
+                            crate::ui::components::appointment::CalendarAction::MonthChanged(_) => {}
+                            crate::ui::components::appointment::CalendarAction::GoToToday => {}
                         }
                     }
 

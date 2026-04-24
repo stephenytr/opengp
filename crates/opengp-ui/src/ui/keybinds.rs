@@ -493,6 +493,12 @@ impl KeybindRegistry {
             context: KeyContext::PatientWorkspace,
             description: "Navigate to previous clinical menu item",
         });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT),
+            action: Action::PrevClinicalMenu,
+            context: KeyContext::PatientWorkspace,
+            description: "Navigate to previous clinical menu item (Shift+Tab)",
+        });
 
         // Patient list: open patient from list
         self.register(Keybind {

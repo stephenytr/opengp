@@ -5,11 +5,11 @@
 use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
-use ratatui::style::Style;
+use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::ui::input::DoubleClickDetector;
-use crate::ui::shared::hover_style;
+use crate::ui::shared::{hover_style, invert_color};
 use crate::ui::theme::Theme;
 
 /// Available tabs in the application
@@ -25,12 +25,21 @@ pub enum Tab {
 }
 
 impl Tab {
-/// Get the display name for the tab
+    /// Get the display name for the tab
     pub fn name(&self) -> &'static str {
         match self {
             Tab::Schedule => "Schedule",
             Tab::PatientSearch => "Patient Search",
             Tab::PatientWorkspace => "Patient Workspace",
+        }
+    }
+
+    /// Get the background color for the tab
+    pub fn bg_color(&self, theme: &Theme) -> ratatui::style::Color {
+        match self {
+            Tab::Schedule => theme.colors.primary,
+            Tab::PatientSearch => theme.colors.primary,
+            Tab::PatientWorkspace => theme.colors.primary,
         }
     }
 
@@ -295,13 +304,14 @@ impl Widget for TabBar {
                     format!(" {} {} ", tab_item.label, tab_item.shortcut)
                 };
 
-                let style = if is_hovered {
-                    // Hover state takes priority for visual feedback
-                    hover_style(&self.theme)
-                } else if is_selected {
+                let style = if is_hovered || is_selected {
+                    // Both hover and selected states use the tab's color with luminance-based text color
+                    let tab_bg_color = tab_item.tab.bg_color(&self.theme);
+                    let tab_fg_color = invert_color(tab_bg_color);
                     Style::default()
-                        .bg(self.theme.colors.primary)
-                        .fg(self.theme.colors.background)
+                        .bg(tab_bg_color)
+                        .fg(tab_fg_color)
+                        .add_modifier(Modifier::BOLD)
                 } else if is_focused {
                     Style::default()
                         .bg(self.theme.colors.selected)

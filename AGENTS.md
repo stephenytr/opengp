@@ -6,6 +6,8 @@ OpenGP is a Rust, terminal-first GP management platform for Australian healthcar
 Codebase follows layered domain-driven architecture, organised as a Cargo workspace.
 Two runnable binaries: TUI app (`src/main.rs`) and REST API server (`crates/opengp-api/src/main.rs`).
 
+
+## DO NOT EVER REVERT OR DISCARD CHANGES WITHOUT PERMISSION THEY ARE NOT EVER SCOPE CREEP. THEY ARE USUALLY UNCOMMITED CHANGES
 ## CURRENT STRUCTURE
 
 ```text

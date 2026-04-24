@@ -4,9 +4,10 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::Widget;
 
+use crate::ui::shared::invert_color;
 use crate::ui::theme::Theme;
 
 /// Represents the different subtabs available in the patient workspace.
@@ -102,6 +103,8 @@ pub struct SubtabBar {
     patient_colour: Color,
     /// Theme for styling
     theme: Theme,
+    /// Currently hovered tab index (None if not hovering)
+    hovered_index: Option<usize>,
 }
 
 impl SubtabBar {
@@ -117,7 +120,12 @@ impl SubtabBar {
             active_index,
             patient_colour,
             theme,
+            hovered_index: None,
         }
+    }
+
+    pub fn set_hovered(&mut self, index: Option<usize>) {
+        self.hovered_index = index;
     }
 }
 
@@ -138,6 +146,7 @@ impl Widget for SubtabBar {
             }
 
             let is_active = i == self.active_index;
+            let is_hovered = self.hovered_index == Some(i);
             let is_enabled = subtab.is_enabled();
 
             let label = if is_enabled {
@@ -146,14 +155,15 @@ impl Widget for SubtabBar {
                 format!(" {} (not enabled) ", subtab.display_name())
             };
 
-            let style = if is_active && is_enabled {
+            let style = if is_enabled && (is_active || is_hovered) {
                 Style::default()
                     .bg(self.patient_colour)
-                    .fg(self.theme.colors.background)
+                    .fg(invert_color(self.patient_colour))
+                    .add_modifier(Modifier::BOLD)
             } else if !is_enabled {
                 Style::default().fg(self.theme.colors.disabled)
             } else {
-                Style::default().fg(self.theme.colors.foreground)
+                Style::default().fg(self.patient_colour)
             };
 
             buf.set_string(tab_area.x, tab_area.y, label, style);

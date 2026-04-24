@@ -1,7 +1,4 @@
 use crate::ui::app::App;
-use crate::ui::app::command::AppCommand;
-use crate::ui::components::tabs::Tab;
-use crate::ui::components::SubtabKind;
 use crate::ui::keybinds::{Action, KeyContext};
 use crossterm::event::KeyEvent;
 
@@ -14,27 +11,9 @@ impl App {
                     self.patient_list.adjust_scroll(visible_rows);
                 }
                 crate::ui::components::patient::PatientListAction::OpenPatient(id) => {
-                    if let Some(patient_item) = self.patient_list.get_patient_by_id(id) {
-                        match self.workspace_manager.open_patient(patient_item.clone()) {
-                            Ok(index) => {
-                                self.workspace_manager.active_index = Some(index);
-                                self.current_context = KeyContext::PatientWorkspace;
-                                self.tab_bar.select(Tab::PatientWorkspace);
-                                self.refresh_status_bar();
-                                self.refresh_context();
-
-                                // Dispatch lazy load of clinical data if not already loaded or loading
-                                if !self.workspace_manager.is_subtab_loaded(SubtabKind::Clinical)
-                                    && !self.workspace_manager.is_subtab_loading(SubtabKind::Clinical)
-                                {
-                                    let _ = self.command_tx.send(AppCommand::LoadPatientWorkspaceData {
-                                        patient_id: id,
-                                        subtab: SubtabKind::Clinical,
-                                    }).map_err(|_| {
-                                        tracing::error!("Failed to send LoadPatientWorkspaceData command");
-                                    });
-                                }
-                            }
+                    if let Some(patient_item) = self.patient_list.get_patient_by_id(id).cloned() {
+                        match self.open_patient_workspace(patient_item) {
+                            Ok(_) => {}
                             Err(crate::ui::components::workspace::WorkspaceError::AlreadyAtLimit) => {
                                 let max = self.workspace_manager.max_open;
                                 let error_msg = format!(

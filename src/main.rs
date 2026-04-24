@@ -301,12 +301,25 @@ async fn run_tui(
                 AppCommand::LoadPractitioners => {
                     match api_client.get_practitioners().await {
                         Ok(practitioners) => {
+                            let colours = [
+                                app.theme().colors.appointment_confirmed,
+                                app.theme().colors.appointment_in_progress,
+                                app.theme().colors.appointment_arrived,
+                                app.theme().colors.appointment_scheduled,
+                                app.theme().colors.primary,
+                                app.theme().colors.secondary,
+                            ];
                             let practitioner_items: Vec<opengp_ui::ui::view_models::PractitionerViewItem> =
                                 practitioners
                                     .into_iter()
-                                    .map(|p| opengp_ui::ui::view_models::PractitionerViewItem {
-                                        id: p.id,
-                                        display_name: p.name,
+                                    .enumerate()
+                                    .map(|(idx, p)| {
+                                        let colour = colours[idx % colours.len()];
+                                        opengp_ui::ui::view_models::PractitionerViewItem {
+                                            id: p.id,
+                                            display_name: p.name,
+                                            colour,
+                                        }
                                     })
                                     .collect();
                             app.appointment_form_set_practitioners(practitioner_items);
@@ -454,16 +467,17 @@ async fn run_tui(
                         continue;
                     }
 
-                    // Find workspace and mark as loading
-                    if let Some(workspace_idx) = app.workspace_manager_mut().find_patient(patient_id) {
-                        match app.workspace_manager_mut().select_by_index(workspace_idx) {
-                            Ok(()) => {
-                                if let Some(workspace) = app.workspace_manager_mut().active_mut() {
-                                    workspace.start_loading(subtab);
-                                }
-                                app.workspace_manager_mut().mark_subtab_loaded(subtab);
+                     // Find workspace and mark as loading
+                     if let Some(workspace_idx) = app.workspace_manager_mut().find_patient(patient_id) {
+                         match app.workspace_manager_mut().select_by_index(workspace_idx) {
+                             Ok(()) => {
+                                 if let Some(workspace) = app.workspace_manager_mut().active_mut() {
+                                     workspace.start_loading(subtab);
+                                 }
+                                 // NOTE: do NOT mark as loaded here — only mark after async completes
+                                 // This prevents the guard from skipping the load if called again
 
-                                let api_client = Arc::clone(&api_client);
+                                 let api_client = Arc::clone(&api_client);
 
                                 // Spawn concurrent fetch — does NOT block the command handler
                                 let task = tokio::spawn(async move {
@@ -524,6 +538,38 @@ async fn run_tui(
                             }
                             Err(e) => {
                                 tracing::error!("Failed to select workspace for patient {}: {}", patient_id, e);
+                            }
+                        }
+                    }
+                }
+                AppCommand::LoadBillingData { patient_id } => {
+                    if let Some(billing_state) = app.billing_state_mut() {
+                        billing_state.loading = true;
+                    }
+                    if let Some(service) = app.billing_ui_service() {
+                        match service.list_invoices_for_patient(patient_id).await {
+                            Ok(invoices) => {
+                                if let Some(billing_state) = app.billing_state_mut() {
+                                    billing_state.invoices = invoices;
+                                    billing_state.loading = false;
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to load invoices for patient {}: {}", patient_id, e);
+                                if let Some(billing_state) = app.billing_state_mut() {
+                                    billing_state.loading = false;
+                                    billing_state.error = Some(e.to_string());
+                                }
+                            }
+                        }
+                        match service.list_claims_for_patient(patient_id).await {
+                            Ok(claims) => {
+                                if let Some(billing_state) = app.billing_state_mut() {
+                                    billing_state.claims = claims;
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to load claims for patient {}: {}", patient_id, e);
                             }
                         }
                     }

@@ -239,13 +239,27 @@ impl AppointmentState {
     }
 
     pub fn load_schedule_data(&mut self, data: CalendarDayView) {
+        self.load_schedule_data_with_colours(data, &[]);
+    }
+
+    pub fn load_schedule_data_with_colours(
+        &mut self,
+        data: CalendarDayView,
+        practitioner_colours: &[ratatui::style::Color],
+    ) {
         self.schedule_data = Some(data.clone());
         self.practitioners_view.clear();
 
-        for ps in &data.practitioners {
+        for (idx, ps) in data.practitioners.iter().enumerate() {
+            let colour = if practitioner_colours.is_empty() {
+                ratatui::style::Color::White
+            } else {
+                practitioner_colours[idx % practitioner_colours.len()]
+            };
             self.practitioners_view.push(PractitionerViewItem {
                 id: ps.practitioner_id,
                 display_name: ps.practitioner_name.clone(),
+                colour,
             });
         }
 

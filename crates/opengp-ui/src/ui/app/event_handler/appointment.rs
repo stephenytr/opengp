@@ -62,12 +62,22 @@ impl App {
                     AppointmentDetailModalAction::ViewClinicalNotes => {
                         let patient_id = modal.patient_id();
                         self.appointment_detail_modal = None;
-                        if let Some(patient_item) = self.patient_list.get_patient_by_id(patient_id) {
-                            let _ = self.workspace_manager.open_patient(patient_item.clone());
-                            self.tab_bar.select(Tab::PatientWorkspace);
-                            self.previous_tab = Tab::PatientSearch;
-                            self.refresh_status_bar();
-                            self.refresh_context();
+                        if let Some(patient_item) = self.patient_list.get_patient_by_id(patient_id).cloned() {
+                            match self.open_patient_workspace(patient_item) {
+                                Ok(_) => {
+                                    self.previous_tab = Tab::PatientSearch;
+                                }
+                                Err(crate::ui::components::workspace::WorkspaceError::AlreadyAtLimit) => {
+                                    let max = self.workspace_manager.max_open;
+                                    self.status_bar.set_error(Some(format!(
+                                        "Max open patients reached (max: {}). Close a tab first.",
+                                        max
+                                    )));
+                                }
+                                Err(err) => {
+                                    self.status_bar.set_error(Some(err.to_string()));
+                                }
+                            }
                         }
                     }
                     AppointmentDetailModalAction::MarkStatus(status) => {
@@ -84,15 +94,12 @@ impl App {
                         let appointment_id = modal.appointment_id();
                         let practitioner_id = modal.appointment().practitioner_id;
                         self.appointment_detail_modal = None;
-                        if let Some(patient_item) = self.patient_list.get_patient_by_id(patient_id) {
-                            match self.workspace_manager.open_patient(patient_item.clone()) {
-                                Ok(_index) => {
+                        if let Some(patient_item) = self.patient_list.get_patient_by_id(patient_id).cloned() {
+                            match self.open_patient_workspace(patient_item) {
+                                Ok(_) => {
                                     if let Some(workspace) = self.workspace_manager.active_mut() {
                                         workspace.active_subtab = crate::ui::components::SubtabKind::Clinical;
                                     }
-
-                                    self.current_context = crate::ui::keybinds::KeyContext::PatientWorkspace;
-                                    self.tab_bar.select(Tab::PatientWorkspace);
 
                                     self.clinical_state_mut().show_consultations();
 
@@ -103,22 +110,13 @@ impl App {
                                         reason: None,
                                         clinical_notes: None,
                                     });
-
-                                    let _ = self.command_tx.send(AppCommand::LoadPatientWorkspaceData {
-                                        patient_id,
-                                        subtab: crate::ui::components::SubtabKind::Clinical,
-                                    });
-
-                                    self.refresh_status_bar();
-                                    self.refresh_context();
                                 }
                                 Err(crate::ui::components::workspace::WorkspaceError::AlreadyAtLimit) => {
                                     let max = self.workspace_manager.max_open;
-                                    let error_msg = format!(
+                                    self.status_bar.set_error(Some(format!(
                                         "Max open patients reached (max: {}). Close a tab first.",
                                         max
-                                    );
-                                    self.status_bar.set_error(Some(error_msg));
+                                    )));
                                 }
                                 Err(err) => {
                                     self.status_bar.set_error(Some(err.to_string()));

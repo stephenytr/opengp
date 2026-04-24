@@ -47,6 +47,9 @@ pub enum AppCommand {
         patient_id: Uuid,
         subtab: SubtabKind,
     },
+    LoadBillingData {
+        patient_id: Uuid,
+    },
 }
 
 #[cfg(test)]

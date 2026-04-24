@@ -3,6 +3,7 @@
 //! Provides UI-specific data structures that decouple domain entities from UI components.
 
 use chrono::{DateTime, NaiveDate, Utc};
+use ratatui::style::Color;
 use uuid::Uuid;
 
 use opengp_domain::domain::appointment::{Appointment, AppointmentStatus, AppointmentType};
@@ -247,6 +248,26 @@ impl From<CalendarAppointment> for AppointmentViewItem {
 pub struct PractitionerViewItem {
     pub id: Uuid,
     pub display_name: String,
+    pub colour: Color,
+}
+
+impl PractitionerViewItem {
+    /// Create a new practitioner view item with a color.
+    pub fn new(id: Uuid, display_name: String, colour: Color) -> Self {
+        Self {
+            id,
+            display_name,
+            colour,
+        }
+    }
+
+    /// Assign a color to this practitioner from a palette using round-robin by index.
+    pub fn with_colour_index(mut self, palette: &[Color], index: usize) -> Self {
+        if !palette.is_empty() {
+            self.colour = palette[index % palette.len()];
+        }
+        self
+    }
 }
 
 impl From<opengp_domain::domain::user::Practitioner> for PractitionerViewItem {
@@ -254,6 +275,7 @@ impl From<opengp_domain::domain::user::Practitioner> for PractitionerViewItem {
         Self {
             id: practitioner.id,
             display_name: practitioner.display_name(),
+            colour: Color::White,
         }
     }
 }

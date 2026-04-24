@@ -359,6 +359,10 @@ impl App {
                 Action::NextClinicalMenu => {
                     if let Some(workspace) = self.workspace_manager.active_mut() {
                         workspace.active_clinical_menu = workspace.active_clinical_menu.next();
+                        if workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing {
+                            self.billing_state_mut();
+                            self.load_billing_data();
+                        }
                         self.refresh_status_bar();
                     }
                 }
@@ -366,21 +370,19 @@ impl App {
                 Action::PrevClinicalMenu => {
                     if let Some(workspace) = self.workspace_manager.active_mut() {
                         workspace.active_clinical_menu = workspace.active_clinical_menu.prev();
+                        if workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing {
+                            self.billing_state_mut();
+                            self.load_billing_data();
+                        }
                         self.refresh_status_bar();
                     }
                 }
 
                 Action::OpenPatientFromList => {
                     if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
-                        if let Some(patient) = self.patient_list.selected_patient() {
-                            match self.workspace_manager.open_patient(patient.clone()) {
-                                Ok(index) => {
-                                    self.workspace_manager.active_index = Some(index);
-                                    self.current_context = KeyContext::PatientWorkspace;
-                                    self.tab_bar.select(Tab::PatientWorkspace);
-                                    self.refresh_status_bar();
-                                    self.refresh_context();
-                                }
+                        if let Some(patient) = self.patient_list.selected_patient().cloned() {
+                            match self.open_patient_workspace(patient) {
+                                Ok(_) => {}
                                 Err(crate::ui::components::workspace::WorkspaceError::AlreadyAtLimit) => {
                                     let max = self.workspace_manager.max_open;
                                     let error_msg = format!(

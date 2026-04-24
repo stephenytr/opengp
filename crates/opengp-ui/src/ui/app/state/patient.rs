@@ -1,5 +1,8 @@
-use crate::ui::app::{App, PendingPatientData};
+use crate::ui::app::{App, AppCommand, PendingPatientData};
 use crate::ui::components::patient::PatientForm;
+use crate::ui::components::SubtabKind;
+use crate::ui::components::tabs::Tab;
+use crate::ui::components::workspace::WorkspaceError;
 use crate::ui::keybinds::KeyContext;
 use crate::ui::view_models::PatientListItem;
 
@@ -40,5 +43,26 @@ impl App {
 
     pub fn patient_list_patients(&self) -> &[PatientListItem] {
         self.patient_list.patients()
+    }
+
+    pub fn open_patient_workspace(&mut self, patient: PatientListItem) -> Result<usize, WorkspaceError> {
+        let patient_id = patient.id;
+        let index = self.workspace_manager.open_patient(patient)?;
+        self.workspace_manager.active_index = Some(index);
+        self.current_context = KeyContext::PatientWorkspace;
+        self.tab_bar.select(Tab::PatientWorkspace);
+        self.refresh_status_bar();
+        self.refresh_context();
+
+        if !self.workspace_manager.is_subtab_loaded(SubtabKind::Clinical)
+            && !self.workspace_manager.is_subtab_loading(SubtabKind::Clinical)
+        {
+            let _ = self.command_tx.send(AppCommand::LoadPatientWorkspaceData {
+                patient_id,
+                subtab: SubtabKind::Clinical,
+            });
+        }
+
+        Ok(index)
     }
 }

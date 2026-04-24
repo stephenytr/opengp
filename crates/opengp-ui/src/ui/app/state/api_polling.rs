@@ -151,14 +151,18 @@ impl App {
             if handle.is_finished() {
                 let result = handle.await;
 
-                // RC-1: validate patient_id matches active workspace before writing
-                let current_patient = self.workspace_manager().active().map(|w| w.patient_id);
-                if current_patient != Some(patient_id) {
-                    tracing::debug!("Clinical load completed for non-active workspace, dropping");
-                    if let Some(workspace) = self.workspace_manager_mut().active_mut() {
+                // RC-1: update workspace for loaded patient (may not be active)
+                if let Some(workspace_idx) = self.workspace_manager().find_patient(patient_id) {
+                    // Workspace exists for this patient — mark load start complete
+                    if let Some(workspace) = self.workspace_manager_mut().workspaces.get_mut(workspace_idx) {
                         workspace.finish_loading(SubtabKind::Clinical);
                     }
                 } else {
+                    tracing::debug!("Clinical load completed for non-existent workspace");
+                }
+
+                let current_patient = self.workspace_manager().active().map(|w| w.patient_id);
+                if current_patient == Some(patient_id) {
                     match result {
                         Ok(result) => {
                             let ClinicalWorkspaceLoadResult {
@@ -192,27 +196,27 @@ impl App {
                                 self.clinical_state_mut().family_history.family_history = entries;
                                 tracing::info!("Loaded family history for clinical view");
                             }
-                            if let Ok(consultations) = consultations {
-                                let in_progress_started_at = consultations.iter().find(|c| {
-                                    c.consultation_started_at.is_some()
-                                        && c.consultation_ended_at.is_none()
-                                }).and_then(|c| c.consultation_started_at);
-                                if let Some(started_at) = in_progress_started_at {
-                                    self.clinical_state_mut().set_active_timer_started_at(started_at);
-                                }
-                                self.clinical_state_mut().consultations.consultations = consultations;
-                                tracing::info!("Loaded consultations for clinical view");
-                            }
-                            if let Some(workspace) = self.workspace_manager_mut().active_mut() {
-                                workspace.finish_loading(SubtabKind::Clinical);
-                            }
-                        }
-                        Err(err) => {
-                            tracing::error!("Clinical workspace load failed: {}", err);
-                            if let Some(workspace) = self.workspace_manager_mut().active_mut() {
-                                workspace.finish_loading(SubtabKind::Clinical);
-                            }
-                        }
+                             if let Ok(consultations) = consultations {
+                                 let in_progress_started_at = consultations.iter().find(|c| {
+                                     c.consultation_started_at.is_some()
+                                         && c.consultation_ended_at.is_none()
+                                 }).and_then(|c| c.consultation_started_at);
+                                 if let Some(started_at) = in_progress_started_at {
+                                     self.clinical_state_mut().set_active_timer_started_at(started_at);
+                                 }
+                                 self.clinical_state_mut().consultations.consultations = consultations;
+                                 tracing::info!("Loaded consultations for clinical view");
+                             }
+                             if let Some(workspace) = self.workspace_manager_mut().active_mut() {
+                                 workspace.mark_loaded(SubtabKind::Clinical);
+                             }
+                         }
+                         Err(err) => {
+                             tracing::error!("Clinical workspace load failed: {}", err);
+                             if let Some(workspace) = self.workspace_manager_mut().active_mut() {
+                                 workspace.mark_loaded(SubtabKind::Clinical);
+                             }
+                         }
                     }
                 }
             } else {

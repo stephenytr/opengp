@@ -34,13 +34,13 @@ pub fn error_style(theme: &Theme) -> Style {
 
 pub fn hover_style(theme: &Theme) -> Style {
     Style::default()
-        .fg(theme.colors.foreground)
+        .fg(invert_color(theme.colors.highlight))
         .bg(theme.colors.highlight)
 }
 
 pub fn selected_hover_style(theme: &Theme) -> Style {
     Style::default()
-        .fg(theme.colors.selected)
+        .fg(invert_color(theme.colors.highlight))
         .bg(theme.colors.highlight)
 }
 

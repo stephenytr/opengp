@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use time::{Date, Month};
 
 use crate::ui::input::DoubleClickDetector;
-use crate::ui::shared::hover_style;
+use crate::ui::shared::{hover_style, invert_color};
 use crate::ui::theme::Theme;
 
 /// Actions that can be triggered by the calendar widget
@@ -299,20 +299,39 @@ impl CalendarWidget {
                     break;
                 }
 
+                let day_of_week = date.weekday().number_from_monday();
+                let is_weekend = day_of_week >= 6;
+                let day_bg = if is_weekend {
+                    self.theme.colors.warning
+                } else {
+                    self.theme.colors.primary
+                };
+                let default_text_color = if is_weekend {
+                    self.theme.colors.warning
+                } else {
+                    self.theme.colors.primary
+                };
+
                 let style = if self.hovered_day_index == Some(day_index) {
-                    // Hover state takes priority for visual feedback
-                    hover_style(&self.theme)
+                    // Hover: distinct style that overrides day background
+                    Style::default()
+                        .bg(self.theme.colors.highlight)
+                        .fg(invert_color(self.theme.colors.highlight))
+                        .add_modifier(Modifier::BOLD)
                 } else if Some(date) == self.selected_date {
                     Style::default()
-                        .bg(self.theme.colors.selected)
-                        .fg(self.theme.colors.background_dark)
+                        .bg(day_bg)
+                        .fg(invert_color(day_bg))
                         .add_modifier(Modifier::BOLD)
                 } else if date == self.focused_date {
-                    Style::default().fg(self.theme.colors.warning)
+                    Style::default()
+                        .bg(day_bg)
+                        .fg(invert_color(day_bg))
+                        .add_modifier(Modifier::BOLD)
                 } else if date.month() != month {
                     Style::default().fg(self.theme.colors.text_dim)
                 } else {
-                    Style::default().fg(self.theme.colors.foreground)
+                    Style::default().fg(default_text_color)
                 };
 
                 buf.set_string(
@@ -344,22 +363,39 @@ impl CalendarWidget {
                     break;
                 }
 
+                let day_of_week = date.weekday().number_from_monday();
+                let is_weekend = day_of_week >= 6;
+                let day_bg = if is_weekend {
+                    self.theme.colors.warning
+                } else {
+                    self.theme.colors.primary
+                };
+                let default_text_color = if is_weekend {
+                    self.theme.colors.warning
+                } else {
+                    self.theme.colors.primary
+                };
+
                 let style = if self.hovered_day_index == Some(day_index) {
-                    // Hover state takes priority for visual feedback
-                    hover_style(&self.theme)
+                    // Hover: distinct style that overrides day background
+                    Style::default()
+                        .bg(self.theme.colors.highlight)
+                        .fg(invert_color(self.theme.colors.highlight))
+                        .add_modifier(Modifier::BOLD)
                 } else if Some(date) == self.selected_date {
                     Style::default()
-                        .bg(self.theme.colors.secondary)
-                        .fg(self.theme.colors.foreground)
-                        .add_modifier(Modifier::UNDERLINED)
+                        .bg(day_bg)
+                        .fg(invert_color(day_bg))
+                        .add_modifier(Modifier::BOLD)
                 } else if date == self.focused_date {
                     Style::default()
-                        .fg(self.theme.colors.primary)
-                        .add_modifier(Modifier::UNDERLINED)
+                        .bg(day_bg)
+                        .fg(invert_color(day_bg))
+                        .add_modifier(Modifier::BOLD)
                 } else if date.month() != month {
                     Style::default().fg(self.theme.colors.text_dim)
                 } else {
-                    Style::default().fg(self.theme.colors.foreground)
+                    Style::default().fg(default_text_color)
                 };
 
                 buf.set_string(

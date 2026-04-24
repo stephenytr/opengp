@@ -536,9 +536,12 @@ impl Widget for PatientList {
 
                 let style = match (is_selected, is_hovered) {
                     (true, true) => selected_hover_style(&self.theme),
-                    (true, false) => Style::default()
-                        .bg(self.theme.colors.selected)
-                        .fg(self.theme.colors.foreground),
+                    (true, false) => {
+                        let bg = self.theme.colors.selected;
+                        Style::default()
+                            .bg(bg)
+                            .fg(crate::ui::shared::invert_color(bg))
+                    }
                     (false, true) => hover_style(&self.theme),
                     (false, false) => Style::default().fg(self.theme.colors.foreground),
                 };

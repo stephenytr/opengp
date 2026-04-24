@@ -199,11 +199,11 @@ impl Schedule {
 
             let header_style = if is_selected {
                 Style::default()
-                    .fg(self.theme.colors.primary)
+                    .bg(practitioner.colour)
+                    .fg(invert_color(practitioner.colour))
                     .bold()
-                    .bg(self.theme.colors.selected)
             } else {
-                Style::default().fg(self.theme.colors.foreground)
+                Style::default().fg(practitioner.colour)
             };
 
             let header_text = &practitioner.display_name;

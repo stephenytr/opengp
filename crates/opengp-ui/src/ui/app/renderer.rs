@@ -189,8 +189,15 @@ impl App {
             Tab::Schedule => self.render_appointment_tab(frame, area),
             Tab::PatientSearch => self.render_patient_tab(frame, area),
             Tab::PatientWorkspace => {
-                self.sync_clinical_view_to_menu();
-                self.render_workspace_clinical(frame, area);
+                let is_billing = self.workspace_manager.active()
+                    .map(|ws| ws.active_clinical_menu == ClinicalMenuKind::Billing)
+                    .unwrap_or(false);
+                if is_billing {
+                    self.render_workspace_billing(frame, area);
+                } else {
+                    self.sync_clinical_view_to_menu();
+                    self.render_workspace_clinical(frame, area);
+                }
             }
         }
     }
@@ -230,6 +237,9 @@ impl App {
                         if clinical.view != ClinicalView::SocialHistory {
                             clinical.show_social_history();
                         }
+                    }
+                    ClinicalMenuKind::Billing => {
+                        // Billing has its own render path — no clinical view sync needed
                     }
                 }
             }
@@ -292,7 +302,16 @@ impl App {
                     .set_inner_height(schedule_inner_height);
 
                 if let Some(data) = self.appointment_state.schedule_data.clone() {
-                    self.appointment_state.load_schedule_data(data);
+                    let practitioner_colours = [
+                        self.theme.colors.appointment_confirmed,
+                        self.theme.colors.appointment_in_progress,
+                        self.theme.colors.appointment_arrived,
+                        self.theme.colors.appointment_scheduled,
+                        self.theme.colors.primary,
+                        self.theme.colors.secondary,
+                    ];
+                    self.appointment_state
+                        .load_schedule_data_with_colours(data, &practitioner_colours);
                 }
 
                 let schedule_has_practitioners = self
@@ -329,7 +348,16 @@ impl App {
                         practitioners: schedules,
                     };
 
-                    self.appointment_state.load_schedule_data(day_view);
+                    let practitioner_colours = [
+                        self.theme.colors.appointment_confirmed,
+                        self.theme.colors.appointment_in_progress,
+                        self.theme.colors.appointment_arrived,
+                        self.theme.colors.appointment_scheduled,
+                        self.theme.colors.primary,
+                        self.theme.colors.secondary,
+                    ];
+                    self.appointment_state
+                        .load_schedule_data_with_colours(day_view, &practitioner_colours);
                 }
 
                 let schedule = self.appointment_state.schedule.clone();
