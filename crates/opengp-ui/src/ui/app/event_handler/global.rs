@@ -170,7 +170,7 @@ impl App {
             }
         }
 
-        if self.tab_bar.selected() == Tab::PatientSearch {
+        if self.tab_bar.selected() == Tab::PatientWorkspace {
             if let Some(workspace) = self.workspace_manager.active_mut() {
                 if let Some(ref mut billing_state) = workspace.billing {
                     use crate::ui::components::billing::{ClaimList, InvoiceList, PaymentList, BillingView};
@@ -219,13 +219,11 @@ impl App {
                         }
                     }
 
-                    // Debounce mouse move events (16ms = ~60fps) — only for widget reconstruction
-                    // Click events (Down, Up) and scrolls bypass debounce and work immediately
                     if matches!(mouse.kind, MouseEventKind::Moved) {
                         use std::time::Duration;
                         if let Some(last) = self.last_billing_render {
                             if last.elapsed() < Duration::from_millis(16) {
-                                return; // Skip reconstruction for this frame
+                                return;
                             }
                         }
                         self.last_billing_render = Some(std::time::Instant::now());
@@ -302,7 +300,7 @@ impl App {
             }
         }
 
-        if self.tab_bar.selected() == Tab::PatientSearch {
+        if self.tab_bar.selected() == Tab::PatientWorkspace {
             if let Some(workspace) = self.workspace_manager.active_mut() {
                 if let Some(ref mut clinical_state) = workspace.clinical {
                     let clinical_content_area = Rect::new(

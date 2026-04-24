@@ -6,7 +6,7 @@ use crate::ui::components::clinical::{
     VitalsDetailModalAction,
 };
 use crate::ui::components::SubtabKind;
-use crate::ui::keybinds::Action;
+use crate::ui::keybinds::{Action, KeyContext};
 use crate::ui::shared::FormAction;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::ui::widgets::FormNavigation;
@@ -347,23 +347,18 @@ impl App {
             }
         }
 
-        match key.code {
-            KeyCode::Right => {
-                self.clinical_state_mut().cycle_view();
-                return Action::Enter;
-            }
-            KeyCode::Left => {
-                self.clinical_state_mut().cycle_view_reverse();
-                return Action::Enter;
-            }
-            _ => {}
-        }
-
-        let view = self.clinical_state_mut().view.clone();
-        match view {
-            ClinicalView::PatientSummary => {}
-            ClinicalView::Consultations => {
-                if key.code == KeyCode::Char('t') {
+        let registry = crate::ui::keybinds::KeybindRegistry::global();
+        if let Some(keybind) = registry.lookup(key, KeyContext::ClinicalSubView) {
+            match keybind.action {
+                Action::CycleClinicalView => {
+                    self.clinical_state_mut().cycle_view();
+                    return Action::Enter;
+                }
+                Action::CycleClinicalViewReverse => {
+                    self.clinical_state_mut().cycle_view_reverse();
+                    return Action::Enter;
+                }
+                Action::ToggleConsultationTimer => {
                     let timer_payload = {
                         let clinical_state = self.clinical_state_mut();
                         let selected = clinical_state.consultations.consultation_list.selected().cloned();
@@ -380,7 +375,14 @@ impl App {
                         return Action::Enter;
                     }
                 }
+                _ => {}
+            }
+        }
 
+        let view = self.clinical_state_mut().view.clone();
+        match view {
+            ClinicalView::PatientSummary => {}
+            ClinicalView::Consultations => {
                 let list_action = self
                     .clinical_state_mut()
                     .consultations

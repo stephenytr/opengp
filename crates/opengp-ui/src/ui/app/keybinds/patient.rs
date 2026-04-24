@@ -53,7 +53,9 @@ impl App {
                     self.current_context = KeyContext::Search;
                 }
                 crate::ui::components::patient::PatientListAction::SearchChanged => {
-                    if !self.patient_list.is_searching() {
+                    if self.patient_list.is_searching() {
+                        self.current_context = KeyContext::Search;
+                    } else {
                         self.current_context = KeyContext::PatientList;
                     }
                 }

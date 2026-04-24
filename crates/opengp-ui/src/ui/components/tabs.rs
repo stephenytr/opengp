@@ -165,23 +165,29 @@ impl TabBar {
 
     /// Handle key event
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<Tab> {
-        use crossterm::event::{KeyCode, KeyEventKind};
+        use crossterm::event::KeyEventKind;
+        use crate::ui::keybinds::{KeyContext, KeybindRegistry, Action};
 
         if key.kind != KeyEventKind::Press {
             return None;
         }
 
-        match key.code {
-            KeyCode::Home => {
-                self.select_index(0);
-                Some(self.selected)
+        let registry = KeybindRegistry::global();
+        if let Some(keybind) = registry.lookup(key, KeyContext::TabBar) {
+            match keybind.action {
+                Action::TabBarHome => {
+                    self.select_index(0);
+                    Some(self.selected)
+                }
+                Action::TabBarEnd => {
+                    self.select_index(3);
+                    Some(self.selected)
+                }
+                Action::TabBarConfirm => Some(self.selected),
+                _ => None,
             }
-            KeyCode::End => {
-                self.select_index(3);
-                Some(self.selected)
-            }
-            KeyCode::Enter | KeyCode::Char(' ') => Some(self.selected),
-            _ => None,
+        } else {
+            None
         }
     }
 

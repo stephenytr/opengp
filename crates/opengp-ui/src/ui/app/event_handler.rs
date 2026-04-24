@@ -116,29 +116,6 @@ impl App {
             return Action::Unknown;
         }
 
-        if self.tab_bar.selected() == Tab::PatientSearch
-            && self.patient_form.is_none()
-            && self.patient_list.is_searching()
-        {
-            if let Some(action) = self.patient_list.handle_key(key) {
-                match action {
-                    crate::ui::components::patient::PatientListAction::SelectionChanged => {}
-                    crate::ui::components::patient::PatientListAction::OpenPatient(id) => {
-                        if let Some(patient_item) = self.patient_list.get_patient_by_id(id) {
-                            let _ = self.workspace_manager.open_patient(patient_item.clone());
-                            self.tab_bar.select(Tab::PatientWorkspace);
-                        }
-                    }
-                    crate::ui::components::patient::PatientListAction::FocusSearch => {}
-                    crate::ui::components::patient::PatientListAction::SearchChanged => {}
-                    crate::ui::components::patient::PatientListAction::ContextMenu { x: _, y: _, patient_id: _ } => {
-                        // Context menu support to be implemented in future
-                    }
-                }
-                return Action::Enter;
-            }
-        }
-
 
 
         if self.appointment_form.is_some() {
@@ -211,13 +188,12 @@ impl App {
                     if self.workspace_manager.active().is_some() {
                         self.workspace_manager.active_index = None;
                     }
-                    self.patient_list.reset_search();
-                    self.tab_bar.select(Tab::PatientSearch);
-                    let today = chrono::Utc::now().date_naive();
-                    self.appointment_state.selected_date = Some(today);
-                    if self.previous_tab != Tab::PatientSearch {
-                        self.request_refresh_appointments(today);
+                    let coming_from_different_tab = self.previous_tab != Tab::PatientSearch;
+                    if coming_from_different_tab {
+                        self.patient_list.reset_search();
+                        self.request_refresh_patients();
                     }
+                    self.tab_bar.select(Tab::PatientSearch);
                     self.previous_tab = Tab::PatientSearch;
                     self.refresh_status_bar();
                     self.refresh_context();
@@ -432,30 +408,36 @@ impl App {
             return Action::Enter;
         }
 
-        if self.tab_bar.selected() == Tab::PatientSearch || self.tab_bar.selected() == Tab::PatientWorkspace && self.patient_form.is_none() {
-            if let Some(workspace) = self.workspace_manager.active() {
-                match workspace.active_subtab {
-                    crate::ui::components::SubtabKind::Clinical => {
-                        let action = self.handle_clinical_keys(key);
-                        if action != Action::Unknown {
-                            return action;
-                        }
-                    }
-                    crate::ui::components::SubtabKind::Billing => {
-                        let action = self.handle_billing_keys(key);
-                        if action != Action::Unknown {
-                            return action;
-                        }
-                    }
-                    _ => {}
+        match self.tab_bar.selected() {
+            Tab::PatientSearch => {
+                if self.patient_form.is_none() {
+                    return self.handle_patient_keys(key);
                 }
-            } else {
-                return self.handle_patient_keys(key);
             }
-        }
-
-        if self.tab_bar.selected() == Tab::Schedule {
-            return self.handle_appointment_keys(key);
+            Tab::PatientWorkspace => {
+                if self.patient_form.is_none() {
+                    if let Some(workspace) = self.workspace_manager.active() {
+                        match workspace.active_subtab {
+                            crate::ui::components::SubtabKind::Clinical => {
+                                let action = self.handle_clinical_keys(key);
+                                if action != Action::Unknown {
+                                    return action;
+                                }
+                            }
+                            crate::ui::components::SubtabKind::Billing => {
+                                let action = self.handle_billing_keys(key);
+                                if action != Action::Unknown {
+                                    return action;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            Tab::Schedule => {
+                return self.handle_appointment_keys(key);
+            }
         }
 
         Action::Unknown

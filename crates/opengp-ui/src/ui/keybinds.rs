@@ -28,6 +28,14 @@ pub enum KeyContext {
     Search,
     /// Help overlay
     Help,
+    /// Billing subtab (within patient workspace)
+    Billing,
+    /// Billing form/detail overlays
+    BillingForm,
+    /// Clinical sub-view navigation (consultations, allergies, etc.)
+    ClinicalSubView,
+    /// Tab bar focus
+    TabBar,
 }
 
 /// Actions that can be triggered by keybinds
@@ -98,8 +106,6 @@ pub enum Action {
     ToggleTimer,
     /// Finish appointment and return to appointments tab
     FinishAppointment,
-    /// Start a consultation from the appointment detail modal
-    StartConsultation,
 
     // Tab actions
     /// Switch to Schedule tab
@@ -204,6 +210,38 @@ pub enum Action {
     ScrollViewportUp,
     /// Scroll viewport down (later hours)
     ScrollViewportDown,
+
+    // Billing actions
+    /// Cycle to next billing view (Invoice → Claim → Payment)
+    NextBillingView,
+    /// Cycle to previous billing view
+    PrevBillingView,
+    /// Create new invoice
+    NewInvoice,
+    /// Edit invoice
+    EditInvoice,
+    /// Process payment
+    ProcessPayment,
+    /// Void invoice
+    VoidInvoice,
+    /// Generate receipt
+    GenerateReceipt,
+
+    // Clinical sub-view actions
+    /// Cycle to next clinical view
+    CycleClinicalView,
+    /// Cycle to previous clinical view
+    CycleClinicalViewReverse,
+    /// Toggle consultation timer
+    ToggleConsultationTimer,
+
+    // Tab bar actions
+    /// Go to first tab
+    TabBarHome,
+    /// Go to last tab
+    TabBarEnd,
+    /// Confirm tab selection
+    TabBarConfirm,
 
     // Unknown action (fallback)
     #[default]
@@ -673,12 +711,6 @@ impl KeybindRegistry {
             context: KeyContext::Schedule,
             description: "Select appointment at current time slot",
         });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
-            action: Action::StartConsultation,
-            context: KeyContext::Schedule,
-            description: "Start Consultation (in appointment modal)",
-        });
         // Schedule: PageUp/PageDown for viewport scrolling
         self.register(Keybind {
             key: KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE),
@@ -713,6 +745,113 @@ impl KeybindRegistry {
         });
 
         // Clinical keybinds removed in Task 5 — moved to workspace subtab in Task 28
+
+        // Billing context keybinds
+        // Navigation between billing views
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
+            action: Action::NextBillingView,
+            context: KeyContext::Billing,
+            description: "Next billing view",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
+            action: Action::PrevBillingView,
+            context: KeyContext::Billing,
+            description: "Previous billing view",
+        });
+
+        // Invoice list keybinds
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
+            action: Action::NewInvoice,
+            context: KeyContext::Billing,
+            description: "New invoice",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            action: Action::Enter,
+            context: KeyContext::Billing,
+            description: "Open invoice detail",
+        });
+
+        // Invoice detail keybinds
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE),
+            action: Action::EditInvoice,
+            context: KeyContext::BillingForm,
+            description: "Edit invoice",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
+            action: Action::ProcessPayment,
+            context: KeyContext::BillingForm,
+            description: "Process payment",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
+            action: Action::VoidInvoice,
+            context: KeyContext::BillingForm,
+            description: "Void invoice",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE),
+            action: Action::GenerateReceipt,
+            context: KeyContext::BillingForm,
+            description: "Generate receipt",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            action: Action::Escape,
+            context: KeyContext::BillingForm,
+            description: "Back to invoice list",
+        });
+
+        // Clinical sub-view keybinds
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
+            action: Action::CycleClinicalView,
+            context: KeyContext::ClinicalSubView,
+            description: "Next clinical view",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
+            action: Action::CycleClinicalViewReverse,
+            context: KeyContext::ClinicalSubView,
+            description: "Previous clinical view",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
+            action: Action::ToggleConsultationTimer,
+            context: KeyContext::ClinicalSubView,
+            description: "Toggle consultation timer",
+        });
+
+        // Tab bar keybinds
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Home, KeyModifiers::NONE),
+            action: Action::TabBarHome,
+            context: KeyContext::TabBar,
+            description: "Go to first tab",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::End, KeyModifiers::NONE),
+            action: Action::TabBarEnd,
+            context: KeyContext::TabBar,
+            description: "Go to last tab",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            action: Action::TabBarConfirm,
+            context: KeyContext::TabBar,
+            description: "Confirm tab selection",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE),
+            action: Action::TabBarConfirm,
+            context: KeyContext::TabBar,
+            description: "Confirm tab selection",
+        });
     }
 
     /// Register a keybind
@@ -969,5 +1108,131 @@ mod tests {
             "Enter should be registered for PatientList context"
         );
         assert_eq!(result.unwrap().action, Action::OpenPatientFromList);
+    }
+
+    #[test]
+    fn test_billing_context_variants_exist() {
+        let _ = KeyContext::Billing;
+        let _ = KeyContext::BillingForm;
+        let _ = Action::NextBillingView;
+        let _ = Action::PrevBillingView;
+        let _ = Action::NewInvoice;
+        let _ = Action::EditInvoice;
+        let _ = Action::ProcessPayment;
+        let _ = Action::VoidInvoice;
+        let _ = Action::GenerateReceipt;
+    }
+
+    #[test]
+    fn test_clinical_subview_context_variants_exist() {
+        let _ = KeyContext::ClinicalSubView;
+        let _ = Action::CycleClinicalView;
+        let _ = Action::CycleClinicalViewReverse;
+        let _ = Action::ToggleConsultationTimer;
+    }
+
+    #[test]
+    fn test_tab_bar_context_variants_exist() {
+        let _ = KeyContext::TabBar;
+        let _ = Action::TabBarHome;
+        let _ = Action::TabBarEnd;
+        let _ = Action::TabBarConfirm;
+    }
+
+    #[test]
+    fn test_billing_right_arrow_cycles_forward() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
+        let result = registry.lookup(key, KeyContext::Billing);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().action, Action::NextBillingView);
+    }
+
+    #[test]
+    fn test_billing_left_arrow_cycles_backward() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
+        let result = registry.lookup(key, KeyContext::Billing);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().action, Action::PrevBillingView);
+    }
+
+    #[test]
+    fn test_billing_form_escapes_to_list() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        let result = registry.lookup(key, KeyContext::BillingForm);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().action, Action::Escape);
+    }
+
+    #[test]
+    fn test_clinical_subview_right_cycles_forward() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
+        let result = registry.lookup(key, KeyContext::ClinicalSubView);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().action, Action::CycleClinicalView);
+    }
+
+    #[test]
+    fn test_clinical_subview_left_cycles_backward() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
+        let result = registry.lookup(key, KeyContext::ClinicalSubView);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().action, Action::CycleClinicalViewReverse);
+    }
+
+    #[test]
+    fn test_clinical_subview_timer_toggle() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE);
+        let result = registry.lookup(key, KeyContext::ClinicalSubView);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().action, Action::ToggleConsultationTimer);
+    }
+
+    #[test]
+    fn test_tab_bar_home_end() {
+        let registry = KeybindRegistry::new();
+        let home_key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
+        let end_key = KeyEvent::new(KeyCode::End, KeyModifiers::NONE);
+
+        let home_result = registry.lookup(home_key, KeyContext::TabBar);
+        assert!(home_result.is_some());
+        assert_eq!(home_result.unwrap().action, Action::TabBarHome);
+
+        let end_result = registry.lookup(end_key, KeyContext::TabBar);
+        assert!(end_result.is_some());
+        assert_eq!(end_result.unwrap().action, Action::TabBarEnd);
+    }
+
+    #[test]
+    fn test_tab_bar_confirm() {
+        let registry = KeybindRegistry::new();
+        let enter_key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        let space_key = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
+
+        let enter_result = registry.lookup(enter_key, KeyContext::TabBar);
+        assert!(enter_result.is_some());
+        assert_eq!(enter_result.unwrap().action, Action::TabBarConfirm);
+
+        let space_result = registry.lookup(space_key, KeyContext::TabBar);
+        assert!(space_result.is_some());
+        assert_eq!(space_result.unwrap().action, Action::TabBarConfirm);
+    }
+
+    #[test]
+    fn test_schedule_enter_not_duplicated() {
+        let registry = KeybindRegistry::new();
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        let result = registry.lookup(key, KeyContext::Schedule);
+        assert!(result.is_some());
+        assert_eq!(
+            result.unwrap().action,
+            Action::Enter,
+            "Schedule Enter should map to Action::Enter, not StartConsultation"
+        );
     }
 }
