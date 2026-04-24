@@ -1,207 +1,19 @@
-use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use opengp_domain::domain::billing::Payment;
-use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Position, Rect};
-use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Block, Borders, Cell, Row, Table};
-use uuid::Uuid;
+use std::rc::Rc;
 
-use crate::ui::input::DoubleClickDetector;
-use crate::ui::shared::{hover_style, selected_hover_style};
 use crate::ui::theme::Theme;
-
-use super::paginated_list::PaginatedList;
+use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
+use crossterm::event::MouseEvent;
+use opengp_domain::domain::billing::Payment;
+use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct PaymentList {
     pub payments: Vec<Payment>,
     pub selected_index: usize,
-    pub scroll_state: ratatui::widgets::ListState,
+    pub scroll_offset: usize,
     pub hovered_index: Option<usize>,
-    pub double_click_detector: DoubleClickDetector,
     pub theme: Theme,
-    paginated_list: PaginatedList<Payment>,
-}
-
-impl PaymentList {
-    pub fn new(payments: Vec<Payment>, theme: Theme) -> Self {
-        let paginated_list = PaginatedList::new(payments.clone());
-        let mut scroll_state = ratatui::widgets::ListState::default();
-        if !payments.is_empty() {
-            scroll_state.select(Some(0));
-        }
-
-        Self {
-            payments,
-            selected_index: 0,
-            scroll_state,
-            hovered_index: None,
-            double_click_detector: DoubleClickDetector::default(),
-            theme,
-            paginated_list,
-        }
-    }
-
-    pub fn select_next(&mut self) {
-        self.paginated_list.select_next_wrap();
-        self.selected_index = self.paginated_list.selected_index;
-        self.scroll_state = self.paginated_list.scroll_state.clone();
-    }
-
-    pub fn select_prev(&mut self) {
-        self.paginated_list.select_prev_wrap();
-        self.selected_index = self.paginated_list.selected_index;
-        self.scroll_state = self.paginated_list.scroll_state.clone();
-    }
-
-    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<PaymentListAction> {
-        const HEADER_HEIGHT: u16 = 2;
-
-        // Track hover state on mouse movement
-        if let MouseEventKind::Moved = mouse.kind {
-            if area.contains(Position::new(mouse.column, mouse.row))
-                && mouse.row >= area.y + HEADER_HEIGHT
-            {
-                let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
-                if row_index < self.payments.len() {
-                    self.hovered_index = Some(row_index);
-                } else {
-                    self.hovered_index = None;
-                }
-            } else {
-                self.hovered_index = None;
-            }
-            return None;
-        }
-
-        // Handle right-click for context menu
-        if let MouseEventKind::Down(MouseButton::Right) = mouse.kind {
-            if !area.contains(Position::new(mouse.column, mouse.row)) {
-                return None;
-            }
-
-            if mouse.row < area.y + HEADER_HEIGHT {
-                return None;
-            }
-
-            let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
-            if row_index < self.payments.len() {
-                self.selected_index = row_index;
-                self.scroll_state.select(Some(self.selected_index));
-                if let Some(payment) = self.payments.get(row_index) {
-                    return Some(PaymentListAction::ContextMenu {
-                        x: mouse.column,
-                        y: mouse.row,
-                        payment_id: payment.id,
-                    });
-                }
-            }
-            return None;
-        }
-
-        // Handle double-click for open action
-        if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
-            if !area.contains(Position::new(mouse.column, mouse.row)) {
-                return None;
-            }
-
-            if mouse.row < area.y + HEADER_HEIGHT {
-                return None;
-            }
-
-            let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
-
-            if row_index >= self.payments.len() {
-                return None;
-            }
-
-            // Check for double-click
-            if self.double_click_detector.check_double_click_now(&mouse) {
-                self.selected_index = row_index;
-                self.scroll_state.select(Some(self.selected_index));
-                return Some(PaymentListAction::ViewDetail);
-            }
-            return None;
-        }
-
-        // Only process left mouse up for normal selection
-        if mouse.kind != MouseEventKind::Up(MouseButton::Left) {
-            return None;
-        }
-
-        if !area.contains(Position::new(mouse.column, mouse.row)) {
-            return None;
-        }
-
-        if mouse.row < area.y + HEADER_HEIGHT {
-            return None;
-        }
-
-        let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
-        if row_index < self.payments.len() {
-            self.selected_index = row_index;
-            self.scroll_state.select(Some(self.selected_index));
-            Some(PaymentListAction::Select(self.selected_index))
-        } else {
-            None
-        }
-    }
-
-    pub fn render(&self, area: Rect, buf: &mut Buffer) {
-        if area.is_empty() {
-            return;
-        }
-
-        let header = Row::new(vec![
-            Cell::from("Date"),
-            Cell::from("Invoice #"),
-            Cell::from("Patient"),
-            Cell::from("Amount"),
-            Cell::from("Method"),
-            Cell::from("Reference"),
-        ])
-        .style(Style::default().add_modifier(Modifier::BOLD));
-
-        let rows = self.payments.iter().enumerate().map(|(index, payment)| {
-            let is_selected = index == self.selected_index;
-            let is_hovered = self.hovered_index == Some(index);
-
-            let style = match (is_selected, is_hovered) {
-                (true, true) => selected_hover_style(&self.theme),
-                (true, false) => Style::default().add_modifier(Modifier::REVERSED),
-                (false, true) => hover_style(&self.theme),
-                (false, false) => Style::default(),
-            };
-
-            let reference = payment.reference.clone().unwrap_or_else(|| "-".to_string());
-
-            Row::new(vec![
-                Cell::from(payment.payment_date.format("%d/%m/%Y").to_string()),
-                Cell::from(payment.invoice_id.to_string()),
-                Cell::from(payment.patient_id.to_string()),
-                Cell::from(format!("${:.2}", payment.amount)),
-                Cell::from(payment.payment_method.to_string()),
-                Cell::from(reference),
-            ])
-            .style(style)
-        });
-
-        let table = Table::new(
-            rows,
-            [
-                Constraint::Length(12),
-                Constraint::Length(12),
-                Constraint::Length(36),
-                Constraint::Length(12),
-                Constraint::Length(12),
-                Constraint::Min(10),
-            ],
-        )
-        .header(header)
-        .block(Block::default().title(" Payments ").borders(Borders::ALL));
-
-        ratatui::widgets::Widget::render(table, area, buf);
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,4 +22,93 @@ pub enum PaymentListAction {
     ViewDetail,
     Back,
     ContextMenu { x: u16, y: u16, payment_id: Uuid },
+}
+
+impl PaymentList {
+    pub fn new(payments: Vec<Payment>, theme: Theme) -> Self {
+        let mut scroll_state = ratatui::widgets::ListState::default();
+        if !payments.is_empty() {
+            scroll_state.select(Some(0));
+        }
+
+        Self {
+            payments,
+            selected_index: 0,
+            scroll_offset: 0,
+            hovered_index: None,
+            theme,
+        }
+    }
+
+    pub fn select_next(&mut self) {
+        self.selected_index = (self.selected_index + 1).min(self.payments.len().saturating_sub(1));
+    }
+
+    pub fn select_prev(&mut self) {
+        self.selected_index = self.selected_index.saturating_sub(1);
+    }
+
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<PaymentListAction> {
+        let mut list = self.as_list();
+        let action = list.handle_mouse(mouse, area);
+        self.sync_from(&list);
+        action.map(|a| match a {
+            UnifiedListAction::Select(i) => PaymentListAction::Select(i),
+            UnifiedListAction::Open(_) => PaymentListAction::ViewDetail,
+            UnifiedListAction::ContextMenu { index, x, y } => {
+                if let Some(payment) = self.payments.get(index) {
+                    PaymentListAction::ContextMenu { x, y, payment_id: payment.id }
+                } else {
+                    PaymentListAction::Select(index)
+                }
+            }
+            UnifiedListAction::New | UnifiedListAction::Edit(_) | UnifiedListAction::Delete(_) | UnifiedListAction::ToggleInactive => {
+                PaymentListAction::Select(self.selected_index)
+            }
+        })
+    }
+
+    fn as_list(&self) -> UnifiedList<Payment> {
+        let mut list = UnifiedList::new(
+            self.payments.clone(),
+            columns(),
+            self.theme.clone(),
+            UnifiedListConfig::new("Payments", 2, "No payments found."),
+        );
+        list.selected_index = self.selected_index;
+        list.scroll_offset = self.scroll_offset;
+        list.hovered_index = self.hovered_index;
+        list
+    }
+
+    fn sync_from(&mut self, list: &UnifiedList<Payment>) {
+        self.selected_index = list.selected_index;
+        self.scroll_offset = list.scroll_offset;
+        self.hovered_index = list.hovered_index;
+    }
+}
+
+impl Widget for PaymentList {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        self.as_list().render(area, buf);
+    }
+}
+
+fn col(
+    title: &'static str,
+    width: u16,
+    render: impl Fn(&Payment) -> String + 'static,
+) -> UnifiedColumnDef<Payment> {
+    UnifiedColumnDef::new(title, width, render)
+}
+
+fn columns() -> Vec<UnifiedColumnDef<Payment>> {
+    vec![
+        col("Date", 12, |p| p.payment_date.format("%d/%m/%Y").to_string()),
+        col("Invoice #", 12, |p| p.invoice_id.to_string()),
+        col("Patient", 36, |p| p.patient_id.to_string()),
+        col("Amount", 12, |p| format!("${:.2}", p.amount)),
+        col("Method", 12, |p| p.payment_method.to_string()),
+        col("Reference", 10, |p| p.reference.clone().unwrap_or_else(|| "-".to_string())),
+    ]
 }

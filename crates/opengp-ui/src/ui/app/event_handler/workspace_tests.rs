@@ -137,10 +137,8 @@ fn test_subtab_kind_sequence() {
     
     assert_eq!(workspace.active_subtab, SubtabKind::Clinical);
     
-    // Helper function to get next subtab in sequence
     fn next_subtab(current: SubtabKind) -> SubtabKind {
         match current {
-            SubtabKind::Summary | SubtabKind::Demographics => SubtabKind::Clinical,
             SubtabKind::Clinical => SubtabKind::Billing,
             SubtabKind::Billing => SubtabKind::Appointments,
             SubtabKind::Appointments => SubtabKind::Clinical,

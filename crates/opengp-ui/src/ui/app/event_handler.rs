@@ -359,7 +359,13 @@ impl App {
                 Action::NextClinicalMenu => {
                     let on_billing = if let Some(workspace) = self.workspace_manager.active_mut() {
                         workspace.active_clinical_menu = workspace.active_clinical_menu.next();
-                        workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing
+                        let billing = workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing;
+                        workspace.active_subtab = if billing {
+                            crate::ui::components::SubtabKind::Billing
+                        } else {
+                            crate::ui::components::SubtabKind::Clinical
+                        };
+                        billing
                     } else {
                         false
                     };
@@ -375,7 +381,13 @@ impl App {
                 Action::PrevClinicalMenu => {
                     let on_billing = if let Some(workspace) = self.workspace_manager.active_mut() {
                         workspace.active_clinical_menu = workspace.active_clinical_menu.prev();
-                        workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing
+                        let billing = workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing;
+                        workspace.active_subtab = if billing {
+                            crate::ui::components::SubtabKind::Billing
+                        } else {
+                            crate::ui::components::SubtabKind::Clinical
+                        };
+                        billing
                     } else {
                         false
                     };

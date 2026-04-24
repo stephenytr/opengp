@@ -25,6 +25,7 @@ mod scrollable_form;
 mod searchable_list;
 mod textarea;
 mod time_picker_popup;
+mod unified_list;
 mod validation;
 
 pub use calendar::{AppointmentStyler, CalendarAction, CalendarMode, CalendarWidget};
@@ -49,4 +50,5 @@ pub use scrollable_form::ScrollableFormState;
 pub use searchable_list::{Searchable, SearchableList, SearchableListAction, SearchableListState};
 pub use textarea::{HeightMode, TextareaState, TextareaWidget};
 pub use time_picker_popup::{TimePickerAction, TimePickerPopup};
+pub use unified_list::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 pub use validation::FormValidator;

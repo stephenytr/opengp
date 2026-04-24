@@ -351,17 +351,45 @@ impl App {
         if let Some(keybind) = registry.lookup(key, KeyContext::ClinicalSubView) {
             match keybind.action {
                 Action::CycleClinicalView => {
-                    if let Some(workspace) = self.workspace_manager.active_mut() {
+                    let on_billing = if let Some(workspace) = self.workspace_manager.active_mut() {
                         workspace.active_clinical_menu = workspace.active_clinical_menu.next();
+                        let billing = workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing;
+                        workspace.active_subtab = if billing {
+                            crate::ui::components::SubtabKind::Billing
+                        } else {
+                            crate::ui::components::SubtabKind::Clinical
+                        };
+                        billing
+                    } else {
+                        false
+                    };
+                    if on_billing {
+                        self.billing_state_mut();
+                        self.request_load_billing();
+                    } else {
+                        self.sync_clinical_view_to_menu();
                     }
-                    self.sync_clinical_view_to_menu();
                     return Action::Enter;
                 }
                 Action::CycleClinicalViewReverse => {
-                    if let Some(workspace) = self.workspace_manager.active_mut() {
+                    let on_billing = if let Some(workspace) = self.workspace_manager.active_mut() {
                         workspace.active_clinical_menu = workspace.active_clinical_menu.prev();
+                        let billing = workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing;
+                        workspace.active_subtab = if billing {
+                            crate::ui::components::SubtabKind::Billing
+                        } else {
+                            crate::ui::components::SubtabKind::Clinical
+                        };
+                        billing
+                    } else {
+                        false
+                    };
+                    if on_billing {
+                        self.billing_state_mut();
+                        self.request_load_billing();
+                    } else {
+                        self.sync_clinical_view_to_menu();
                     }
-                    self.sync_clinical_view_to_menu();
                     return Action::Enter;
                 }
                 Action::ToggleConsultationTimer => {
@@ -383,6 +411,20 @@ impl App {
                 }
                 _ => {}
             }
+        }
+
+        {
+            let cs = self.clinical_state_mut();
+            let consultations = cs.consultations.consultations.clone();
+            cs.consultations.consultation_list.consultations = consultations;
+            let allergies = cs.allergies.allergies.clone();
+            cs.allergies.allergy_list.allergies = allergies;
+            let vitals = cs.vitals.vital_signs.clone();
+            cs.vitals.vitals_list.vitals = vitals;
+            let medical_history = cs.medical_history.medical_history.clone();
+            cs.medical_history.medical_history_list.conditions = medical_history;
+            let family_history = cs.family_history.family_history.clone();
+            cs.family_history.family_history_list.entries = family_history;
         }
 
         let view = self.clinical_state_mut().view.clone();
@@ -438,18 +480,18 @@ impl App {
                     .handle_key(key);
                 if let Some(action) = list_action {
                     match action {
-                        crate::ui::widgets::ListAction::Open(condition) => {
+                        crate::ui::widgets::UnifiedListAction::Open(condition) => {
                             self.clinical_state_mut()
                                 .open_medical_history_detail(condition, &theme);
                         }
-                        crate::ui::widgets::ListAction::New => {
+                        crate::ui::widgets::UnifiedListAction::New => {
                             self.clinical_state_mut().open_medical_history_form();
                         }
-                        crate::ui::widgets::ListAction::Select(_)
-                        | crate::ui::widgets::ListAction::Edit(_)
-                        | crate::ui::widgets::ListAction::Delete(_)
-                        | crate::ui::widgets::ListAction::ToggleInactive
-                        | crate::ui::widgets::ListAction::ContextMenu { .. } => {}
+                        crate::ui::widgets::UnifiedListAction::Select(_)
+                        | crate::ui::widgets::UnifiedListAction::Edit(_)
+                        | crate::ui::widgets::UnifiedListAction::Delete(_)
+                        | crate::ui::widgets::UnifiedListAction::ToggleInactive
+                        | crate::ui::widgets::UnifiedListAction::ContextMenu { .. } => {}
                     }
                     return Action::Enter;
                 }

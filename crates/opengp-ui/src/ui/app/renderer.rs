@@ -373,31 +373,6 @@ impl App {
 
 
 
-    fn render_workspace_summary(&mut self, frame: &mut Frame, area: Rect) {
-        use crate::ui::components::workspace::SummaryView;
-
-        if let Some(workspace) = self.workspace_manager.active() {
-            let summary = SummaryView::new(
-                &workspace.patient_snapshot,
-                &workspace.clinical,
-                &workspace.billing,
-                &workspace.appointments,
-                &self.theme,
-            );
-
-            frame.render_widget(summary, area);
-        }
-    }
-
-    fn render_workspace_demographics(&mut self, frame: &mut Frame, area: Rect) {
-        use crate::ui::components::workspace::DemographicsViewList;
-
-        if let Some(workspace) = self.workspace_manager.active() {
-            let view = DemographicsViewList::new(&workspace.patient_snapshot, &self.theme);
-            frame.render_widget(view, area);
-        }
-    }
-
     fn render_workspace_clinical(&mut self, frame: &mut Frame, area: Rect) {
         use ratatui::widgets::Paragraph;
 
@@ -425,6 +400,7 @@ impl App {
                         let mut consultation_list = ConsultationList::new(existing.theme.clone());
                         consultation_list.selected_index = existing.selected_index;
                         consultation_list.scroll_offset = existing.scroll_offset;
+                        consultation_list.hovered_index = existing.hovered_index;
                         consultation_list.consultations = clinical_state.consultations.consultations.clone();
 
                         frame.render_widget(consultation_list, area);
@@ -434,6 +410,7 @@ impl App {
                         let mut allergy_list = AllergyList::new(existing.theme.clone());
                         allergy_list.selected_index = existing.selected_index;
                         allergy_list.scroll_offset = existing.scroll_offset;
+                        allergy_list.hovered_index = existing.hovered_index;
                         allergy_list.allergies = clinical_state.allergies.allergies.clone();
 
                         frame.render_widget(allergy_list, area);
@@ -443,6 +420,7 @@ impl App {
                         let mut vitals_list = VitalSignsList::new(existing.theme.clone());
                         vitals_list.selected_index = existing.selected_index;
                         vitals_list.scroll_offset = existing.scroll_offset;
+                        vitals_list.hovered_index = existing.hovered_index;
                         vitals_list.vitals = clinical_state.vitals.vital_signs.clone();
 
                         frame.render_widget(vitals_list, area);
@@ -452,6 +430,7 @@ impl App {
                         let mut medical_history_list = MedicalHistoryList::new(existing.theme.clone());
                         medical_history_list.selected_index = existing.selected_index;
                         medical_history_list.scroll_offset = existing.scroll_offset;
+                        medical_history_list.hovered_index = existing.hovered_index;
                         medical_history_list.conditions = clinical_state.medical_history.medical_history.clone();
                         frame.render_widget(medical_history_list, area);
                     }
@@ -460,6 +439,7 @@ impl App {
                         let mut family_history_list = FamilyHistoryList::new(existing.theme.clone());
                         family_history_list.selected_index = existing.selected_index;
                         family_history_list.scroll_offset = existing.scroll_offset;
+                        family_history_list.hovered_index = existing.hovered_index;
                         family_history_list.entries = clinical_state.family_history.family_history.clone();
                         frame.render_widget(family_history_list, area);
                     }

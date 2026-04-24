@@ -42,7 +42,13 @@ impl App {
                 if let Some(idx) = clinical_row.handle_mouse(mouse, clinical_row_area) {
                     if let Some(kind) = ClinicalMenuKind::from_index(idx) {
                         workspace.active_clinical_menu = kind;
-                        if kind == ClinicalMenuKind::Billing {
+                        let billing = kind == ClinicalMenuKind::Billing;
+                        workspace.active_subtab = if billing {
+                            crate::ui::components::SubtabKind::Billing
+                        } else {
+                            crate::ui::components::SubtabKind::Clinical
+                        };
+                        if billing {
                             self.billing_state_mut();
                             self.request_load_billing();
                         }
@@ -306,11 +312,24 @@ impl App {
         if self.tab_bar.selected() == Tab::PatientWorkspace {
             if let Some(workspace) = self.workspace_manager.active_mut() {
                 if let Some(ref mut clinical_state) = workspace.clinical {
+                    let consultations = clinical_state.consultations.consultations.clone();
+                    clinical_state.consultations.consultation_list.consultations = consultations;
+                    let allergies = clinical_state.allergies.allergies.clone();
+                    clinical_state.allergies.allergy_list.allergies = allergies;
+                    let vitals = clinical_state.vitals.vital_signs.clone();
+                    clinical_state.vitals.vitals_list.vitals = vitals;
+                    let medical_history = clinical_state.medical_history.medical_history.clone();
+                    clinical_state.medical_history.medical_history_list.conditions = medical_history;
+                    let family_history = clinical_state.family_history.family_history.clone();
+                    clinical_state.family_history.family_history_list.entries = family_history;
+
+                    let content_top = area.y + 2;
+                    let content_height = area.height.saturating_sub(2 + STATUS_BAR_HEIGHT);
                     let clinical_content_area = Rect::new(
                         area.x,
-                        area.y + clinical_row_offset,
+                        content_top,
                         area.width,
-                        area.height.saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
+                        content_height,
                     );
 
                     match clinical_state.view {

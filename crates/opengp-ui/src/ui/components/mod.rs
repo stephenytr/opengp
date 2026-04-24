@@ -11,11 +11,10 @@ pub mod patient;
 pub mod patient_tab_bar;
 pub mod shared;
 pub mod status_bar;
-pub mod subtab_bar;
 pub mod tabs;
 pub mod welcome_panel;
 pub mod workspace;
 
 pub use clinical_row::{ClinicalMenuKind, ClinicalRow};
 pub use patient_tab_bar::{PatientTab, PatientTabBar};
-pub use subtab_bar::{SubtabBar, SubtabKind};
+pub use workspace::SubtabKind;

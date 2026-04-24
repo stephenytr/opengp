@@ -5,9 +5,23 @@ use crate::ui::view_models::PatientListItem;
 use crate::ui::components::clinical::ClinicalState;
 use crate::ui::components::billing::PatientBillingState;
 use crate::ui::app::PendingBillingSaveData;
-use crate::ui::components::SubtabKind;
 use crate::ui::components::clinical_row::ClinicalMenuKind;
 use super::appointment_state::PatientAppointmentState;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SubtabKind {
+    Clinical,
+    Billing,
+    Appointments,
+    #[cfg(feature = "pathology")]
+    Pathology,
+    #[cfg(feature = "prescription")]
+    Prescription,
+    #[cfg(feature = "referral")]
+    Referral,
+    #[cfg(feature = "immunisation")]
+    Immunisation,
+}
 
 #[derive(Debug, Clone)]
 pub enum WorkspaceError {
@@ -43,6 +57,24 @@ pub struct PatientWorkspace {
     pub billing: Option<PatientBillingState>,
     pub appointments: Option<PatientAppointmentState>,
     pub pending_billing: Option<PendingBillingSaveData>,
+}
+
+impl SubtabKind {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            SubtabKind::Clinical => "Clinical",
+            SubtabKind::Billing => "Billing",
+            SubtabKind::Appointments => "Appointments",
+            #[cfg(feature = "pathology")]
+            SubtabKind::Pathology => "Pathology",
+            #[cfg(feature = "prescription")]
+            SubtabKind::Prescription => "Prescription",
+            #[cfg(feature = "referral")]
+            SubtabKind::Referral => "Referral",
+            #[cfg(feature = "immunisation")]
+            SubtabKind::Immunisation => "Immunisation",
+        }
+    }
 }
 
 impl PatientWorkspace {

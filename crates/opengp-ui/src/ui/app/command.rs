@@ -88,8 +88,6 @@ mod tests {
     #[test]
     fn test_subtab_kind_variants() {
         let subtabs = vec![
-            SubtabKind::Summary,
-            SubtabKind::Demographics,
             SubtabKind::Clinical,
             SubtabKind::Billing,
             SubtabKind::Appointments,

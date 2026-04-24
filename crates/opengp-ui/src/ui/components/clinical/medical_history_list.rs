@@ -1,10 +1,12 @@
+use std::rc::Rc;
+
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{ClinicalTableList, ColumnDef, ListAction};
+use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 use crossterm::event::{KeyEvent, MouseEvent};
 use opengp_domain::domain::clinical::{ConditionStatus, MedicalHistory, Severity};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 
-pub type MedicalHistoryListAction = ListAction<MedicalHistory>;
+pub type MedicalHistoryListAction = UnifiedListAction<MedicalHistory>;
 
 #[derive(Clone)]
 pub struct MedicalHistoryList {
@@ -13,6 +15,7 @@ pub struct MedicalHistoryList {
     pub scroll_offset: usize,
     pub loading: bool,
     pub theme: Theme,
+    pub hovered_index: Option<usize>,
 }
 
 impl MedicalHistoryList {
@@ -23,118 +26,96 @@ impl MedicalHistoryList {
             scroll_offset: 0,
             loading: false,
             theme,
+            hovered_index: None,
         }
     }
 
     pub fn adjust_scroll(&mut self, visible_rows: usize) {
-        let mut list = self.table_list();
+        let mut list = self.as_list();
         list.adjust_scroll(visible_rows);
-        self.sync_nav(&list);
+        self.sync_from(&list);
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<MedicalHistoryListAction> {
-        let mut list = self.table_list();
+        let mut list = self.as_list();
         let action = list.handle_key(key);
-        self.sync_nav(&list);
+        self.sync_from(&list);
         action
     }
 
-    pub fn handle_mouse(
-        &mut self,
-        mouse: MouseEvent,
-        area: Rect,
-    ) -> Option<MedicalHistoryListAction> {
-        let mut list = self.table_list();
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<MedicalHistoryListAction> {
+        let mut list = self.as_list();
         let action = list.handle_mouse(mouse, area);
-        self.sync_nav(&list);
+        self.sync_from(&list);
         action
     }
 
-    fn sync_nav(&mut self, list: &ClinicalTableList<MedicalHistory>) {
-        self.selected_index = list.selected_index;
-        self.scroll_offset = list.scroll_offset;
-    }
-
-    fn table_list(&self) -> ClinicalTableList<MedicalHistory> {
-        let mut list = ClinicalTableList::new(
+    fn as_list(&self) -> UnifiedList<MedicalHistory> {
+        let mut list = UnifiedList::new(
             self.conditions.clone(),
             Self::columns(),
             self.theme.clone(),
-            "Medical History",
-            None,
+            UnifiedListConfig::new("Medical History", 2, "No medical history found. Press n to add a condition."),
         );
         list.selected_index = self.selected_index;
         list.scroll_offset = self.scroll_offset;
         list.loading = self.loading;
-        list.empty_message = "No medical history found. Press n to add a condition.".to_string();
+        list.hovered_index = self.hovered_index;
         list
     }
 
-    fn columns() -> Vec<ColumnDef<MedicalHistory>> {
+    fn sync_from(&mut self, list: &UnifiedList<MedicalHistory>) {
+        self.selected_index = list.selected_index;
+        self.scroll_offset = list.scroll_offset;
+        self.loading = list.loading;
+        self.hovered_index = list.hovered_index;
+    }
+
+    fn columns() -> Vec<UnifiedColumnDef<MedicalHistory>> {
         vec![
-            ColumnDef {
-                title: "Condition",
-                width: 25,
-                render: Box::new(|c| c.condition.clone()),
-            },
-            ColumnDef {
-                title: "DiagDate",
-                width: 12,
-                render: Box::new(|c| {
-                    c.diagnosis_date
-                        .map(|d| d.format("%d/%m/%Y").to_string())
-                        .unwrap_or_else(|| "-".to_string())
-                }),
-            },
-            ColumnDef {
-                title: "Status",
-                width: 12,
-                render: Box::new(|c| {
-                    match c.status {
-                        ConditionStatus::Active => "Active",
-                        ConditionStatus::Resolved => "Resolved",
-                        ConditionStatus::Chronic => "Chronic",
-                        ConditionStatus::Recurring => "Recurring",
-                        ConditionStatus::InRemission => "In Remission",
-                    }
-                    .to_string()
-                }),
-            },
-            ColumnDef {
-                title: "Severity",
-                width: 10,
-                render: Box::new(|c| {
-                    match c.severity {
-                        Some(Severity::Mild) => "Mild",
-                        Some(Severity::Moderate) => "Moderate",
-                        Some(Severity::Severe) => "Severe",
-                        None => "-",
-                    }
-                    .to_string()
-                }),
-            },
-            ColumnDef {
-                title: "Notes",
-                width: 25,
-                render: Box::new(|c| {
-                    c.notes
-                        .as_ref()
-                        .map(|s| {
-                            if s.len() > 23 {
-                                format!("{}...", &s[..23])
-                            } else {
-                                s.clone()
-                            }
-                        })
-                        .unwrap_or_else(|| "-".to_string())
-                }),
-            },
+            UnifiedColumnDef::<MedicalHistory>::new("Condition", 25, |c| c.condition.clone()),
+            UnifiedColumnDef::<MedicalHistory>::new("DiagDate", 12, |c| {
+                c.diagnosis_date
+                    .map(|d| d.format("%d/%m/%Y").to_string())
+                    .unwrap_or_else(|| "-".to_string())
+            }),
+            UnifiedColumnDef::<MedicalHistory>::new("Status", 12, |c| {
+                match c.status {
+                    ConditionStatus::Active => "Active",
+                    ConditionStatus::Resolved => "Resolved",
+                    ConditionStatus::Chronic => "Chronic",
+                    ConditionStatus::Recurring => "Recurring",
+                    ConditionStatus::InRemission => "In Remission",
+                }
+                .to_string()
+            }),
+            UnifiedColumnDef::<MedicalHistory>::new("Severity", 10, |c| {
+                match c.severity {
+                    Some(Severity::Mild) => "Mild",
+                    Some(Severity::Moderate) => "Moderate",
+                    Some(Severity::Severe) => "Severe",
+                    None => "-",
+                }
+                .to_string()
+            }),
+            UnifiedColumnDef::<MedicalHistory>::new("Notes", 25, |c| {
+                c.notes
+                    .as_ref()
+                    .map(|s| {
+                        if s.len() > 23 {
+                            format!("{}...", &s[..23])
+                        } else {
+                            s.clone()
+                        }
+                    })
+                    .unwrap_or_else(|| "-".to_string())
+            }),
         ]
     }
 }
 
 impl Widget for MedicalHistoryList {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        self.table_list().render(area, buf);
+        self.as_list().render(area, buf);
     }
 }

@@ -1,5 +1,7 @@
+use std::rc::Rc;
+
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{ClinicalTableList, ColumnDef, ListAction};
+use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 use crossterm::event::{KeyEvent, MouseEvent};
 use opengp_domain::domain::clinical::Consultation;
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
@@ -11,6 +13,7 @@ pub struct ConsultationList {
     pub scroll_offset: usize,
     pub loading: bool,
     pub theme: Theme,
+    pub hovered_index: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -31,35 +34,32 @@ impl ConsultationList {
             scroll_offset: 0,
             loading: false,
             theme,
+            hovered_index: None,
         }
     }
 
+    pub fn set_consultations(&mut self, consultations: Vec<Consultation>) {
+        self.consultations = consultations;
+    }
+
     pub fn next(&mut self) {
-        let mut table = self.table();
-        table.move_down();
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
+        if self.selected_index < self.consultations.len().saturating_sub(1) {
+            self.selected_index += 1;
+        }
     }
 
     pub fn prev(&mut self) {
-        let mut table = self.table();
-        table.move_up();
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
+        if self.selected_index > 0 {
+            self.selected_index -= 1;
+        }
     }
 
     pub fn move_first(&mut self) {
-        let mut table = self.table();
-        table.move_first();
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
+        self.selected_index = 0;
     }
 
     pub fn move_last(&mut self) {
-        let mut table = self.table();
-        table.move_last();
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
+        self.selected_index = self.consultations.len().saturating_sub(1);
     }
 
     pub fn move_up(&mut self) {
@@ -71,10 +71,14 @@ impl ConsultationList {
     }
 
     pub fn adjust_scroll(&mut self, visible_rows: usize) {
-        let mut table = self.table();
-        table.adjust_scroll(visible_rows);
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
+        if visible_rows == 0 {
+            return;
+        }
+        if self.selected_index < self.scroll_offset {
+            self.scroll_offset = self.selected_index;
+        } else if self.selected_index >= self.scroll_offset + visible_rows {
+            self.scroll_offset = self.selected_index.saturating_sub(visible_rows) + 1;
+        }
     }
 
     pub fn move_up_and_scroll(&mut self, visible_rows: usize) {
@@ -120,55 +124,60 @@ impl ConsultationList {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ConsultationListAction> {
-        let mut table = self.table();
-        let out = match table.handle_key(key) {
-            Some(ListAction::Select(i)) => Some(ConsultationListAction::Select(i)),
-            Some(ListAction::Open(c)) => Some(ConsultationListAction::Open(Box::new(c))),
-            Some(ListAction::New) => Some(ConsultationListAction::New),
-            _ => None,
-        };
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
-        out
+        let mut list = self.as_list()?;
+        let action = list.handle_key(key);
+        self.sync_from(&list);
+        action.map(|a| match a {
+            UnifiedListAction::Select(i) => ConsultationListAction::Select(i),
+            UnifiedListAction::Open(c) => ConsultationListAction::Open(Box::new(c)),
+            UnifiedListAction::New => ConsultationListAction::New,
+            _ => ConsultationListAction::Select(self.selected_index),
+        })
     }
 
-    pub fn handle_mouse(
-        &mut self,
-        mouse: MouseEvent,
-        area: Rect,
-    ) -> Option<ConsultationListAction> {
-        let mut table = self.table();
-        let action = table.handle_mouse(mouse, area).and_then(|a| match a {
-            ListAction::Select(i) => Some(ConsultationListAction::Select(i)),
-            ListAction::Open(consultation) => Some(ConsultationListAction::Open(Box::new(consultation))),
-            ListAction::New => Some(ConsultationListAction::New),
-            ListAction::ContextMenu { index, x, y } => Some(ConsultationListAction::ContextMenu { index, x, y }),
-            ListAction::Edit(_) | ListAction::Delete(_) | ListAction::ToggleInactive => None,
-        });
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
-        action
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ConsultationListAction> {
+        let mut list = self.as_list()?;
+        let action = list.handle_mouse(mouse, area);
+        self.sync_from(&list);
+        action.map(|a| match a {
+            UnifiedListAction::Select(i) => ConsultationListAction::Select(i),
+            UnifiedListAction::Open(c) => ConsultationListAction::Open(Box::new(c)),
+            UnifiedListAction::New => ConsultationListAction::New,
+            UnifiedListAction::ContextMenu { index, x, y, .. } => ConsultationListAction::ContextMenu { index, x, y },
+            _ => ConsultationListAction::Select(self.selected_index),
+        })
     }
 
-    fn table(&self) -> ClinicalTableList<Consultation> {
-        let mut table = ClinicalTableList::new(
+    fn as_list(&self) -> Option<UnifiedList<Consultation>> {
+        let mut list = UnifiedList::new(
             self.consultations.clone(),
             columns(),
             self.theme.clone(),
-            "Consultations",
-            None,
+            UnifiedListConfig::new("Consultations", 2, "No consultations found. Press n to add a new consultation."),
         );
-        table.selected_index = self.selected_index;
-        table.scroll_offset = self.scroll_offset;
-        table.loading = self.loading;
-        table.empty_message = "No consultations found. Press n to add a new consultation.".into();
-        table
+        list.selected_index = self.selected_index;
+        list.scroll_offset = self.scroll_offset;
+        list.loading = self.loading;
+        list.hovered_index = self.hovered_index;
+        Some(list)
+    }
+
+    fn sync_from(&mut self, list: &UnifiedList<Consultation>) {
+        self.selected_index = list.selected_index;
+        self.scroll_offset = list.scroll_offset;
+        self.loading = list.loading;
+        self.hovered_index = list.hovered_index;
     }
 }
 
 impl Widget for ConsultationList {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        self.table().render(area, buf);
+        let mut list = match self.as_list() {
+            Some(l) => l,
+            None => return,
+        };
+        list.loading = self.loading;
+        list.render(area, buf);
     }
 }
 
@@ -176,15 +185,15 @@ fn col(
     title: &'static str,
     width: u16,
     render: impl Fn(&Consultation) -> String + 'static,
-) -> ColumnDef<Consultation> {
-    ColumnDef {
+) -> UnifiedColumnDef<Consultation> {
+    UnifiedColumnDef {
         title,
         width,
-        render: Box::new(render),
+        render: Rc::new(render),
     }
 }
 
-fn columns() -> Vec<ColumnDef<Consultation>> {
+fn columns() -> Vec<UnifiedColumnDef<Consultation>> {
     vec![
         col("Date", 12, |c| {
             c.consultation_date.format("%d/%m/%Y").to_string()

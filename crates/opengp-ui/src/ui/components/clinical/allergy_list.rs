@@ -1,5 +1,7 @@
+use std::rc::Rc;
+
 use crate::ui::theme::Theme;
-use crate::ui::widgets::{ClinicalTableList, ColumnDef, ListAction};
+use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 use crossterm::event::{KeyEvent, MouseEvent};
 use opengp_domain::domain::clinical::Allergy;
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
@@ -12,6 +14,7 @@ pub struct AllergyList {
     pub scroll_offset: usize,
     pub loading: bool,
     pub theme: Theme,
+    pub hovered_index: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,88 +36,97 @@ impl AllergyList {
             scroll_offset: 0,
             loading: false,
             theme,
+            hovered_index: None,
         }
     }
 
     pub fn next(&mut self) {
-        let mut table = self.table();
-        table.move_down();
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
+        self.selected_index = (self.selected_index + 1).min(self.allergies.len().saturating_sub(1));
     }
 
     pub fn prev(&mut self) {
-        let mut table = self.table();
-        table.move_up();
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
+        self.selected_index = self.selected_index.saturating_sub(1);
     }
 
     pub fn move_first(&mut self) {
-        let mut table = self.table();
-        table.move_first();
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
+        self.selected_index = 0;
     }
 
     pub fn adjust_scroll(&mut self, visible_rows: usize) {
-        let mut table = self.table();
-        table.adjust_scroll(visible_rows);
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
+        if visible_rows == 0 {
+            return;
+        }
+        if self.selected_index < self.scroll_offset {
+            self.scroll_offset = self.selected_index;
+        } else if self.selected_index >= self.scroll_offset + visible_rows {
+            self.scroll_offset = self.selected_index.saturating_sub(visible_rows) + 1;
+        }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<AllergyListAction> {
-        let mut table = self.table();
-        let out = match table.handle_key(key) {
-            Some(ListAction::Select(i)) => Some(AllergyListAction::Select(i)),
-            Some(ListAction::Open(a)) => Some(AllergyListAction::Open(a)),
-            Some(ListAction::New) => Some(AllergyListAction::New),
-            Some(ListAction::Delete(a)) => Some(AllergyListAction::Delete(a)),
-            Some(ListAction::ToggleInactive) => {
+        let mut list = self.as_list()?;
+        let action = list.handle_key(key);
+        self.sync_from(&list);
+        action.map(|a| match a {
+            UnifiedListAction::Select(i) => AllergyListAction::Select(i),
+            UnifiedListAction::Open(a) => AllergyListAction::Open(a),
+            UnifiedListAction::New => AllergyListAction::New,
+            UnifiedListAction::Delete(a) => AllergyListAction::Delete(a),
+            UnifiedListAction::ToggleInactive => {
                 self.show_inactive = !self.show_inactive;
-                Some(AllergyListAction::ToggleInactive)
+                AllergyListAction::ToggleInactive
             }
-            _ => None,
-        };
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
-        out
+            UnifiedListAction::Edit(_) | UnifiedListAction::ContextMenu { .. } => {
+                AllergyListAction::Select(self.selected_index)
+            }
+        })
     }
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<AllergyListAction> {
-        let mut table = self.table();
-        let action = table.handle_mouse(mouse, area).and_then(|a| match a {
-            ListAction::Select(i) => Some(AllergyListAction::Select(i)),
-            ListAction::Open(allergy) => Some(AllergyListAction::Open(allergy)),
-            ListAction::New => Some(AllergyListAction::New),
-            ListAction::ContextMenu { index, x, y } => Some(AllergyListAction::ContextMenu { index, x, y }),
-            ListAction::Edit(_) | ListAction::Delete(_) | ListAction::ToggleInactive => None,
-        });
-        self.selected_index = table.selected_index;
-        self.scroll_offset = table.scroll_offset;
-        action
+        let mut list = self.as_list()?;
+        let action = list.handle_mouse(mouse, area);
+        self.sync_from(&list);
+        action.map(|a| match a {
+            UnifiedListAction::Select(i) => AllergyListAction::Select(i),
+            UnifiedListAction::Open(a) => AllergyListAction::Open(a),
+            UnifiedListAction::New => AllergyListAction::New,
+            UnifiedListAction::ContextMenu { index, x, y } => AllergyListAction::ContextMenu { index, x, y },
+            UnifiedListAction::Edit(_) | UnifiedListAction::Delete(_) | UnifiedListAction::ToggleInactive => {
+                AllergyListAction::Select(self.selected_index)
+            }
+        })
     }
 
-    fn table(&self) -> ClinicalTableList<Allergy> {
-        let mut table = ClinicalTableList::new(
+    fn as_list(&self) -> Option<UnifiedList<Allergy>> {
+        let mut list = UnifiedList::new(
             self.allergies.clone(),
             columns(),
             self.theme.clone(),
-            "Allergies",
-            None,
+            UnifiedListConfig::new("Allergies", 2, "No allergies found. Press n to add a new allergy."),
         );
-        table.selected_index = self.selected_index;
-        table.scroll_offset = self.scroll_offset;
-        table.loading = self.loading;
-        table.empty_message = "No allergies found. Press n to add a new allergy.".into();
-        table
+        list.selected_index = self.selected_index;
+        list.scroll_offset = self.scroll_offset;
+        list.loading = self.loading;
+        list.hovered_index = self.hovered_index;
+        Some(list)
+    }
+
+    fn sync_from(&mut self, list: &UnifiedList<Allergy>) {
+        self.selected_index = list.selected_index;
+        self.scroll_offset = list.scroll_offset;
+        self.loading = list.loading;
+        self.hovered_index = list.hovered_index;
     }
 }
 
 impl Widget for AllergyList {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        self.table().render(area, buf);
+        let mut list = match self.as_list() {
+            Some(l) => l,
+            None => return,
+        };
+        list.loading = self.loading;
+        list.render(area, buf);
     }
 }
 
@@ -122,15 +134,11 @@ fn col(
     title: &'static str,
     width: u16,
     render: impl Fn(&Allergy) -> String + 'static,
-) -> ColumnDef<Allergy> {
-    ColumnDef {
-        title,
-        width,
-        render: Box::new(render),
-    }
+) -> UnifiedColumnDef<Allergy> {
+    UnifiedColumnDef::new(title, width, render)
 }
 
-fn columns() -> Vec<ColumnDef<Allergy>> {
+fn columns() -> Vec<UnifiedColumnDef<Allergy>> {
     vec![
         col("Allergen", 20, |a| a.allergen.clone()),
         col("Type", 15, |a| a.allergy_type.to_string()),
