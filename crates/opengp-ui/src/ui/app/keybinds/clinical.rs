@@ -351,43 +351,15 @@ impl App {
         if let Some(keybind) = registry.lookup(key, KeyContext::ClinicalSubView) {
             match keybind.action {
                 Action::CycleClinicalView => {
-                    let on_billing = if let Some(workspace) = self.workspace_manager.active_mut() {
+                    if let Some(workspace) = self.workspace_manager.active_mut() {
                         workspace.active_clinical_menu = workspace.active_clinical_menu.next();
-                        let billing = workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing;
-                        workspace.active_subtab = if billing {
-                            crate::ui::components::SubtabKind::Billing
-                        } else {
-                            crate::ui::components::SubtabKind::Clinical
-                        };
-                        billing
-                    } else {
-                        false
-                    };
-                    if on_billing {
-                        self.billing_state_mut();
-                        self.request_load_billing();
-                    } else {
                         self.sync_clinical_view_to_menu();
                     }
                     return Action::Enter;
                 }
                 Action::CycleClinicalViewReverse => {
-                    let on_billing = if let Some(workspace) = self.workspace_manager.active_mut() {
+                    if let Some(workspace) = self.workspace_manager.active_mut() {
                         workspace.active_clinical_menu = workspace.active_clinical_menu.prev();
-                        let billing = workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing;
-                        workspace.active_subtab = if billing {
-                            crate::ui::components::SubtabKind::Billing
-                        } else {
-                            crate::ui::components::SubtabKind::Clinical
-                        };
-                        billing
-                    } else {
-                        false
-                    };
-                    if on_billing {
-                        self.billing_state_mut();
-                        self.request_load_billing();
-                    } else {
                         self.sync_clinical_view_to_menu();
                     }
                     return Action::Enter;

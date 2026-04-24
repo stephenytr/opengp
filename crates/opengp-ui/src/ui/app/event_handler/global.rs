@@ -42,16 +42,6 @@ impl App {
                 if let Some(idx) = clinical_row.handle_mouse(mouse, clinical_row_area) {
                     if let Some(kind) = ClinicalMenuKind::from_index(idx) {
                         workspace.active_clinical_menu = kind;
-                        let billing = kind == ClinicalMenuKind::Billing;
-                        workspace.active_subtab = if billing {
-                            crate::ui::components::SubtabKind::Billing
-                        } else {
-                            crate::ui::components::SubtabKind::Clinical
-                        };
-                        if billing {
-                            self.billing_state_mut();
-                            self.request_load_billing();
-                        }
                         self.refresh_status_bar();
                         return;
                     }
