@@ -202,15 +202,14 @@ impl App {
         }
     }
 
-    fn sync_clinical_view_to_menu(&mut self) {
+    pub(crate) fn sync_clinical_view_to_menu(&mut self) {
         if let Some(workspace) = self.workspace_manager.active_mut() {
             let menu = workspace.active_clinical_menu;
             if let Some(ref mut clinical) = workspace.clinical {
                 match menu {
                     ClinicalMenuKind::Consultations => {
-                        match clinical.view {
-                            ClinicalView::PatientSummary | ClinicalView::Consultations => {}
-                            _ => clinical.show_patient_summary(),
+                        if clinical.view != ClinicalView::Consultations {
+                            clinical.show_consultations();
                         }
                     }
                     ClinicalMenuKind::Vitals => {

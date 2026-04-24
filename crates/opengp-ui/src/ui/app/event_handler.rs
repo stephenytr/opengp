@@ -357,25 +357,35 @@ impl App {
                 }
 
                 Action::NextClinicalMenu => {
-                    if let Some(workspace) = self.workspace_manager.active_mut() {
+                    let on_billing = if let Some(workspace) = self.workspace_manager.active_mut() {
                         workspace.active_clinical_menu = workspace.active_clinical_menu.next();
-                        if workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing {
-                            self.billing_state_mut();
-                            self.load_billing_data();
-                        }
-                        self.refresh_status_bar();
+                        workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing
+                    } else {
+                        false
+                    };
+                    if on_billing {
+                        self.billing_state_mut();
+                        self.request_load_billing();
+                    } else {
+                        self.sync_clinical_view_to_menu();
                     }
+                    self.refresh_status_bar();
                 }
 
                 Action::PrevClinicalMenu => {
-                    if let Some(workspace) = self.workspace_manager.active_mut() {
+                    let on_billing = if let Some(workspace) = self.workspace_manager.active_mut() {
                         workspace.active_clinical_menu = workspace.active_clinical_menu.prev();
-                        if workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing {
-                            self.billing_state_mut();
-                            self.load_billing_data();
-                        }
-                        self.refresh_status_bar();
+                        workspace.active_clinical_menu == crate::ui::components::clinical_row::ClinicalMenuKind::Billing
+                    } else {
+                        false
+                    };
+                    if on_billing {
+                        self.billing_state_mut();
+                        self.request_load_billing();
+                    } else {
+                        self.sync_clinical_view_to_menu();
                     }
+                    self.refresh_status_bar();
                 }
 
                 Action::OpenPatientFromList => {
