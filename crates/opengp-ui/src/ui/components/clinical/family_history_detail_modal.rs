@@ -94,14 +94,6 @@ impl FamilyHistoryDetailModal {
                 self.prev_button();
                 None
             }
-            KeyCode::Left | KeyCode::Up => {
-                self.prev_button();
-                None
-            }
-            KeyCode::Right | KeyCode::Down => {
-                self.next_button();
-                None
-            }
             KeyCode::Enter => self.handle_enter_on_focused_button(),
             _ => None,
         }

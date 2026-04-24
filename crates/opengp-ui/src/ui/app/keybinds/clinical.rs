@@ -350,20 +350,6 @@ impl App {
         let registry = crate::ui::keybinds::KeybindRegistry::global();
         if let Some(keybind) = registry.lookup(key, KeyContext::ClinicalSubView) {
             match keybind.action {
-                Action::CycleClinicalView => {
-                    if let Some(workspace) = self.workspace_manager.active_mut() {
-                        workspace.active_clinical_menu = workspace.active_clinical_menu.next();
-                        self.sync_clinical_view_to_menu();
-                    }
-                    return Action::Enter;
-                }
-                Action::CycleClinicalViewReverse => {
-                    if let Some(workspace) = self.workspace_manager.active_mut() {
-                        workspace.active_clinical_menu = workspace.active_clinical_menu.prev();
-                        self.sync_clinical_view_to_menu();
-                    }
-                    return Action::Enter;
-                }
                 Action::ToggleConsultationTimer => {
                     let timer_payload = {
                         let clinical_state = self.clinical_state_mut();

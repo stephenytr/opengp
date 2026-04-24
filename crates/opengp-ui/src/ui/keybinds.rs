@@ -228,10 +228,6 @@ pub enum Action {
     GenerateReceipt,
 
     // Clinical sub-view actions
-    /// Cycle to next clinical view
-    CycleClinicalView,
-    /// Cycle to previous clinical view
-    CycleClinicalViewReverse,
     /// Toggle consultation timer
     ToggleConsultationTimer,
 
@@ -815,18 +811,6 @@ impl KeybindRegistry {
 
         // Clinical sub-view keybinds
         self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
-            action: Action::CycleClinicalView,
-            context: KeyContext::ClinicalSubView,
-            description: "Next clinical view",
-        });
-        self.register(Keybind {
-            key: KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
-            action: Action::CycleClinicalViewReverse,
-            context: KeyContext::ClinicalSubView,
-            description: "Previous clinical view",
-        });
-        self.register(Keybind {
             key: KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
             action: Action::ToggleConsultationTimer,
             context: KeyContext::ClinicalSubView,
@@ -1132,8 +1116,6 @@ mod tests {
     #[test]
     fn test_clinical_subview_context_variants_exist() {
         let _ = KeyContext::ClinicalSubView;
-        let _ = Action::CycleClinicalView;
-        let _ = Action::CycleClinicalViewReverse;
         let _ = Action::ToggleConsultationTimer;
     }
 
@@ -1170,24 +1152,6 @@ mod tests {
         let result = registry.lookup(key, KeyContext::BillingForm);
         assert!(result.is_some());
         assert_eq!(result.unwrap().action, Action::Escape);
-    }
-
-    #[test]
-    fn test_clinical_subview_right_cycles_forward() {
-        let registry = KeybindRegistry::new();
-        let key = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
-        let result = registry.lookup(key, KeyContext::ClinicalSubView);
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().action, Action::CycleClinicalView);
-    }
-
-    #[test]
-    fn test_clinical_subview_left_cycles_backward() {
-        let registry = KeybindRegistry::new();
-        let key = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
-        let result = registry.lookup(key, KeyContext::ClinicalSubView);
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().action, Action::CycleClinicalViewReverse);
     }
 
     #[test]
