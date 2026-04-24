@@ -11,65 +11,65 @@ use opengp_domain::domain::billing::{
 
 #[derive(Debug, FromRow)]
 struct InvoiceRow {
-    id: String,
+    id: Uuid,
     invoice_number: String,
-    patient_id: String,
-    practitioner_id: String,
-    consultation_id: Option<String>,
+    patient_id: Uuid,
+    practitioner_id: Uuid,
+    consultation_id: Option<Uuid>,
     billing_type: String,
     status: String,
-    issue_date: String,
-    due_date: Option<String>,
+    issue_date: NaiveDate,
+    due_date: Option<NaiveDate>,
     subtotal: f64,
     gst_amount: f64,
     total_amount: f64,
     amount_paid: f64,
     amount_outstanding: f64,
     notes: Option<String>,
-    created_at: String,
-    updated_at: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, FromRow)]
 struct InvoiceItemRow {
-    id: String,
+    id: Uuid,
     description: String,
     item_code: Option<String>,
-    quantity: i64,
+    quantity: i32,
     unit_price: f64,
     amount: f64,
-    is_gst_free: i64,
+    is_gst_free: bool,
 }
 
 #[derive(Debug, FromRow)]
 struct PaymentRow {
-    id: String,
-    invoice_id: String,
-    patient_id: String,
-    payment_date: String,
+    id: Uuid,
+    invoice_id: Uuid,
+    patient_id: Uuid,
+    payment_date: NaiveDate,
     amount: f64,
     payment_method: String,
     reference: Option<String>,
     notes: Option<String>,
-    created_at: String,
-    created_by: String,
+    created_by: Uuid,
+    created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, FromRow)]
 struct ClaimRow {
-    id: String,
-    invoice_id: Option<String>,
-    patient_id: String,
-    practitioner_id: String,
+    id: Uuid,
+    invoice_id: Option<Uuid>,
+    patient_id: Uuid,
+    practitioner_id: Uuid,
     claim_type: String,
     status: String,
-    service_date: String,
+    service_date: NaiveDate,
     total_claimed: f64,
     total_benefit: f64,
     reference_number: Option<String>,
-    submitted_at: Option<String>,
-    processed_at: Option<String>,
-    created_at: String,
+    submitted_at: Option<DateTime<Utc>>,
+    processed_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
 }
 
 pub struct SqlxBillingRepository {
@@ -82,25 +82,16 @@ impl SqlxBillingRepository {
     }
 
     async fn map_invoice_row(&self, row: InvoiceRow) -> Result<Invoice, RepositoryError> {
-        let invoice_id = parse_uuid(&row.id, "invoices.id")?;
-        let items = self.find_invoice_items(invoice_id).await?;
+        let items = self.find_invoice_items(row.id).await?;
 
         Ok(Invoice {
-            id: invoice_id,
-            patient_id: parse_uuid(&row.patient_id, "invoices.patient_id")?,
-            practitioner_id: parse_uuid(&row.practitioner_id, "invoices.practitioner_id")?,
-            consultation_id: row
-                .consultation_id
-                .as_deref()
-                .map(|value| parse_uuid(value, "invoices.consultation_id"))
-                .transpose()?,
+            id: row.id,
+            patient_id: row.patient_id,
+            practitioner_id: row.practitioner_id,
+            consultation_id: row.consultation_id,
             invoice_number: row.invoice_number,
-            invoice_date: parse_naive_date(&row.issue_date, "invoices.issue_date")?,
-            due_date: row
-                .due_date
-                .as_deref()
-                .map(|value| parse_naive_date(value, "invoices.due_date"))
-                .transpose()?,
+            invoice_date: row.issue_date,
+            due_date: row.due_date,
             items,
             subtotal: row.subtotal,
             gst_amount: row.gst_amount,
@@ -110,40 +101,37 @@ impl SqlxBillingRepository {
             status: parse_enum(&row.status, "invoices.status")?,
             billing_type: parse_enum(&row.billing_type, "invoices.billing_type")?,
             notes: row.notes,
-            created_at: parse_datetime(&row.created_at, "invoices.created_at")?,
-            updated_at: parse_datetime(&row.updated_at, "invoices.updated_at")?,
-            created_by: parse_uuid(&row.practitioner_id, "invoices.practitioner_id")?,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            created_by: row.practitioner_id,
             updated_by: None,
         })
     }
 
     fn map_invoice_item_row(row: InvoiceItemRow) -> Result<InvoiceItem, RepositoryError> {
-        let quantity =
-            u32::try_from(row.quantity).map_err(|_| invalid_data("invoice_items.quantity", row.quantity))?;
-
         Ok(InvoiceItem {
-            id: parse_uuid(&row.id, "invoice_items.id")?,
+            id: row.id,
             description: row.description,
             item_code: row.item_code,
-            quantity,
+            quantity: row.quantity as u32,
             unit_price: row.unit_price,
             amount: row.amount,
-            is_gst_free: row.is_gst_free != 0,
+            is_gst_free: row.is_gst_free,
         })
     }
 
     fn map_payment_row(row: PaymentRow) -> Result<Payment, RepositoryError> {
         Ok(Payment {
-            id: parse_uuid(&row.id, "payments.id")?,
-            invoice_id: parse_uuid(&row.invoice_id, "payments.invoice_id")?,
-            patient_id: parse_uuid(&row.patient_id, "payments.patient_id")?,
-            payment_date: parse_datetime(&row.payment_date, "payments.payment_date")?,
+            id: row.id,
+            invoice_id: row.invoice_id,
+            patient_id: row.patient_id,
+            payment_date: row.payment_date.and_hms_opt(0, 0, 0).unwrap_or_default().and_utc(),
             amount: row.amount,
             payment_method: parse_enum(&row.payment_method, "payments.payment_method")?,
             reference: row.reference,
             notes: row.notes,
-            created_at: parse_datetime(&row.created_at, "payments.created_at")?,
-            created_by: parse_uuid(&row.created_by, "payments.created_by")?,
+            created_at: row.created_at,
+            created_by: row.created_by,
         })
     }
 
@@ -152,36 +140,24 @@ impl SqlxBillingRepository {
         let total_benefit = row.total_benefit;
 
         Ok(MedicareClaim {
-            id: parse_uuid(&row.id, "medicare_claims.id")?,
-            patient_id: parse_uuid(&row.patient_id, "medicare_claims.patient_id")?,
-            practitioner_id: parse_uuid(&row.practitioner_id, "medicare_claims.practitioner_id")?,
+            id: row.id,
+            patient_id: row.patient_id,
+            practitioner_id: row.practitioner_id,
             consultation_id: None,
-            invoice_id: row
-                .invoice_id
-                .as_deref()
-                .map(|value| parse_uuid(value, "medicare_claims.invoice_id"))
-                .transpose()?,
+            invoice_id: row.invoice_id,
             claim_reference: row.reference_number,
-            service_date: parse_naive_date(&row.service_date, "medicare_claims.service_date")?,
+            service_date: row.service_date,
             items: Vec::<MBSItem>::new(),
             total_claimed,
             total_benefit,
             patient_contribution: total_claimed - total_benefit,
             claim_type: parse_enum(&row.claim_type, "medicare_claims.claim_type")?,
             status: parse_enum(&row.status, "medicare_claims.status")?,
-            submitted_at: row
-                .submitted_at
-                .as_deref()
-                .map(|value| parse_datetime(value, "medicare_claims.submitted_at"))
-                .transpose()?,
-            processed_at: row
-                .processed_at
-                .as_deref()
-                .map(|value| parse_datetime(value, "medicare_claims.processed_at"))
-                .transpose()?,
+            submitted_at: row.submitted_at,
+            processed_at: row.processed_at,
             rejection_reason: None,
-            created_at: parse_datetime(&row.created_at, "medicare_claims.created_at")?,
-            created_by: parse_uuid(&row.practitioner_id, "medicare_claims.practitioner_id")?,
+            created_at: row.created_at,
+            created_by: row.practitioner_id,
         })
     }
 
@@ -200,15 +176,15 @@ impl SqlxBillingRepository {
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 "#,
             )
-            .bind(item.id.to_string())
-            .bind(invoice_id.to_string())
+            .bind(item.id)
+            .bind(invoice_id)
             .bind(&item.description)
             .bind(&item.item_code)
             .bind(quantity)
             .bind(item.unit_price)
             .bind(item.amount)
             .bind(if item.is_gst_free { 1_i64 } else { 0_i64 })
-            .bind(created_at.to_rfc3339())
+            .bind(created_at)
             .execute(&self.pool)
             .await
             .map_err(sqlx_to_repository_error)?;
@@ -232,7 +208,7 @@ impl BillingRepository for SqlxBillingRepository {
             WHERE id = $1
             "#,
         )
-        .bind(id.to_string())
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -259,7 +235,7 @@ impl BillingRepository for SqlxBillingRepository {
             ORDER BY created_at DESC
             "#,
         )
-        .bind(patient_id.to_string())
+        .bind(patient_id)
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -288,8 +264,8 @@ impl BillingRepository for SqlxBillingRepository {
             ORDER BY created_at DESC
             "#,
         )
-        .bind(start.to_rfc3339())
-        .bind(end.to_rfc3339())
+.bind(start)
+            .bind(end)
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -345,23 +321,23 @@ impl BillingRepository for SqlxBillingRepository {
             )
             "#,
         )
-        .bind(invoice.id.to_string())
+        .bind(invoice.id)
         .bind(&invoice.invoice_number)
-        .bind(invoice.patient_id.to_string())
-        .bind(invoice.practitioner_id.to_string())
-        .bind(invoice.consultation_id.map(|id| id.to_string()))
+        .bind(invoice.patient_id)
+        .bind(invoice.practitioner_id)
+        .bind(invoice.consultation_id)
         .bind(invoice.billing_type.to_string())
         .bind(invoice.status.to_string())
-        .bind(invoice.invoice_date.format("%Y-%m-%d").to_string())
-        .bind(invoice.due_date.map(|date| date.format("%Y-%m-%d").to_string()))
+.bind(invoice.invoice_date)
+            .bind(invoice.due_date)
         .bind(invoice.subtotal)
         .bind(invoice.gst_amount)
         .bind(invoice.total_amount)
         .bind(invoice.amount_paid)
         .bind(invoice.amount_outstanding)
         .bind(&invoice.notes)
-        .bind(invoice.created_at.to_rfc3339())
-        .bind(invoice.updated_at.to_rfc3339())
+.bind(invoice.created_at)
+            .bind(invoice.updated_at)
         .execute(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -395,27 +371,27 @@ impl BillingRepository for SqlxBillingRepository {
             "#,
         )
         .bind(&invoice.invoice_number)
-        .bind(invoice.patient_id.to_string())
-        .bind(invoice.practitioner_id.to_string())
-        .bind(invoice.consultation_id.map(|id| id.to_string()))
+        .bind(invoice.patient_id)
+        .bind(invoice.practitioner_id)
+        .bind(invoice.consultation_id)
         .bind(invoice.billing_type.to_string())
         .bind(invoice.status.to_string())
-        .bind(invoice.invoice_date.format("%Y-%m-%d").to_string())
-        .bind(invoice.due_date.map(|date| date.format("%Y-%m-%d").to_string()))
+.bind(invoice.invoice_date)
+            .bind(invoice.due_date)
         .bind(invoice.subtotal)
         .bind(invoice.gst_amount)
         .bind(invoice.total_amount)
         .bind(invoice.amount_paid)
         .bind(invoice.amount_outstanding)
         .bind(&invoice.notes)
-        .bind(invoice.updated_at.to_rfc3339())
-        .bind(invoice.id.to_string())
+        .bind(invoice.updated_at)
+        .bind(invoice.id)
         .execute(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
 
         sqlx::query("DELETE FROM invoice_items WHERE invoice_id = $1")
-            .bind(invoice.id.to_string())
+            .bind(invoice.id)
             .execute(&self.pool)
             .await
             .map_err(sqlx_to_repository_error)?;
@@ -433,8 +409,8 @@ impl BillingRepository for SqlxBillingRepository {
     ) -> Result<(), RepositoryError> {
         sqlx::query("UPDATE invoices SET status = $1, updated_at = $2 WHERE id = $3")
             .bind(status.to_string())
-            .bind(Utc::now().to_rfc3339())
-            .bind(id.to_string())
+            .bind(Utc::now())
+            .bind(id)
             .execute(&self.pool)
             .await
             .map_err(sqlx_to_repository_error)?;
@@ -454,7 +430,7 @@ impl BillingRepository for SqlxBillingRepository {
             WHERE id = $1
             "#,
         )
-        .bind(id.to_string())
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -478,19 +454,19 @@ impl BillingRepository for SqlxBillingRepository {
             )
             "#,
         )
-        .bind(claim.id.to_string())
-        .bind(claim.invoice_id.map(|id| id.to_string()))
-        .bind(claim.patient_id.to_string())
-        .bind(claim.practitioner_id.to_string())
+        .bind(claim.id)
+        .bind(claim.invoice_id)
+        .bind(claim.patient_id)
+        .bind(claim.practitioner_id)
         .bind(claim.claim_type.to_string())
         .bind(claim.status.to_string())
-        .bind(claim.service_date.format("%Y-%m-%d").to_string())
+        .bind(claim.service_date)
         .bind(claim.total_claimed)
         .bind(claim.total_benefit)
         .bind(&claim.claim_reference)
-        .bind(claim.submitted_at.map(|date| date.to_rfc3339()))
-        .bind(claim.processed_at.map(|date| date.to_rfc3339()))
-        .bind(claim.created_at.to_rfc3339())
+.bind(claim.submitted_at)
+            .bind(claim.processed_at)
+            .bind(claim.created_at)
         .execute(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -538,7 +514,7 @@ impl BillingRepository for SqlxBillingRepository {
             ORDER BY created_at DESC
             "#,
         )
-        .bind(patient_id.to_string())
+        .bind(patient_id)
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -582,7 +558,7 @@ impl BillingRepository for SqlxBillingRepository {
     ) -> Result<(), RepositoryError> {
         sqlx::query("UPDATE medicare_claims SET status = $1 WHERE id = $2")
             .bind(status.to_string())
-            .bind(id.to_string())
+            .bind(id)
             .execute(&self.pool)
             .await
             .map_err(sqlx_to_repository_error)?;
@@ -600,16 +576,16 @@ impl BillingRepository for SqlxBillingRepository {
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
-        .bind(payment.id.to_string())
-        .bind(payment.invoice_id.to_string())
-        .bind(payment.patient_id.to_string())
+        .bind(payment.id)
+        .bind(payment.invoice_id)
+        .bind(payment.patient_id)
         .bind(payment.amount)
         .bind(payment.payment_method.to_string())
-        .bind(payment.payment_date.to_rfc3339())
+        .bind(payment.payment_date.date_naive())
         .bind(&payment.reference)
         .bind(&payment.notes)
-        .bind(payment.created_by.to_string())
-        .bind(payment.created_at.to_rfc3339())
+        .bind(payment.created_by)
+        .bind(payment.created_at)
         .execute(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -628,7 +604,7 @@ impl BillingRepository for SqlxBillingRepository {
             ORDER BY payment_date DESC
             "#,
         )
-        .bind(invoice_id.to_string())
+        .bind(invoice_id)
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -647,7 +623,7 @@ impl BillingRepository for SqlxBillingRepository {
             ORDER BY payment_date DESC
             "#,
         )
-        .bind(patient_id.to_string())
+        .bind(patient_id)
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -670,8 +646,8 @@ impl BillingRepository for SqlxBillingRepository {
             ORDER BY payment_date DESC
             "#,
         )
-        .bind(start.to_rfc3339())
-        .bind(end.to_rfc3339())
+.bind(start)
+            .bind(end)
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -688,7 +664,7 @@ impl BillingRepository for SqlxBillingRepository {
             ORDER BY created_at ASC, id ASC
             "#,
         )
-        .bind(invoice_id.to_string())
+        .bind(invoice_id)
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -713,23 +689,6 @@ impl BillingRepository for SqlxBillingRepository {
     }
 }
 
-fn parse_uuid(value: &str, field: &str) -> Result<Uuid, RepositoryError> {
-    Uuid::parse_str(value).map_err(|err| {
-        RepositoryError::Database(format!("Invalid UUID in {field}: {err}"))
-    })
-}
-
-fn parse_datetime(value: &str, field: &str) -> Result<DateTime<Utc>, RepositoryError> {
-    DateTime::parse_from_rfc3339(value)
-        .map(|date| date.with_timezone(&Utc))
-        .map_err(|err| RepositoryError::Database(format!("Invalid RFC3339 datetime in {field}: {err}")))
-}
-
-fn parse_naive_date(value: &str, field: &str) -> Result<NaiveDate, RepositoryError> {
-    NaiveDate::parse_from_str(value, "%Y-%m-%d")
-        .map_err(|err| RepositoryError::Database(format!("Invalid date in {field}: {err}")))
-}
-
 fn parse_enum<T>(value: &str, field: &str) -> Result<T, RepositoryError>
 where
     T: std::str::FromStr,
@@ -738,8 +697,4 @@ where
     value
         .parse::<T>()
         .map_err(|err| RepositoryError::Database(format!("Invalid enum in {field}: {err}")))
-}
-
-fn invalid_data(field: &str, value: i64) -> RepositoryError {
-    RepositoryError::Database(format!("Invalid numeric value in {field}: {value}"))
 }

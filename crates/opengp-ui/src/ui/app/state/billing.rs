@@ -1,5 +1,6 @@
 use crate::ui::app::{App, AppCommand, PendingBillingSaveData};
 use crate::ui::components::billing::PatientBillingState;
+use crate::ui::components::SubtabKind;
 
 impl App {
     pub fn set_pending_billing(&mut self, pending: PendingBillingSaveData) {
@@ -51,5 +52,19 @@ impl App {
             None => return,
         };
         let _ = self.command_tx.send(AppCommand::LoadBillingData { patient_id });
+    }
+
+    pub fn request_load_billing(&mut self) {
+        let patient_id = match self.workspace_manager().active() {
+            Some(ws) => ws.patient_id,
+            None => return,
+        };
+        if self.workspace_manager().is_subtab_loading(SubtabKind::Billing) {
+            return;
+        }
+        let _ = self.command_tx.send(AppCommand::LoadPatientWorkspaceData {
+            patient_id,
+            subtab: SubtabKind::Billing,
+        });
     }
 }

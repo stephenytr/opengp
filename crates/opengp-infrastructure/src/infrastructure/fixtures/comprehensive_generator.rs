@@ -287,6 +287,7 @@ mod tests {
             patient_count: 1,
             patient_config,
             clinical_config,
+            billing_config: BillingGeneratorConfig::default(),
             practitioner_ids: Vec::new(),
         };
 

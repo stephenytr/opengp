@@ -2,7 +2,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseButton, MouseEvent,
 use opengp_domain::domain::billing::{Invoice, InvoiceStatus};
 use ratatui::layout::{Constraint, Position, Rect};
 use ratatui::style::{Color, Style};
-use ratatui::widgets::{Block, Borders, Cell, ListState, Row, Table};
+use ratatui::widgets::{Block, Borders, Cell, ListState, Paragraph, Row, Table};
+use ratatui::text::Line;
 use ratatui::Frame;
 use uuid::Uuid;
 
@@ -303,6 +304,23 @@ impl InvoiceList {
             .widths(widths);
 
         frame.render_widget(table, inner);
+
+        if self.filtered.is_empty() {
+            let message = if self.search_query.is_empty() {
+                "No invoices found"
+            } else {
+                "No invoices match your search"
+            };
+            let empty_msg = Paragraph::new(Line::from(message))
+                .style(Style::default().fg(self.theme.colors.disabled));
+            let text_area = Rect::new(
+                inner.x,
+                inner.y.saturating_add(1),
+                inner.width,
+                1,
+            );
+            frame.render_widget(empty_msg, text_area);
+        }
     }
 }
 

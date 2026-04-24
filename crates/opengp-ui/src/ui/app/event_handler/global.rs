@@ -42,6 +42,10 @@ impl App {
                 if let Some(idx) = clinical_row.handle_mouse(mouse, clinical_row_area) {
                     if let Some(kind) = ClinicalMenuKind::from_index(idx) {
                         workspace.active_clinical_menu = kind;
+                        if kind == ClinicalMenuKind::Billing {
+                            self.billing_state_mut();
+                            self.request_load_billing();
+                        }
                         self.refresh_status_bar();
                         return;
                     }

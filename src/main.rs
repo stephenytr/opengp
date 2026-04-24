@@ -451,6 +451,7 @@ async fn run_tui(
                     }
                 }
                 AppCommand::LoadPatientWorkspaceData { patient_id, subtab } => {
+                    use opengp_ui::ui::components::SubtabKind;
                     tracing::info!("LoadPatientWorkspaceData command received for patient {} subtab {:?}", patient_id, subtab);
 
                     // Guard: don't reload if already loaded or in-flight
@@ -458,6 +459,16 @@ async fn run_tui(
                         || app.workspace_manager().is_subtab_loading(subtab)
                     {
                         tracing::debug!("Skipping LoadPatientWorkspaceData — already loaded/loading");
+                        continue;
+                    }
+
+                    if subtab == SubtabKind::Billing {
+                        if let Some(workspace_idx) = app.workspace_manager_mut().find_patient(patient_id) {
+                            if let Some(workspace) = app.workspace_manager_mut().workspaces.get_mut(workspace_idx) {
+                                workspace.start_loading(SubtabKind::Billing);
+                            }
+                        }
+                        let _ = app.command_tx.send(AppCommand::LoadBillingData { patient_id });
                         continue;
                     }
 
@@ -543,6 +554,7 @@ async fn run_tui(
                     }
                 }
                 AppCommand::LoadBillingData { patient_id } => {
+                    use opengp_ui::ui::components::SubtabKind;
                     if let Some(billing_state) = app.billing_state_mut() {
                         billing_state.loading = true;
                     }
@@ -571,6 +583,12 @@ async fn run_tui(
                             Err(e) => {
                                 tracing::error!("Failed to load claims for patient {}: {}", patient_id, e);
                             }
+                        }
+                    }
+                    if let Some(workspace_idx) = app.workspace_manager_mut().find_patient(patient_id) {
+                        if let Some(workspace) = app.workspace_manager_mut().workspaces.get_mut(workspace_idx) {
+                            workspace.finish_loading(SubtabKind::Billing);
+                            workspace.mark_loaded(SubtabKind::Billing);
                         }
                     }
                 }

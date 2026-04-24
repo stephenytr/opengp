@@ -63,6 +63,15 @@ impl App {
             });
         }
 
+        if !self.workspace_manager.is_subtab_loaded(SubtabKind::Billing)
+            && !self.workspace_manager.is_subtab_loading(SubtabKind::Billing)
+        {
+            let _ = self.command_tx.send(AppCommand::LoadPatientWorkspaceData {
+                patient_id,
+                subtab: SubtabKind::Billing,
+            });
+        }
+
         Ok(index)
     }
 }
