@@ -58,6 +58,7 @@ type LoginTask = tokio::task::JoinHandle<
     Result<opengp_domain::domain::api::LoginResponse, crate::api::ApiClientError>,
 >;
 
+#[derive(Debug)]
 pub struct ClinicalWorkspaceLoadResult {
     pub patient_id: uuid::Uuid,
     pub allergies: Result<Vec<opengp_domain::domain::clinical::Allergy>, crate::api::ApiClientError>,
@@ -70,7 +71,7 @@ pub struct ClinicalWorkspaceLoadResult {
 
 type ClinicalWorkspaceLoadTask = tokio::task::JoinHandle<ClinicalWorkspaceLoadResult>;
 
-pub(super) enum ApiTaskError {
+pub enum ApiTaskError {
     Unauthorized,
     ServerUnavailable(String),
     Message(String),

@@ -37,6 +37,7 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 ratatui.workspace = true
+rat-salsa.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 thiserror.workspace = true

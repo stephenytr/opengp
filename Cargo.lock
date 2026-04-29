@@ -2266,6 +2266,7 @@ dependencies = [
  "opengp-domain",
  "opengp-infrastructure",
  "opengp-ui",
+ "rat-salsa",
  "ratatui",
  "serde",
  "serde_json",

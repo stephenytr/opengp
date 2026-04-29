@@ -1,1196 +1,380 @@
-use color_eyre::Result;
-use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture, Event},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
-use opengp_domain::domain::api::{
-    AllergyRequest, ConsultationRequest, FamilyHistoryRequest, MedicalHistoryRequest,
-    SocialHistoryRequest, VitalSignsRequest,
-};
-use opengp_ui::api::ApiClient;
-use opengp_ui::ui::app::{App, AppCommand, ClinicalWorkspaceLoadResult, PendingBillingSaveData};
-use opengp_ui::ui::services::{BillingUiService, ClinicalUiService, AppointmentUiService};
-use opengp_domain::domain::billing::{BillingRepository, BillingService, BillingType};
-use opengp_domain::domain::clinical::{
-    Consultation, ConsultationRepository, ClinicalRepositories, ClinicalService, suggest_mbs_level,
-};
-use opengp_domain::domain::patient::PatientRepository;
-use opengp_domain::domain::audit::{AuditEmitter, AuditRepository, AuditService};
+use std::sync::Arc;
+
+use color_eyre::eyre::eyre;
+use opengp_config::{load_practice_config, CalendarConfig, Config, PracticeConfig};
 use opengp_domain::domain::appointment::{
-    AppointmentRepository, AppointmentCalendarQuery, AppointmentService, AvailabilityService,
+    AppointmentCalendarQuery, AppointmentRepository, AppointmentService, AvailabilityService,
 };
+use opengp_domain::domain::audit::{AuditEmitter, AuditRepository, AuditService};
+use opengp_domain::domain::billing::{BillingRepository, BillingService};
+use opengp_domain::domain::clinical::{ClinicalRepositories, ClinicalService, ConsultationRepository};
+use opengp_domain::domain::patient::PatientRepository;
 use opengp_domain::domain::user::WorkingHoursRepository;
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
-use opengp_infrastructure::infrastructure::database::{create_pool, DatabaseConfig};
 use opengp_infrastructure::infrastructure::database::repositories::{
-    SqlxAllergyRepository, SqlxAuditRepository, SqlxBillingRepository, SqlxClinicalRepository,
-    SqlxFamilyHistoryRepository, SqlxMedicalHistoryRepository, SqlxPatientRepository,
-    SqlxSocialHistoryRepository, SqlxVitalSignsRepository, SqlxAppointmentRepository,
-    SqlxPractitionerRepository, SqlxWorkingHoursRepository,
+    SqlxAllergyRepository, SqlxAppointmentRepository, SqlxAuditRepository, SqlxBillingRepository,
+    SqlxClinicalRepository, SqlxFamilyHistoryRepository, SqlxMedicalHistoryRepository,
+    SqlxPatientRepository, SqlxPractitionerRepository, SqlxSocialHistoryRepository,
+    SqlxVitalSignsRepository, SqlxWorkingHoursRepository,
 };
-use ratatui::backend::CrosstermBackend;
-use ratatui::Terminal;
-use std::io;
-use std::sync::Arc;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-use opengp_config::CalendarConfig;
-use opengp_config::Config;
-use opengp_config::{load_practice_config, PracticeConfig};
+use opengp_infrastructure::infrastructure::database::{create_pool, DatabaseConfig};
+use opengp_ui::api::ApiClient;
+use opengp_ui::ui::app::{AppCommand, AppError, AppEvent, AppState, GlobalState};
+use opengp_ui::ui::components::appointment::AppointmentState;
+use opengp_ui::ui::components::help::HelpOverlay;
+use opengp_ui::ui::components::patient::PatientList;
+use opengp_ui::ui::components::status_bar::StatusBar;
+use opengp_ui::ui::components::tabs::{Tab, TabBar};
+use opengp_ui::ui::components::workspace::WorkspaceManager;
+use opengp_ui::ui::keybinds::{Action, KeyContext, KeybindRegistry};
+use opengp_ui::ui::services::{AppointmentUiService, BillingUiService, ClinicalUiService};
 use opengp_ui::ui::theme::{ColorPalette, Theme};
+use rat_salsa::poll::{PollCrossterm, PollTasks, PollTokio};
+use rat_salsa::{run_tui, Control, RunConfig, SalsaAppContext};
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::widgets::{Paragraph, Widget};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod conversions;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<(), AppError> {
     color_eyre::install()?;
 
     let config = Config::from_env()?;
-
     init_logging(&config.app.logging.level, &config.app.logging.log_file);
+    tracing::info!("Starting OpenGP (rat-salsa runtime)");
 
-    tracing::info!("Starting OpenGP");
+    let rt = tokio::runtime::Runtime::new()?;
 
+    let (mut global, mut state) = rt.block_on(async {
+        bootstrap(config).await
+    })?;
+
+    run_tui(
+        init,
+        render,
+        event_fn,
+        error_fn,
+        &mut global,
+        &mut state,
+        RunConfig::default()?
+            .poll(PollCrossterm)
+            .poll(PollTasks::default())
+            .poll(PollTokio::new(rt)),
+    )?;
+
+    tracing::info!("OpenGP shutdown complete");
+    Ok(())
+}
+
+async fn bootstrap(config: Config) -> Result<(GlobalState, AppState), AppError> {
     let api_base_url = config.app.api_client.base_url.clone();
     let api_client = Arc::new(ApiClient::new(api_base_url));
     if let Ok(token) = std::env::var("API_SESSION_TOKEN") {
         api_client.set_session_token(Some(token)).await;
     }
-
-    run_tui(
-        api_client,
-        config.app.calendar,
-        config.app.ui,
-        config.theme,
-        load_practice_config()?,
-        config.app.api_server.database,
-        config.encryption_key,
-        config.healthcare,
-        config.patient,
-        config.allergies,
-        config.clinical,
-        config.social_history,
-    )
-    .await?;
-
-    tracing::info!("OpenGP shutdown complete");
-
-    Ok(())
-}
-
-async fn run_tui(
-    api_client: Arc<ApiClient>,
-    calendar_config: CalendarConfig,
-    ui_config: opengp_config::UiConfig,
-    theme_config: opengp_config::ThemeConfig,
-    practice_config: PracticeConfig,
-    database_config: DatabaseConfig,
-    encryption_key: String,
-    healthcare_config: opengp_config::healthcare::HealthcareConfig,
-    patient_config: opengp_config::PatientConfig,
-    allergy_config: opengp_config::AllergyConfig,
-    clinical_config: opengp_config::ClinicalConfig,
-    social_history_config: opengp_config::SocialHistoryConfig,
-) -> Result<()> {
-    // All setup runs before entering the alternate screen so that errors
-    // (e.g. database unreachable) are printed to the normal terminal instead
-    // of being swallowed by a black screen.
-
     let has_session_token = api_client.current_session_token().await.is_some();
 
-    let (mut theme, palette_config) = match ui_config.theme.as_str() {
-        "light" => (Theme::light(), &theme_config.light),
-        "high_contrast" => (Theme::high_contrast(), &theme_config.high_contrast),
-        _ => (Theme::dark(), &theme_config.dark),
+    let (mut theme, palette_config) = match config.app.ui.theme.as_str() {
+        "light" => (Theme::light(), &config.theme.light),
+        "high_contrast" => (Theme::high_contrast(), &config.theme.high_contrast),
+        _ => (Theme::dark(), &config.theme.dark),
     };
     theme.colors = ColorPalette::from_config(palette_config);
 
-    let (billing_service, clinical_ui_service, appointment_ui_service) = {
-        let db_url = database_config.url.clone();
-        let database_pool = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            create_pool(&database_config),
-        )
-        .await
-        .map_err(|_| {
-            color_eyre::eyre::eyre!(
-                "Database connection timed out after 5 seconds — is PostgreSQL running?\n  URL: {}",
-                db_url
-            )
-        })
-        .and_then(|r| {
-            r.map_err(|e| {
-                color_eyre::eyre::eyre!(
-                    "Failed to connect to database — is PostgreSQL running?\n  URL: {}\n  Cause: {}",
-                    db_url,
-                    e
-                )
-            })
-        })?;
-        let pool = database_pool.as_postgres().clone();
+    let (billing_service, clinical_ui_service, appointment_ui_service) = build_services(
+        &config.app.api_server.database,
+        &config.encryption_key,
+    )
+    .await?;
 
-        let encryption_service = Arc::new(
-            EncryptionService::new_with_key(&encryption_key)
-                .map_err(|err| color_eyre::eyre::eyre!(err.to_string()))?,
-        );
+    let keybinds = KeybindRegistry::global();
+    let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel::<AppCommand>();
 
-        let billing_repo: Arc<dyn BillingRepository> =
-            Arc::new(SqlxBillingRepository::new(pool.clone()));
-        let consultation_repo: Arc<dyn ConsultationRepository> = Arc::new(
-            SqlxClinicalRepository::new(pool.clone(), Arc::clone(&encryption_service)),
-        );
-
-        let billing_domain_service =
-            BillingService::new(Arc::clone(&billing_repo), Arc::clone(&consultation_repo));
-        let billing_service = Some(Arc::new(BillingUiService::new(Arc::new(billing_domain_service))));
-
-        // Create clinical service with all required repositories
-        let clinical_repos = ClinicalRepositories {
-            consultation: Arc::clone(&consultation_repo),
-            allergy: Arc::new(SqlxAllergyRepository::new(pool.clone(), Arc::clone(&encryption_service))),
-            medical_history: Arc::new(SqlxMedicalHistoryRepository::new(
-                pool.clone(),
-                Arc::clone(&encryption_service),
-            )),
-            vital_signs: Arc::new(SqlxVitalSignsRepository::new(pool.clone(), Arc::clone(&encryption_service))),
-            social_history: Arc::new(SqlxSocialHistoryRepository::new(
-                pool.clone(),
-                Arc::clone(&encryption_service),
-            )),
-            family_history: Arc::new(SqlxFamilyHistoryRepository::new(
-                pool.clone(),
-                Arc::clone(&encryption_service),
-            )),
-        };
-
-        let patient_repo: Arc<dyn PatientRepository> =
-            Arc::new(SqlxPatientRepository::new(pool.clone(), Arc::clone(&encryption_service)));
-        let patient_service = Arc::new(opengp_domain::domain::patient::PatientService::new(patient_repo));
-
-         let audit_repo: Arc<dyn AuditRepository> =
-             Arc::new(SqlxAuditRepository::new(pool.clone()));
-         let audit_service: Arc<dyn AuditEmitter> = Arc::new(AuditService::new(audit_repo));
-
-          let clinical_domain_service = Arc::new(ClinicalService::new(
-              clinical_repos,
-              patient_service,
-              Arc::clone(&audit_service),
-          ));
-         let clinical_service = Some(Arc::new(ClinicalUiService::new(clinical_domain_service)));
-
-         // Create appointment service
-         let practitioner_repo: Arc<dyn opengp_domain::domain::user::PractitionerRepository> =
-             Arc::new(SqlxPractitionerRepository::new(pool.clone()));
-         let appointment_repo: Arc<dyn AppointmentRepository> =
-             Arc::new(SqlxAppointmentRepository::new(pool.clone()));
-         let appointment_calendar_query: Arc<dyn AppointmentCalendarQuery> =
-             Arc::new(SqlxAppointmentRepository::new(pool.clone()));
-         let working_hours_repo: Arc<dyn WorkingHoursRepository> =
-             Arc::new(SqlxWorkingHoursRepository::new(pool.clone()));
-         
-         let appointment_domain_service = Arc::new(AppointmentService::new(
-             Arc::clone(&appointment_repo),
-             Arc::clone(&audit_service),
-             Arc::clone(&appointment_calendar_query),
-         ));
-         let availability_service = Arc::new(AvailabilityService::new(
-             Arc::clone(&appointment_repo),
-             Arc::clone(&working_hours_repo),
-         ));
-
-         let appointment_ui_service = Some(Arc::new(AppointmentUiService::new(
-             Arc::clone(&practitioner_repo),
-             appointment_calendar_query,
-             appointment_repo,
-             Arc::clone(&appointment_domain_service),
-             availability_service,
-             Arc::clone(&working_hours_repo),
-         )));
-
-         (billing_service, clinical_service, appointment_ui_service)
+    let mut state = AppState {
+        tab_bar: TabBar::new(theme.clone()),
+        previous_tab: Tab::Schedule,
+        status_bar: StatusBar::schedule(theme.clone()),
+        help_overlay: HelpOverlay::new(theme.clone()),
+        login_screen: opengp_ui::ui::screens::LoginScreen::new(theme.clone()),
+        authenticated: has_session_token,
+        current_context: KeyContext::Global,
+        should_quit: false,
+        current_user_id: uuid::Uuid::nil(),
+        terminal_size: Rect::new(0, 0, 80, 24),
+        patient_list: PatientList::new(theme.clone()),
+        patient_form: None,
+        pending_patient_data: None,
+        pending_edit_patient_id: None,
+        appointment_state: AppointmentState::new(theme.clone(), config.app.calendar.clone()),
+        appointment_form: None,
+        appointment_detail_modal: None,
+        pending_load_practitioners: false,
+        pending_load_booked_slots: None,
+        pending_appointment_save: None,
+        pending_appointment_status_transition: None,
+        pending_reschedule: None,
+        workspace_manager: WorkspaceManager::new(theme.clone(), config.patient.max_open_patients),
+        pending_clinical_save_data: None,
+        patient_page_limit: 100,
+        appointment_page_limit: 100,
+        consultation_page_limit: 100,
+        pending_patient_list_refresh: false,
+        pending_appointment_list_refresh: None,
+        pending_consultation_list_refresh: None,
+        pending_practitioners_list_refresh: false,
+        patient_list_fetch_task: None,
+        appointment_list_fetch_task: None,
+        practitioners_list_fetch_task: None,
+        reschedule_task: None,
+        status_update_task: None,
+        login_task: None,
+        clinical_workspace_load_task: None,
+        pending_login_request: None,
+        active_login_attempt: None,
+        server_unavailable_error: None,
+        server_unavailable_retry: None,
+        active_appointment_refresh_date: None,
+        context_menu_state: None,
+        last_billing_render: None,
+        hovered_clinical_menu: None,
+        command_tx,
+        command_rx: Some(command_rx),
     };
 
-    let mut app = App::new(
-        Some(api_client.clone()),
-        calendar_config.clone(),
-        theme,
-        healthcare_config,
-        patient_config.clone(),
-        allergy_config,
-        clinical_config,
-        social_history_config,
-        billing_service,
+    if !has_session_token {
+        state.authenticated = false;
+    }
+
+    let global = GlobalState {
+        salsa_ctx: SalsaAppContext::default(),
+        api_client: Some(api_client),
+        billing_ui_service: billing_service,
+        clinical_ui_service,
         appointment_ui_service,
-        practice_config,
-        patient_config.max_open_patients,
+        patient_ui_service: None,
+        practice_config: load_practice_config()?,
+        healthcare_config: config.healthcare,
+        patient_config: config.patient,
+        allergy_config: config.allergies,
+        clinical_config: config.clinical,
+        social_history_config: config.social_history,
+        theme,
+        keybinds,
+    };
+
+    Ok((global, state))
+}
+
+async fn build_services(
+    database_config: &DatabaseConfig,
+    encryption_key: &str,
+) -> Result<
+    (
+        Option<Arc<BillingUiService>>,
+        Option<Arc<ClinicalUiService>>,
+        Option<Arc<AppointmentUiService>>,
+    ),
+    AppError,
+> {
+    let db_url = database_config.url.clone();
+    let database_pool = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        create_pool(database_config),
+    )
+    .await
+    .map_err(|_| eyre!("Database connection timed out after 5 seconds — is PostgreSQL running?\n  URL: {}", db_url))
+    .and_then(|r| {
+        r.map_err(|e| eyre!("Failed to connect to database — is PostgreSQL running?\n  URL: {}\n  Cause: {}", db_url, e))
+    })?;
+
+    let pool = database_pool.as_postgres().clone();
+    let encryption_service = Arc::new(
+        EncryptionService::new_with_key(encryption_key)
+            .map_err(|err| eyre!(err.to_string()))?,
     );
-    let mut command_rx = app.take_command_rx().expect("failed to extract command_rx from app");
-    app.set_authenticated(has_session_token);
-    if has_session_token {
-        app.request_refresh_patients();
+
+    let billing_repo: Arc<dyn BillingRepository> = Arc::new(SqlxBillingRepository::new(pool.clone()));
+    let consultation_repo: Arc<dyn ConsultationRepository> = Arc::new(
+        SqlxClinicalRepository::new(pool.clone(), Arc::clone(&encryption_service)),
+    );
+
+    let billing_domain_service = BillingService::new(Arc::clone(&billing_repo), Arc::clone(&consultation_repo));
+    let billing_service = Some(Arc::new(BillingUiService::new(Arc::new(billing_domain_service))));
+
+    let clinical_repos = ClinicalRepositories {
+        consultation: Arc::clone(&consultation_repo),
+        allergy: Arc::new(SqlxAllergyRepository::new(pool.clone(), Arc::clone(&encryption_service))),
+        medical_history: Arc::new(SqlxMedicalHistoryRepository::new(pool.clone(), Arc::clone(&encryption_service))),
+        vital_signs: Arc::new(SqlxVitalSignsRepository::new(pool.clone(), Arc::clone(&encryption_service))),
+        social_history: Arc::new(SqlxSocialHistoryRepository::new(pool.clone(), Arc::clone(&encryption_service))),
+        family_history: Arc::new(SqlxFamilyHistoryRepository::new(pool.clone(), Arc::clone(&encryption_service))),
+    };
+
+    let patient_repo: Arc<dyn PatientRepository> = Arc::new(SqlxPatientRepository::new(
+        pool.clone(),
+        Arc::clone(&encryption_service),
+    ));
+    let patient_service = Arc::new(opengp_domain::domain::patient::PatientService::new(patient_repo));
+
+    let audit_repo: Arc<dyn AuditRepository> = Arc::new(SqlxAuditRepository::new(pool.clone()));
+    let audit_service: Arc<dyn AuditEmitter> = Arc::new(AuditService::new(audit_repo));
+
+    let clinical_domain_service = Arc::new(ClinicalService::new(
+        clinical_repos,
+        patient_service,
+        Arc::clone(&audit_service),
+    ));
+    let clinical_ui_service = Some(Arc::new(ClinicalUiService::new(clinical_domain_service)));
+
+    let practitioner_repo: Arc<dyn opengp_domain::domain::user::PractitionerRepository> =
+        Arc::new(SqlxPractitionerRepository::new(pool.clone()));
+    let appointment_repo: Arc<dyn AppointmentRepository> = Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let appointment_calendar_query: Arc<dyn AppointmentCalendarQuery> = Arc::new(SqlxAppointmentRepository::new(pool.clone()));
+    let working_hours_repo: Arc<dyn WorkingHoursRepository> = Arc::new(SqlxWorkingHoursRepository::new(pool.clone()));
+
+    let appointment_domain_service = Arc::new(AppointmentService::new(
+        Arc::clone(&appointment_repo),
+        Arc::clone(&audit_service),
+        Arc::clone(&appointment_calendar_query),
+    ));
+    let availability_service = Arc::new(AvailabilityService::new(
+        Arc::clone(&appointment_repo),
+        Arc::clone(&working_hours_repo),
+    ));
+
+    let appointment_ui_service = Some(Arc::new(AppointmentUiService::new(
+        Arc::clone(&practitioner_repo),
+        appointment_calendar_query,
+        appointment_repo,
+        appointment_domain_service,
+        availability_service,
+        working_hours_repo,
+    )));
+
+    Ok((billing_service, clinical_ui_service, appointment_ui_service))
+}
+
+fn init(state: &mut AppState, _ctx: &mut GlobalState) -> Result<(), AppError> {
+    if state.authenticated {
+        state.pending_patient_list_refresh = true;
     }
-
-    // Only enter the alternate screen once all setup has succeeded.
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-
-    loop {
-        app.poll_api_tasks().await;
-
-        terminal.draw(|frame| {
-            app.render(frame);
-        })?;
-
-        // Check if there's pending patient data to save
-        if let Some(pending) = app.take_pending_patient_data() {
-            match pending {
-                opengp_ui::ui::app::PendingPatientData::New(data) => {
-                    let request = conversions::patient_request_from_new(data);
-                    api_client.create_patient(&request).await?;
-                    tracing::info!("Created new patient via API");
-                }
-                opengp_ui::ui::app::PendingPatientData::Update { id, data } => {
-                    let existing = api_client.get_patient(id).await?;
-                    let request = conversions::patient_request_from_update(data, &existing);
-                    api_client.update_patient(id, request).await?;
-                    tracing::info!("Updated patient via API");
-                }
-            }
-
-            app.request_refresh_patients();
-        }
-
-        if let Some((data, version)) = app.take_pending_appointment_save() {
-            tracing::info!("pending appointment save taken: patient={} practitioner={} start={}", data.patient_id, data.practitioner_id, data.start_time);
-            if let Some(appointment_id) = app.appointment_form_appointment_id() {
-                tracing::info!("dispatching UpdateAppointment for {}", appointment_id);
-                let _ = app.command_tx.send(AppCommand::UpdateAppointment {
-                    id: appointment_id,
-                    data,
-                    version,
-                });
-            } else {
-                tracing::info!("dispatching CreateAppointment");
-                let _ = app.command_tx.send(AppCommand::CreateAppointment(data));
-            }
-        }
-
-
-        if let Some(patient_id) = app.take_pending_edit_patient_id() {
-            match api_client.get_patient(patient_id).await {
-                Ok(patient) => {
-                    app.open_patient_form(conversions::domain_patient_from_api_response(patient));
-                    tracing::info!("Loaded patient for editing: {}", patient_id);
-                }
-                Err(e) => {
-                    tracing::error!("Failed to load patient for editing: {}", e);
-                }
-            }
-        }
-
-        // Drain appointment commands from the channel
-        while let Ok(cmd) = command_rx.try_recv() {
-            match cmd {
-                AppCommand::RefreshAppointments(date) => {
-                    app.request_refresh_appointments(date);
-                }
-                AppCommand::LoadPractitioners => {
-                    match api_client.get_practitioners().await {
-                        Ok(practitioners) => {
-                            let colours = [
-                                app.theme().colors.appointment_confirmed,
-                                app.theme().colors.appointment_in_progress,
-                                app.theme().colors.appointment_arrived,
-                                app.theme().colors.appointment_scheduled,
-                                app.theme().colors.primary,
-                                app.theme().colors.secondary,
-                            ];
-                            let practitioner_items: Vec<opengp_ui::ui::view_models::PractitionerViewItem> =
-                                practitioners
-                                    .into_iter()
-                                    .enumerate()
-                                    .map(|(idx, p)| {
-                                        let colour = colours[idx % colours.len()];
-                                        opengp_ui::ui::view_models::PractitionerViewItem {
-                                            id: p.id,
-                                            display_name: p.name,
-                                            colour,
-                                        }
-                                    })
-                                    .collect();
-                            app.appointment_form_set_practitioners(practitioner_items);
-                            tracing::info!("Loaded practitioners for appointment form");
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to load practitioners for form: {}", e);
-                        }
-                    }
-                }
-                AppCommand::LoadAvailableSlots { practitioner_id, date, duration_minutes } => {
-                    match api_client
-                        .get_available_slots(practitioner_id, date, duration_minutes as i64)
-                        .await
-                    {
-                        Ok(available_slots) => {
-                            let booked_slots = compute_booked_slots(&available_slots, &calendar_config);
-                            app.appointment_form_set_booked_slots(booked_slots);
-                            tracing::info!("Loaded booked slots for time picker");
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to load available slots: {:?}", e);
-                        }
-                    }
-                }
-                AppCommand::CreateAppointment(data) => {
-                    let appointment_date = data.start_time.with_timezone(&chrono::Local).date_naive();
-                    let request = conversions::appointment_request_from_new(data);
-                    let result = match api_client.create_appointment(&request).await {
-                        Ok(_) => {
-                            tracing::info!("Created new appointment via API");
-                            let date = app
-                                .appointment_state_mut()
-                                .selected_date
-                                .unwrap_or(appointment_date);
-                            app.request_refresh_appointments(date);
-                            Ok(())
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to create appointment: {}", e);
-                            Err(e.to_string())
-                        }
-                    };
-                    let _ = app.command_tx.send(AppCommand::AppointmentSaveResult(result));
-                }
-                AppCommand::UpdateAppointment { id, data, version } => {
-                    let appointment_date = data.start_time.with_timezone(&chrono::Local).date_naive();
-                    let request = conversions::appointment_request_from_new_versioned(data, version);
-                    let result = match api_client.update_appointment(id, &request).await {
-                        Ok(_) => {
-                            tracing::info!("Updated appointment {} via API", id);
-                            let date = app
-                                .appointment_state_mut()
-                                .selected_date
-                                .unwrap_or(appointment_date);
-                            app.request_refresh_appointments(date);
-                            Ok(())
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to update appointment {}: {}", id, e);
-                            Err(e.to_string())
-                        }
-                    };
-                    let _ = app.command_tx.send(AppCommand::AppointmentSaveResult(result));
-                }
-                AppCommand::AppointmentSaveResult(result) => {
-                    match result {
-                        Ok(()) => {
-                            tracing::info!("AppointmentSaveResult: Ok — closing form");
-                            app.appointment_form_complete_save();
-                        }
-                        Err(ref msg) => {
-                            tracing::warn!("AppointmentSaveResult: Err — {}", msg);
-                            app.appointment_form_set_error(result.unwrap_err());
-                        }
-                    }
-                }
-                AppCommand::UpdateAppointmentStatus { id, status } => {
-                    let status_str = match status {
-                        opengp_domain::domain::appointment::AppointmentStatus::Scheduled => "scheduled",
-                        opengp_domain::domain::appointment::AppointmentStatus::Confirmed => "confirmed",
-                        opengp_domain::domain::appointment::AppointmentStatus::Arrived => "arrived",
-                        opengp_domain::domain::appointment::AppointmentStatus::InProgress => "in_progress",
-                        opengp_domain::domain::appointment::AppointmentStatus::Billing => "billing",
-                        opengp_domain::domain::appointment::AppointmentStatus::Completed => "completed",
-                        opengp_domain::domain::appointment::AppointmentStatus::Cancelled => "cancelled",
-                        opengp_domain::domain::appointment::AppointmentStatus::NoShow => "no_show",
-                        opengp_domain::domain::appointment::AppointmentStatus::Rescheduled => "rescheduled",
-                    };
-                    match api_client.update_appointment_status(id, status_str).await {
-                        Ok(_) => {
-                            tracing::info!("Updated appointment status");
-                        }
-                        Err(e) => tracing::error!("Failed to update appointment status: {}", e),
-                    }
-                }
-                AppCommand::SaveClinicalData { patient_id, data } => {
-                    tracing::info!("SaveClinicalData command received for patient {}", patient_id);
-                    // Find workspace by patient_id and call clinical save service
-                    if let Some(workspace) = app.workspace_manager_mut().find_patient(patient_id) {
-                        match app.workspace_manager_mut().select_by_index(workspace) {
-                            Ok(()) => {
-                                tracing::debug!("Selected workspace for patient {}", patient_id);
-                                // In a full implementation, we would call the clinical save service here
-                                // For now, this is a placeholder that will be completed when clinical
-                                // subtab workflow is fully wired in the renderer
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to select workspace for patient {}: {}", patient_id, e);
-                            }
-                        }
-                    }
-                }
-                AppCommand::SaveBillingData { patient_id, data } => {
-                    tracing::info!("SaveBillingData command received for patient {}", patient_id);
-                    // Find workspace by patient_id and call billing save service
-                    if let Some(workspace) = app.workspace_manager_mut().find_patient(patient_id) {
-                        match app.workspace_manager_mut().select_by_index(workspace) {
-                            Ok(()) => {
-                                tracing::debug!("Selected workspace for patient {}", patient_id);
-                                // In a full implementation, we would call the billing save service here
-                                // For now, this is a placeholder that will be completed when billing
-                                // subtab workflow is fully wired in the renderer
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to select workspace for patient {}: {}", patient_id, e);
-                            }
-                        }
-                    }
-                }
-                AppCommand::LoadPatientWorkspaceData { patient_id, subtab } => {
-                    use opengp_ui::ui::components::SubtabKind;
-                    tracing::info!("LoadPatientWorkspaceData command received for patient {} subtab {:?}", patient_id, subtab);
-
-                    // Guard: don't reload if already loaded or in-flight
-                    if app.workspace_manager().is_subtab_loaded(subtab)
-                        || app.workspace_manager().is_subtab_loading(subtab)
-                    {
-                        tracing::debug!("Skipping LoadPatientWorkspaceData — already loaded/loading");
-                        continue;
-                    }
-
-                    if subtab == SubtabKind::Billing {
-                        if let Some(workspace_idx) = app.workspace_manager_mut().find_patient(patient_id) {
-                            if let Some(workspace) = app.workspace_manager_mut().workspaces.get_mut(workspace_idx) {
-                                workspace.start_loading(SubtabKind::Billing);
-                            }
-                        }
-                        let _ = app.command_tx.send(AppCommand::LoadBillingData { patient_id });
-                        continue;
-                    }
-
-                    // Guard against double-dispatch (RC-3)
-                    if app.has_clinical_workspace_load_task() {
-                        tracing::warn!("clinical_workspace_load_task already in flight");
-                        continue;
-                    }
-
-                     // Find workspace and mark as loading
-                     if let Some(workspace_idx) = app.workspace_manager_mut().find_patient(patient_id) {
-                         match app.workspace_manager_mut().select_by_index(workspace_idx) {
-                             Ok(()) => {
-                                 if let Some(workspace) = app.workspace_manager_mut().active_mut() {
-                                     workspace.start_loading(subtab);
-                                 }
-                                 // NOTE: do NOT mark as loaded here — only mark after async completes
-                                 // This prevents the guard from skipping the load if called again
-
-                                 let api_client = Arc::clone(&api_client);
-
-                                // Spawn concurrent fetch — does NOT block the command handler
-                                let task = tokio::spawn(async move {
-                                let (
-                                    allergies,
-                                    medical_history,
-                                    vitals,
-                                    social_history,
-                                    family_history,
-                                    consultations,
-                                ) = tokio::join!(
-                                    api_client.get_allergies(patient_id),
-                                    api_client.get_medical_history(patient_id),
-                                    api_client.get_vitals(patient_id),
-                                    api_client.get_social_history(patient_id),
-                                    api_client.get_family_history(patient_id),
-                                    api_client.get_consultations(patient_id, 1, 100),
-                                );
-
-                                    ClinicalWorkspaceLoadResult {
-                                        patient_id,
-                                        allergies: allergies.map(|allergies| {
-                                            allergies
-                                                .into_iter()
-                                                .map(conversions::domain_allergy_from_api_response)
-                                                .collect()
-                                        }),
-                                        medical_history: medical_history.map(|medical_history| {
-                                            medical_history
-                                                .into_iter()
-                                                .map(conversions::domain_medical_history_from_api_response)
-                                                .collect()
-                                        }),
-                                        vitals: vitals.map(|vitals| {
-                                            vitals
-                                                .into_iter()
-                                                .map(conversions::domain_vital_signs_from_api_response)
-                                                .collect()
-                                        }),
-                                        social_history: social_history
-                                            .map(conversions::domain_social_history_from_api_response),
-                                        family_history: family_history.map(|family_history| {
-                                            family_history
-                                                .into_iter()
-                                                .map(conversions::domain_family_history_from_api_response)
-                                                .collect()
-                                        }),
-                                        consultations: consultations.map(|paginated| {
-                                            paginated.data
-                                                .into_iter()
-                                                .map(conversions::domain_consultation_from_api_response)
-                                                .collect()
-                                        }),
-                                    }
-                                });
-
-                                app.set_clinical_workspace_load_task(patient_id, task);
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to select workspace for patient {}: {}", patient_id, e);
-                            }
-                        }
-                    }
-                }
-                AppCommand::LoadBillingData { patient_id } => {
-                    use opengp_ui::ui::components::SubtabKind;
-                    if let Some(billing_state) = app.billing_state_mut() {
-                        billing_state.loading = true;
-                    }
-                    if let Some(service) = app.billing_ui_service() {
-                        match service.list_invoices_for_patient(patient_id).await {
-                            Ok(invoices) => {
-                                if let Some(billing_state) = app.billing_state_mut() {
-                                    billing_state.invoices = invoices;
-                                    billing_state.loading = false;
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to load invoices for patient {}: {}", patient_id, e);
-                                if let Some(billing_state) = app.billing_state_mut() {
-                                    billing_state.loading = false;
-                                    billing_state.error = Some(e.to_string());
-                                }
-                            }
-                        }
-                        match service.list_claims_for_patient(patient_id).await {
-                            Ok(claims) => {
-                                if let Some(billing_state) = app.billing_state_mut() {
-                                    billing_state.claims = claims;
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to load claims for patient {}: {}", patient_id, e);
-                            }
-                        }
-                    }
-                    if let Some(workspace_idx) = app.workspace_manager_mut().find_patient(patient_id) {
-                        if let Some(workspace) = app.workspace_manager_mut().workspaces.get_mut(workspace_idx) {
-                            workspace.finish_loading(SubtabKind::Billing);
-                            workspace.mark_loaded(SubtabKind::Billing);
-                        }
-                    }
-                }
-                AppCommand::CancelAppointment { id, reason } => {
-                    tracing::info!("CancelAppointment command received for appointment {}: {}", id, reason);
-                    // This is an appointment-scoped operation and should be handled at the appointment level
-                    // For now, this is a placeholder for future appointment cancellation workflow
-                }
-                AppCommand::RescheduleAppointment {
-                    id,
-                    new_start_time,
-                    new_duration_minutes,
-                    user_id,
-                } => {
-                    tracing::info!(
-                        "RescheduleAppointment command received for appointment {} at {}",
-                        id,
-                        new_start_time
-                    );
-                    // This is an appointment-scoped operation and should be handled at the appointment level
-                    // For now, this is a placeholder for future appointment rescheduling workflow
-                }
-            }
-        }
-
-        // Pass patients to appointment form if it exists
-        if app.has_appointment_form() {
-            let patient_items: Vec<opengp_ui::ui::view_models::PatientListItem> =
-                app.patient_list_patients().to_vec();
-            app.appointment_form_set_patients(patient_items);
-        }
-
-        if app.take_pending_load_practitioners() {
-            let _ = app.command_tx.send(AppCommand::LoadPractitioners);
-        }
-
-        if let Some((practitioner_id, date, duration)) = app.take_pending_load_booked_slots() {
-            let _ = app.command_tx.send(AppCommand::LoadAvailableSlots {
-                practitioner_id,
-                date,
-                duration_minutes: duration,
-            });
-        }
-
-        if let Some(pending) = app.take_pending_clinical_save_data() {
-            match pending {
-                opengp_ui::ui::app::PendingClinicalSaveData::Allergy {
-                    patient_id,
-                    allergy,
-                } => {
-                    let request = AllergyRequest {
-                        allergen: allergy.allergen,
-                        allergy_type: conversions::allergy_type_to_api_string(allergy.allergy_type)
-                            .to_string(),
-                        severity: conversions::severity_to_api_string(allergy.severity).to_string(),
-                        reaction: allergy.reaction,
-                        onset_date: allergy.onset_date,
-                        notes: allergy.notes,
-                    };
-                    match api_client.create_allergy(patient_id, &request).await {
-                        Ok(_) => {
-                            tracing::info!("Saved allergy for patient {}", patient_id);
-                            match api_client.get_allergies(patient_id).await {
-                                Ok(allergies) => {
-                                    app.clinical_state_mut().allergies.allergies = allergies
-                                        .into_iter()
-                                        .map(conversions::domain_allergy_from_api_response)
-                                        .collect()
-                                }
-                                Err(e) => {
-                                    tracing::error!("Failed to reload allergies: {}", e);
-                                    app.set_status_error(format!(
-                                        "Failed to reload allergies: {}",
-                                        e
-                                    ));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to save allergy: {}", e);
-                            app.set_status_error(format!("Failed to save allergy: {}", e));
-                        }
-                    }
-                }
-                opengp_ui::ui::app::PendingClinicalSaveData::MedicalHistory {
-                    patient_id,
-                    history,
-                } => {
-                    let request = MedicalHistoryRequest {
-                        condition: history.condition,
-                        diagnosis_date: history.diagnosis_date,
-                        status: conversions::condition_status_to_api_string(history.status)
-                            .to_string(),
-                        severity: history.severity.map(|severity| {
-                            conversions::severity_to_api_string(severity).to_string()
-                        }),
-                        notes: history.notes,
-                    };
-                    match api_client
-                        .create_medical_history(patient_id, &request)
-                        .await
-                    {
-                        Ok(_) => {
-                            tracing::info!("Saved medical history for patient {}", patient_id);
-                            match api_client.get_medical_history(patient_id).await {
-                                Ok(conditions) => {
-                                    app.clinical_state_mut().medical_history.medical_history = conditions
-                                        .into_iter()
-                                        .map(conversions::domain_medical_history_from_api_response)
-                                        .collect()
-                                }
-                                Err(e) => {
-                                    tracing::error!("Failed to reload medical history: {}", e);
-                                    app.set_status_error(format!(
-                                        "Failed to reload medical history: {}",
-                                        e
-                                    ));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to save medical history: {}", e);
-                            app.set_status_error(format!("Failed to save medical history: {}", e));
-                        }
-                    }
-                }
-                opengp_ui::ui::app::PendingClinicalSaveData::VitalSigns { patient_id, vitals } => {
-                    let request = VitalSignsRequest {
-                        consultation_id: vitals.consultation_id,
-                        systolic_bp: vitals.systolic_bp,
-                        diastolic_bp: vitals.diastolic_bp,
-                        heart_rate: vitals.heart_rate,
-                        respiratory_rate: vitals.respiratory_rate,
-                        temperature: vitals.temperature,
-                        oxygen_saturation: vitals.oxygen_saturation,
-                        height_cm: vitals.height_cm,
-                        weight_kg: vitals.weight_kg,
-                        notes: vitals.notes,
-                    };
-                    match api_client.create_vitals(patient_id, &request).await {
-                        Ok(_) => {
-                            tracing::info!("Saved vital signs for patient {}", patient_id);
-                            match api_client.get_vitals(patient_id).await {
-                                Ok(v) => {
-                                    app.clinical_state_mut().vitals.vital_signs = v
-                                        .into_iter()
-                                        .map(conversions::domain_vital_signs_from_api_response)
-                                        .collect()
-                                }
-                                Err(e) => {
-                                    tracing::error!("Failed to reload vital signs: {}", e);
-                                    app.set_status_error(format!(
-                                        "Failed to reload vital signs: {}",
-                                        e
-                                    ));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to save vital signs: {}", e);
-                            app.set_status_error(format!("Failed to save vital signs: {}", e));
-                        }
-                    }
-                }
-                opengp_ui::ui::app::PendingClinicalSaveData::FamilyHistory {
-                    patient_id,
-                    entry,
-                } => {
-                    let request = FamilyHistoryRequest {
-                        relative_relationship: entry.relative_relationship,
-                        condition: entry.condition,
-                        age_at_diagnosis: entry.age_at_diagnosis,
-                        notes: entry.notes,
-                    };
-                    match api_client.create_family_history(patient_id, &request).await {
-                        Ok(_) => {
-                            tracing::info!("Saved family history for patient {}", patient_id);
-                            match api_client.get_family_history(patient_id).await {
-                                Ok(entries) => {
-                                    app.clinical_state_mut().family_history.family_history = entries
-                                        .into_iter()
-                                        .map(conversions::domain_family_history_from_api_response)
-                                        .collect()
-                                }
-                                Err(e) => {
-                                    tracing::error!("Failed to reload family history: {}", e);
-                                    app.set_status_error(format!(
-                                        "Failed to reload family history: {}",
-                                        e
-                                    ));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to save family history: {}", e);
-                            app.set_status_error(format!("Failed to save family history: {}", e));
-                        }
-                    }
-                }
-                opengp_ui::ui::app::PendingClinicalSaveData::Consultation {
-                    patient_id,
-                    practitioner_id,
-                    appointment_id,
-                    reason,
-                    clinical_notes,
-                } => {
-                    let effective_practitioner_id = if practitioner_id.is_nil() {
-                        app.current_user_id
-                    } else {
-                        practitioner_id
-                    };
-                    let request = ConsultationRequest {
-                        patient_id,
-                        practitioner_id: effective_practitioner_id,
-                        appointment_id,
-                        reason,
-                        clinical_notes,
-                        version: 1,
-                    };
-                    match api_client.create_consultation(&request).await {
-                        Ok(consultation) => {
-                            tracing::info!(
-                                "Created consultation {} for patient {}",
-                                consultation.id,
-                                patient_id
-                            );
-                            let started_at = chrono::Utc::now();
-                            if let Some(ref service) = clinical_ui_service {
-                                if let Err(e) = service.start_timer(consultation.id).await {
-                                    tracing::error!("Failed to start timer: {}", e);
-                                }
-                            }
-                            let domain_consultation = Consultation {
-                                id: consultation.id,
-                                patient_id: consultation.patient_id,
-                                practitioner_id: consultation.practitioner_id,
-                                appointment_id: consultation.appointment_id,
-                                consultation_date: consultation.consultation_date,
-                                reason: consultation.reason.clone(),
-                                clinical_notes: consultation.clinical_notes.clone(),
-                                is_signed: consultation.is_signed,
-                                signed_at: None,
-                                signed_by: None,
-                                consultation_started_at: Some(started_at),
-                                consultation_ended_at: None,
-                                created_at: consultation.consultation_date,
-                                updated_at: consultation.consultation_date,
-                                version: consultation.version,
-                                created_by: consultation.practitioner_id,
-                                updated_by: None,
-                            };
-                            app.clinical_state_mut().consultations.consultations.push(domain_consultation);
-                            app.clinical_state_mut().set_active_timer_started_at(started_at);
-                            app.clinical_state_mut().show_consultations();
-                            if consultation.is_signed {
-                                app.set_pending_billing(PendingBillingSaveData::AwaitingMbsSelection {
-                                    consultation_id: consultation.id,
-                                    patient_id: consultation.patient_id,
-                                });
-                            }
-                            app.pending_consultation_list_refresh = Some(patient_id);
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to create consultation: {}", e);
-                            app.set_status_error(format!("Failed to create consultation: {}", e));
-                        }
-                    }
-                }
-                opengp_ui::ui::app::PendingClinicalSaveData::SocialHistory {
-                    patient_id,
-                    history,
-                } => {
-                    let request = SocialHistoryRequest {
-                        smoking_status: conversions::smoking_status_to_api_string(
-                            history.smoking_status,
-                        )
-                        .to_string(),
-                        cigarettes_per_day: history.cigarettes_per_day,
-                        smoking_quit_date: history.smoking_quit_date,
-                        alcohol_status: conversions::alcohol_status_to_api_string(
-                            history.alcohol_status,
-                        )
-                        .to_string(),
-                        standard_drinks_per_week: history.standard_drinks_per_week,
-                        exercise_frequency: history.exercise_frequency.map(|frequency| {
-                            conversions::exercise_frequency_to_api_string(frequency).to_string()
-                        }),
-                        occupation: history.occupation,
-                        living_situation: history.living_situation,
-                        support_network: history.support_network,
-                        notes: history.notes,
-                    };
-                    match api_client.update_social_history(patient_id, &request).await {
-                        Ok(_) => {
-                            tracing::info!("Saved social history for patient {}", patient_id);
-                            match api_client.get_social_history(patient_id).await {
-                                Ok(sh) => {
-                                    app.clinical_state_mut().social_history.social_history = Some(
-                                        conversions::domain_social_history_from_api_response(sh),
-                                    )
-                                }
-                                Err(e) => {
-                                    tracing::error!("Failed to reload social history: {}", e);
-                                    app.set_status_error(format!(
-                                        "Failed to reload social history: {}",
-                                        e
-                                    ));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to save social history: {}", e);
-                            app.set_status_error(format!("Failed to save social history: {}", e));
-                        }
-                    }
-                }
-                opengp_ui::ui::app::PendingClinicalSaveData::TimerStart { consultation_id } => {
-                    if let Some(ref service) = clinical_ui_service {
-                        match service.start_timer(consultation_id).await {
-                            Ok(()) => {
-                                let now = chrono::Utc::now();
-                                app.clinical_state_mut().set_active_timer_started_at(now);
-                                if let Some(c) = app
-                                    .clinical_state_mut()
-                                    .consultations
-                                    .consultations
-                                    .iter_mut()
-                                    .find(|c| c.id == consultation_id)
-                                {
-                                    c.consultation_started_at = Some(now);
-                                    c.consultation_ended_at = None;
-                                }
-                            }
-                            Err(e) => {
-                                app.set_status_error(format!("Timer start failed: {}", e));
-                            }
-                        }
-                    }
-                }
-                opengp_ui::ui::app::PendingClinicalSaveData::TimerStop { consultation_id } => {
-                    if let Some(ref service) = clinical_ui_service {
-                        match service.stop_timer(consultation_id).await {
-                            Ok(_duration) => {
-                                let now = chrono::Utc::now();
-                                app.clinical_state_mut().consultations.clear_active_timer();
-                                if let Some(c) = app
-                                    .clinical_state_mut()
-                                    .consultations
-                                    .consultations
-                                    .iter_mut()
-                                    .find(|c| c.id == consultation_id)
-                                {
-                                    c.consultation_ended_at = Some(now);
-                                }
-                            }
-                            Err(e) => {
-                                app.set_status_error(format!("Timer stop failed: {}", e));
-                            }
-                        }
-                    }
-                }
-                opengp_ui::ui::app::PendingClinicalSaveData::SignConsultation {
-                    consultation_id,
-                    user_id,
-                } => {
-                    if let Some(consultation) = app
-                        .clinical_state_mut()
-                        .consultations
-                        .consultations
-                        .iter()
-                        .find(|c| c.id == consultation_id)
-                        .cloned()
-                    {
-                        if consultation.consultation_started_at.is_some()
-                            && consultation.consultation_ended_at.is_none()
-                        {
-                            if let Some(ref service) = clinical_ui_service {
-                                let _ = service.stop_timer(consultation_id).await;
-                            }
-                        }
-                    }
-
-                    if let Some(ref service) = clinical_ui_service {
-                        match service.sign_consultation(consultation_id, user_id).await {
-                            Ok(()) => {
-                                if let Some(c) = app
-                                    .clinical_state_mut()
-                                    .consultations
-                                    .consultations
-                                    .iter_mut()
-                                    .find(|c| c.id == consultation_id)
-                                {
-                                    c.is_signed = true;
-                                    c.signed_at = Some(chrono::Utc::now());
-                                    c.signed_by = Some(user_id);
-                                }
-                                app.clinical_state_mut().close_consultation_form();
-                                app.clinical_state_mut().view =
-                                    opengp_ui::ui::components::clinical::ClinicalView::Consultations;
-                                app.set_status_success("Consultation signed successfully");
-                                tracing::info!(
-                                    "Consultation {} signed by {}",
-                                    consultation_id,
-                                    user_id
-                                );
-                            }
-                            Err(e) => {
-                                app.set_status_error(format!("Failed to sign consultation: {}", e));
-                                tracing::error!("Failed to sign consultation: {}", e);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if let Some(pending) = app.take_pending_billing() {
-            match pending {
-                PendingBillingSaveData::AwaitingMbsSelection {
-                    consultation_id,
-                    patient_id,
-                } => {
-                    // Fetch the consultation to get the timer duration
-                    match api_client
-                        .get_consultations(patient_id, 1, 100)
-                        .await
-                    {
-                        Ok(response) => {
-                            // Find the consultation with the matching ID
-                            if let Some(consultation_response) = response
-                                .data
-                                .iter()
-                                .find(|c| c.id == consultation_id)
-                            {
-                                // Calculate duration from consultation timer
-                                let duration_minutes = match (
-                                    consultation_response.consultation_started_at,
-                                    consultation_response.consultation_ended_at,
-                                ) {
-                                    (Some(start), Some(end)) => {
-                                        let duration = end.signed_duration_since(start);
-                                        duration.num_minutes()
-                                    }
-                                    _ => 0, // Default to 0 if timer not set
-                                };
-
-                                // Get the appropriate MBS item based on duration
-                                let mbs_item = suggest_mbs_level(duration_minutes);
-                                let selected_items =
-                                    vec![(mbs_item.to_string(), 89.0, true)];
-
-                                app.set_pending_billing(PendingBillingSaveData::CreatingInvoice {
-                                    consultation_id,
-                                    mbs_items: selected_items,
-                                    billing_type: BillingType::PrivateBilling,
-                                });
-                                tracing::info!(
-                                    "Selected MBS item {} (duration: {} minutes) for consultation {}",
-                                    mbs_item,
-                                    duration_minutes,
-                                    consultation_id
-                                );
-                            } else {
-                                // Consultation not found, fall back to default MBS item 23
-                                let selected_items = vec![("23".to_string(), 89.0, true)];
-                                app.set_pending_billing(PendingBillingSaveData::CreatingInvoice {
-                                    consultation_id,
-                                    mbs_items: selected_items,
-                                    billing_type: BillingType::PrivateBilling,
-                                });
-                                tracing::warn!(
-                                    "Consultation {} not found in API response; using default MBS item 23",
-                                    consultation_id
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            // API error, fall back to default MBS item 23
-                            let selected_items = vec![("23".to_string(), 89.0, true)];
-                            app.set_pending_billing(PendingBillingSaveData::CreatingInvoice {
-                                consultation_id,
-                                mbs_items: selected_items,
-                                billing_type: BillingType::PrivateBilling,
-                            });
-                            tracing::error!(
-                                "Failed to fetch consultations for patient {}: {}; using default MBS item 23",
-                                patient_id,
-                                e
-                            );
-                        }
-                    }
-                }
-                PendingBillingSaveData::CreatingInvoice {
-                    consultation_id,
-                    mbs_items,
-                    billing_type,
-                } => {
-                    if let Some(service) = app.billing_ui_service() {
-                        match service
-                            .create_invoice(
-                                consultation_id,
-                                mbs_items,
-                                billing_type,
-                                app.current_user_id,
-                            )
-                            .await
-                        {
-                            Ok(invoice) => {
-                                app.open_billing_invoice_detail(invoice.id);
-                                tracing::info!(
-                                    "Created invoice {} from consultation {}",
-                                    invoice.id,
-                                    consultation_id
-                                );
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "Failed to create invoice from consultation {}: {}",
-                                    consultation_id,
-                                    e
-                                );
-                                app.set_status_error(format!(
-                                    "Failed to create invoice from signed consultation: {}",
-                                    e
-                                ));
-                            }
-                        }
-                    } else {
-                        tracing::warn!(
-                            "Billing service not wired; skipping invoice creation for consultation {}",
-                            consultation_id
-                        );
-                        app.set_status_error(
-                            "Billing service not yet wired; invoice creation deferred",
-                        );
-                    }
-                }
-            }
-        }
-
-
-
-        if crossterm::event::poll(std::time::Duration::from_millis(ui_config.tick_rate_ms))? {
-            if let Ok(event) = crossterm::event::read() {
-                match event {
-                    Event::Key(key) => {
-                        let action = app.handle_key_event(key);
-
-                        if action == opengp_ui::ui::keybinds::Action::Quit || app.should_quit() {
-                            break;
-                        }
-                    }
-                    Event::Mouse(mouse) => {
-                        let terminal_size = terminal.size().unwrap_or_default();
-                        let terminal_rect = ratatui::layout::Rect::new(
-                            0,
-                            0,
-                            terminal_size.width,
-                            terminal_size.height,
-                        );
-                        app.handle_global_mouse_event(mouse, terminal_rect);
-                    }
-                    Event::Resize(_, _) => {}
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
-
     Ok(())
 }
 
-fn compute_booked_slots(
-    available_slots: &[chrono::NaiveTime],
-    calendar_config: &CalendarConfig,
-) -> Vec<chrono::NaiveTime> {
-    use chrono::NaiveTime;
-
-    let mut all_slots = Vec::new();
-
-    // Generate all 15-minute slots from min_hour to max_hour
-    for hour in calendar_config.min_hour..calendar_config.max_hour {
-        for minute in [0, 15, 30, 45].iter() {
-            if let Some(time) = NaiveTime::from_hms_opt(hour as u32, *minute, 0) {
-                all_slots.push(time);
-            }
-        }
+fn render(area: Rect, buf: &mut Buffer, state: &mut AppState, _ctx: &mut GlobalState) -> Result<(), AppError> {
+    if state.help_overlay.is_visible() {
+        state.help_overlay.clone().render(area, buf);
+        return Ok(());
     }
 
-    // Booked = all slots minus available slots
-    all_slots
-        .into_iter()
-        .filter(|slot| !available_slots.contains(slot))
-        .collect()
+    if !state.authenticated {
+        state.login_screen.clone().render(area, buf);
+        return Ok(());
+    }
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
+        .split(area);
+
+    state.tab_bar.clone().render(layout[0], buf);
+
+    match state.tab_bar.selected() {
+        Tab::Schedule => Paragraph::new("Schedule").render(layout[1], buf),
+        Tab::PatientSearch => state.patient_list.clone().render(layout[1], buf),
+        Tab::PatientWorkspace => Paragraph::new("Patient workspace").render(layout[1], buf),
+    }
+
+    state.status_bar.clone().render(layout[2], buf);
+    Ok(())
+}
+
+fn event_fn(event: &AppEvent, state: &mut AppState, _ctx: &mut GlobalState) -> Result<Control<AppEvent>, AppError> {
+    use crossterm::event::{Event, KeyCode, KeyModifiers};
+
+    match event {
+        AppEvent::Term(term_event) => match term_event {
+            Event::Key(key) => {
+                if !state.authenticated {
+                    if let Some(opengp_ui::ui::screens::LoginAction::Submit { username, password }) =
+                        state.login_screen.handle_key(*key)
+                    {
+                        state.pending_login_request = Some((username, password));
+                        return Ok(Control::Changed);
+                    }
+                }
+
+                if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('q') {
+                    state.should_quit = true;
+                    return Ok(Control::Quit);
+                }
+
+                match key.code {
+                    KeyCode::F(1) => {
+                        state.help_overlay.toggle();
+                        Ok(Control::Changed)
+                    }
+                    KeyCode::F(2) => {
+                        state.tab_bar.select(Tab::Schedule);
+                        Ok(Control::Changed)
+                    }
+                    KeyCode::F(3) => {
+                        state.tab_bar.select(Tab::PatientSearch);
+                        Ok(Control::Changed)
+                    }
+                    _ => {
+                        let action = KeybindRegistry::global()
+                            .lookup(*key, KeyContext::Global)
+                            .map(|k| k.action.clone());
+                        if matches!(action, Some(Action::Quit)) {
+                            state.should_quit = true;
+                            Ok(Control::Quit)
+                        } else {
+                            Ok(Control::Continue)
+                        }
+                    }
+                }
+            }
+            Event::Resize(w, h) => {
+                state.terminal_size = Rect::new(0, 0, *w, *h);
+                Ok(Control::Changed)
+            }
+            _ => Ok(Control::Continue),
+        },
+        AppEvent::LoginResult(result) => {
+            match result {
+                Ok(_) => {
+                    state.authenticated = true;
+                    state.pending_patient_list_refresh = true;
+                    state.status_bar.clear_error();
+                }
+                Err(err) => {
+                    state.authenticated = false;
+                    state.status_bar.set_error(Some(err.clone()));
+                }
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::PatientListLoaded(result) => {
+            match result {
+                Ok(patients) => state.patient_list.set_patients(patients.clone()),
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        _ => Ok(Control::Continue),
+    }
+}
+
+fn error_fn(err: AppError, state: &mut AppState, _ctx: &mut GlobalState) -> Result<Control<AppEvent>, AppError> {
+    state.status_bar.set_error(Some(err.to_string()));
+    Ok(Control::Changed)
 }
 
 fn init_logging(level: &str, log_file_path: &str) {

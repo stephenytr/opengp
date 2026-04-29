@@ -7,7 +7,7 @@
 //! Run with: cargo run --example generate_comprehensive_patients
 
 use opengp_infrastructure::infrastructure::fixtures::{
-    ClinicalDataGeneratorConfig, ComprehensivePatientGenerator,
+    BillingGeneratorConfig, ClinicalDataGeneratorConfig, ComprehensivePatientGenerator,
     ComprehensivePatientGeneratorConfig, PatientGeneratorConfig,
 };
 use uuid::Uuid;
@@ -72,6 +72,8 @@ fn main() {
         consultation_count: 8,
         medical_history_count: 5,
         allergy_count: 2,
+        vitals_count: 15,
+        family_history_count: 3,
         notes_percentage: 0.90,
         signed_percentage: 0.85,
         severe_allergy_percentage: 0.15,
@@ -81,6 +83,7 @@ fn main() {
         patient_count: 3,
         patient_config,
         clinical_config,
+        billing_config: BillingGeneratorConfig::default(),
         practitioner_ids: Vec::new(),
     };
 
