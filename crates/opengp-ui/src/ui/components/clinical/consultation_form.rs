@@ -14,7 +14,7 @@ use crate::ui::input::to_ratatui_key;
 use crate::ui::shared::FormMode;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    FieldType, FormField, FormFieldMeta, FormNavigation, FormState, HeightMode, TextareaState,
+    FormField, FormFieldMeta, FormNavigation, FormState, HeightMode, TextareaState,
     TextareaWidget,
 };
 use opengp_domain::domain::clinical::Consultation;
@@ -279,7 +279,9 @@ impl ConsultationForm {
 
         // Ctrl+S submits the form from any field
         let event = Event::Key(key);
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(&event, ct_event!(key press CONTROL-'s')) {
+        if key.modifiers.contains(KeyModifiers::CONTROL)
+            && matches!(&event, ct_event!(key press CONTROL-'s'))
+        {
             FormNavigation::validate(self);
             return Some(ConsultationFormAction::Submit);
         }

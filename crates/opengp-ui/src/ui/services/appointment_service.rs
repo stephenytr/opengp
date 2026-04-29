@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use chrono::{Datelike, NaiveDate, TimeZone, Utc, Weekday};
 
-use super::shared::{ToUiError, UiResult, UiResultExt};
+use super::shared::{UiResult, UiResultExt};
 use chrono::NaiveTime;
 use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentRepository, AppointmentSearchCriteria, AppointmentService,

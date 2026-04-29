@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use time::{Date, Month};
 
 use crate::ui::input::DoubleClickDetector;
-use crate::ui::shared::{hover_style, invert_color};
+use crate::ui::shared::invert_color;
 use crate::ui::theme::Theme;
 
 /// Actions that can be triggered by the calendar widget

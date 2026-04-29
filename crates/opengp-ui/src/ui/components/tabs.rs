@@ -10,7 +10,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 
 use crate::ui::input::DoubleClickDetector;
-use crate::ui::shared::{hover_style, invert_color};
+use crate::ui::shared::invert_color;
 use crate::ui::theme::Theme;
 
 /// Available tabs in the application

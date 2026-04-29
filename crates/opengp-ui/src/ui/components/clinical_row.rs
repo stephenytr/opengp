@@ -4,7 +4,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::Widget;
 
-use crate::ui::shared::{hover_style, invert_color};
+use crate::ui::shared::invert_color;
 use crate::ui::theme::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

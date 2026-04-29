@@ -21,7 +21,7 @@ use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::{
     format_date, parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption,
-    DropdownWidget, FieldType, FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState,
+    DropdownWidget, FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState,
     SearchableListAction, SearchableListState, TextareaState, TextareaWidget, TimePickerAction,
     TimePickerPopup,
 };
@@ -882,7 +882,9 @@ impl AppointmentForm {
                 // Allow Tab/BackTab/Esc to pass through to form's navigation handler
                 let event = Event::Key(key);
                 match &event {
-                    ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => return None,
+                    ct_event!(keycode press Tab)
+                    | ct_event!(keycode press BackTab)
+                    | ct_event!(keycode press Esc) => return None,
                     _ => match action {
                         DropdownAction::Selected(_) => {
                             if let Some(value) = self
@@ -927,7 +929,10 @@ impl AppointmentForm {
 
         if self.focused_field == FIELD_DATE {
             let event = Event::Key(key);
-            if matches!(&event, ct_event!(keycode press Enter) | ct_event!(key press ' ')) {
+            if matches!(
+                &event,
+                ct_event!(keycode press Enter) | ct_event!(key press ' ')
+            ) {
                 let current_value = parse_date(&self.get_value_by_id(FIELD_DATE));
                 self.date_picker.open(current_value);
                 return Some(AppointmentFormAction::FocusChanged);
@@ -952,7 +957,10 @@ impl AppointmentForm {
 
         if self.focused_field == FIELD_START_TIME {
             let event = Event::Key(key);
-            if matches!(&event, ct_event!(keycode press Enter) | ct_event!(key press ' ')) {
+            if matches!(
+                &event,
+                ct_event!(keycode press Enter) | ct_event!(key press ' ')
+            ) {
                 // Need practitioner_id, date, and duration to open time picker
                 if let (Some(practitioner_id), Some(date), Ok(duration)) = (
                     self.data.practitioner_id,
@@ -970,7 +978,9 @@ impl AppointmentForm {
 
         // Ctrl+S submits the form from any field
         let event = Event::Key(key);
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(&event, ct_event!(key press CONTROL-'s')) {
+        if key.modifiers.contains(KeyModifiers::CONTROL)
+            && matches!(&event, ct_event!(key press CONTROL-'s'))
+        {
             FormNavigation::validate(self);
             return Some(AppointmentFormAction::Submit);
         }

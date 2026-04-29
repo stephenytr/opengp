@@ -105,41 +105,41 @@ impl<A> ContextMenuState<A> {
         Some(Rect::new(x, y, width, height))
     }
 
-     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ContextMenuAction<A>>
-     where
-         A: Clone,
-     {
-         if !self.visible || key.kind != KeyEventKind::Press {
-             return None;
-         }
- 
-         let event = Event::Key(key);
-         match &event {
-             ct_event!(keycode press Up) => {
-                 self.move_prev_enabled();
-                 Some(ContextMenuAction::FocusChanged)
-             }
-             ct_event!(keycode press Down) => {
-                 self.move_next_enabled();
-                 Some(ContextMenuAction::FocusChanged)
-             }
-             ct_event!(keycode press Enter) => {
-                 if let Some(item) = self.selected_item() {
-                     if item.enabled {
-                         let action = item.action.clone();
-                         self.visible = false;
-                         return Some(ContextMenuAction::Selected(action));
-                     }
-                 }
-                 None
-             }
-             ct_event!(keycode press Esc) => {
-                 self.visible = false;
-                 Some(ContextMenuAction::Dismissed)
-             }
-             _ => None,
-         }
-     }
+    pub fn handle_key(&mut self, key: KeyEvent) -> Option<ContextMenuAction<A>>
+    where
+        A: Clone,
+    {
+        if !self.visible || key.kind != KeyEventKind::Press {
+            return None;
+        }
+
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press Up) => {
+                self.move_prev_enabled();
+                Some(ContextMenuAction::FocusChanged)
+            }
+            ct_event!(keycode press Down) => {
+                self.move_next_enabled();
+                Some(ContextMenuAction::FocusChanged)
+            }
+            ct_event!(keycode press Enter) => {
+                if let Some(item) = self.selected_item() {
+                    if item.enabled {
+                        let action = item.action.clone();
+                        self.visible = false;
+                        return Some(ContextMenuAction::Selected(action));
+                    }
+                }
+                None
+            }
+            ct_event!(keycode press Esc) => {
+                self.visible = false;
+                Some(ContextMenuAction::Dismissed)
+            }
+            _ => None,
+        }
+    }
 
     pub fn handle_mouse(
         &mut self,

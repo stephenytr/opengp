@@ -1,8 +1,5 @@
 use crate::ui::app::App;
 use crate::ui::components::appointment::AppointmentView;
-use crate::ui::components::clinical::{
-    AllergyListAction, ConsultationListAction, FamilyHistoryListAction, VitalSignsListAction,
-};
 use crate::ui::components::clinical_row::{ClinicalMenuKind, ClinicalRow};
 use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
 use crate::ui::components::tabs::Tab;
@@ -151,7 +148,6 @@ impl App {
                         .constraints([Constraint::Length(23), Constraint::Min(0)])
                         .split(appointment_content_area);
 
-                    use crossterm::event::MouseEventKind;
                     // Always forward mouse events to calendar for hover tracking
                     if let Some(action) = self
                         .appointment_state

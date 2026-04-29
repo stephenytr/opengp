@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use crossterm::event::{Event, KeyEvent, KeyModifiers};
-use rat_event::ct_event;
 use opengp_config::forms::ValidationRules;
 use opengp_domain::domain::clinical::FamilyHistory;
+use rat_event::ct_event;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -325,12 +325,16 @@ impl FamilyHistoryForm {
         }
 
         let event = Event::Key(key);
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(&event, ct_event!(key press CONTROL-'s')) {
+        if key.modifiers.contains(KeyModifiers::CONTROL)
+            && matches!(&event, ct_event!(key press CONTROL-'s'))
+        {
             FormNavigation::validate(self);
             return Some(FamilyHistoryFormAction::Submit);
         }
 
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(&event, ct_event!(keycode press CONTROL-Tab)) {
+        if key.modifiers.contains(KeyModifiers::CONTROL)
+            && matches!(&event, ct_event!(keycode press CONTROL-Tab))
+        {
             return Some(FamilyHistoryFormAction::Cancel);
         }
 

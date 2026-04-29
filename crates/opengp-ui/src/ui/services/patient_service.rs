@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use super::shared::{ToUiError, UiResult, UiResultExt, UiServiceError};
+use super::shared::{UiResult, UiResultExt, UiServiceError};
 use crate::ui::view_models::PatientListItem;
 use opengp_domain::domain::patient::{NewPatientData, Patient, PatientService, UpdatePatientData};
 

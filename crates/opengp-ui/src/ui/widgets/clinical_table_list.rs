@@ -134,69 +134,69 @@ impl<T> ClinicalTableList<T> {
     ///
     /// Returns a [`ListAction`] that the caller can use to drive the rest of
     /// the UI, or `None` when the key is ignored.
-     pub fn handle_key(&mut self, _key: KeyEvent) -> Option<ListAction<T>>
-     where
-         T: Clone,
-     {
-         let key = _key;
- 
-         if key.kind != KeyEventKind::Press {
-             return None;
-         }
- 
-         let event = Event::Key(key);
-         match &event {
-             ct_event!(keycode press Up) | ct_event!(key press 'k') => {
-                 self.move_up();
-                 self.adjust_scroll(10);
-                 Some(ListAction::Select(self.selected_index))
-             }
-             ct_event!(keycode press Down) | ct_event!(key press 'j') => {
-                 self.move_down();
-                 self.adjust_scroll(10);
-                 Some(ListAction::Select(self.selected_index))
-             }
-             ct_event!(keycode press Home) => {
-                 self.move_first();
-                 self.adjust_scroll(10);
-                 Some(ListAction::Select(self.selected_index))
-             }
-             ct_event!(keycode press End) => {
-                 self.move_last();
-                 self.adjust_scroll(10);
-                 Some(ListAction::Select(self.selected_index))
-             }
-             ct_event!(keycode press PageUp) => {
-                 self.selected_index = self.selected_index.saturating_sub(10);
-                 self.adjust_scroll(10);
-                 Some(ListAction::Select(self.selected_index))
-             }
-             ct_event!(keycode press PageDown) => {
-                 self.selected_index =
-                     (self.selected_index + 10).min(self.items.len().saturating_sub(1));
-                 self.adjust_scroll(10);
-                 Some(ListAction::Select(self.selected_index))
-             }
-             ct_event!(keycode press Enter) => self
-                 .items
-                 .get(self.selected_index)
-                 .cloned()
-                 .map(ListAction::Open),
-             ct_event!(key press 'n') => Some(ListAction::New),
-             ct_event!(key press 'e') => self
-                 .items
-                 .get(self.selected_index)
-                 .cloned()
-                 .map(ListAction::Edit),
-             ct_event!(key press 'd') => self
-                 .items
-                 .get(self.selected_index)
-                 .cloned()
-                 .map(ListAction::Delete),
-             ct_event!(key press 'i') => Some(ListAction::ToggleInactive),
-             _ => None,
-         }
-     }
+    pub fn handle_key(&mut self, _key: KeyEvent) -> Option<ListAction<T>>
+    where
+        T: Clone,
+    {
+        let key = _key;
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press Up) | ct_event!(key press 'k') => {
+                self.move_up();
+                self.adjust_scroll(10);
+                Some(ListAction::Select(self.selected_index))
+            }
+            ct_event!(keycode press Down) | ct_event!(key press 'j') => {
+                self.move_down();
+                self.adjust_scroll(10);
+                Some(ListAction::Select(self.selected_index))
+            }
+            ct_event!(keycode press Home) => {
+                self.move_first();
+                self.adjust_scroll(10);
+                Some(ListAction::Select(self.selected_index))
+            }
+            ct_event!(keycode press End) => {
+                self.move_last();
+                self.adjust_scroll(10);
+                Some(ListAction::Select(self.selected_index))
+            }
+            ct_event!(keycode press PageUp) => {
+                self.selected_index = self.selected_index.saturating_sub(10);
+                self.adjust_scroll(10);
+                Some(ListAction::Select(self.selected_index))
+            }
+            ct_event!(keycode press PageDown) => {
+                self.selected_index =
+                    (self.selected_index + 10).min(self.items.len().saturating_sub(1));
+                self.adjust_scroll(10);
+                Some(ListAction::Select(self.selected_index))
+            }
+            ct_event!(keycode press Enter) => self
+                .items
+                .get(self.selected_index)
+                .cloned()
+                .map(ListAction::Open),
+            ct_event!(key press 'n') => Some(ListAction::New),
+            ct_event!(key press 'e') => self
+                .items
+                .get(self.selected_index)
+                .cloned()
+                .map(ListAction::Edit),
+            ct_event!(key press 'd') => self
+                .items
+                .get(self.selected_index)
+                .cloned()
+                .map(ListAction::Delete),
+            ct_event!(key press 'i') => Some(ListAction::ToggleInactive),
+            _ => None,
+        }
+    }
 
     /// Handles mouse scrolling and click selection inside the list area.
     ///

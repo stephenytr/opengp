@@ -1,9 +1,7 @@
-use std::rc::Rc;
-
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 use crossterm::event::{Event, KeyEvent, KeyEventKind, MouseEvent};
-use opengp_domain::domain::billing::{Invoice, InvoiceStatus};
+use opengp_domain::domain::billing::Invoice;
 use rat_event::ct_event;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};

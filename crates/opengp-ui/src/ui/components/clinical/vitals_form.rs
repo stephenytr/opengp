@@ -5,9 +5,9 @@
 use std::collections::HashMap;
 
 use crossterm::event::{Event, KeyEvent, KeyModifiers};
-use rat_event::ct_event;
 use opengp_config::forms::{FormRule, FormRuleType, NumericRange, ValidationRules};
 use opengp_config::healthcare::HealthcareConfig;
+use rat_event::ct_event;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -383,7 +383,9 @@ impl VitalSignsForm {
 
         // Ctrl+S submits the form from any field
         let event = Event::Key(key);
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(&event, ct_event!(key press CONTROL-'s')) {
+        if key.modifiers.contains(KeyModifiers::CONTROL)
+            && matches!(&event, ct_event!(key press CONTROL-'s'))
+        {
             FormNavigation::validate(self);
             return Some(VitalSignsFormAction::Submit);
         }

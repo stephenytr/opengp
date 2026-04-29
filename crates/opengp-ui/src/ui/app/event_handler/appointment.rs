@@ -1,4 +1,4 @@
-use crate::ui::app::{App, AppCommand, AppointmentStatusTransition, PendingClinicalSaveData};
+use crate::ui::app::{App, AppointmentStatusTransition, PendingClinicalSaveData};
 use crate::ui::components::appointment::{AppointmentDetailModalAction, AppointmentFormAction};
 use crate::ui::components::tabs::Tab;
 use crate::ui::keybinds::Action;

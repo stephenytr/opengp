@@ -256,66 +256,66 @@ impl<'a, T: Searchable> SearchableList<'a, T> {
         }
     }
 
-     /// Handles key presses for opening the list, typing the query, and navigation.
-     pub fn handle_key(&mut self, key: KeyEvent) -> SearchableListAction {
-         if key.kind != KeyEventKind::Press {
-             return SearchableListAction::None;
-         }
- 
-         if !self.state.open {
-             let event = Event::Key(key);
-             if matches!(&event, ct_event!(keycode press Enter)) {
-                 self.state.open();
-                 return SearchableListAction::None;
-             }
-             return SearchableListAction::None;
-         }
- 
-         let event = Event::Key(key);
-         match &event {
-             ct_event!(keycode press Esc) => {
-                 self.state.close();
-                 SearchableListAction::Cancelled
-             }
-             ct_event!(keycode press Enter) => {
-                 if let (Some(id), Some(name)) =
-                     (self.state.selected_id(), self.state.selected_display())
-                 {
-                     self.state.close();
-                     SearchableListAction::Selected(id, name)
-                 } else {
-                     SearchableListAction::Cancelled
-                 }
-             }
-             ct_event!(keycode press Up) | ct_event!(key press 'k') => {
-                 self.state.move_up();
-                 SearchableListAction::None
-             }
-             ct_event!(keycode press Down) | ct_event!(key press 'j') => {
-                 self.state.move_down();
-                 SearchableListAction::None
-             }
-             ct_event!(keycode press Backspace) => {
-                 self.state.query.pop();
-                 if self.fuzzy {
-                     self.state.filter_fuzzy();
-                 } else {
-                     self.state.filter_substring();
-                 }
-                 SearchableListAction::None
-             }
-             ct_event!(key press c) => {
-                 self.state.query.push(*c);
-                 if self.fuzzy {
-                     self.state.filter_fuzzy();
-                 } else {
-                     self.state.filter_substring();
-                 }
-                 SearchableListAction::None
-             }
-             _ => SearchableListAction::None,
-         }
-     }
+    /// Handles key presses for opening the list, typing the query, and navigation.
+    pub fn handle_key(&mut self, key: KeyEvent) -> SearchableListAction {
+        if key.kind != KeyEventKind::Press {
+            return SearchableListAction::None;
+        }
+
+        if !self.state.open {
+            let event = Event::Key(key);
+            if matches!(&event, ct_event!(keycode press Enter)) {
+                self.state.open();
+                return SearchableListAction::None;
+            }
+            return SearchableListAction::None;
+        }
+
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press Esc) => {
+                self.state.close();
+                SearchableListAction::Cancelled
+            }
+            ct_event!(keycode press Enter) => {
+                if let (Some(id), Some(name)) =
+                    (self.state.selected_id(), self.state.selected_display())
+                {
+                    self.state.close();
+                    SearchableListAction::Selected(id, name)
+                } else {
+                    SearchableListAction::Cancelled
+                }
+            }
+            ct_event!(keycode press Up) | ct_event!(key press 'k') => {
+                self.state.move_up();
+                SearchableListAction::None
+            }
+            ct_event!(keycode press Down) | ct_event!(key press 'j') => {
+                self.state.move_down();
+                SearchableListAction::None
+            }
+            ct_event!(keycode press Backspace) => {
+                self.state.query.pop();
+                if self.fuzzy {
+                    self.state.filter_fuzzy();
+                } else {
+                    self.state.filter_substring();
+                }
+                SearchableListAction::None
+            }
+            ct_event!(key press c) => {
+                self.state.query.push(*c);
+                if self.fuzzy {
+                    self.state.filter_fuzzy();
+                } else {
+                    self.state.filter_substring();
+                }
+                SearchableListAction::None
+            }
+            _ => SearchableListAction::None,
+        }
+    }
 }
 
 impl<'a, T: Searchable> Widget for SearchableList<'a, T> {

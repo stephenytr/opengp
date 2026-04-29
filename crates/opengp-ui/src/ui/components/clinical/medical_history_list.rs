@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 use crossterm::event::{KeyEvent, MouseEvent};

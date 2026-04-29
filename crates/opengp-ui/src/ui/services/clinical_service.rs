@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use super::shared::{ToUiError, UiResult, UiResultExt};
+use super::shared::{UiResult, UiResultExt};
 use opengp_domain::domain::clinical::{
     Allergy, ClinicalService, ConditionStatus, Consultation, FamilyHistory, MedicalHistory,
     NewAllergyData, NewConsultationData, NewFamilyHistoryData, NewMedicalHistoryData,

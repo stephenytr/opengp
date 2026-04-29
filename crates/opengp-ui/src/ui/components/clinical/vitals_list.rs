@@ -1,10 +1,8 @@
-use std::rc::Rc;
-
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 use crossterm::event::{Event, KeyEvent, KeyEventKind, MouseEvent};
-use rat_event::ct_event;
 use opengp_domain::domain::clinical::VitalSigns;
+use rat_event::ct_event;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 
@@ -132,18 +130,18 @@ impl VitalSignsList {
         self.hovered_index = list.hovered_index;
     }
 
-     pub fn handle_key(&mut self, key: KeyEvent) -> Option<VitalSignsListAction> {
-         if key.kind == KeyEventKind::Press {
-             let event = Event::Key(key);
-             if matches!(&event, ct_event!(key press '+') | ct_event!(key press '=')) {
-                 return Some(VitalSignsListAction::NextPage);
-             }
-             if matches!(&event, ct_event!(key press '-')) {
-                 return Some(VitalSignsListAction::PrevPage);
-             }
-         }
-         let mut list = self.as_list();
-         let action = list.handle_key(key).and_then(|a| match a {
+    pub fn handle_key(&mut self, key: KeyEvent) -> Option<VitalSignsListAction> {
+        if key.kind == KeyEventKind::Press {
+            let event = Event::Key(key);
+            if matches!(&event, ct_event!(key press '+') | ct_event!(key press '=')) {
+                return Some(VitalSignsListAction::NextPage);
+            }
+            if matches!(&event, ct_event!(key press '-')) {
+                return Some(VitalSignsListAction::PrevPage);
+            }
+        }
+        let mut list = self.as_list();
+        let action = list.handle_key(key).and_then(|a| match a {
             UnifiedListAction::Select(i) => Some(VitalSignsListAction::Select(i)),
             UnifiedListAction::Open(v) => Some(VitalSignsListAction::Open(v)),
             UnifiedListAction::New => Some(VitalSignsListAction::New),

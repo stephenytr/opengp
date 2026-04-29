@@ -82,38 +82,38 @@ impl<B: ModalButton> ModalState<B> {
         }
     }
 
-     /// Handles a key press and updates focus or triggers actions.
-     ///
-     /// Returns a [`ModalAction`] when the key should be handled by the caller,
-     /// such as confirm or cancel, and `None` when the key is ignored.
-     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ModalAction> {
-         if key.kind != KeyEventKind::Press {
-             return None;
-         }
- 
-         let event = Event::Key(key);
-         match &event {
-             ct_event!(keycode press Esc) => Some(ModalAction::Dismiss),
-             ct_event!(keycode press Enter) => Some(ModalAction::Confirm),
-             ct_event!(keycode press Tab) => {
-                 self.next_button();
-                 Some(ModalAction::FocusChanged)
-             }
-             ct_event!(keycode press BackTab) => {
-                 self.prev_button();
-                 Some(ModalAction::FocusChanged)
-             }
-             ct_event!(keycode press Left) => {
-                 self.prev_button();
-                 Some(ModalAction::FocusChanged)
-             }
-             ct_event!(keycode press Right) => {
-                 self.next_button();
-                 Some(ModalAction::FocusChanged)
-             }
-             _ => None,
-         }
-     }
+    /// Handles a key press and updates focus or triggers actions.
+    ///
+    /// Returns a [`ModalAction`] when the key should be handled by the caller,
+    /// such as confirm or cancel, and `None` when the key is ignored.
+    pub fn handle_key(&mut self, key: KeyEvent) -> Option<ModalAction> {
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press Esc) => Some(ModalAction::Dismiss),
+            ct_event!(keycode press Enter) => Some(ModalAction::Confirm),
+            ct_event!(keycode press Tab) => {
+                self.next_button();
+                Some(ModalAction::FocusChanged)
+            }
+            ct_event!(keycode press BackTab) => {
+                self.prev_button();
+                Some(ModalAction::FocusChanged)
+            }
+            ct_event!(keycode press Left) => {
+                self.prev_button();
+                Some(ModalAction::FocusChanged)
+            }
+            ct_event!(keycode press Right) => {
+                self.next_button();
+                Some(ModalAction::FocusChanged)
+            }
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]

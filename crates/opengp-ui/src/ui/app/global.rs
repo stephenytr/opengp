@@ -2,9 +2,9 @@ use rat_salsa::{SalsaAppContext, SalsaContext};
 use std::sync::Arc;
 
 use crate::api::ApiClient;
-use crate::ui::app::{AppState, AppContextMenuAction, RetryOperation};
 use crate::ui::app::error::AppError;
 use crate::ui::app::event::AppEvent;
+use crate::ui::app::{AppContextMenuAction, AppState, RetryOperation};
 use crate::ui::components::appointment::{AppointmentDetailModal, AppointmentForm};
 use crate::ui::components::help::HelpOverlay;
 use crate::ui::components::patient::PatientForm;

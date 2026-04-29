@@ -102,7 +102,9 @@ impl AllergyForm {
         if let Some(action) = action {
             let event = Event::Key(key);
             match &event {
-                ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => return None,
+                ct_event!(keycode press Tab)
+                | ct_event!(keycode press BackTab)
+                | ct_event!(keycode press Esc) => return None,
                 _ => match action {
                     DropdownAction::Selected(_) | DropdownAction::Closed => {
                         let selected_value = self
@@ -124,7 +126,9 @@ impl AllergyForm {
         } else {
             let event = Event::Key(key);
             match &event {
-                ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => return None,
+                ct_event!(keycode press Tab)
+                | ct_event!(keycode press BackTab)
+                | ct_event!(keycode press Esc) => return None,
                 _ => return Some(None),
             }
         }
@@ -170,7 +174,10 @@ impl AllergyForm {
 
         if self.form_state.focused_field == AllergyFormField::OnsetDate {
             let event = Event::Key(key);
-            if matches!(&event, ct_event!(keycode press Enter) | ct_event!(key press ' ')) {
+            if matches!(
+                &event,
+                ct_event!(keycode press Enter) | ct_event!(key press ' ')
+            ) {
                 self.date_picker.open(self.onset_date);
                 return Some(AllergyFormAction::FocusChanged);
             }

@@ -7,9 +7,9 @@ use crate::ui::widgets::{
     LoadingState, ScrollableFormState, TextareaState, TextareaWidget,
 };
 use crossterm::event::{Event, KeyEvent, KeyModifiers};
-use rat_event::ct_event;
 use opengp_config::{forms::ValidationRules, SocialHistoryConfig};
 use opengp_domain::domain::clinical::{AlcoholStatus, ExerciseFrequency, SmokingStatus};
+use rat_event::ct_event;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -295,7 +295,9 @@ impl SocialHistoryComponent {
                 if let Some(_action) = dropdown_consumed {
                     let event = Event::Key(key);
                     match &event {
-                        ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => {}
+                        ct_event!(keycode press Tab)
+                        | ct_event!(keycode press BackTab)
+                        | ct_event!(keycode press Esc) => {}
                         _ => {
                             self.validate_field_by_id(&focused_field_id);
                             return Some(SocialHistoryAction::FieldChanged);

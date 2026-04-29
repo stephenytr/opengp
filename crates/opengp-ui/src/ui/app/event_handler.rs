@@ -4,7 +4,7 @@ mod global;
 #[cfg(test)]
 mod workspace_tests;
 
-use crate::ui::app::{App, AppCommand, PendingPatientData};
+use crate::ui::app::{App, PendingPatientData};
 use crate::ui::components::appointment::{AppointmentForm, AppointmentView};
 use crate::ui::components::tabs::Tab;
 use crate::ui::keybinds::{Action, KeyContext};

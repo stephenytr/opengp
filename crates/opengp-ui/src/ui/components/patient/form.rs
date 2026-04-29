@@ -6,14 +6,13 @@ use std::cmp::max;
 use std::collections::HashMap;
 
 use crossterm::event::{Event, KeyEvent, MouseEvent, MouseEventKind};
-use rat_event::ct_event;
 use opengp_config::{
     forms::{FieldDefinition, FieldType as ConfigFieldType, FormConfig, ValidationRules},
-    PatientConfig,
 };
 use opengp_domain::domain::patient::{
     Address, EmergencyContact, Ihi, MedicareNumber, NewPatientData, Patient, PhoneNumber,
 };
+use rat_event::ct_event;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
@@ -22,7 +21,6 @@ use ratatui::widgets::{Block, Borders, Paragraph, Widget};
 use uuid::Uuid;
 
 use crate::ui::input::{to_ratatui_key, HoverState};
-use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::shared::{hover_style, FormAction};
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
@@ -898,7 +896,10 @@ impl PatientForm {
 
         if self.focused_field == FIELD_DATE_OF_BIRTH {
             let event = Event::Key(key);
-            if matches!(&event, ct_event!(keycode press Enter) | ct_event!(key press ' ')) {
+            if matches!(
+                &event,
+                ct_event!(keycode press Enter) | ct_event!(key press ' ')
+            ) {
                 let current_value = parse_date(&self.get_value_by_id(FIELD_DATE_OF_BIRTH));
                 self.date_picker.open(current_value);
                 return Some(PatientFormAction::FocusChanged);
@@ -959,7 +960,9 @@ impl PatientForm {
         let event = Event::Key(key);
         let selected_value = if let Some(action) = action {
             match &event {
-                ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => {
+                ct_event!(keycode press Tab)
+                | ct_event!(keycode press BackTab)
+                | ct_event!(keycode press Esc) => {
                     return None;
                 }
                 _ => match action {
@@ -977,7 +980,9 @@ impl PatientForm {
             }
         } else {
             match &event {
-                ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => return None,
+                ct_event!(keycode press Tab)
+                | ct_event!(keycode press BackTab)
+                | ct_event!(keycode press Esc) => return None,
                 _ => return Some(None),
             }
         };

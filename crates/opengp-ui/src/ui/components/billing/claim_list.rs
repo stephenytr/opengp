@@ -1,9 +1,7 @@
-use std::rc::Rc;
-
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
-use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-use opengp_domain::domain::billing::{ClaimStatus, MedicareClaim};
+use crossterm::event::MouseEvent;
+use opengp_domain::domain::billing::MedicareClaim;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 use uuid::Uuid;

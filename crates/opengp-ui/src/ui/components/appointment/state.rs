@@ -370,7 +370,7 @@ impl AppointmentState {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ScheduleAction> {
-        use crossterm::event::{Event, KeyEventKind, KeyModifiers};
+        use crossterm::event::{Event, KeyEventKind};
         use rat_event::ct_event;
 
         if key.kind != KeyEventKind::Press {

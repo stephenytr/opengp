@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
 use crossterm::event::{Event, KeyEvent, KeyModifiers};
-use rat_event::ct_event;
 use opengp_config::forms::ValidationRules;
 use opengp_config::ClinicalConfig;
 use opengp_domain::domain::clinical::{ConditionStatus, MedicalHistory, Severity};
+use rat_event::ct_event;
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -193,7 +193,9 @@ impl MedicalHistoryForm {
             return None;
         }
         let event = Event::Key(key);
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(&event, ct_event!(key press CONTROL-'s')) {
+        if key.modifiers.contains(KeyModifiers::CONTROL)
+            && matches!(&event, ct_event!(key press CONTROL-'s'))
+        {
             self.validate();
             return Some(MedicalHistoryFormAction::Submit);
         }
@@ -210,7 +212,9 @@ impl MedicalHistoryForm {
             if let Some(action) = action {
                 let event = Event::Key(key);
                 match &event {
-                    ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => return None,
+                    ct_event!(keycode press Tab)
+                    | ct_event!(keycode press BackTab)
+                    | ct_event!(keycode press Esc) => return None,
                     _ => match action {
                         DropdownAction::Selected(_) => {
                             self.validate_field(focused);
