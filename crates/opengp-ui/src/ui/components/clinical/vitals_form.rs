@@ -4,23 +4,24 @@
 
 use std::collections::HashMap;
 
-use crossterm::event::{KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyEvent, KeyModifiers};
+use rat_event::ct_event;
 use opengp_config::forms::{FormRule, FormRuleType, NumericRange, ValidationRules};
 use opengp_config::healthcare::HealthcareConfig;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::shared::{FormAction, FormMode};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    FormField, FormFieldMeta, FormNavigation, FormRuleEngine,
-    FormState, FormValidator, HeightMode, TextareaState, TextareaWidget,
+    FormField, FormFieldMeta, FormNavigation, FormRuleEngine, FormState, FormValidator, HeightMode,
+    TextareaState, TextareaWidget,
 };
 use opengp_domain::domain::clinical::VitalSigns;
 
@@ -374,14 +375,15 @@ impl VitalSignsForm {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<VitalSignsFormAction> {
-        use crossterm::event::{KeyCode, KeyEventKind};
+        use crossterm::event::KeyEventKind;
 
         if key.kind != KeyEventKind::Press {
             return None;
         }
 
         // Ctrl+S submits the form from any field
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
+        let event = Event::Key(key);
+        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(&event, ct_event!(key press CONTROL-'s')) {
             FormNavigation::validate(self);
             return Some(VitalSignsFormAction::Submit);
         }
@@ -401,16 +403,17 @@ impl VitalSignsForm {
             return Some(VitalSignsFormAction::ValueChanged);
         }
 
-        match key.code {
-            KeyCode::PageUp => {
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press PageUp) => {
                 self.form_state.scroll.scroll_up();
                 Some(VitalSignsFormAction::FocusChanged)
             }
-            KeyCode::PageDown => {
+            ct_event!(keycode press PageDown) => {
                 self.form_state.scroll.scroll_down();
                 Some(VitalSignsFormAction::FocusChanged)
             }
-            KeyCode::Enter => None,
+            ct_event!(keycode press Enter) => None,
             _ => {
                 self.form_state.focused_field = self.focused_field;
                 if let Some(action) = self.form_state.handle_navigation_key(key) {

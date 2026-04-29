@@ -2,12 +2,13 @@
 //!
 //! Form for creating and editing patient consultations (SOAP notes).
 
-use crossterm::event::{KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyEvent, KeyModifiers};
+use rat_event::ct_event;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::shared::FormMode;
@@ -270,14 +271,15 @@ impl ConsultationForm {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ConsultationFormAction> {
-        use crossterm::event::{KeyCode, KeyEventKind};
+        use crossterm::event::KeyEventKind;
 
         if key.kind != KeyEventKind::Press {
             return None;
         }
 
         // Ctrl+S submits the form from any field
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
+        let event = Event::Key(key);
+        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(&event, ct_event!(key press CONTROL-'s')) {
             FormNavigation::validate(self);
             return Some(ConsultationFormAction::Submit);
         }
@@ -294,8 +296,9 @@ impl ConsultationForm {
             }
         }
 
-        match key.code {
-            KeyCode::Tab => {
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press Tab) => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     return Some(ConsultationFormAction::Cancel);
                 }
@@ -306,28 +309,28 @@ impl ConsultationForm {
                 }
                 Some(ConsultationFormAction::FocusChanged)
             }
-            KeyCode::BackTab => {
+            ct_event!(keycode press BackTab) => {
                 self.state.prev_field();
                 Some(ConsultationFormAction::FocusChanged)
             }
-            KeyCode::Up => {
+            ct_event!(keycode press Up) => {
                 self.state.prev_field();
                 Some(ConsultationFormAction::FocusChanged)
             }
-            KeyCode::Down => {
+            ct_event!(keycode press Down) => {
                 self.state.next_field();
                 Some(ConsultationFormAction::FocusChanged)
             }
-            KeyCode::PageUp => {
+            ct_event!(keycode press PageUp) => {
                 self.state.scroll.scroll_up();
                 Some(ConsultationFormAction::FocusChanged)
             }
-            KeyCode::PageDown => {
+            ct_event!(keycode press PageDown) => {
                 self.state.scroll.scroll_down();
                 Some(ConsultationFormAction::FocusChanged)
             }
-            KeyCode::Enter => None,
-            KeyCode::Esc => Some(ConsultationFormAction::Cancel),
+            ct_event!(keycode press Enter) => None,
+            ct_event!(keycode press Esc) => Some(ConsultationFormAction::Cancel),
             _ => None,
         }
     }

@@ -5,7 +5,8 @@
 use std::cmp::max;
 use std::collections::HashMap;
 
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
+use crossterm::event::{Event, KeyEvent, MouseEvent, MouseEventKind};
+use rat_event::ct_event;
 use opengp_config::{
     forms::{FieldDefinition, FieldType as ConfigFieldType, FormConfig, ValidationRules},
     PatientConfig,
@@ -13,16 +14,16 @@ use opengp_config::{
 use opengp_domain::domain::patient::{
     Address, EmergencyContact, Ihi, MedicareNumber, NewPatientData, Patient, PhoneNumber,
 };
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Paragraph, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 use uuid::Uuid;
 
 use crate::ui::input::{to_ratatui_key, HoverState};
 use crate::ui::layout::LABEL_WIDTH;
-use crate::ui::shared::{FormAction, hover_style};
+use crate::ui::shared::{hover_style, FormAction};
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
 use crate::ui::widgets::{
@@ -895,12 +896,13 @@ impl PatientForm {
             return Some(PatientFormAction::FocusChanged);
         }
 
-        if self.focused_field == FIELD_DATE_OF_BIRTH
-            && matches!(key.code, KeyCode::Enter | KeyCode::Char(' '))
-        {
-            let current_value = parse_date(&self.get_value_by_id(FIELD_DATE_OF_BIRTH));
-            self.date_picker.open(current_value);
-            return Some(PatientFormAction::FocusChanged);
+        if self.focused_field == FIELD_DATE_OF_BIRTH {
+            let event = Event::Key(key);
+            if matches!(&event, ct_event!(keycode press Enter) | ct_event!(key press ' ')) {
+                let current_value = parse_date(&self.get_value_by_id(FIELD_DATE_OF_BIRTH));
+                self.date_picker.open(current_value);
+                return Some(PatientFormAction::FocusChanged);
+            }
         }
 
         if let Some(dropdown_action) = self.handle_dropdown_key(key) {
@@ -919,16 +921,17 @@ impl PatientForm {
             }
         }
 
-        match key.code {
-            KeyCode::PageUp => {
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press PageUp) => {
                 self.form_state.scroll.scroll_up();
                 Some(PatientFormAction::ValueChanged)
             }
-            KeyCode::PageDown => {
+            ct_event!(keycode press PageDown) => {
                 self.form_state.scroll.scroll_down();
                 Some(PatientFormAction::ValueChanged)
             }
-            KeyCode::Enter => None,
+            ct_event!(keycode press Enter) => None,
             _ => {
                 if let Some(action) = self.form_state.handle_navigation_key(key) {
                     if matches!(action, FormAction::Submit) {
@@ -953,9 +956,10 @@ impl PatientForm {
             dropdown.handle_key(key)
         };
 
+        let event = Event::Key(key);
         let selected_value = if let Some(action) = action {
-            match key.code {
-                KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {
+            match &event {
+                ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => {
                     return None;
                 }
                 _ => match action {
@@ -964,14 +968,16 @@ impl PatientForm {
                         .dropdowns
                         .get(&field_id)
                         .and_then(|dropdown| dropdown.selected_value().map(|v| v.to_string())),
-                    DropdownAction::Opened | DropdownAction::FocusChanged | DropdownAction::ContextMenu { .. } => {
+                    DropdownAction::Opened
+                    | DropdownAction::FocusChanged
+                    | DropdownAction::ContextMenu { .. } => {
                         return Some(Some(PatientFormAction::ValueChanged));
                     }
                 },
             }
         } else {
-            match key.code {
-                KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
+            match &event {
+                ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => return None,
                 _ => return Some(None),
             }
         };
@@ -987,41 +993,42 @@ impl PatientForm {
         // Handle hover state tracking for Moved events
         if mouse.kind == MouseEventKind::Moved {
             let mouse_pos = Position::new(mouse.column, mouse.row);
-            
+
             if !area.contains(mouse_pos) {
                 self.hovered_field.clear_hover();
                 return None;
             }
-            
+
             let inner = Rect::new(area.x + 1, area.y + 1, area.width - 2, area.height - 2);
             if !inner.contains(mouse_pos) {
                 self.hovered_field.clear_hover();
                 return None;
             }
-            
+
             let mut y = inner.y + 1;
             let max_y = inner.y + inner.height - 2;
-            
+
             for field_id in &self.field_ids {
                 if y > max_y {
                     break;
                 }
-                
+
                 let field_height = self.get_field_height(field_id);
                 let field_area = Rect::new(inner.x + 1, y, inner.width - 2, field_height);
-                
+
                 if field_area.contains(mouse_pos) {
-                    self.hovered_field.set_hovered(field_id.clone(), (mouse.column, mouse.row));
+                    self.hovered_field
+                        .set_hovered(field_id.clone(), (mouse.column, mouse.row));
                     return None;
                 }
-                
+
                 y += field_height;
             }
-            
+
             self.hovered_field.clear_hover();
             return None;
         }
-        
+
         // Handle left-click for focus changes
         if mouse.kind != MouseEventKind::Up(crossterm::event::MouseButton::Left) {
             return None;
@@ -1339,7 +1346,7 @@ impl Widget for PatientForm {
                         if let Some(dropdown) = self.form_state.dropdowns.get(&field_id).cloned() {
                             let dropdown_area =
                                 Rect::new(inner.x + 1, y as u16, inner.width - 2, 3);
-                            
+
                             if is_hovered {
                                 let bg_style = hover_style(&self.form_state.theme);
                                 for row in dropdown_area.y..dropdown_area.bottom() {
@@ -1348,7 +1355,7 @@ impl Widget for PatientForm {
                                     }
                                 }
                             }
-                            
+
                             if dropdown.is_open() {
                                 open_dropdown = Some((dropdown.clone(), dropdown_area));
                             }
@@ -1360,7 +1367,7 @@ impl Widget for PatientForm {
                                 inner.width - 2,
                                 textarea.height(),
                             );
-                            
+
                             if is_hovered {
                                 let bg_style = hover_style(&self.form_state.theme);
                                 for row in textarea_area.y..textarea_area.bottom() {
@@ -1369,7 +1376,7 @@ impl Widget for PatientForm {
                                     }
                                 }
                             }
-                            
+
                             TextareaWidget::new(textarea, self.form_state.theme.clone())
                                 .focused(is_focused)
                                 .render(textarea_area, buf);
@@ -1386,7 +1393,7 @@ impl Widget for PatientForm {
                                 left_col.width.saturating_sub(2),
                                 3,
                             );
-                            
+
                             if is_hovered {
                                 let bg_style = hover_style(&self.form_state.theme);
                                 for row in dropdown_area.y..dropdown_area.bottom() {
@@ -1395,7 +1402,7 @@ impl Widget for PatientForm {
                                     }
                                 }
                             }
-                            
+
                             if dropdown.is_open() {
                                 open_dropdown = Some((dropdown.clone(), dropdown_area));
                             }
@@ -1407,7 +1414,7 @@ impl Widget for PatientForm {
                                 left_col.width.saturating_sub(2),
                                 textarea.height(),
                             );
-                            
+
                             if is_hovered {
                                 let bg_style = hover_style(&self.form_state.theme);
                                 for row in textarea_area.y..textarea_area.bottom() {
@@ -1416,7 +1423,7 @@ impl Widget for PatientForm {
                                     }
                                 }
                             }
-                            
+
                             TextareaWidget::new(textarea, self.form_state.theme.clone())
                                 .focused(is_focused)
                                 .render(textarea_area, buf);
@@ -1432,7 +1439,7 @@ impl Widget for PatientForm {
                                 right_col.width.saturating_sub(2),
                                 3,
                             );
-                            
+
                             if is_hovered {
                                 let bg_style = hover_style(&self.form_state.theme);
                                 for row in dropdown_area.y..dropdown_area.bottom() {
@@ -1441,7 +1448,7 @@ impl Widget for PatientForm {
                                     }
                                 }
                             }
-                            
+
                             if dropdown.is_open() {
                                 open_dropdown = Some((dropdown.clone(), dropdown_area));
                             }
@@ -1453,7 +1460,7 @@ impl Widget for PatientForm {
                                 right_col.width.saturating_sub(2),
                                 textarea.height(),
                             );
-                            
+
                             if is_hovered {
                                 let bg_style = hover_style(&self.form_state.theme);
                                 for row in textarea_area.y..textarea_area.bottom() {
@@ -1462,7 +1469,7 @@ impl Widget for PatientForm {
                                     }
                                 }
                             }
-                            
+
                             TextareaWidget::new(textarea, self.form_state.theme.clone())
                                 .focused(is_focused)
                                 .render(textarea_area, buf);
@@ -1506,7 +1513,7 @@ impl Widget for PatientForm {
                 if let Some(dropdown) = self.form_state.dropdowns.get(&field_id).cloned() {
                     if y >= inner.y as i32 && y < max_y {
                         let dropdown_area = Rect::new(inner.x + 1, y as u16, inner.width - 2, 3);
-                        
+
                         if is_hovered {
                             let bg_style = hover_style(&self.form_state.theme);
                             for row in dropdown_area.y..dropdown_area.bottom() {
@@ -1515,7 +1522,7 @@ impl Widget for PatientForm {
                                 }
                             }
                         }
-                        
+
                         if dropdown.is_open() {
                             open_dropdown = Some((dropdown.clone(), dropdown_area));
                         }
@@ -1534,7 +1541,7 @@ impl Widget for PatientForm {
                             inner.width - 2,
                             textarea_height as u16,
                         );
-                        
+
                         if is_hovered {
                             let bg_style = hover_style(&self.form_state.theme);
                             for row in textarea_area.y..textarea_area.bottom() {
@@ -1543,7 +1550,7 @@ impl Widget for PatientForm {
                                 }
                             }
                         }
-                        
+
                         TextareaWidget::new(textarea, self.form_state.theme.clone())
                             .focused(is_focused)
                             .render(textarea_area, buf);

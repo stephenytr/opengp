@@ -1,4 +1,5 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{Event, KeyEvent, KeyEventKind};
+use rat_event::ct_event;
 
 use super::{
     AllergyForm, AllergyFormAction, AllergyFormField, AllergyType, FIELD_ALLERGEN,
@@ -99,8 +100,9 @@ impl AllergyForm {
         };
 
         if let Some(action) = action {
-            match key.code {
-                KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
+            let event = Event::Key(key);
+            match &event {
+                ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => return None,
                 _ => match action {
                     DropdownAction::Selected(_) | DropdownAction::Closed => {
                         let selected_value = self
@@ -112,14 +114,17 @@ impl AllergyForm {
                             self.set_value_by_id(&field_id, value);
                         }
                     }
-                    DropdownAction::Opened | DropdownAction::FocusChanged | DropdownAction::ContextMenu { .. } => {
+                    DropdownAction::Opened
+                    | DropdownAction::FocusChanged
+                    | DropdownAction::ContextMenu { .. } => {
                         return Some(Some(AllergyFormAction::ValueChanged));
                     }
                 },
             }
         } else {
-            match key.code {
-                KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
+            let event = Event::Key(key);
+            match &event {
+                ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => return None,
                 _ => return Some(None),
             }
         }
@@ -163,11 +168,12 @@ impl AllergyForm {
             return Some(AllergyFormAction::FocusChanged);
         }
 
-        if self.form_state.focused_field == AllergyFormField::OnsetDate
-            && matches!(key.code, KeyCode::Enter | KeyCode::Char(' '))
-        {
-            self.date_picker.open(self.onset_date);
-            return Some(AllergyFormAction::FocusChanged);
+        if self.form_state.focused_field == AllergyFormField::OnsetDate {
+            let event = Event::Key(key);
+            if matches!(&event, ct_event!(keycode press Enter) | ct_event!(key press ' ')) {
+                self.date_picker.open(self.onset_date);
+                return Some(AllergyFormAction::FocusChanged);
+            }
         }
 
         if let Some(dropdown_action) = self.handle_dropdown_key(key) {
@@ -190,16 +196,17 @@ impl AllergyForm {
             }
         }
 
-        match key.code {
-            KeyCode::PageUp => {
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press PageUp) => {
                 self.form_state.scroll.scroll_up();
                 Some(AllergyFormAction::FocusChanged)
             }
-            KeyCode::PageDown => {
+            ct_event!(keycode press PageDown) => {
                 self.form_state.scroll.scroll_down();
                 Some(AllergyFormAction::FocusChanged)
             }
-            KeyCode::Enter => None,
+            ct_event!(keycode press Enter) => None,
             _ => {
                 if let Some(action) = self.form_state.handle_navigation_key(key) {
                     if matches!(action, FormAction::Submit) {

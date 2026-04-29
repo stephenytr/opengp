@@ -4,14 +4,15 @@
 //! Provides keyboard-driven time selection with centered overlay rendering.
 
 use chrono::{NaiveDate, NaiveTime, Timelike};
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
+use crossterm::event::{Event, KeyEvent, MouseEvent, MouseEventKind};
 use opengp_config::CalendarConfig;
+use rat_event::ct_event;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::symbols::border;
 use ratatui::widgets::{Block, Clear, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::shared::hover_style;
 use crate::ui::theme::Theme;
@@ -161,17 +162,19 @@ impl TimePickerPopup {
             return None;
         }
 
+        let event = Event::Key(key);
+
         // If no available slots, only allow Esc
         if self.get_available_slots().is_empty() {
-            if key.code == KeyCode::Esc {
+            if matches!(&event, ct_event!(keycode press Esc)) {
                 self.is_visible = false;
                 return Some(TimePickerAction::Dismissed);
             }
             return None;
         }
 
-        match key.code {
-            KeyCode::Enter | KeyCode::Char(' ') => {
+        match &event {
+            ct_event!(keycode press Enter) | ct_event!(key press ' ') => {
                 if !self.is_slot_booked(self.selected_time) {
                     let selected = self.selected_time;
                     self.is_visible = false;
@@ -179,23 +182,23 @@ impl TimePickerPopup {
                 }
                 None
             }
-            KeyCode::Esc => {
+            ct_event!(keycode press Esc) => {
                 self.is_visible = false;
                 Some(TimePickerAction::Dismissed)
             }
-            KeyCode::Up | KeyCode::Char('k') => {
+            ct_event!(keycode press Up) | ct_event!(key press 'k') => {
                 self.move_selection_up();
                 None
             }
-            KeyCode::Down | KeyCode::Char('j') => {
+            ct_event!(keycode press Down) | ct_event!(key press 'j') => {
                 self.move_selection_down();
                 None
             }
-            KeyCode::Left | KeyCode::Char('h') => {
+            ct_event!(keycode press Left) | ct_event!(key press 'h') => {
                 self.move_selection_left();
                 None
             }
-            KeyCode::Right | KeyCode::Char('l') => {
+            ct_event!(keycode press Right) | ct_event!(key press 'l') => {
                 self.move_selection_right();
                 None
             }
@@ -463,6 +466,7 @@ impl Default for TimePickerPopup {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::KeyCode;
 
     #[test]
     fn test_new_popup_is_not_visible() {

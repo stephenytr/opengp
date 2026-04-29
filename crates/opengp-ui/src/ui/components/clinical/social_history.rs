@@ -6,15 +6,16 @@ use crate::ui::widgets::{
     format_date, parse_date, DropdownOption, DropdownWidget, FormValidator, HeightMode,
     LoadingState, ScrollableFormState, TextareaState, TextareaWidget,
 };
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyEvent, KeyModifiers};
+use rat_event::ct_event;
 use opengp_config::{forms::ValidationRules, SocialHistoryConfig};
 use opengp_domain::domain::clinical::{AlcoholStatus, ExerciseFrequency, SmokingStatus};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Clone)]
 pub struct SocialHistoryData {
@@ -268,8 +269,9 @@ impl SocialHistoryComponent {
         }
 
         if !self.is_editing {
-            match key.code {
-                KeyCode::Char('e') | KeyCode::Char('n') => {
+            let event = Event::Key(key);
+            match &event {
+                ct_event!(key press 'e') | ct_event!(key press 'n') => {
                     self.start_editing();
                     Some(SocialHistoryAction::Edit)
                 }
@@ -277,8 +279,9 @@ impl SocialHistoryComponent {
             }
         } else {
             // Ctrl+S saves the form
+            let event = Event::Key(key);
             if key.modifiers.contains(KeyModifiers::CONTROL)
-                && matches!(key.code, KeyCode::Char('s'))
+                && matches!(&event, ct_event!(key press CONTROL-'s'))
             {
                 return Some(SocialHistoryAction::Save);
             }
@@ -290,8 +293,9 @@ impl SocialHistoryComponent {
                     .get_mut(&focused_field_id)
                     .and_then(|dropdown| dropdown.handle_key(key));
                 if let Some(_action) = dropdown_consumed {
-                    match key.code {
-                        KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {}
+                    let event = Event::Key(key);
+                    match &event {
+                        ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => {}
                         _ => {
                             self.validate_field_by_id(&focused_field_id);
                             return Some(SocialHistoryAction::FieldChanged);
@@ -312,8 +316,9 @@ impl SocialHistoryComponent {
                 }
             }
 
-            match key.code {
-                KeyCode::Tab => {
+            let event = Event::Key(key);
+            match &event {
+                ct_event!(keycode press Tab) | ct_event!(keycode press SHIFT-Tab) => {
                     if key.modifiers.contains(KeyModifiers::SHIFT) {
                         self.prev_field();
                     } else {
@@ -321,28 +326,28 @@ impl SocialHistoryComponent {
                     }
                     Some(SocialHistoryAction::FocusChanged)
                 }
-                KeyCode::BackTab => {
+                ct_event!(keycode press BackTab) | ct_event!(keycode press SHIFT-BackTab) => {
                     self.prev_field();
                     Some(SocialHistoryAction::FocusChanged)
                 }
-                KeyCode::Up => {
+                ct_event!(keycode press Up) => {
                     self.prev_field();
                     Some(SocialHistoryAction::FocusChanged)
                 }
-                KeyCode::Down => {
+                ct_event!(keycode press Down) => {
                     self.next_field();
                     Some(SocialHistoryAction::FocusChanged)
                 }
-                KeyCode::PageUp => {
+                ct_event!(keycode press PageUp) => {
                     self.scroll.scroll_up();
                     Some(SocialHistoryAction::FocusChanged)
                 }
-                KeyCode::PageDown => {
+                ct_event!(keycode press PageDown) => {
                     self.scroll.scroll_down();
                     Some(SocialHistoryAction::FocusChanged)
                 }
-                KeyCode::Enter => None,
-                KeyCode::Esc => {
+                ct_event!(keycode press Enter) => None,
+                ct_event!(keycode press Esc) => {
                     self.stop_editing();
                     Some(SocialHistoryAction::Cancel)
                 }
@@ -941,6 +946,7 @@ fn render_edit_mode(component: &SocialHistoryComponent, inner: Rect, buf: &mut B
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::KeyCode;
 
     #[test]
     fn test_component_construction_with_theme() {

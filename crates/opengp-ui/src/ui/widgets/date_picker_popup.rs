@@ -4,11 +4,12 @@
 //! Provides keyboard-driven date selection with centered overlay rendering.
 
 use chrono::{Datelike, NaiveDate};
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
+use crossterm::event::{Event, KeyEvent, MouseEvent, MouseEventKind};
+use rat_event::ct_event;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::{Clear, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use super::CalendarWidget;
 use crate::ui::shared::hover_style;
@@ -80,17 +81,18 @@ impl DatePickerPopup {
             return None;
         }
 
-        match key.code {
-            KeyCode::Enter | KeyCode::Char(' ') => {
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press Enter) | ct_event!(key press ' ') => {
                 let selected = self.calendar.focused_date;
                 self.visible = false;
                 Some(DatePickerAction::Selected(selected))
             }
-            KeyCode::Esc => {
+            ct_event!(keycode press Esc) => {
                 self.visible = false;
                 Some(DatePickerAction::Dismissed)
             }
-            KeyCode::Up | KeyCode::Char('k') => {
+            ct_event!(keycode press Up) | ct_event!(key press 'k') => {
                 if self.calendar.focused_date.day() > 7 {
                     self.calendar.focused_date -= chrono::Duration::days(7);
                 } else {
@@ -106,7 +108,7 @@ impl DatePickerPopup {
                 }
                 None
             }
-            KeyCode::Down | KeyCode::Char('j') => {
+            ct_event!(keycode press Down) | ct_event!(key press 'j') => {
                 let (year, month) = self.calendar.current_month;
                 let days_in_month = self.days_in_month(year, month);
                 if self.calendar.focused_date.day() + 7 <= days_in_month {
@@ -127,7 +129,7 @@ impl DatePickerPopup {
                 }
                 None
             }
-            KeyCode::Left | KeyCode::Char('h') => {
+            ct_event!(keycode press Left) | ct_event!(key press 'h') => {
                 let prev = self.calendar.focused_date - chrono::Duration::days(1);
                 self.calendar.focused_date = prev;
                 let current_month = self.calendar.current_month.1;
@@ -136,7 +138,7 @@ impl DatePickerPopup {
                 }
                 None
             }
-            KeyCode::Right | KeyCode::Char('l') => {
+            ct_event!(keycode press Right) | ct_event!(key press 'l') => {
                 let next = self.calendar.focused_date + chrono::Duration::days(1);
                 self.calendar.focused_date = next;
                 let current_month = self.calendar.current_month.1;
@@ -163,14 +165,19 @@ impl DatePickerPopup {
             MouseEventKind::Moved => {
                 // Track hover state based on popup area
                 if let Some(area) = self.popup_area {
-                    self.hovered_index = self.calendar.get_day_index_at(mouse.column, mouse.row, area);
+                    self.hovered_index =
+                        self.calendar
+                            .get_day_index_at(mouse.column, mouse.row, area);
                 }
                 None
             }
             MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
                 // Click selects the date
                 if let Some(area) = self.popup_area {
-                    if let Some(day_index) = self.calendar.get_day_index_at(mouse.column, mouse.row, area) {
+                    if let Some(day_index) =
+                        self.calendar
+                            .get_day_index_at(mouse.column, mouse.row, area)
+                    {
                         if let Some(date) = self.calendar.day_at_index(day_index) {
                             self.calendar.focused_date = date;
                             self.calendar.selected_date = Some(date);

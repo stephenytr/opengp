@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyEvent, KeyModifiers};
+use rat_event::ct_event;
 use opengp_config::forms::ValidationRules;
 use opengp_config::ClinicalConfig;
 use opengp_domain::domain::clinical::{ConditionStatus, MedicalHistory, Severity};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
@@ -191,7 +192,8 @@ impl MedicalHistoryForm {
         if key.kind != KeyEventKind::Press {
             return None;
         }
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
+        let event = Event::Key(key);
+        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(&event, ct_event!(key press CONTROL-'s')) {
             self.validate();
             return Some(MedicalHistoryFormAction::Submit);
         }
@@ -206,8 +208,9 @@ impl MedicalHistoryForm {
                 dropdown.handle_key(key)
             };
             if let Some(action) = action {
-                match key.code {
-                    KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
+                let event = Event::Key(key);
+                match &event {
+                    ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => return None,
                     _ => match action {
                         DropdownAction::Selected(_) => {
                             self.validate_field(focused);
@@ -234,8 +237,9 @@ impl MedicalHistoryForm {
             }
         }
 
-        match key.code {
-            KeyCode::Tab => {
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press Tab) => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
                     self.state.prev_field();
                 } else {
@@ -243,24 +247,24 @@ impl MedicalHistoryForm {
                 }
                 Some(MedicalHistoryFormAction::FocusChanged)
             }
-            KeyCode::BackTab | KeyCode::Up => {
+            ct_event!(keycode press BackTab) | ct_event!(keycode press Up) => {
                 self.state.prev_field();
                 Some(MedicalHistoryFormAction::FocusChanged)
             }
-            KeyCode::Down => {
+            ct_event!(keycode press Down) => {
                 self.state.next_field();
                 Some(MedicalHistoryFormAction::FocusChanged)
             }
-            KeyCode::PageUp => {
+            ct_event!(keycode press PageUp) => {
                 self.state.scroll.scroll_up();
                 Some(MedicalHistoryFormAction::FocusChanged)
             }
-            KeyCode::PageDown => {
+            ct_event!(keycode press PageDown) => {
                 self.state.scroll.scroll_down();
                 Some(MedicalHistoryFormAction::FocusChanged)
             }
-            KeyCode::Enter => None,
-            KeyCode::Esc => Some(MedicalHistoryFormAction::Cancel),
+            ct_event!(keycode press Enter) => None,
+            ct_event!(keycode press Esc) => Some(MedicalHistoryFormAction::Cancel),
             _ => None,
         }
     }

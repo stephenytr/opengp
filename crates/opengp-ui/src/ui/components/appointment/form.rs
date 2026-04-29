@@ -6,12 +6,13 @@
 use std::collections::HashMap;
 
 use chrono::NaiveTime;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyEvent, KeyModifiers};
+use rat_event::ct_event;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 use uuid::Uuid;
 
 use crate::ui::input::to_ratatui_key;
@@ -20,9 +21,9 @@ use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 use crate::ui::widgets::{
     format_date, parse_date, DatePickerAction, DatePickerPopup, DropdownAction, DropdownOption,
-    DropdownWidget, FieldType, FormFieldMeta, FormNavigation,
-    HeightMode, ScrollableFormState, SearchableListAction, SearchableListState, TextareaState,
-    TextareaWidget, TimePickerAction, TimePickerPopup,
+    DropdownWidget, FieldType, FormFieldMeta, FormNavigation, HeightMode, ScrollableFormState,
+    SearchableListAction, SearchableListState, TextareaState, TextareaWidget, TimePickerAction,
+    TimePickerPopup,
 };
 use opengp_config::healthcare::HealthcareConfig;
 use opengp_config::{AppointmentConfig, AppointmentTypeOption};
@@ -879,8 +880,9 @@ impl AppointmentForm {
                 .and_then(|dropdown| dropdown.handle_key(key))
             {
                 // Allow Tab/BackTab/Esc to pass through to form's navigation handler
-                match key.code {
-                    KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => return None,
+                let event = Event::Key(key);
+                match &event {
+                    ct_event!(keycode press Tab) | ct_event!(keycode press BackTab) | ct_event!(keycode press Esc) => return None,
                     _ => match action {
                         DropdownAction::Selected(_) => {
                             if let Some(value) = self
@@ -923,12 +925,13 @@ impl AppointmentForm {
             return Some(AppointmentFormAction::FocusChanged);
         }
 
-        if self.focused_field == FIELD_DATE
-            && matches!(key.code, KeyCode::Enter | KeyCode::Char(' '))
-        {
-            let current_value = parse_date(&self.get_value_by_id(FIELD_DATE));
-            self.date_picker.open(current_value);
-            return Some(AppointmentFormAction::FocusChanged);
+        if self.focused_field == FIELD_DATE {
+            let event = Event::Key(key);
+            if matches!(&event, ct_event!(keycode press Enter) | ct_event!(key press ' ')) {
+                let current_value = parse_date(&self.get_value_by_id(FIELD_DATE));
+                self.date_picker.open(current_value);
+                return Some(AppointmentFormAction::FocusChanged);
+            }
         }
 
         // Time picker handling
@@ -947,25 +950,27 @@ impl AppointmentForm {
             return Some(AppointmentFormAction::FocusChanged);
         }
 
-        if self.focused_field == FIELD_START_TIME
-            && matches!(key.code, KeyCode::Enter | KeyCode::Char(' '))
-        {
-            // Need practitioner_id, date, and duration to open time picker
-            if let (Some(practitioner_id), Some(date), Ok(duration)) = (
-                self.data.practitioner_id,
-                parse_date(&self.get_value_by_id(FIELD_DATE)),
-                self.data.duration.parse::<u32>(),
-            ) {
-                return Some(AppointmentFormAction::OpenTimePicker {
-                    practitioner_id,
-                    date,
-                    duration,
-                });
+        if self.focused_field == FIELD_START_TIME {
+            let event = Event::Key(key);
+            if matches!(&event, ct_event!(keycode press Enter) | ct_event!(key press ' ')) {
+                // Need practitioner_id, date, and duration to open time picker
+                if let (Some(practitioner_id), Some(date), Ok(duration)) = (
+                    self.data.practitioner_id,
+                    parse_date(&self.get_value_by_id(FIELD_DATE)),
+                    self.data.duration.parse::<u32>(),
+                ) {
+                    return Some(AppointmentFormAction::OpenTimePicker {
+                        practitioner_id,
+                        date,
+                        duration,
+                    });
+                }
             }
         }
 
         // Ctrl+S submits the form from any field
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
+        let event = Event::Key(key);
+        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(&event, ct_event!(key press CONTROL-'s')) {
             FormNavigation::validate(self);
             return Some(AppointmentFormAction::Submit);
         }
@@ -984,8 +989,9 @@ impl AppointmentForm {
             }
         }
 
-        match key.code {
-            KeyCode::Tab => {
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press Tab) => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
                     FormNavigation::prev_field(self);
                 } else {
@@ -993,27 +999,27 @@ impl AppointmentForm {
                 }
                 Some(AppointmentFormAction::FocusChanged)
             }
-            KeyCode::BackTab => {
+            ct_event!(keycode press BackTab) => {
                 FormNavigation::prev_field(self);
                 Some(AppointmentFormAction::FocusChanged)
             }
-            KeyCode::Up => {
+            ct_event!(keycode press Up) => {
                 FormNavigation::prev_field(self);
                 Some(AppointmentFormAction::FocusChanged)
             }
-            KeyCode::Down => {
+            ct_event!(keycode press Down) => {
                 FormNavigation::next_field(self);
                 Some(AppointmentFormAction::FocusChanged)
             }
-            KeyCode::PageUp => {
+            ct_event!(keycode press PageUp) => {
                 self.scroll.scroll_up();
                 Some(AppointmentFormAction::FocusChanged)
             }
-            KeyCode::PageDown => {
+            ct_event!(keycode press PageDown) => {
                 self.scroll.scroll_down();
                 Some(AppointmentFormAction::FocusChanged)
             }
-            KeyCode::Enter => {
+            ct_event!(keycode press Enter) => {
                 if self.focused_field == FIELD_PATIENT && !self.patient_picker.is_open() {
                     self.patient_picker.open();
                     return Some(AppointmentFormAction::FocusChanged);
@@ -1024,7 +1030,7 @@ impl AppointmentForm {
                 }
                 None
             }
-            KeyCode::Esc => {
+            ct_event!(keycode press Esc) => {
                 if self.patient_picker.is_open() {
                     self.patient_picker.close();
                     return Some(AppointmentFormAction::FocusChanged);
@@ -1034,20 +1040,6 @@ impl AppointmentForm {
                     return Some(AppointmentFormAction::FocusChanged);
                 }
                 Some(AppointmentFormAction::Cancel)
-            }
-            KeyCode::Char(c) => {
-                let field_id = self.focused_field.clone();
-                let mut value = self.get_value_by_id(&field_id);
-                value.push(c);
-                self.set_value_by_id(&field_id, value);
-                Some(AppointmentFormAction::ValueChanged)
-            }
-            KeyCode::Backspace => {
-                let field_id = self.focused_field.clone();
-                let mut value = self.get_value_by_id(&field_id);
-                value.pop();
-                self.set_value_by_id(&field_id, value);
-                Some(AppointmentFormAction::ValueChanged)
             }
             _ => None,
         }

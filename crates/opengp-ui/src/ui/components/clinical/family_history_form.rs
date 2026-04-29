@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 
-use crossterm::event::{KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyEvent, KeyModifiers};
+use rat_event::ct_event;
 use opengp_config::forms::ValidationRules;
 use opengp_domain::domain::clinical::FamilyHistory;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::theme::Theme;
@@ -317,23 +318,25 @@ impl FamilyHistoryForm {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<FamilyHistoryFormAction> {
-        use crossterm::event::{KeyCode, KeyEventKind};
+        use crossterm::event::KeyEventKind;
 
         if key.kind != KeyEventKind::Press {
             return None;
         }
 
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
+        let event = Event::Key(key);
+        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(&event, ct_event!(key press CONTROL-'s')) {
             FormNavigation::validate(self);
             return Some(FamilyHistoryFormAction::Submit);
         }
 
-        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Tab {
+        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(&event, ct_event!(keycode press CONTROL-Tab)) {
             return Some(FamilyHistoryFormAction::Cancel);
         }
 
-        match key.code {
-            KeyCode::Tab => {
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press Tab) => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
                     FormNavigation::prev_field(self);
                 } else {
@@ -341,19 +344,19 @@ impl FamilyHistoryForm {
                 }
                 return Some(FamilyHistoryFormAction::FocusChanged);
             }
-            KeyCode::BackTab => {
+            ct_event!(keycode press BackTab) => {
                 FormNavigation::prev_field(self);
                 return Some(FamilyHistoryFormAction::FocusChanged);
             }
-            KeyCode::PageUp => {
+            ct_event!(keycode press PageUp) => {
                 self.form_state.scroll.scroll_up();
                 return Some(FamilyHistoryFormAction::FocusChanged);
             }
-            KeyCode::PageDown => {
+            ct_event!(keycode press PageDown) => {
                 self.form_state.scroll.scroll_down();
                 return Some(FamilyHistoryFormAction::FocusChanged);
             }
-            KeyCode::Esc => return Some(FamilyHistoryFormAction::Cancel),
+            ct_event!(keycode press Esc) => return Some(FamilyHistoryFormAction::Cancel),
             _ => {}
         }
 

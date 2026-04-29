@@ -8,10 +8,10 @@
 
 use chrono::{NaiveDate, NaiveTime};
 use crossterm::event::KeyEvent;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::Widget;
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use super::{DatePickerAction, DatePickerPopup, TimePickerAction, TimePickerPopup};
 use crate::ui::theme::Theme;

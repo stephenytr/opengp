@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, KeyEvent, KeyEventKind};
+use rat_event::ct_event;
 
 use crate::shared::{FormAction, FormMode};
 use crate::theme::Theme;
@@ -207,31 +208,28 @@ impl<F: FormField> FormState<F> {
             return None;
         }
 
-        if key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('s')) {
-            for field in self.field_order.clone() {
-                let _ = self.validate_field(field);
-            }
-            return Some(FormAction::Submit);
-        }
-
-        if key.code == KeyCode::Esc {
-            return Some(FormAction::Cancel);
-        }
-
-        match key.code {
-            KeyCode::Tab => {
-                if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    self.prev_field();
-                } else {
-                    self.next_field();
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(key press CONTROL-'s') => {
+                for field in self.field_order.clone() {
+                    let _ = self.validate_field(field);
                 }
+                Some(FormAction::Submit)
+            }
+            ct_event!(keycode press Esc) => Some(FormAction::Cancel),
+            ct_event!(keycode press Tab) => {
+                self.next_field();
                 Some(FormAction::FocusChanged)
             }
-            KeyCode::BackTab | KeyCode::Up => {
+            ct_event!(keycode press SHIFT-Tab) => {
                 self.prev_field();
                 Some(FormAction::FocusChanged)
             }
-            KeyCode::Down => {
+            ct_event!(keycode press Up) => {
+                self.prev_field();
+                Some(FormAction::FocusChanged)
+            }
+            ct_event!(keycode press Down) => {
                 self.next_field();
                 Some(FormAction::FocusChanged)
             }
