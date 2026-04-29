@@ -144,7 +144,7 @@ impl AllergyForm {
             .map(|(key, option)| DropdownOption::new(key, &option.label))
             .collect();
 
-        let severity_options: Vec<DropdownOption> = allergy_config
+        let _severity_options: Vec<DropdownOption> = allergy_config
             .severities
             .iter()
             .filter(|(_, option)| option.enabled)

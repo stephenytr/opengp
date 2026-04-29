@@ -108,6 +108,7 @@ pub struct App {
     workspace_manager: WorkspaceManager,
     billing_ui_service: Option<Arc<BillingUiService>>,
     appointment_ui_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
+    #[allow(dead_code)]
     practice_config: opengp_config::PracticeConfig,
     healthcare_config: opengp_config::healthcare::HealthcareConfig,
     patient_config: opengp_config::PatientConfig,
@@ -273,7 +274,8 @@ impl App {
         social_history_config: opengp_config::SocialHistoryConfig,
         billing_ui_service: Option<Arc<BillingUiService>>,
         appointment_ui_service: Option<Arc<crate::ui::services::AppointmentUiService>>,
-        practice_config: opengp_config::PracticeConfig,
+    #[allow(dead_code)]
+    practice_config: opengp_config::PracticeConfig,
         max_open_patients: usize,
     ) -> Self {
         let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel::<AppCommand>();

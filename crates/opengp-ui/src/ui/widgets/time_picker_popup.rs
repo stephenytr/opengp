@@ -336,6 +336,7 @@ impl TimePickerPopup {
         hours_range.min(GRID_ROWS - 1)
     }
 
+    #[allow(dead_code)]
     fn update_time_from_grid(&mut self) {
         let hour = self.config.viewport_start_hour as u32 + self.selected_row as u32;
         let minute = self.selected_col as u32 * 15;
