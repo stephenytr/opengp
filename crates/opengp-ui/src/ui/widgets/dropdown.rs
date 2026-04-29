@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
-use crossterm::event::{MouseEvent, MouseEventKind};
+use crossterm::event::{Event, MouseEvent, MouseEventKind};
+use rat_event::ct_event;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::shared::hover_style;
 use crate::ui::theme::Theme;
@@ -199,10 +200,9 @@ impl DropdownWidget {
     /// Returns a [`DropdownAction`] that the caller can use to react to
     /// changes or `None` when the key is ignored.
     pub fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> Option<DropdownAction> {
-        use crossterm::event::KeyCode;
-
-        match key.code {
-            KeyCode::Enter => {
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press Enter) => {
                 if self.is_open() {
                     self.confirm_selection();
                     Some(DropdownAction::Selected(self.selected_index))
@@ -211,7 +211,7 @@ impl DropdownWidget {
                     Some(DropdownAction::Opened)
                 }
             }
-            KeyCode::Esc => {
+            ct_event!(keycode press Esc) => {
                 if self.is_open() {
                     self.close();
                     Some(DropdownAction::Closed)
@@ -219,7 +219,7 @@ impl DropdownWidget {
                     None
                 }
             }
-            KeyCode::Up | KeyCode::Char('k') => {
+            ct_event!(keycode press Up) | ct_event!(key press 'k') => {
                 if self.is_open() {
                     self.select_prev();
                     Some(DropdownAction::FocusChanged)
@@ -227,7 +227,7 @@ impl DropdownWidget {
                     None
                 }
             }
-            KeyCode::Down | KeyCode::Char('j') => {
+            ct_event!(keycode press Down) | ct_event!(key press 'j') => {
                 if self.is_open() {
                     self.select_next();
                     Some(DropdownAction::FocusChanged)
@@ -236,7 +236,7 @@ impl DropdownWidget {
                     Some(DropdownAction::Opened)
                 }
             }
-            KeyCode::Tab => {
+            ct_event!(keycode press Tab) => {
                 if self.is_open() {
                     // Close dropdown and let parent handle Tab for field navigation
                     self.close();
@@ -245,7 +245,7 @@ impl DropdownWidget {
                     None
                 }
             }
-            KeyCode::BackTab => {
+            ct_event!(keycode press BackTab) => {
                 if self.is_open() {
                     self.close();
                     Some(DropdownAction::Closed)
@@ -261,18 +261,18 @@ impl DropdownWidget {
     ///
     /// Returns a [`DropdownAction`] when a click opens, closes, or selects
     /// a value, or `None` when the event is ignored.
-    /// 
+    ///
     /// Also tracks hover state when dropdown is open via MouseEventKind::Moved.
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<DropdownAction> {
         let inner = Rect::new(area.x + 1, area.y + 1, area.width - 2, area.height - 2);
-        
+
         // Handle mouse movement for hover tracking when dropdown is open
         if mouse.kind == MouseEventKind::Moved {
             if self.is_open() && inner.contains((mouse.column, mouse.row).into()) {
                 let header_height = 1;
                 let options_area_start = inner.y + header_height;
                 let mouse_y = mouse.row;
-                
+
                 if mouse_y >= options_area_start {
                     let relative_y = (mouse_y - options_area_start) as usize;
                     if relative_y < self.options.len() {
@@ -288,14 +288,14 @@ impl DropdownWidget {
             }
             return None;
         }
-        
+
         // Handle right-click for context menu
         if let MouseEventKind::Down(crossterm::event::MouseButton::Right) = mouse.kind {
             if self.is_open() && inner.contains((mouse.column, mouse.row).into()) {
                 let header_height = 1;
                 let options_area_start = inner.y + header_height;
                 let mouse_y = mouse.row;
-                
+
                 if mouse_y >= options_area_start {
                     let relative_y = (mouse_y - options_area_start) as usize;
                     if relative_y < self.options.len() {
@@ -309,7 +309,7 @@ impl DropdownWidget {
             }
             return None;
         }
-        
+
         // Handle left-click selection
         if mouse.kind != MouseEventKind::Up(crossterm::event::MouseButton::Left) {
             return None;

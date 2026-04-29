@@ -2,10 +2,11 @@ use std::rc::Rc;
 
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseEvent};
+use crossterm::event::{Event, KeyEvent, KeyEventKind, MouseEvent};
+use rat_event::ct_event;
 use opengp_domain::domain::clinical::VitalSigns;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Clone)]
 pub struct VitalSignsList {
@@ -38,19 +39,24 @@ fn fmt_bp(v: &VitalSigns) -> String {
     }
 }
 fn fmt_hr(v: &VitalSigns) -> String {
-    v.heart_rate.map_or_else(|| "-".to_string(), |h| h.to_string())
+    v.heart_rate
+        .map_or_else(|| "-".to_string(), |h| h.to_string())
 }
 fn fmt_rr(v: &VitalSigns) -> String {
-    v.respiratory_rate.map_or_else(|| "-".to_string(), |r| r.to_string())
+    v.respiratory_rate
+        .map_or_else(|| "-".to_string(), |r| r.to_string())
 }
 fn fmt_temp(v: &VitalSigns) -> String {
-    v.temperature.map_or_else(|| "-".to_string(), |t| format!("{:.1}", t))
+    v.temperature
+        .map_or_else(|| "-".to_string(), |t| format!("{:.1}", t))
 }
 fn fmt_spo2(v: &VitalSigns) -> String {
-    v.oxygen_saturation.map_or_else(|| "-".to_string(), |s| s.to_string())
+    v.oxygen_saturation
+        .map_or_else(|| "-".to_string(), |s| s.to_string())
 }
 fn fmt_bmi(v: &VitalSigns) -> String {
-    v.bmi.map_or_else(|| "-".to_string(), |b| format!("{:.1}", b))
+    v.bmi
+        .map_or_else(|| "-".to_string(), |b| format!("{:.1}", b))
 }
 
 fn columns() -> Vec<UnifiedColumnDef<VitalSigns>> {
@@ -126,21 +132,25 @@ impl VitalSignsList {
         self.hovered_index = list.hovered_index;
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent) -> Option<VitalSignsListAction> {
-        if key.kind == KeyEventKind::Press {
-            if matches!(key.code, KeyCode::Char('+') | KeyCode::Char('=')) {
-                return Some(VitalSignsListAction::NextPage);
-            }
-            if key.code == KeyCode::Char('-') {
-                return Some(VitalSignsListAction::PrevPage);
-            }
-        }
-        let mut list = self.as_list();
-        let action = list.handle_key(key).and_then(|a| match a {
+     pub fn handle_key(&mut self, key: KeyEvent) -> Option<VitalSignsListAction> {
+         if key.kind == KeyEventKind::Press {
+             let event = Event::Key(key);
+             if matches!(&event, ct_event!(key press '+') | ct_event!(key press '=')) {
+                 return Some(VitalSignsListAction::NextPage);
+             }
+             if matches!(&event, ct_event!(key press '-')) {
+                 return Some(VitalSignsListAction::PrevPage);
+             }
+         }
+         let mut list = self.as_list();
+         let action = list.handle_key(key).and_then(|a| match a {
             UnifiedListAction::Select(i) => Some(VitalSignsListAction::Select(i)),
             UnifiedListAction::Open(v) => Some(VitalSignsListAction::Open(v)),
             UnifiedListAction::New => Some(VitalSignsListAction::New),
-            UnifiedListAction::Edit(_) | UnifiedListAction::Delete(_) | UnifiedListAction::ToggleInactive | UnifiedListAction::ContextMenu { .. } => None,
+            UnifiedListAction::Edit(_)
+            | UnifiedListAction::Delete(_)
+            | UnifiedListAction::ToggleInactive
+            | UnifiedListAction::ContextMenu { .. } => None,
         });
         self.sync_from(&list);
         action
@@ -150,8 +160,14 @@ impl VitalSignsList {
         let mut list = self.as_list();
         let action = list.handle_mouse(mouse, area).and_then(|a| match a {
             UnifiedListAction::Select(i) => Some(VitalSignsListAction::Select(i)),
-            UnifiedListAction::ContextMenu { index, x, y } => Some(VitalSignsListAction::ContextMenu { index, x, y }),
-            UnifiedListAction::Open(_) | UnifiedListAction::New | UnifiedListAction::Edit(_) | UnifiedListAction::Delete(_) | UnifiedListAction::ToggleInactive => None,
+            UnifiedListAction::ContextMenu { index, x, y } => {
+                Some(VitalSignsListAction::ContextMenu { index, x, y })
+            }
+            UnifiedListAction::Open(_)
+            | UnifiedListAction::New
+            | UnifiedListAction::Edit(_)
+            | UnifiedListAction::Delete(_)
+            | UnifiedListAction::ToggleInactive => None,
         });
         self.sync_from(&list);
         action

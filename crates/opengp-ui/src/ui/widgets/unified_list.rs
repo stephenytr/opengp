@@ -1,13 +1,14 @@
 use std::cmp::Ordering;
 use std::rc::Rc;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{Event, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind};
+use rat_event::ct_event;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::input::DoubleClickDetector;
 use crate::ui::shared::{hover_style, invert_color, selected_hover_style};
@@ -59,7 +60,11 @@ impl<T: Clone> Clone for UnifiedListAction<T> {
             UnifiedListAction::Edit(t) => UnifiedListAction::Edit(t.clone()),
             UnifiedListAction::Delete(t) => UnifiedListAction::Delete(t.clone()),
             UnifiedListAction::ToggleInactive => UnifiedListAction::ToggleInactive,
-            UnifiedListAction::ContextMenu { index, x, y } => UnifiedListAction::ContextMenu { index: *index, x: *x, y: *y },
+            UnifiedListAction::ContextMenu { index, x, y } => UnifiedListAction::ContextMenu {
+                index: *index,
+                x: *x,
+                y: *y,
+            },
         }
     }
 }
@@ -73,7 +78,18 @@ impl<T: PartialEq> PartialEq for UnifiedListAction<T> {
             (UnifiedListAction::Edit(a), UnifiedListAction::Edit(b)) => a == b,
             (UnifiedListAction::Delete(a), UnifiedListAction::Delete(b)) => a == b,
             (UnifiedListAction::ToggleInactive, UnifiedListAction::ToggleInactive) => true,
-            (UnifiedListAction::ContextMenu { index: ia, x: xa, y: ya }, UnifiedListAction::ContextMenu { index: ib, x: xb, y: yb }) => ia == ib && xa == xb && ya == yb,
+            (
+                UnifiedListAction::ContextMenu {
+                    index: ia,
+                    x: xa,
+                    y: ya,
+                },
+                UnifiedListAction::ContextMenu {
+                    index: ib,
+                    x: xb,
+                    y: yb,
+                },
+            ) => ia == ib && xa == xb && ya == yb,
             _ => false,
         }
     }
@@ -89,7 +105,11 @@ pub struct UnifiedListConfig<T> {
 }
 
 impl<T> UnifiedListConfig<T> {
-    pub fn new(title: impl Into<String>, header_rows: u16, empty_message: impl Into<String>) -> UnifiedListConfig<T> {
+    pub fn new(
+        title: impl Into<String>,
+        header_rows: u16,
+        empty_message: impl Into<String>,
+    ) -> UnifiedListConfig<T> {
         UnifiedListConfig {
             title: title.into(),
             header_rows,
@@ -190,54 +210,56 @@ impl<T: Clone> UnifiedList<T> {
             return None;
         }
 
-        match key.code {
-            KeyCode::Up | KeyCode::Char('k') => {
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press Up) | ct_event!(key press 'k') => {
                 self.move_up();
                 self.adjust_scroll(10);
                 Some(UnifiedListAction::Select(self.selected_index))
             }
-            KeyCode::Down | KeyCode::Char('j') => {
+            ct_event!(keycode press Down) | ct_event!(key press 'j') => {
                 self.move_down();
                 self.adjust_scroll(10);
                 Some(UnifiedListAction::Select(self.selected_index))
             }
-            KeyCode::Home => {
+            ct_event!(keycode press Home) => {
                 self.move_first();
                 self.adjust_scroll(10);
                 Some(UnifiedListAction::Select(self.selected_index))
             }
-            KeyCode::End => {
+            ct_event!(keycode press End) => {
                 self.move_last();
                 self.adjust_scroll(10);
                 Some(UnifiedListAction::Select(self.selected_index))
             }
-            KeyCode::PageUp => {
+            ct_event!(keycode press PageUp) => {
                 self.selected_index = self.selected_index.saturating_sub(10);
                 self.adjust_scroll(10);
                 Some(UnifiedListAction::Select(self.selected_index))
             }
-            KeyCode::PageDown => {
-                self.selected_index = (self.selected_index + 10).min(self.items.len().saturating_sub(1));
+            ct_event!(keycode press PageDown) => {
+                self.selected_index =
+                    (self.selected_index + 10).min(self.items.len().saturating_sub(1));
                 self.adjust_scroll(10);
                 Some(UnifiedListAction::Select(self.selected_index))
             }
-            KeyCode::Enter => self
+            ct_event!(keycode press Enter) => self
                 .items
                 .get(self.selected_index)
                 .cloned()
                 .map(UnifiedListAction::Open),
-            KeyCode::Char('n') => Some(UnifiedListAction::New),
-            KeyCode::Char('e') => self
+            ct_event!(key press 'n') => Some(UnifiedListAction::New),
+            ct_event!(key press 'e') => self
                 .items
                 .get(self.selected_index)
                 .cloned()
                 .map(UnifiedListAction::Edit),
-            KeyCode::Char('d') => self
+            ct_event!(key press 'd') => self
                 .items
                 .get(self.selected_index)
                 .cloned()
                 .map(UnifiedListAction::Delete),
-            KeyCode::Char('i') => Some(UnifiedListAction::ToggleInactive),
+            ct_event!(key press 'i') => Some(UnifiedListAction::ToggleInactive),
             _ => None,
         }
     }
@@ -433,6 +455,7 @@ impl<T: Clone> Widget for UnifiedList<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::KeyCode;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
 
@@ -444,16 +467,33 @@ mod tests {
 
     fn make_items() -> Vec<TestItem> {
         vec![
-            TestItem { id: 3, name: "Gamma" },
-            TestItem { id: 1, name: "Alpha" },
-            TestItem { id: 2, name: "Beta" },
+            TestItem {
+                id: 3,
+                name: "Gamma",
+            },
+            TestItem {
+                id: 1,
+                name: "Alpha",
+            },
+            TestItem {
+                id: 2,
+                name: "Beta",
+            },
         ]
     }
 
     fn make_columns() -> Vec<UnifiedColumnDef<TestItem>> {
         vec![
-            UnifiedColumnDef { title: "ID", width: 5, render: Rc::new(|i: &TestItem| i.id.to_string()) },
-            UnifiedColumnDef { title: "Name", width: 20, render: Rc::new(|i: &TestItem| i.name.to_string()) },
+            UnifiedColumnDef {
+                title: "ID",
+                width: 5,
+                render: Rc::new(|i: &TestItem| i.id.to_string()),
+            },
+            UnifiedColumnDef {
+                title: "Name",
+                width: 20,
+                render: Rc::new(|i: &TestItem| i.name.to_string()),
+            },
         ]
     }
 
@@ -532,7 +572,7 @@ mod tests {
         ));
         assert_eq!(list.selected_index, 0);
 
-let open = list.handle_key(key(KeyCode::Enter));
+        let open = list.handle_key(key(KeyCode::Enter));
         assert!(matches!(
             open,
             Some(UnifiedListAction::Open(TestItem { id: 3, .. }))

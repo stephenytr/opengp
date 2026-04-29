@@ -2,14 +2,15 @@
 //!
 //! Displays a searchable list of patients with pagination.
 
-use crossterm::event::{KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{Event, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use rat_event::ct_event;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Constraint;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 use sublime_fuzzy::best_match;
 use uuid::Uuid;
 
@@ -225,96 +226,98 @@ impl PatientList {
         self.scrollable.scroll_offset()
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent) -> Option<PatientListAction> {
-        use crossterm::event::{KeyCode, KeyEventKind};
-
-        // Ignore non-press key events (e.g., Release events from terminals with keyboard enhancement)
-        if key.kind != KeyEventKind::Press {
-            return None;
-        }
-
-        // Handle search input mode
-        if self.searching {
-            match key.code {
-                KeyCode::Esc => {
-                    self.searching = false;
-                    self.search_query.clear();
-                    self.apply_filter();
-                    self.scrollable = ScrollableState::new();
-                    self.scrollable.set_item_count(self.filtered.len());
-                }
-                KeyCode::Backspace => {
-                    self.search_query.pop();
-                    self.apply_filter();
-                    self.scrollable = ScrollableState::new();
-                    self.scrollable.set_item_count(self.filtered.len());
-                }
-                KeyCode::Char(c) => {
-                    self.search_query.push(c);
-                    self.apply_filter();
-                    self.scrollable = ScrollableState::new();
-                    self.scrollable.set_item_count(self.filtered.len());
-                }
-                KeyCode::Enter => {
-                    self.searching = false;
-                }
-                KeyCode::Up => {
-                    self.move_up();
-                    return Some(PatientListAction::SelectionChanged);
-                }
-                KeyCode::Down => {
-                    self.move_down();
-                    return Some(PatientListAction::SelectionChanged);
-                }
-                _ => {}
-            }
-            return Some(PatientListAction::SearchChanged);
-        }
-
-        // Normal navigation mode
-        match key.code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.move_up();
-                Some(PatientListAction::SelectionChanged)
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.move_down();
-                Some(PatientListAction::SelectionChanged)
-            }
-            KeyCode::Home => {
-                self.move_first();
-                Some(PatientListAction::SelectionChanged)
-            }
-            KeyCode::End => {
-                self.move_last();
-                Some(PatientListAction::SelectionChanged)
-            }
-            KeyCode::PageUp => {
-                self.move_by(-10);
-                Some(PatientListAction::SelectionChanged)
-            }
-            KeyCode::PageDown => {
-                self.move_by(10);
-                Some(PatientListAction::SelectionChanged)
-            }
-            KeyCode::Enter => {
-                if self.has_selection() {
-                    // SAFETY: has_selection() confirmed filtered is not empty
-                    #[allow(clippy::unwrap_used)]
-                    Some(PatientListAction::OpenPatient(
-                        self.selected_patient_id().unwrap(),
-                    ))
-                } else {
-                    None
-                }
-            }
-            KeyCode::Char('/') => {
-                self.searching = true;
-                Some(PatientListAction::FocusSearch)
-            }
-            _ => None,
-        }
-    }
+     pub fn handle_key(&mut self, key: KeyEvent) -> Option<PatientListAction> {
+         use crossterm::event::KeyEventKind;
+ 
+         // Ignore non-press key events (e.g., Release events from terminals with keyboard enhancement)
+         if key.kind != KeyEventKind::Press {
+             return None;
+         }
+ 
+         let event = Event::Key(key);
+ 
+         // Handle search input mode
+         if self.searching {
+             match &event {
+                 ct_event!(keycode press Esc) => {
+                     self.searching = false;
+                     self.search_query.clear();
+                     self.apply_filter();
+                     self.scrollable = ScrollableState::new();
+                     self.scrollable.set_item_count(self.filtered.len());
+                 }
+                 ct_event!(keycode press Backspace) => {
+                     self.search_query.pop();
+                     self.apply_filter();
+                     self.scrollable = ScrollableState::new();
+                     self.scrollable.set_item_count(self.filtered.len());
+                 }
+                 ct_event!(key press c) => {
+                     self.search_query.push(*c);
+                     self.apply_filter();
+                     self.scrollable = ScrollableState::new();
+                     self.scrollable.set_item_count(self.filtered.len());
+                 }
+                 ct_event!(keycode press Enter) => {
+                     self.searching = false;
+                 }
+                 ct_event!(keycode press Up) => {
+                     self.move_up();
+                     return Some(PatientListAction::SelectionChanged);
+                 }
+                 ct_event!(keycode press Down) => {
+                     self.move_down();
+                     return Some(PatientListAction::SelectionChanged);
+                 }
+                 _ => {}
+             }
+             return Some(PatientListAction::SearchChanged);
+         }
+ 
+         // Normal navigation mode
+         match &event {
+             ct_event!(keycode press Up) | ct_event!(key press 'k') => {
+                 self.move_up();
+                 Some(PatientListAction::SelectionChanged)
+             }
+             ct_event!(keycode press Down) | ct_event!(key press 'j') => {
+                 self.move_down();
+                 Some(PatientListAction::SelectionChanged)
+             }
+             ct_event!(keycode press Home) => {
+                 self.move_first();
+                 Some(PatientListAction::SelectionChanged)
+             }
+             ct_event!(keycode press End) => {
+                 self.move_last();
+                 Some(PatientListAction::SelectionChanged)
+             }
+             ct_event!(keycode press PageUp) => {
+                 self.move_by(-10);
+                 Some(PatientListAction::SelectionChanged)
+             }
+             ct_event!(keycode press PageDown) => {
+                 self.move_by(10);
+                 Some(PatientListAction::SelectionChanged)
+             }
+             ct_event!(keycode press Enter) => {
+                 if self.has_selection() {
+                     // SAFETY: has_selection() confirmed filtered is not empty
+                     #[allow(clippy::unwrap_used)]
+                     Some(PatientListAction::OpenPatient(
+                         self.selected_patient_id().unwrap(),
+                     ))
+                 } else {
+                     None
+                 }
+             }
+             ct_event!(key press '/') => {
+                 self.searching = true;
+                 Some(PatientListAction::FocusSearch)
+             }
+             _ => None,
+         }
+     }
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<PatientListAction> {
         // Handle mouse wheel for scrolling
@@ -588,6 +591,7 @@ impl HasFocus for PatientList {
 mod tests {
     use super::*;
     use chrono::NaiveDate;
+    use crossterm::event::KeyCode;
     use opengp_domain::domain::patient::Patient;
 
     fn create_test_patient(first: &str, last: &str) -> PatientListItem {

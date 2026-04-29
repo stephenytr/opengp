@@ -1,9 +1,10 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{Event, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind};
+use rat_event::ct_event;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Clear, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::theme::Theme;
 
@@ -104,42 +105,47 @@ impl<A> ContextMenuState<A> {
         Some(Rect::new(x, y, width, height))
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent) -> Option<ContextMenuAction<A>>
-    where
-        A: Clone,
-    {
-        if !self.visible || key.kind != KeyEventKind::Press {
-            return None;
-        }
+     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ContextMenuAction<A>>
+     where
+         A: Clone,
+     {
+         if !self.visible || key.kind != KeyEventKind::Press {
+             return None;
+         }
+ 
+         let event = Event::Key(key);
+         match &event {
+             ct_event!(keycode press Up) => {
+                 self.move_prev_enabled();
+                 Some(ContextMenuAction::FocusChanged)
+             }
+             ct_event!(keycode press Down) => {
+                 self.move_next_enabled();
+                 Some(ContextMenuAction::FocusChanged)
+             }
+             ct_event!(keycode press Enter) => {
+                 if let Some(item) = self.selected_item() {
+                     if item.enabled {
+                         let action = item.action.clone();
+                         self.visible = false;
+                         return Some(ContextMenuAction::Selected(action));
+                     }
+                 }
+                 None
+             }
+             ct_event!(keycode press Esc) => {
+                 self.visible = false;
+                 Some(ContextMenuAction::Dismissed)
+             }
+             _ => None,
+         }
+     }
 
-        match key.code {
-            KeyCode::Up => {
-                self.move_prev_enabled();
-                Some(ContextMenuAction::FocusChanged)
-            }
-            KeyCode::Down => {
-                self.move_next_enabled();
-                Some(ContextMenuAction::FocusChanged)
-            }
-            KeyCode::Enter => {
-                if let Some(item) = self.selected_item() {
-                    if item.enabled {
-                        let action = item.action.clone();
-                        self.visible = false;
-                        return Some(ContextMenuAction::Selected(action));
-                    }
-                }
-                None
-            }
-            KeyCode::Esc => {
-                self.visible = false;
-                Some(ContextMenuAction::Dismissed)
-            }
-            _ => None,
-        }
-    }
-
-    pub fn handle_mouse(&mut self, mouse: MouseEvent, viewport: Rect) -> Option<ContextMenuAction<A>> {
+    pub fn handle_mouse(
+        &mut self,
+        mouse: MouseEvent,
+        viewport: Rect,
+    ) -> Option<ContextMenuAction<A>> {
         if !self.visible {
             return None;
         }
@@ -251,7 +257,7 @@ impl<A> ContextMenuState<A> {
 mod tests {
     use super::*;
 
-    use crossterm::event::{KeyModifiers, MouseButton, MouseEventKind};
+    use crossterm::event::{KeyCode, KeyModifiers, MouseButton, MouseEventKind};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum TestAction {
@@ -302,7 +308,10 @@ mod tests {
 
         state.show_at(Position::new(4, 5));
         assert!(state.is_visible());
-        assert_eq!(state.selected_item().map(|i| &i.label), Some(&"Edit".to_string()));
+        assert_eq!(
+            state.selected_item().map(|i| &i.label),
+            Some(&"Edit".to_string())
+        );
 
         state.hide();
         assert!(!state.is_visible());
@@ -313,10 +322,16 @@ mod tests {
         let mut state = ContextMenuState::new(Theme::dark(), build_items());
         state.show_at(Position::new(1, 1));
 
-        assert_eq!(state.handle_key(press(KeyCode::Down)), Some(ContextMenuAction::FocusChanged));
+        assert_eq!(
+            state.handle_key(press(KeyCode::Down)),
+            Some(ContextMenuAction::FocusChanged)
+        );
         assert_eq!(state.selected_index, 2);
 
-        assert_eq!(state.handle_key(press(KeyCode::Up)), Some(ContextMenuAction::FocusChanged));
+        assert_eq!(
+            state.handle_key(press(KeyCode::Up)),
+            Some(ContextMenuAction::FocusChanged)
+        );
         assert_eq!(state.selected_index, 0);
     }
 
@@ -327,7 +342,10 @@ mod tests {
         state.selected_index = 2;
 
         let action = state.handle_key(press(KeyCode::Enter));
-        assert_eq!(action, Some(ContextMenuAction::Selected(TestAction::Archive)));
+        assert_eq!(
+            action,
+            Some(ContextMenuAction::Selected(TestAction::Archive))
+        );
         assert!(!state.is_visible());
     }
 

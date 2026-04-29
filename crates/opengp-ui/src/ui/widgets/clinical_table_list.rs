@@ -1,12 +1,13 @@
 use std::cmp::Ordering;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{Event, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind};
+use rat_event::ct_event;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 const TABLE_HEADER_ROWS: u16 = 2;
 use crate::ui::input::DoubleClickDetector;
@@ -133,68 +134,69 @@ impl<T> ClinicalTableList<T> {
     ///
     /// Returns a [`ListAction`] that the caller can use to drive the rest of
     /// the UI, or `None` when the key is ignored.
-    pub fn handle_key(&mut self, _key: KeyEvent) -> Option<ListAction<T>>
-    where
-        T: Clone,
-    {
-        let key = _key;
-
-        if key.kind != KeyEventKind::Press {
-            return None;
-        }
-
-        match key.code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.move_up();
-                self.adjust_scroll(10);
-                Some(ListAction::Select(self.selected_index))
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.move_down();
-                self.adjust_scroll(10);
-                Some(ListAction::Select(self.selected_index))
-            }
-            KeyCode::Home => {
-                self.move_first();
-                self.adjust_scroll(10);
-                Some(ListAction::Select(self.selected_index))
-            }
-            KeyCode::End => {
-                self.move_last();
-                self.adjust_scroll(10);
-                Some(ListAction::Select(self.selected_index))
-            }
-            KeyCode::PageUp => {
-                self.selected_index = self.selected_index.saturating_sub(10);
-                self.adjust_scroll(10);
-                Some(ListAction::Select(self.selected_index))
-            }
-            KeyCode::PageDown => {
-                self.selected_index =
-                    (self.selected_index + 10).min(self.items.len().saturating_sub(1));
-                self.adjust_scroll(10);
-                Some(ListAction::Select(self.selected_index))
-            }
-            KeyCode::Enter => self
-                .items
-                .get(self.selected_index)
-                .cloned()
-                .map(ListAction::Open),
-            KeyCode::Char('n') => Some(ListAction::New),
-            KeyCode::Char('e') => self
-                .items
-                .get(self.selected_index)
-                .cloned()
-                .map(ListAction::Edit),
-            KeyCode::Char('d') => self
-                .items
-                .get(self.selected_index)
-                .cloned()
-                .map(ListAction::Delete),
-            KeyCode::Char('i') => Some(ListAction::ToggleInactive),
-            _ => None,
-        }
-    }
+     pub fn handle_key(&mut self, _key: KeyEvent) -> Option<ListAction<T>>
+     where
+         T: Clone,
+     {
+         let key = _key;
+ 
+         if key.kind != KeyEventKind::Press {
+             return None;
+         }
+ 
+         let event = Event::Key(key);
+         match &event {
+             ct_event!(keycode press Up) | ct_event!(key press 'k') => {
+                 self.move_up();
+                 self.adjust_scroll(10);
+                 Some(ListAction::Select(self.selected_index))
+             }
+             ct_event!(keycode press Down) | ct_event!(key press 'j') => {
+                 self.move_down();
+                 self.adjust_scroll(10);
+                 Some(ListAction::Select(self.selected_index))
+             }
+             ct_event!(keycode press Home) => {
+                 self.move_first();
+                 self.adjust_scroll(10);
+                 Some(ListAction::Select(self.selected_index))
+             }
+             ct_event!(keycode press End) => {
+                 self.move_last();
+                 self.adjust_scroll(10);
+                 Some(ListAction::Select(self.selected_index))
+             }
+             ct_event!(keycode press PageUp) => {
+                 self.selected_index = self.selected_index.saturating_sub(10);
+                 self.adjust_scroll(10);
+                 Some(ListAction::Select(self.selected_index))
+             }
+             ct_event!(keycode press PageDown) => {
+                 self.selected_index =
+                     (self.selected_index + 10).min(self.items.len().saturating_sub(1));
+                 self.adjust_scroll(10);
+                 Some(ListAction::Select(self.selected_index))
+             }
+             ct_event!(keycode press Enter) => self
+                 .items
+                 .get(self.selected_index)
+                 .cloned()
+                 .map(ListAction::Open),
+             ct_event!(key press 'n') => Some(ListAction::New),
+             ct_event!(key press 'e') => self
+                 .items
+                 .get(self.selected_index)
+                 .cloned()
+                 .map(ListAction::Edit),
+             ct_event!(key press 'd') => self
+                 .items
+                 .get(self.selected_index)
+                 .cloned()
+                 .map(ListAction::Delete),
+             ct_event!(key press 'i') => Some(ListAction::ToggleInactive),
+             _ => None,
+         }
+     }
 
     /// Handles mouse scrolling and click selection inside the list area.
     ///
@@ -405,6 +407,7 @@ impl<T> Widget for ClinicalTableList<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::KeyCode;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
 

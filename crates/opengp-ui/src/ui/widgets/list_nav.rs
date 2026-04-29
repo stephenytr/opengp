@@ -6,7 +6,8 @@
 //!
 //! Works with `ScrollableState` for managing selection and scroll offset.
 
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
+use crossterm::event::{Event, KeyEvent, MouseEvent, MouseEventKind};
+use rat_event::ct_event;
 use ratatui::layout::{Position, Rect};
 
 use crate::ui::widgets::scrollable::{ScrollableState, SCROLL_LINES};
@@ -44,28 +45,29 @@ pub fn list_handle_key(
         return None;
     }
 
-    match key.code {
-        KeyCode::Up | KeyCode::Char('k') => {
+    let event = Event::Key(key);
+    match &event {
+        ct_event!(keycode press Up) | ct_event!(key press 'k') => {
             scrollable.move_up_and_scroll(visible_rows);
             Some(ListNavAction::SelectionChanged)
         }
-        KeyCode::Down | KeyCode::Char('j') => {
+        ct_event!(keycode press Down) | ct_event!(key press 'j') => {
             scrollable.move_down_and_scroll(visible_rows);
             Some(ListNavAction::SelectionChanged)
         }
-        KeyCode::Home => {
+        ct_event!(keycode press Home) => {
             scrollable.move_first_and_scroll(visible_rows);
             Some(ListNavAction::SelectionChanged)
         }
-        KeyCode::End => {
+        ct_event!(keycode press End) => {
             scrollable.move_last_and_scroll(visible_rows);
             Some(ListNavAction::SelectionChanged)
         }
-        KeyCode::PageUp => {
+        ct_event!(keycode press PageUp) => {
             scrollable.move_by_and_scroll(-(visible_rows as isize), visible_rows);
             Some(ListNavAction::SelectionChanged)
         }
-        KeyCode::PageDown => {
+        ct_event!(keycode press PageDown) => {
             scrollable.move_by_and_scroll(visible_rows as isize, visible_rows);
             Some(ListNavAction::SelectionChanged)
         }
@@ -147,7 +149,7 @@ pub fn list_handle_mouse(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossterm::event::MouseButton;
+    use crossterm::event::{KeyCode, MouseButton};
 
     // ============================================================================
     // KEYBOARD NAVIGATION TESTS
