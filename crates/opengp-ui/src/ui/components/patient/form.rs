@@ -1604,6 +1604,7 @@ impl HasFocus for PatientForm {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use opengp_config::PatientConfig;
 
     #[test]
     fn test_form_creation() {

@@ -16,7 +16,7 @@ use opengp_domain::domain::appointment::{
 use opengp_domain::domain::user::{Practitioner, PractitionerRepository, WorkingHoursRepository};
 
 #[cfg(test)]
-use super::shared::UiServiceError;
+use super::shared::{ToUiError, UiServiceError};
 #[cfg(test)]
 use opengp_domain::domain::error::RepositoryError;
 

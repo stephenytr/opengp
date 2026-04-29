@@ -10,7 +10,7 @@ use opengp_domain::domain::clinical::{
 };
 
 #[cfg(test)]
-use super::shared::UiServiceError;
+use super::shared::{ToUiError, UiServiceError};
 #[cfg(test)]
 use opengp_domain::domain::clinical::ServiceError as DomainServiceError;
 

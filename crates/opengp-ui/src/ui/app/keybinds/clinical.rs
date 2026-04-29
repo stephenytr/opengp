@@ -589,7 +589,7 @@ mod tests {
     use crate::ui::theme::Theme;
     use crate::ui::view_models::PatientListItem;
     use chrono::NaiveDate;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use opengp_config::CalendarConfig;
     use opengp_domain::domain::patient::Gender;
 
