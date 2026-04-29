@@ -3,6 +3,7 @@ use crossterm::event::Event as CrosstermEvent;
 use opengp_domain::domain::api::LoginResponse;
 use opengp_domain::domain::appointment::CalendarDayView;
 use opengp_domain::domain::billing::{Invoice, MedicareClaim};
+use opengp_domain::domain::patient::Patient;
 use uuid::Uuid;
 
 use crate::ui::app::ClinicalWorkspaceLoadResult;
@@ -48,6 +49,8 @@ pub enum AppEvent {
     },
     BillingDataLoaded(Result<BillingWorkspaceData, String>),
     PatientListLoaded(Result<Vec<PatientListItem>, String>),
+    PatientEditLoaded(Result<Patient, String>),
+    ConsultationsRefreshed(Result<(), String>),
     LoginResult(Result<LoginResponse, String>),
 }
 

@@ -12,15 +12,6 @@ impl App {
         }
     }
 
-    pub fn take_pending_billing(&mut self) -> Option<PendingBillingSaveData> {
-        if !self.authenticated {
-            return None;
-        }
-        self.workspace_manager_mut()
-            .active_mut()
-            .and_then(|w| w.pending_billing.take())
-    }
-
     pub fn open_billing_invoice_detail(&mut self, invoice_id: uuid::Uuid) {
         if let Some(workspace) = self.workspace_manager_mut().active_mut() {
             if workspace.billing.is_none() {

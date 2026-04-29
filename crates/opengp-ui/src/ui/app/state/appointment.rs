@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 
-use crate::ui::app::{App, AppointmentStatusTransition};
+use crate::ui::app::App;
 use crate::ui::components::appointment::AppointmentState;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 
@@ -16,29 +16,6 @@ impl App {
 
     pub fn request_load_practitioners(&mut self) {
         self.pending_load_practitioners = true;
-    }
-
-    pub fn take_pending_load_practitioners(&mut self) -> bool {
-        std::mem::take(&mut self.pending_load_practitioners)
-    }
-
-    pub fn take_pending_appointment_save(
-        &mut self,
-    ) -> Option<(opengp_domain::domain::appointment::NewAppointmentData, i32)> {
-        if !self.authenticated {
-            return None;
-        }
-        self.pending_appointment_save.take()
-    }
-
-    pub fn take_pending_appointment_status_transition(
-        &mut self,
-    ) -> Option<(uuid::Uuid, AppointmentStatusTransition)> {
-        self.pending_appointment_status_transition.take()
-    }
-
-    pub fn take_pending_reschedule(&mut self) -> Option<crate::ui::app::PendingRescheduleData> {
-        self.pending_reschedule.take()
     }
 
     pub fn appointment_state_mut(&mut self) -> &mut AppointmentState {
@@ -72,10 +49,6 @@ impl App {
         if let Some(ref mut form) = self.appointment_form {
             form.set_practitioners(practitioners);
         }
-    }
-
-    pub fn take_pending_load_booked_slots(&mut self) -> Option<(uuid::Uuid, NaiveDate, u32)> {
-        self.pending_load_booked_slots.take()
     }
 
     pub fn appointment_form_set_booked_slots(&mut self, booked_slots: Vec<chrono::NaiveTime>) {

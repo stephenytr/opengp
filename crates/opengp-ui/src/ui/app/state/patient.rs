@@ -1,4 +1,4 @@
-use crate::ui::app::{App, AppCommand, PendingPatientData};
+use crate::ui::app::{App, AppCommand};
 use crate::ui::components::patient::PatientForm;
 use crate::ui::components::tabs::Tab;
 use crate::ui::components::workspace::WorkspaceError;
@@ -15,17 +15,6 @@ impl App {
         let list_items: Vec<PatientListItem> =
             patients.into_iter().map(PatientListItem::from).collect();
         self.patient_list.set_patients(list_items);
-    }
-
-    pub fn take_pending_patient_data(&mut self) -> Option<PendingPatientData> {
-        if !self.authenticated {
-            return None;
-        }
-        self.pending_patient_data.take()
-    }
-
-    pub fn take_pending_edit_patient_id(&mut self) -> Option<uuid::Uuid> {
-        self.pending_edit_patient_id.take()
     }
 
     pub fn request_edit_patient(&mut self, patient_id: uuid::Uuid) {

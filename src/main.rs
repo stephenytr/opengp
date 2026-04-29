@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use color_eyre::eyre::eyre;
-use opengp_config::{load_practice_config, CalendarConfig, Config, PracticeConfig};
+use opengp_config::{load_practice_config, Config};
 use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentRepository, AppointmentService, AvailabilityService,
 };
@@ -22,8 +22,7 @@ use opengp_infrastructure::infrastructure::database::repositories::{
 use opengp_infrastructure::infrastructure::database::{create_pool, DatabaseConfig};
 use opengp_ui::api::ApiClient;
 use opengp_ui::ui::app::{
-    AppCommand, AppError, AppEvent, AppState, DialogContent, GlobalState, PendingPatientData,
-    RetryOperation,
+    AppCommand, AppError, AppEvent, AppState, DialogContent, GlobalState, RetryOperation,
 };
 use opengp_ui::ui::components::appointment::{
     AppointmentDetailModalAction, AppointmentForm, AppointmentFormAction, AppointmentState,
@@ -37,13 +36,15 @@ use opengp_ui::ui::components::status_bar::StatusBar;
 use opengp_ui::ui::components::tabs::{Tab, TabBar};
 use opengp_ui::ui::components::workspace::WorkspaceManager;
 use opengp_ui::ui::keybinds::{Action, KeyContext, KeybindRegistry};
-use opengp_ui::ui::services::{AppointmentUiService, BillingUiService, ClinicalUiService};
+use opengp_ui::ui::services::{
+    AppointmentUiService, BillingUiService, ClinicalUiService, PatientUiService,
+};
 use opengp_ui::ui::theme::{ColorPalette, Theme};
 use opengp_ui::ui::widgets::FormNavigation;
 use rat_event::{HandleEvent, Outcome, Regular};
 use rat_focus::{Focus, FocusBuilder, HasFocus};
 use rat_salsa::poll::{PollCrossterm, PollTasks, PollTokio};
-use rat_salsa::{run_tui, Control, RunConfig, SalsaAppContext};
+use rat_salsa::{run_tui, Control, RunConfig, SalsaAppContext, SalsaContext};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::widgets::{Paragraph, Widget};
@@ -94,7 +95,7 @@ async fn bootstrap(config: Config) -> Result<(GlobalState, AppState), AppError> 
     };
     theme.colors = ColorPalette::from_config(palette_config);
 
-    let (billing_service, clinical_ui_service, appointment_ui_service) =
+    let (billing_service, clinical_ui_service, appointment_ui_service, patient_ui_service) =
         build_services(&config.app.api_server.database, &config.encryption_key).await?;
 
     let keybinds = KeybindRegistry::global();
@@ -111,24 +112,11 @@ async fn bootstrap(config: Config) -> Result<(GlobalState, AppState), AppError> 
         current_user_id: uuid::Uuid::nil(),
         terminal_size: Rect::new(0, 0, 80, 24),
         patient_list: PatientList::new(theme.clone()),
-        pending_patient_data: None,
-        pending_edit_patient_id: None,
         appointment_state: AppointmentState::new(theme.clone(), config.app.calendar.clone()),
-        pending_load_practitioners: false,
-        pending_load_booked_slots: None,
-        pending_appointment_save: None,
-        pending_appointment_status_transition: None,
-        pending_reschedule: None,
         workspace_manager: WorkspaceManager::new(theme.clone(), config.patient.max_open_patients),
-        pending_clinical_save_data: None,
         patient_page_limit: 100,
         appointment_page_limit: 100,
         consultation_page_limit: 100,
-        pending_patient_list_refresh: false,
-        pending_appointment_list_refresh: None,
-        pending_consultation_list_refresh: None,
-        pending_practitioners_list_refresh: false,
-        pending_login_request: None,
         active_login_attempt: None,
         active_appointment_refresh_date: None,
         last_billing_render: None,
@@ -148,7 +136,7 @@ async fn bootstrap(config: Config) -> Result<(GlobalState, AppState), AppError> 
         billing_ui_service: billing_service,
         clinical_ui_service,
         appointment_ui_service,
-        patient_ui_service: None,
+        patient_ui_service,
         practice_config: load_practice_config()?,
         healthcare_config: config.healthcare,
         patient_config: config.patient,
@@ -170,6 +158,7 @@ async fn build_services(
         Option<Arc<BillingUiService>>,
         Option<Arc<ClinicalUiService>>,
         Option<Arc<AppointmentUiService>>,
+        Option<Arc<PatientUiService>>,
     ),
     AppError,
 > {
@@ -244,6 +233,9 @@ async fn build_services(
     let patient_service = Arc::new(opengp_domain::domain::patient::PatientService::new(
         patient_repo,
     ));
+    let patient_ui_service = Some(Arc::new(PatientUiService::new(Arc::clone(
+        &patient_service,
+    ))));
 
     let audit_repo: Arc<dyn AuditRepository> = Arc::new(SqlxAuditRepository::new(pool.clone()));
     let audit_service: Arc<dyn AuditEmitter> = Arc::new(AuditService::new(audit_repo));
@@ -283,14 +275,243 @@ async fn build_services(
         working_hours_repo,
     )));
 
-    Ok((billing_service, clinical_ui_service, appointment_ui_service))
+    Ok((
+        billing_service,
+        clinical_ui_service,
+        appointment_ui_service,
+        patient_ui_service,
+    ))
 }
 
 fn init(state: &mut AppState, _ctx: &mut GlobalState) -> Result<(), AppError> {
     if state.authenticated {
-        state.pending_patient_list_refresh = true;
+        spawn_patient_list_refresh(_ctx);
     }
     Ok(())
+}
+
+fn spawn_login_request(ctx: &GlobalState, username: String, password: String) {
+    let client = ctx.api_client.clone();
+    ctx.spawn_async(async move {
+        let result = if let Some(c) = client {
+            c.login(username, password).await.map_err(|e| e.to_string())
+        } else {
+            Err("No API client".to_string())
+        };
+        Ok(Control::Event(AppEvent::LoginResult(result)))
+    });
+}
+
+fn spawn_patient_list_refresh(ctx: &GlobalState) {
+    let service = ctx.patient_ui_service.clone();
+    ctx.spawn_async(async move {
+        let result = if let Some(svc) = service {
+            svc.list_patients_as_view_items()
+                .await
+                .map_err(|e| e.to_string())
+        } else {
+            Err("No patient service".to_string())
+        };
+        Ok(Control::Event(AppEvent::PatientListLoaded(result)))
+    });
+}
+
+fn spawn_patient_save(ctx: &GlobalState, pending: opengp_ui::ui::app::PendingPatientData) {
+    let service = ctx.patient_ui_service.clone();
+    ctx.spawn_async(async move {
+        let result = if let Some(svc) = service {
+            let save_result = match pending {
+                opengp_ui::ui::app::PendingPatientData::New(data) => {
+                    svc.create_patient(data).await.map(|_| ())
+                }
+                opengp_ui::ui::app::PendingPatientData::Update { id, data } => {
+                    svc.update_patient(id, data).await.map(|_| ())
+                }
+            };
+
+            match save_result {
+                Ok(()) => svc
+                    .list_patients_as_view_items()
+                    .await
+                    .map_err(|e| e.to_string()),
+                Err(err) => Err(err.to_string()),
+            }
+        } else {
+            Err("No patient service".to_string())
+        };
+        Ok(Control::Event(AppEvent::PatientListLoaded(result)))
+    });
+}
+
+fn spawn_load_patient_for_edit(ctx: &GlobalState, patient_id: uuid::Uuid) {
+    let service = ctx.patient_ui_service.clone();
+    ctx.spawn_async(async move {
+        let result = if let Some(svc) = service {
+            svc.get_patient(patient_id).await.map_err(|e| e.to_string())
+        } else {
+            Err("No patient service".to_string())
+        };
+        Ok(Control::Event(AppEvent::PatientEditLoaded(result)))
+    });
+}
+
+fn spawn_refresh_appointments(ctx: &GlobalState, date: chrono::NaiveDate) {
+    let service = ctx.appointment_ui_service.clone();
+    ctx.spawn_async(async move {
+        let result = if let Some(svc) = service {
+            svc.get_schedule(date).await.map_err(|e| e.to_string())
+        } else {
+            Err("No appointment service".to_string())
+        };
+        Ok(Control::Event(AppEvent::AppointmentsRefreshed(result)))
+    });
+}
+
+fn spawn_load_practitioners(ctx: &GlobalState) {
+    let service = ctx.appointment_ui_service.clone();
+    ctx.spawn_async(async move {
+        let result = if let Some(svc) = service {
+            svc.get_practitioners()
+                .await
+                .map(|items| items.into_iter().map(|p| p.into()).collect())
+                .map_err(|e| e.to_string())
+        } else {
+            Err("No appointment service".to_string())
+        };
+        Ok(Control::Event(AppEvent::PractitionersLoaded(result)))
+    });
+}
+
+fn spawn_load_booked_slots(
+    ctx: &GlobalState,
+    practitioner_id: uuid::Uuid,
+    date: chrono::NaiveDate,
+    duration: u32,
+) {
+    let service = ctx.appointment_ui_service.clone();
+    ctx.spawn_async(async move {
+        let result = if let Some(svc) = service {
+            svc.get_available_slots(practitioner_id, date, duration)
+                .await
+                .map_err(|e| e.to_string())
+        } else {
+            Err("No appointment service".to_string())
+        };
+        Ok(Control::Event(AppEvent::AvailableSlotsLoaded(result)))
+    });
+}
+
+fn spawn_save_appointment(
+    ctx: &GlobalState,
+    data: opengp_domain::domain::appointment::NewAppointmentData,
+    user_id: uuid::Uuid,
+) {
+    let service = ctx.appointment_ui_service.clone();
+    ctx.spawn_async(async move {
+        let result = if let Some(svc) = service {
+            svc.create_appointment(data, user_id)
+                .await
+                .map_err(|e| e.to_string())
+        } else {
+            Err("No appointment service".to_string())
+        };
+        Ok(Control::Event(AppEvent::AppointmentSaved(result)))
+    });
+}
+
+fn spawn_update_appointment_status(
+    ctx: &GlobalState,
+    appointment_id: uuid::Uuid,
+    transition: opengp_ui::ui::app::AppointmentStatusTransition,
+    user_id: uuid::Uuid,
+    refresh_date: chrono::NaiveDate,
+) {
+    let service = ctx.appointment_ui_service.clone();
+    ctx.spawn_async(async move {
+        let result = if let Some(svc) = service {
+            match transition {
+                opengp_ui::ui::app::AppointmentStatusTransition::SetStatus(status) => {
+                    let status_result = match status {
+                        opengp_domain::domain::appointment::AppointmentStatus::Arrived => {
+                            svc.mark_arrived(appointment_id, user_id).await
+                        }
+                        opengp_domain::domain::appointment::AppointmentStatus::InProgress => {
+                            svc.mark_in_progress(appointment_id, user_id).await
+                        }
+                        opengp_domain::domain::appointment::AppointmentStatus::Completed => {
+                            svc.mark_completed(appointment_id, user_id).await
+                        }
+                        opengp_domain::domain::appointment::AppointmentStatus::NoShow => {
+                            svc.mark_no_show(appointment_id, user_id).await
+                        }
+                        opengp_domain::domain::appointment::AppointmentStatus::Billing => {
+                            svc.mark_billing(appointment_id, user_id).await
+                        }
+                        opengp_domain::domain::appointment::AppointmentStatus::Scheduled
+                        | opengp_domain::domain::appointment::AppointmentStatus::Confirmed
+                        | opengp_domain::domain::appointment::AppointmentStatus::Rescheduled
+                        | opengp_domain::domain::appointment::AppointmentStatus::Cancelled => {
+                            Ok(())
+                        }
+                    };
+                    status_result
+                        .map(|_| (appointment_id, refresh_date))
+                        .map_err(|e| e.to_string())
+                }
+            }
+        } else {
+            Err("No appointment service".to_string())
+        };
+        Ok(Control::Event(AppEvent::AppointmentStatusUpdated(result)))
+    });
+}
+
+fn spawn_reschedule_appointment(
+    ctx: &GlobalState,
+    data: opengp_ui::ui::app::PendingRescheduleData,
+    user_id: uuid::Uuid,
+) {
+    let service = ctx.appointment_ui_service.clone();
+    ctx.spawn_async(async move {
+        let result = if let Some(svc) = service {
+            match (data.new_date, data.new_time) {
+                (Some(new_date), Some(new_time)) => {
+                    let new_start = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
+                        new_date.and_time(new_time),
+                        chrono::Utc,
+                    );
+                    svc.reschedule_appointment(
+                        data.appointment_id,
+                        new_start,
+                        data.duration_minutes,
+                        user_id,
+                    )
+                    .await
+                    .map(|_| (data.appointment_id, new_date))
+                    .map_err(|e| e.to_string())
+                }
+                _ => Err("Missing date/time for reschedule".to_string()),
+            }
+        } else {
+            Err("No appointment service".to_string())
+        };
+        Ok(Control::Event(AppEvent::AppointmentRescheduled(result)))
+    });
+}
+
+fn spawn_refresh_consultations(ctx: &GlobalState, patient_id: uuid::Uuid) {
+    let service = ctx.clinical_ui_service.clone();
+    ctx.spawn_async(async move {
+        let result = if let Some(svc) = service {
+            svc.list_consultations(patient_id)
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        } else {
+            Err("No clinical service".to_string())
+        };
+        Ok(Control::Event(AppEvent::ConsultationsRefreshed(result)))
+    });
 }
 
 fn dialog_render(
@@ -308,13 +529,17 @@ fn dialog_render(
         DialogContent::PatientForm(form) => form.clone().render(area, buf),
         DialogContent::AppointmentForm(form) => form.clone().render(area, buf),
         DialogContent::AppointmentDetailModal(modal) => modal.clone().render(area, buf),
-        DialogContent::ContextMenu(_) => {},
-        DialogContent::ServerUnavailable { .. } => {},
+        DialogContent::ContextMenu(_) => {}
+        DialogContent::ServerUnavailable { .. } => {}
     }
 }
 
 fn push_dialog(ctx: &GlobalState, dialog: DialogContent) {
-    ctx.dialogs.push(dialog_render, |_event, _dialog, _state| Ok(Outcome::Continue.into()), dialog);
+    ctx.dialogs.push(
+        dialog_render,
+        |_event, _dialog, _state| Ok(Outcome::Continue.into()),
+        dialog,
+    );
 }
 
 fn dialog_index(ctx: &GlobalState, predicate: impl Fn(&DialogContent) -> bool) -> Option<usize> {
@@ -338,7 +563,9 @@ fn close_dialog(ctx: &GlobalState, predicate: impl Fn(&DialogContent) -> bool) -
 }
 
 fn toggle_help_dialog(state: &mut AppState, ctx: &GlobalState) {
-    if close_dialog(ctx, |dialog| matches!(dialog, DialogContent::HelpOverlay(_))) {
+    if close_dialog(ctx, |dialog| {
+        matches!(dialog, DialogContent::HelpOverlay(_))
+    }) {
         return;
     }
 
@@ -414,10 +641,13 @@ fn render(
                         .borders(ratatui::widgets::Borders::ALL)
                         .style(ratatui::style::Style::default().red());
                     border.clone().render(error_area, buf);
-                    
+
                     let inner = border.inner(error_area);
-                    Paragraph::new(format!("{}\n\n(Press 'r' to retry or Esc to dismiss)", error))
-                        .render(inner, buf);
+                    Paragraph::new(format!(
+                        "{}\n\n(Press 'r' to retry or Esc to dismiss)",
+                        error
+                    ))
+                    .render(inner, buf);
                 }
             }
         }
@@ -479,21 +709,21 @@ fn refresh_status_and_context(state: &mut AppState, ctx: &GlobalState) {
         if let Some(context) = dialog_context {
             context
         } else {
-        match state.tab_bar.selected() {
-            Tab::PatientSearch | Tab::PatientWorkspace => {
-                if state.patient_list.is_searching() {
-                    KeyContext::Search
-                } else if state.workspace_manager.active().is_some() {
-                    KeyContext::PatientWorkspace
-                } else {
-                    KeyContext::PatientList
+            match state.tab_bar.selected() {
+                Tab::PatientSearch | Tab::PatientWorkspace => {
+                    if state.patient_list.is_searching() {
+                        KeyContext::Search
+                    } else if state.workspace_manager.active().is_some() {
+                        KeyContext::PatientWorkspace
+                    } else {
+                        KeyContext::PatientList
+                    }
                 }
+                Tab::Schedule => match state.appointment_state.current_view {
+                    AppointmentView::Calendar => KeyContext::Calendar,
+                    AppointmentView::Schedule => KeyContext::Schedule,
+                },
             }
-            Tab::Schedule => match state.appointment_state.current_view {
-                AppointmentView::Calendar => KeyContext::Calendar,
-                AppointmentView::Schedule => KeyContext::Schedule,
-            },
-        }
         }
     };
 }
@@ -505,13 +735,13 @@ enum DialogKeyResult {
 }
 
 fn handle_patient_form_key(
-    state: &mut AppState,
+    _state: &mut AppState,
+    ctx: &GlobalState,
     dialog: &mut DialogContent,
     key: crossterm::event::KeyEvent,
 ) -> DialogKeyResult {
     let mut consumed = false;
     let mut close_form = false;
-    let mut pending_patient_data = None;
 
     if let DialogContent::PatientForm(form) = dialog {
         if let Some(action) = form.handle_key(key) {
@@ -523,13 +753,16 @@ fn handle_patient_form_key(
                         form.focus_first_error();
                     } else if form.is_edit_mode() {
                         if let Some((id, data)) = form.to_update_patient_data() {
-                            pending_patient_data = Some(PendingPatientData::Update { id, data });
+                            spawn_patient_save(
+                                ctx,
+                                opengp_ui::ui::app::PendingPatientData::Update { id, data },
+                            );
                             close_form = true;
                         } else {
                             form.focus_first_error();
                         }
                     } else if let Some(data) = form.to_new_patient_data() {
-                        pending_patient_data = Some(PendingPatientData::New(data));
+                        spawn_patient_save(ctx, opengp_ui::ui::app::PendingPatientData::New(data));
                         close_form = true;
                     } else {
                         form.focus_first_error();
@@ -539,14 +772,10 @@ fn handle_patient_form_key(
                     close_form = true;
                 }
                 PatientFormAction::SaveComplete => {
-                    state.pending_patient_list_refresh = true;
+                    spawn_patient_list_refresh(ctx);
                 }
             }
         }
-    }
-
-    if let Some(data) = pending_patient_data {
-        state.pending_patient_data = Some(data);
     }
 
     if close_form {
@@ -560,6 +789,7 @@ fn handle_patient_form_key(
 
 fn handle_appointment_form_key(
     state: &mut AppState,
+    ctx: &GlobalState,
     dialog: &mut DialogContent,
     key: crossterm::event::KeyEvent,
 ) -> DialogKeyResult {
@@ -569,9 +799,8 @@ fn handle_appointment_form_key(
                 AppointmentFormAction::FocusChanged | AppointmentFormAction::ValueChanged => {}
                 AppointmentFormAction::Submit => {
                     if let Some(data) = form.to_new_appointment_data() {
-                        let version = form.form_version();
                         form.set_saving(true);
-                        state.pending_appointment_save = Some((data, version));
+                        spawn_save_appointment(ctx, data, state.current_user_id);
                     } else {
                         let msg = form
                             .first_error()
@@ -585,7 +814,7 @@ fn handle_appointment_form_key(
                 }
                 AppointmentFormAction::SaveComplete => {
                     state.status_bar.clear_error();
-                    state.pending_appointment_list_refresh = Some(chrono::Utc::now().date_naive());
+                    spawn_refresh_appointments(ctx, chrono::Utc::now().date_naive());
                     return DialogKeyResult::HandledClose;
                 }
                 AppointmentFormAction::OpenTimePicker {
@@ -595,7 +824,7 @@ fn handle_appointment_form_key(
                 } => {
                     let practitioner_id_i64 = practitioner_id.as_u128() as i64;
                     form.open_time_picker(practitioner_id_i64, date, duration);
-                    state.pending_load_booked_slots = Some((practitioner_id, date, duration));
+                    spawn_load_booked_slots(ctx, practitioner_id, date, duration);
                 }
             }
             return DialogKeyResult::HandledKeep;
@@ -606,6 +835,7 @@ fn handle_appointment_form_key(
 
 fn handle_detail_modal_key(
     state: &mut AppState,
+    ctx: &GlobalState,
     dialog: &mut DialogContent,
     key: crossterm::event::KeyEvent,
 ) -> DialogKeyResult {
@@ -617,10 +847,14 @@ fn handle_detail_modal_key(
                 }
                 AppointmentDetailModalAction::MarkStatus(status) => {
                     let appointment_id = modal.appointment_id();
-                    state.pending_appointment_status_transition = Some((
+                    let refresh_date = modal.appointment().start_time.date_naive();
+                    spawn_update_appointment_status(
+                        ctx,
                         appointment_id,
                         opengp_ui::ui::app::AppointmentStatusTransition::SetStatus(status),
-                    ));
+                        state.current_user_id,
+                        refresh_date,
+                    );
                     return DialogKeyResult::HandledClose;
                 }
                 AppointmentDetailModalAction::OpenTimePicker {
@@ -628,20 +862,24 @@ fn handle_detail_modal_key(
                     date,
                     duration,
                 } => {
-                    state.pending_load_booked_slots = Some((practitioner_id, date, duration));
+                    spawn_load_booked_slots(ctx, practitioner_id, date, duration);
                 }
                 AppointmentDetailModalAction::RescheduleTime => {
                     if let (Some(new_date), Some(new_time)) = (
                         modal.pending_reschedule_date(),
                         modal.pending_reschedule_time(),
                     ) {
-                        state.pending_reschedule = Some(opengp_ui::ui::app::PendingRescheduleData {
-                            appointment_id: modal.appointment_id(),
-                            new_date: Some(new_date),
-                            new_time: Some(new_time),
-                            practitioner_id: modal.appointment().practitioner_id,
-                            duration_minutes: modal.appointment().duration_minutes() as i64,
-                        });
+                        spawn_reschedule_appointment(
+                            ctx,
+                            opengp_ui::ui::app::PendingRescheduleData {
+                                appointment_id: modal.appointment_id(),
+                                new_date: Some(new_date),
+                                new_time: Some(new_time),
+                                practitioner_id: modal.appointment().practitioner_id,
+                                duration_minutes: modal.appointment().duration_minutes() as i64,
+                            },
+                            state.current_user_id,
+                        );
                         return DialogKeyResult::HandledClose;
                     }
                 }
@@ -688,7 +926,9 @@ fn event_fn(
                 refresh_status_and_context(state, ctx);
 
                 if let Some(index) = ctx.dialogs.top::<DialogContent>() {
-                    let dialog_result = if let Some(mut dialog) = ctx.dialogs.get_mut::<DialogContent>(index) {
+                    let dialog_result = if let Some(mut dialog) =
+                        ctx.dialogs.get_mut::<DialogContent>(index)
+                    {
                         match &mut *dialog {
                             DialogContent::HelpOverlay(_) => {
                                 if key.code == KeyCode::Esc || key.code == KeyCode::F(1) {
@@ -698,13 +938,13 @@ fn event_fn(
                                 }
                             }
                             DialogContent::PatientForm(_) => {
-                                handle_patient_form_key(state, &mut dialog, *key)
+                                handle_patient_form_key(state, ctx, &mut dialog, *key)
                             }
                             DialogContent::AppointmentForm(_) => {
-                                handle_appointment_form_key(state, &mut dialog, *key)
+                                handle_appointment_form_key(state, ctx, &mut dialog, *key)
                             }
                             DialogContent::AppointmentDetailModal(_) => {
-                                handle_detail_modal_key(state, &mut dialog, *key)
+                                handle_detail_modal_key(state, ctx, &mut dialog, *key)
                             }
                             DialogContent::ContextMenu(_) => DialogKeyResult::NotHandled,
                             DialogContent::ServerUnavailable { .. } => DialogKeyResult::NotHandled,
@@ -735,16 +975,18 @@ fn event_fn(
                                         if let Some(operation) = retry.clone() {
                                             match operation {
                                                 RetryOperation::Login { username, password } => {
-                                                    state.pending_login_request = Some((username, password));
+                                                    spawn_login_request(ctx, username, password);
                                                 }
                                                 RetryOperation::RefreshPatients => {
-                                                    state.pending_patient_list_refresh = true;
+                                                    spawn_patient_list_refresh(ctx);
                                                 }
                                                 RetryOperation::RefreshAppointments { date } => {
-                                                    state.pending_appointment_list_refresh = Some(date);
+                                                    spawn_refresh_appointments(ctx, date);
                                                 }
-                                                RetryOperation::RefreshConsultations { patient_id } => {
-                                                    state.pending_consultation_list_refresh = Some(patient_id);
+                                                RetryOperation::RefreshConsultations {
+                                                    patient_id,
+                                                } => {
+                                                    spawn_refresh_consultations(ctx, patient_id);
                                                 }
                                             }
                                             _ = ctx.dialogs.pop();
@@ -760,15 +1002,19 @@ fn event_fn(
                             }
                             DialogContent::ContextMenu(menu) => {
                                 if menu.is_visible() {
-                                    if let Some(mut menu_mut) = ctx.dialogs.get_mut::<DialogContent>(index) {
-                                        if let DialogContent::ContextMenu(ref mut context_menu) = &mut *menu_mut {
+                                    if let Some(mut menu_mut) =
+                                        ctx.dialogs.get_mut::<DialogContent>(index)
+                                    {
+                                        if let DialogContent::ContextMenu(ref mut context_menu) =
+                                            &mut *menu_mut
+                                        {
                                             if let Some(action) = context_menu.handle_key(*key) {
                                                 match action {
                                                     opengp_ui::ui::widgets::ContextMenuAction::Selected(app_action) => {
                                                         _ = ctx.dialogs.pop();
                                                         match app_action {
                                                             opengp_ui::ui::app::AppContextMenuAction::PatientEdit(id) => {
-                                                                state.pending_edit_patient_id = Some(id);
+                                                                spawn_load_patient_for_edit(ctx, id);
                                                             }
                                                             opengp_ui::ui::app::AppContextMenuAction::PatientDelete(_)
                                                             | opengp_ui::ui::app::AppContextMenuAction::PatientViewHistory(_)
@@ -803,7 +1049,7 @@ fn event_fn(
                         password,
                     }) = state.login_screen.handle_key(*key)
                     {
-                        state.pending_login_request = Some((username, password));
+                        spawn_login_request(ctx, username, password);
                         return Ok(Control::Changed);
                     }
 
@@ -859,7 +1105,7 @@ fn event_fn(
                                     state.appointment_state.selected_date = Some(date);
                                     state.appointment_state.current_view =
                                         AppointmentView::Schedule;
-                                    state.pending_appointment_list_refresh = Some(date);
+                                    spawn_refresh_appointments(ctx, date);
                                 }
                                 CalendarAction::FocusDate(_)
                                 | CalendarAction::MonthChanged(_)
@@ -884,7 +1130,8 @@ fn event_fn(
                                     ctx.theme.clone(),
                                     ctx.healthcare_config.clone(),
                                 );
-                                if let Some(schedule_data) = state.appointment_state.schedule_data.as_ref()
+                                if let Some(schedule_data) =
+                                    state.appointment_state.schedule_data.as_ref()
                                 {
                                     if let Some(practitioner) = schedule_data
                                         .practitioners
@@ -906,7 +1153,7 @@ fn event_fn(
                                     time,
                                 );
                                 push_dialog(ctx, DialogContent::AppointmentForm(form));
-                                state.pending_load_practitioners = true;
+                                spawn_load_practitioners(ctx);
                             }
                             ScheduleAction::NavigateTimeSlot(_)
                             | ScheduleAction::NavigatePractitioner(_)
@@ -948,7 +1195,7 @@ fn event_fn(
                                     }
                                     if state.previous_tab != Tab::PatientSearch {
                                         state.patient_list.reset_search();
-                                        state.pending_patient_list_refresh = true;
+                                        spawn_patient_list_refresh(ctx);
                                     }
                                     state.tab_bar.select(Tab::PatientSearch);
                                     state.previous_tab = Tab::PatientSearch;
@@ -986,7 +1233,7 @@ fn event_fn(
                                         if let Some(patient_id) =
                                             state.patient_list.selected_patient_id()
                                         {
-                                            state.pending_edit_patient_id = Some(patient_id);
+                                            spawn_load_patient_for_edit(ctx, patient_id);
                                             return Ok(Control::Changed);
                                         }
                                     }
@@ -1026,14 +1273,14 @@ fn event_fn(
                                 Action::Refresh => {
                                     match state.tab_bar.selected() {
                                         Tab::PatientSearch | Tab::PatientWorkspace => {
-                                            state.pending_patient_list_refresh = true;
+                                            spawn_patient_list_refresh(ctx);
                                         }
                                         Tab::Schedule => {
                                             let date = state
                                                 .appointment_state
                                                 .selected_date
                                                 .unwrap_or_else(|| chrono::Utc::now().date_naive());
-                                            state.pending_appointment_list_refresh = Some(date);
+                                            spawn_refresh_appointments(ctx, date);
                                         }
                                     }
                                     return Ok(Control::Changed);
@@ -1047,7 +1294,7 @@ fn event_fn(
                                                 ctx.healthcare_config.clone(),
                                             )),
                                         );
-                                        state.pending_load_practitioners = true;
+                                        spawn_load_practitioners(ctx);
                                         return Ok(Control::Changed);
                                     }
                                 }
@@ -1069,7 +1316,7 @@ fn event_fn(
             match result {
                 Ok(_) => {
                     state.authenticated = true;
-                    state.pending_patient_list_refresh = true;
+                    spawn_patient_list_refresh(ctx);
                     state.status_bar.clear_error();
                 }
                 Err(err) => {
@@ -1082,6 +1329,23 @@ fn event_fn(
         AppEvent::PatientListLoaded(result) => {
             match result {
                 Ok(patients) => state.patient_list.set_patients(patients.clone()),
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::PatientEditLoaded(result) => {
+            match result {
+                Ok(patient) => {
+                    push_dialog(
+                        ctx,
+                        DialogContent::PatientForm(PatientForm::from_patient(
+                            patient.clone(),
+                            ctx.theme.clone(),
+                            &ctx.patient_config,
+                        )),
+                    );
+                    state.status_bar.clear_error();
+                }
                 Err(err) => state.status_bar.set_error(Some(err.clone())),
             }
             Ok(Control::Changed)
@@ -1118,7 +1382,7 @@ fn event_fn(
                     close_dialog(ctx, |dialog| {
                         matches!(dialog, DialogContent::AppointmentDetailModal(_))
                     });
-                    state.pending_appointment_list_refresh = Some(*date);
+                    spawn_refresh_appointments(ctx, *date);
                     state.status_bar.clear_error();
                 }
                 Err(err) => state.status_bar.set_error(Some(err.clone())),
@@ -1131,7 +1395,7 @@ fn event_fn(
                     close_dialog(ctx, |dialog| {
                         matches!(dialog, DialogContent::AppointmentDetailModal(_))
                     });
-                    state.pending_appointment_list_refresh = Some(*date);
+                    spawn_refresh_appointments(ctx, *date);
                     state.status_bar.clear_error();
                 }
                 Err(err) => state.status_bar.set_error(Some(err.clone())),
@@ -1152,7 +1416,14 @@ fn event_fn(
         }
         AppEvent::PractitionersLoaded(result) => {
             match result {
-                Ok(_view_items) => {
+                Ok(view_items) => {
+                    if let Some(index) = ctx.dialogs.top::<DialogContent>() {
+                        if let Some(mut dialog) = ctx.dialogs.get_mut::<DialogContent>(index) {
+                            if let DialogContent::AppointmentForm(form) = &mut *dialog {
+                                form.set_practitioners(view_items.clone());
+                            }
+                        }
+                    }
                     state.status_bar.clear_error();
                 }
                 Err(err) => state.status_bar.set_error(Some(err.clone())),
@@ -1161,9 +1432,29 @@ fn event_fn(
         }
         AppEvent::AvailableSlotsLoaded(result) => {
             match result {
-                Ok(_slots) => {
+                Ok(slots) => {
+                    if let Some(index) = ctx.dialogs.top::<DialogContent>() {
+                        if let Some(mut dialog) = ctx.dialogs.get_mut::<DialogContent>(index) {
+                            match &mut *dialog {
+                                DialogContent::AppointmentForm(form) => {
+                                    form.set_booked_slots(slots.clone());
+                                }
+                                DialogContent::AppointmentDetailModal(modal) => {
+                                    modal.set_booked_slots(slots.clone());
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                     state.status_bar.clear_error();
                 }
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::ConsultationsRefreshed(result) => {
+            match result {
+                Ok(()) => state.status_bar.clear_error(),
                 Err(err) => state.status_bar.set_error(Some(err.clone())),
             }
             Ok(Control::Changed)
@@ -1187,8 +1478,8 @@ fn event_fn(
             Ok(Control::Changed)
         }
         AppEvent::PatientWorkspaceDataLoaded {
-            patient_id,
-            subtab,
+            patient_id: _,
+            subtab: _,
             result,
         } => {
             match result {
@@ -1208,7 +1499,6 @@ fn event_fn(
             }
             Ok(Control::Changed)
         }
-        _ => Ok(Control::Continue),
     }
 }
 
