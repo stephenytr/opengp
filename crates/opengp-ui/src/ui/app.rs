@@ -25,8 +25,16 @@ mod event_handler;
 mod keybinds;
 mod renderer;
 mod state;
+mod global;
+mod app_state;
+mod event;
+mod error;
 
 pub use command::AppCommand;
+pub use global::GlobalState;
+pub use app_state::AppState;
+pub use event::AppEvent;
+pub use error::AppError;
 
 const DEFAULT_PATIENT_PAGE_LIMIT: u32 = 100;
 const DEFAULT_APPOINTMENT_PAGE_LIMIT: u32 = 100;
