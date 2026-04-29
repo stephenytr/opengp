@@ -13,14 +13,17 @@ pub fn parse_hex(hex: &str) -> Result<(u8, u8, u8), ThemeConverterError> {
         return Err(ThemeConverterError::InvalidHexColor(hex.to_string()));
     }
 
-    let r: u8 = u8::from_str_radix(&hex[0..2], 16).map_err(|_| ThemeConverterError::InvalidHexColor(hex.to_string()))?;
-    let g: u8 = u8::from_str_radix(&hex[2..4], 16).map_err(|_| ThemeConverterError::InvalidHexColor(hex.to_string()))?;
-    let b: u8 = u8::from_str_radix(&hex[4..6], 16).map_err(|_| ThemeConverterError::InvalidHexColor(hex.to_string()))?;
-    
+    let r: u8 = u8::from_str_radix(&hex[0..2], 16)
+        .map_err(|_| ThemeConverterError::InvalidHexColor(hex.to_string()))?;
+    let g: u8 = u8::from_str_radix(&hex[2..4], 16)
+        .map_err(|_| ThemeConverterError::InvalidHexColor(hex.to_string()))?;
+    let b: u8 = u8::from_str_radix(&hex[4..6], 16)
+        .map_err(|_| ThemeConverterError::InvalidHexColor(hex.to_string()))?;
+
     Ok((r, g, b))
 }
 
-pub fn to_opengp_color (r: u8, g: u8, b: u8) -> String {
+pub fn to_opengp_color(r: u8, g: u8, b: u8) -> String {
     format!("Rgb({r}, {g}, {b})")
 }
 

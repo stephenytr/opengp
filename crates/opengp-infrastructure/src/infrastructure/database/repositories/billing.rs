@@ -125,7 +125,11 @@ impl SqlxBillingRepository {
             id: row.id,
             invoice_id: row.invoice_id,
             patient_id: row.patient_id,
-            payment_date: row.payment_date.and_hms_opt(0, 0, 0).unwrap_or_default().and_utc(),
+            payment_date: row
+                .payment_date
+                .and_hms_opt(0, 0, 0)
+                .unwrap_or_default()
+                .and_utc(),
             amount: row.amount,
             payment_method: parse_enum(&row.payment_method, "payments.payment_method")?,
             reference: row.reference,
@@ -264,8 +268,8 @@ impl BillingRepository for SqlxBillingRepository {
             ORDER BY created_at DESC
             "#,
         )
-.bind(start)
-            .bind(end)
+        .bind(start)
+        .bind(end)
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -328,16 +332,16 @@ impl BillingRepository for SqlxBillingRepository {
         .bind(invoice.consultation_id)
         .bind(invoice.billing_type.to_string())
         .bind(invoice.status.to_string())
-.bind(invoice.invoice_date)
-            .bind(invoice.due_date)
+        .bind(invoice.invoice_date)
+        .bind(invoice.due_date)
         .bind(invoice.subtotal)
         .bind(invoice.gst_amount)
         .bind(invoice.total_amount)
         .bind(invoice.amount_paid)
         .bind(invoice.amount_outstanding)
         .bind(&invoice.notes)
-.bind(invoice.created_at)
-            .bind(invoice.updated_at)
+        .bind(invoice.created_at)
+        .bind(invoice.updated_at)
         .execute(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -376,8 +380,8 @@ impl BillingRepository for SqlxBillingRepository {
         .bind(invoice.consultation_id)
         .bind(invoice.billing_type.to_string())
         .bind(invoice.status.to_string())
-.bind(invoice.invoice_date)
-            .bind(invoice.due_date)
+        .bind(invoice.invoice_date)
+        .bind(invoice.due_date)
         .bind(invoice.subtotal)
         .bind(invoice.gst_amount)
         .bind(invoice.total_amount)
@@ -464,9 +468,9 @@ impl BillingRepository for SqlxBillingRepository {
         .bind(claim.total_claimed)
         .bind(claim.total_benefit)
         .bind(&claim.claim_reference)
-.bind(claim.submitted_at)
-            .bind(claim.processed_at)
-            .bind(claim.created_at)
+        .bind(claim.submitted_at)
+        .bind(claim.processed_at)
+        .bind(claim.created_at)
         .execute(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -593,7 +597,10 @@ impl BillingRepository for SqlxBillingRepository {
         Ok(payment)
     }
 
-    async fn find_payments_by_invoice(&self, invoice_id: Uuid) -> Result<Vec<Payment>, RepositoryError> {
+    async fn find_payments_by_invoice(
+        &self,
+        invoice_id: Uuid,
+    ) -> Result<Vec<Payment>, RepositoryError> {
         let rows = sqlx::query_as::<_, PaymentRow>(
             r#"
             SELECT
@@ -612,7 +619,10 @@ impl BillingRepository for SqlxBillingRepository {
         rows.into_iter().map(Self::map_payment_row).collect()
     }
 
-    async fn find_payments_by_patient(&self, patient_id: Uuid) -> Result<Vec<Payment>, RepositoryError> {
+    async fn find_payments_by_patient(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<Vec<Payment>, RepositoryError> {
         let rows = sqlx::query_as::<_, PaymentRow>(
             r#"
             SELECT
@@ -646,8 +656,8 @@ impl BillingRepository for SqlxBillingRepository {
             ORDER BY payment_date DESC
             "#,
         )
-.bind(start)
-            .bind(end)
+        .bind(start)
+        .bind(end)
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_to_repository_error)?;
@@ -655,7 +665,10 @@ impl BillingRepository for SqlxBillingRepository {
         rows.into_iter().map(Self::map_payment_row).collect()
     }
 
-    async fn find_invoice_items(&self, invoice_id: Uuid) -> Result<Vec<InvoiceItem>, RepositoryError> {
+    async fn find_invoice_items(
+        &self,
+        invoice_id: Uuid,
+    ) -> Result<Vec<InvoiceItem>, RepositoryError> {
         let rows = sqlx::query_as::<_, InvoiceItemRow>(
             r#"
             SELECT id, description, item_code, quantity, unit_price, amount, is_gst_free

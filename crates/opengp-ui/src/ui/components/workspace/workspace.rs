@@ -1,12 +1,12 @@
+use super::appointment_state::PatientAppointmentState;
+use crate::ui::app::PendingBillingSaveData;
+use crate::ui::components::billing::PatientBillingState;
+use crate::ui::components::clinical::ClinicalState;
+use crate::ui::components::clinical_row::ClinicalMenuKind;
+use crate::ui::view_models::PatientListItem;
+use ratatui::style::Color;
 use std::collections::HashSet;
 use uuid::Uuid;
-use ratatui::style::Color;
-use crate::ui::view_models::PatientListItem;
-use crate::ui::components::clinical::ClinicalState;
-use crate::ui::components::billing::PatientBillingState;
-use crate::ui::app::PendingBillingSaveData;
-use crate::ui::components::clinical_row::ClinicalMenuKind;
-use super::appointment_state::PatientAppointmentState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SubtabKind {
@@ -36,7 +36,9 @@ impl std::fmt::Display for WorkspaceError {
         match self {
             WorkspaceError::AlreadyAtLimit => write!(f, "Already at maximum open patient limit"),
             WorkspaceError::FormOpen => write!(f, "Cannot close workspace while form is open"),
-            WorkspaceError::TimerActive => write!(f, "Cannot close workspace while timer is active"),
+            WorkspaceError::TimerActive => {
+                write!(f, "Cannot close workspace while timer is active")
+            }
             WorkspaceError::IndexOutOfRange => write!(f, "Workspace index out of range"),
         }
     }
@@ -78,10 +80,7 @@ impl SubtabKind {
 }
 
 impl PatientWorkspace {
-    pub fn new(
-        patient_snapshot: PatientListItem,
-        colour: Color,
-    ) -> Self {
+    pub fn new(patient_snapshot: PatientListItem, colour: Color) -> Self {
         Self {
             patient_id: patient_snapshot.id,
             patient_snapshot,

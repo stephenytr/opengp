@@ -409,19 +409,19 @@ mod tests {
     #[test]
     fn test_patient_colour_round_robin() {
         let palette = ColorPalette::dark();
-        
+
         // Test first colour
         let colour_0 = palette.patient_colour(0);
         assert_eq!(colour_0, palette.patient_tab_colours[0]);
-        
+
         // Test all 8 colours
         for i in 0..8 {
             assert_eq!(palette.patient_colour(i), palette.patient_tab_colours[i]);
         }
-        
+
         // Test round-robin wrapping: index 8 should equal index 0
         assert_eq!(palette.patient_colour(8), palette.patient_colour(0));
-        
+
         // Test larger indices wrap correctly
         assert_eq!(palette.patient_colour(16), palette.patient_colour(0));
         assert_eq!(palette.patient_colour(17), palette.patient_colour(1));

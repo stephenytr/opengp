@@ -119,8 +119,12 @@ impl BillingGenerator {
                     .created_at
                     .checked_add_signed(Duration::days(self.rng.gen_range(0..=14)))
                     .unwrap_or(invoice.created_at);
-                let payment =
-                    self.generate_payment(invoice.id, patient_id, invoice.total_amount, payment_date);
+                let payment = self.generate_payment(
+                    invoice.id,
+                    patient_id,
+                    invoice.total_amount,
+                    payment_date,
+                );
                 payments.push(payment);
                 invoice.amount_paid = invoice.total_amount;
                 invoice.amount_outstanding = 0.0;
@@ -151,7 +155,9 @@ impl BillingGenerator {
             self.rng.gen_range(0..=999_999)
         );
         let due_date = service_date + Duration::days(30);
-        let item_count = self.rng.gen_range(1..=self.config.max_items_per_invoice.max(1).min(5));
+        let item_count = self
+            .rng
+            .gen_range(1..=self.config.max_items_per_invoice.max(1).min(5));
 
         let mut items = Vec::with_capacity(item_count);
         for _ in 0..item_count {
@@ -256,7 +262,12 @@ impl BillingGenerator {
         let status = self.determine_claim_status();
         let submitted_at = if self.is_submitted_status(status) {
             let offset_days = self.rng.gen_range(1..=3);
-            Some((service_date + Duration::days(offset_days)).and_hms_opt(9, 0, 0).unwrap_or_else(|| Utc::now().naive_utc()).and_utc())
+            Some(
+                (service_date + Duration::days(offset_days))
+                    .and_hms_opt(9, 0, 0)
+                    .unwrap_or_else(|| Utc::now().naive_utc())
+                    .and_utc(),
+            )
         } else {
             None
         };
@@ -324,7 +335,12 @@ impl BillingGenerator {
         let status = self.determine_claim_status();
         let submitted_at = if self.is_submitted_status(status) {
             let offset_days = self.rng.gen_range(1..=3);
-            Some((service_date + Duration::days(offset_days)).and_hms_opt(9, 0, 0).unwrap_or_else(|| Utc::now().naive_utc()).and_utc())
+            Some(
+                (service_date + Duration::days(offset_days))
+                    .and_hms_opt(9, 0, 0)
+                    .unwrap_or_else(|| Utc::now().naive_utc())
+                    .and_utc(),
+            )
         } else {
             None
         };
@@ -868,7 +884,10 @@ mod tests {
             let file_number = generator.generate_dva_file_number();
 
             // Must start with DVA
-            assert!(file_number.starts_with("DVA"), "File number must start with DVA");
+            assert!(
+                file_number.starts_with("DVA"),
+                "File number must start with DVA"
+            );
 
             // Must be exactly 11 characters (DVA + 8 digits)
             assert_eq!(file_number.len(), 11, "File number must be 11 chars");

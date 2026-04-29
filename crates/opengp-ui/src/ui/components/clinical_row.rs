@@ -1,11 +1,11 @@
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::Widget;
-use crossterm::event::{MouseEvent, MouseEventKind, MouseButton};
 
-use crate::ui::theme::Theme;
 use crate::ui::shared::{hover_style, invert_color};
+use crate::ui::theme::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ClinicalMenuKind {
@@ -248,12 +248,24 @@ mod tests {
 
     #[test]
     fn test_clinical_menu_kind_display_names() {
-        assert_eq!(ClinicalMenuKind::Consultations.display_name(), "Consultations");
+        assert_eq!(
+            ClinicalMenuKind::Consultations.display_name(),
+            "Consultations"
+        );
         assert_eq!(ClinicalMenuKind::Vitals.display_name(), "Vitals");
         assert_eq!(ClinicalMenuKind::Allergies.display_name(), "Allergies");
-        assert_eq!(ClinicalMenuKind::MedicalHistory.display_name(), "Medical History");
-        assert_eq!(ClinicalMenuKind::FamilyHistory.display_name(), "Family History");
-        assert_eq!(ClinicalMenuKind::SocialHistory.display_name(), "Social History");
+        assert_eq!(
+            ClinicalMenuKind::MedicalHistory.display_name(),
+            "Medical History"
+        );
+        assert_eq!(
+            ClinicalMenuKind::FamilyHistory.display_name(),
+            "Family History"
+        );
+        assert_eq!(
+            ClinicalMenuKind::SocialHistory.display_name(),
+            "Social History"
+        );
         assert_eq!(ClinicalMenuKind::Billing.display_name(), "Billing");
     }
 
@@ -265,26 +277,44 @@ mod tests {
 
     #[test]
     fn test_clinical_menu_kind_next_wraps() {
-        assert_eq!(ClinicalMenuKind::Consultations.next(), ClinicalMenuKind::Vitals);
-        assert_eq!(ClinicalMenuKind::SocialHistory.next(), ClinicalMenuKind::Billing);
-        assert_eq!(ClinicalMenuKind::Billing.next(), ClinicalMenuKind::Consultations);
+        assert_eq!(
+            ClinicalMenuKind::Consultations.next(),
+            ClinicalMenuKind::Vitals
+        );
+        assert_eq!(
+            ClinicalMenuKind::SocialHistory.next(),
+            ClinicalMenuKind::Billing
+        );
+        assert_eq!(
+            ClinicalMenuKind::Billing.next(),
+            ClinicalMenuKind::Consultations
+        );
     }
 
     #[test]
     fn test_clinical_menu_kind_prev_wraps() {
-        assert_eq!(ClinicalMenuKind::Vitals.prev(), ClinicalMenuKind::Consultations);
-        assert_eq!(ClinicalMenuKind::Consultations.prev(), ClinicalMenuKind::Billing);
-        assert_eq!(ClinicalMenuKind::Billing.prev(), ClinicalMenuKind::SocialHistory);
+        assert_eq!(
+            ClinicalMenuKind::Vitals.prev(),
+            ClinicalMenuKind::Consultations
+        );
+        assert_eq!(
+            ClinicalMenuKind::Consultations.prev(),
+            ClinicalMenuKind::Billing
+        );
+        assert_eq!(
+            ClinicalMenuKind::Billing.prev(),
+            ClinicalMenuKind::SocialHistory
+        );
     }
 
     #[test]
     fn test_clinical_row_move_next() {
         let items = ClinicalMenuKind::all();
         let mut row = ClinicalRow::new(items, 0, Color::Blue, Theme::dark());
-        
+
         row.move_next();
         assert_eq!(row.active_item(), Some(ClinicalMenuKind::Vitals));
-        
+
         row.move_next();
         assert_eq!(row.active_item(), Some(ClinicalMenuKind::Allergies));
     }
@@ -293,10 +323,10 @@ mod tests {
     fn test_clinical_row_move_prev() {
         let items = ClinicalMenuKind::all();
         let mut row = ClinicalRow::new(items, 2, Color::Blue, Theme::dark());
-        
+
         row.move_prev();
         assert_eq!(row.active_item(), Some(ClinicalMenuKind::Vitals));
-        
+
         row.move_prev();
         assert_eq!(row.active_item(), Some(ClinicalMenuKind::Consultations));
     }
@@ -305,10 +335,10 @@ mod tests {
     fn test_clinical_row_wrap_around() {
         let items = ClinicalMenuKind::all();
         let mut row = ClinicalRow::new(items, 6, Color::Blue, Theme::dark());
-        
+
         row.move_next();
         assert_eq!(row.active_item(), Some(ClinicalMenuKind::Consultations));
-        
+
         row.move_prev();
         assert_eq!(row.active_item(), Some(ClinicalMenuKind::Billing));
     }

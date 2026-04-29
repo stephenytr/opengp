@@ -3,11 +3,11 @@
 //! Displays a day view with practitioner columns and time slots.
 
 use chrono::{NaiveDate, Timelike};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, StatefulWidget, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -98,7 +98,11 @@ impl Schedule {
             for x in overlay_area.x..overlay_area.x + overlay_area.width {
                 if let Some(cell) = buf.cell_mut((x, y)) {
                     cell.set_symbol(" ");
-                    cell.set_style(Style::default().bg(self.theme.colors.background_dark).fg(self.theme.colors.foreground));
+                    cell.set_style(
+                        Style::default()
+                            .bg(self.theme.colors.background_dark)
+                            .fg(self.theme.colors.foreground),
+                    );
                 }
             }
         }
@@ -106,7 +110,11 @@ impl Schedule {
         let block = Block::default()
             .title(" DEBUG ")
             .borders(Borders::ALL)
-            .style(Style::default().bg(self.theme.colors.background_dark).fg(self.theme.colors.warning));
+            .style(
+                Style::default()
+                    .bg(self.theme.colors.background_dark)
+                    .fg(self.theme.colors.warning),
+            );
         block.render(overlay_area, buf);
 
         let inner = overlay_area.inner(ratatui::layout::Margin {
@@ -151,7 +159,9 @@ impl Schedule {
                     inner.x,
                     y,
                     line,
-                    Style::default().bg(self.theme.colors.background_dark).fg(self.theme.colors.foreground),
+                    Style::default()
+                        .bg(self.theme.colors.background_dark)
+                        .fg(self.theme.colors.foreground),
                 );
             }
         }
@@ -378,36 +388,40 @@ impl Schedule {
                 }
             }
 
-             let hovered_style = crate::ui::shared::hover_style(&self.theme);
-             if let Some((hovered_idx, hovered_slot)) = state.hovered_slot.element_id {
-                 if hovered_idx == idx {
-                     let hover_y = area.y + 1 + (hovered_slot as u16 * 2);
-                     if hover_y < area.y + area.height {
-                         for x in col_x..col_x + col_width {
-                             if let Some(cell) = buf.cell_mut((x, hover_y)) {
-                                 cell.set_fg(hovered_style.fg.unwrap_or(ratatui::style::Color::Reset));
-                                 cell.set_bg(hovered_style.bg.unwrap_or(ratatui::style::Color::Reset));
-                             }
-                         }
-                     }
-                 }
-             }
+            let hovered_style = crate::ui::shared::hover_style(&self.theme);
+            if let Some((hovered_idx, hovered_slot)) = state.hovered_slot.element_id {
+                if hovered_idx == idx {
+                    let hover_y = area.y + 1 + (hovered_slot as u16 * 2);
+                    if hover_y < area.y + area.height {
+                        for x in col_x..col_x + col_width {
+                            if let Some(cell) = buf.cell_mut((x, hover_y)) {
+                                cell.set_fg(
+                                    hovered_style.fg.unwrap_or(ratatui::style::Color::Reset),
+                                );
+                                cell.set_bg(
+                                    hovered_style.bg.unwrap_or(ratatui::style::Color::Reset),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
 
-             let slot_y = area.y + 1 + (state.selected_time_slot as u16 * 2);
-             if slot_y < area.y + area.height {
-                 let highlight_style = if is_selected {
-                     Style::default().bg(self.theme.colors.highlight)
-                 } else {
-                     Style::default()
-                         .bg(self.theme.colors.selected)
-                         .fg(self.theme.colors.border)
-                 };
-                 for x in col_x..col_x + col_width {
-                     if let Some(cell) = buf.cell_mut((x, slot_y)) {
-                         cell.set_bg(highlight_style.bg.unwrap_or(ratatui::style::Color::Reset));
-                     }
-                 }
-             }
+            let slot_y = area.y + 1 + (state.selected_time_slot as u16 * 2);
+            if slot_y < area.y + area.height {
+                let highlight_style = if is_selected {
+                    Style::default().bg(self.theme.colors.highlight)
+                } else {
+                    Style::default()
+                        .bg(self.theme.colors.selected)
+                        .fg(self.theme.colors.border)
+                };
+                for x in col_x..col_x + col_width {
+                    if let Some(cell) = buf.cell_mut((x, slot_y)) {
+                        cell.set_bg(highlight_style.bg.unwrap_or(ratatui::style::Color::Reset));
+                    }
+                }
+            }
         }
     }
 

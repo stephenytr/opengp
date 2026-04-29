@@ -54,8 +54,7 @@ impl AppointmentHistoryGenerator {
             self.config.min_appointments_per_patient
         } else {
             self.rng.gen_range(
-                self.config.min_appointments_per_patient
-                    ..=self.config.max_appointments_per_patient,
+                self.config.min_appointments_per_patient..=self.config.max_appointments_per_patient,
             )
         };
 
@@ -200,7 +199,9 @@ mod tests {
         let appointments = generator.generate_for_patient(patient_id, practitioner_ids);
 
         let now = Utc::now();
-        assert!(appointments.iter().all(|appointment| appointment.start_time < now));
+        assert!(appointments
+            .iter()
+            .all(|appointment| appointment.start_time < now));
     }
 
     #[test]

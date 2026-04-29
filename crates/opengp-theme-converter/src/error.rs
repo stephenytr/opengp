@@ -1,7 +1,6 @@
+use serde_yaml::Error as YamlDeError;
 use thiserror::Error;
 use toml::de::Error as TomlDeError;
-use serde_yaml::Error as YamlDeError;
-
 
 #[derive(Debug, Error)]
 pub enum ThemeConverterError {

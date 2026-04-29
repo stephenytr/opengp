@@ -1,14 +1,14 @@
-use std::sync::Arc;
 use rat_salsa::{SalsaAppContext, SalsaContext};
+use std::sync::Arc;
 
-use crate::ui::app::event::AppEvent;
-use crate::ui::app::error::AppError;
-use crate::ui::keybinds::KeybindRegistry;
-use crate::ui::theme::Theme;
-use crate::ui::services::{
-    BillingUiService, ClinicalUiService, AppointmentUiService, PatientUiService,
-};
 use crate::api::ApiClient;
+use crate::ui::app::error::AppError;
+use crate::ui::app::event::AppEvent;
+use crate::ui::keybinds::KeybindRegistry;
+use crate::ui::services::{
+    AppointmentUiService, BillingUiService, ClinicalUiService, PatientUiService,
+};
+use crate::ui::theme::Theme;
 
 /// GlobalState holds long-lived dependencies and the rat-salsa execution context.
 /// It does NOT contain mutable UI state — that belongs in AppState.

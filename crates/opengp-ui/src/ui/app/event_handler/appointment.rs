@@ -62,7 +62,9 @@ impl App {
                     AppointmentDetailModalAction::ViewClinicalNotes => {
                         let patient_id = modal.patient_id();
                         self.appointment_detail_modal = None;
-                        if let Some(patient_item) = self.patient_list.get_patient_by_id(patient_id).cloned() {
+                        if let Some(patient_item) =
+                            self.patient_list.get_patient_by_id(patient_id).cloned()
+                        {
                             match self.open_patient_workspace(patient_item) {
                                 Ok(_) => {
                                     self.previous_tab = Tab::PatientSearch;
@@ -94,7 +96,9 @@ impl App {
                         let appointment_id = modal.appointment_id();
                         let practitioner_id = modal.appointment().practitioner_id;
                         self.appointment_detail_modal = None;
-                        if let Some(patient_item) = self.patient_list.get_patient_by_id(patient_id).cloned() {
+                        if let Some(patient_item) =
+                            self.patient_list.get_patient_by_id(patient_id).cloned()
+                        {
                             match self.open_patient_workspace(patient_item) {
                                 Ok(_) => {
                                     if let Some(workspace) = self.workspace_manager.active_mut() {

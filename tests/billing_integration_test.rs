@@ -2,11 +2,13 @@
 
 use chrono::{Datelike, NaiveDate, Utc};
 use opengp_domain::domain::billing::{
-    BillingError, BillingRepository, BillingService, BillingType, Invoice, InvoiceItem, InvoiceStatus,
-    ServiceError as BillingServiceError, ValidationError as BillingValidationError,
+    BillingError, BillingRepository, BillingService, BillingType, Invoice, InvoiceItem,
+    InvoiceStatus, ServiceError as BillingServiceError, ValidationError as BillingValidationError,
 };
 use opengp_domain::domain::clinical::{Consultation, ConsultationRepository};
-use opengp_domain::domain::patient::{Address, Gender, NewPatientData, PatientRepository, PatientService};
+use opengp_domain::domain::patient::{
+    Address, Gender, NewPatientData, PatientRepository, PatientService,
+};
 use opengp_infrastructure::infrastructure::crypto::EncryptionService;
 use opengp_infrastructure::infrastructure::database::repositories::{
     SqlxBillingRepository, SqlxClinicalRepository, SqlxPatientRepository,
@@ -48,7 +50,8 @@ async fn setup_test_database() -> PgPool {
 
 fn build_billing_service(pool: &PgPool) -> BillingService {
     let crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
-    let billing_repo: Arc<dyn BillingRepository> = Arc::new(SqlxBillingRepository::new(pool.clone()));
+    let billing_repo: Arc<dyn BillingRepository> =
+        Arc::new(SqlxBillingRepository::new(pool.clone()));
     let clinical_repo: Arc<dyn ConsultationRepository> =
         Arc::new(SqlxClinicalRepository::new(pool.clone(), crypto));
 
@@ -61,7 +64,8 @@ fn build_billing_repository(pool: &PgPool) -> Arc<dyn BillingRepository> {
 
 async fn create_test_patient(pool: &PgPool) -> Uuid {
     let crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
-    let repository: Arc<dyn PatientRepository> = Arc::new(SqlxPatientRepository::new(pool.clone(), crypto));
+    let repository: Arc<dyn PatientRepository> =
+        Arc::new(SqlxPatientRepository::new(pool.clone(), crypto));
     let service = PatientService::new(repository);
 
     let medicare_number = format!("{:010}", Uuid::new_v4().as_u128() % 10_000_000_000);
@@ -124,7 +128,12 @@ async fn create_test_practitioner(pool: &PgPool) -> Uuid {
     id
 }
 
-async fn create_consultation(pool: &PgPool, patient_id: Uuid, practitioner_id: Uuid, signed: bool) -> Uuid {
+async fn create_consultation(
+    pool: &PgPool,
+    patient_id: Uuid,
+    practitioner_id: Uuid,
+    signed: bool,
+) -> Uuid {
     let crypto = Arc::new(EncryptionService::new().expect("Failed to initialize encryption"));
     let consultation_repo: Arc<dyn ConsultationRepository> =
         Arc::new(SqlxClinicalRepository::new(pool.clone(), crypto));
@@ -146,7 +155,12 @@ async fn create_consultation(pool: &PgPool, patient_id: Uuid, practitioner_id: U
     consultation.id
 }
 
-fn build_draft_invoice(patient_id: Uuid, practitioner_id: Uuid, created_by: Uuid, invoice_number: String) -> Invoice {
+fn build_draft_invoice(
+    patient_id: Uuid,
+    practitioner_id: Uuid,
+    created_by: Uuid,
+    invoice_number: String,
+) -> Invoice {
     let now = Utc::now();
     Invoice {
         id: Uuid::new_v4(),
@@ -192,7 +206,10 @@ async fn test_create_invoice_from_consultation() {
     let invoice = billing_service
         .create_invoice_from_consultation(
             consultation_id,
-            vec![("23".to_string(), 89.0, true), ("10990".to_string(), 25.0, false)],
+            vec![
+                ("23".to_string(), 89.0, true),
+                ("10990".to_string(), 25.0, false),
+            ],
             BillingType::PrivateBilling,
             practitioner_id,
         )
@@ -265,7 +282,10 @@ async fn test_record_cash_payment_partial() {
 
     assert_eq!(updated_invoice.status, InvoiceStatus::PartiallyPaid);
     assert_eq!(updated_invoice.amount_paid, partial_amount);
-    assert_eq!(updated_invoice.amount_outstanding, invoice.total_amount - partial_amount);
+    assert_eq!(
+        updated_invoice.amount_outstanding,
+        invoice.total_amount - partial_amount
+    );
 }
 
 #[tokio::test]
@@ -295,9 +315,15 @@ async fn test_prepare_claim_json() {
     let parsed: Value = serde_json::from_str(&claim_json).expect("Claim JSON should be valid");
     assert_eq!(parsed["invoice_id"], invoice.id.to_string());
     assert_eq!(parsed["patient_id"], invoice.patient_id.to_string());
-    assert_eq!(parsed["practitioner_id"], invoice.practitioner_id.to_string());
+    assert_eq!(
+        parsed["practitioner_id"],
+        invoice.practitioner_id.to_string()
+    );
     assert!(parsed["items"].is_array(), "items should be an array");
-    assert!(parsed["total_claimed"].is_number(), "total_claimed should be numeric");
+    assert!(
+        parsed["total_claimed"].is_number(),
+        "total_claimed should be numeric"
+    );
 }
 
 #[tokio::test]
@@ -423,7 +449,10 @@ async fn test_gst_calculation() {
     let invoice = billing_service
         .create_invoice_from_consultation(
             consultation_id,
-            vec![("23".to_string(), 80.0, true), ("SUPPLY-1".to_string(), 50.0, false)],
+            vec![
+                ("23".to_string(), 80.0, true),
+                ("SUPPLY-1".to_string(), 50.0, false),
+            ],
             BillingType::PrivateBilling,
             practitioner_id,
         )
@@ -450,7 +479,8 @@ async fn test_invoice_status_transitions() {
         .await
         .expect("Failed to generate invoice number");
 
-    let draft_invoice = build_draft_invoice(patient_id, practitioner_id, practitioner_id, invoice_number);
+    let draft_invoice =
+        build_draft_invoice(patient_id, practitioner_id, practitioner_id, invoice_number);
     let created = billing_service
         .create_invoice(draft_invoice)
         .await
@@ -497,7 +527,9 @@ async fn test_cannot_create_invoice_from_unsigned_consultation() {
 
     assert!(matches!(
         result,
-        Err(BillingError::Validation(BillingValidationError::ConsultationNotSigned))
+        Err(BillingError::Validation(
+            BillingValidationError::ConsultationNotSigned
+        ))
     ));
     assert!(!matches!(result, Err(BillingServiceError::Repository(_))));
 }

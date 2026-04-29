@@ -3,13 +3,13 @@
 //! Displays when no patients are currently open, showing OpenGP title,
 //! empty state message, and keybind hints for common actions.
 
+use crate::ui::theme::Theme;
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Widget},
 };
-use crate::ui::theme::Theme;
 
 /// Welcome panel widget for empty workspace state
 #[derive(Clone)]
@@ -76,20 +76,22 @@ impl Widget for WelcomePanel {
         lines.push(Line::from(""));
 
         // Keybind hints
-        lines.push(Line::from(vec![Span::styled(
-            "F2",
-            Style::default()
-                .fg(self.theme.colors.secondary)
-                .add_modifier(Modifier::BOLD),
+        lines.push(Line::from(vec![
+            Span::styled(
+                "F2",
+                Style::default()
+                    .fg(self.theme.colors.secondary)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" — Appointments calendar"),
         ]));
 
-        lines.push(Line::from(vec![Span::styled(
-            "F3",
-            Style::default()
-                .fg(self.theme.colors.secondary)
-                .add_modifier(Modifier::BOLD),
+        lines.push(Line::from(vec![
+            Span::styled(
+                "F3",
+                Style::default()
+                    .fg(self.theme.colors.secondary)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" — Search patients"),
         ]));

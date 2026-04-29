@@ -72,9 +72,15 @@ pub trait BillingRepository: Send + Sync {
     /// Record a payment against an invoice.
     async fn record_payment(&self, payment: Payment) -> Result<Payment, RepositoryError>;
 
-    async fn find_payments_by_invoice(&self, invoice_id: Uuid) -> Result<Vec<Payment>, RepositoryError>;
+    async fn find_payments_by_invoice(
+        &self,
+        invoice_id: Uuid,
+    ) -> Result<Vec<Payment>, RepositoryError>;
 
-    async fn find_payments_by_patient(&self, patient_id: Uuid) -> Result<Vec<Payment>, RepositoryError>;
+    async fn find_payments_by_patient(
+        &self,
+        patient_id: Uuid,
+    ) -> Result<Vec<Payment>, RepositoryError>;
 
     async fn find_payments_by_date_range(
         &self,
@@ -82,7 +88,10 @@ pub trait BillingRepository: Send + Sync {
         end: DateTime<Utc>,
     ) -> Result<Vec<Payment>, RepositoryError>;
 
-    async fn find_invoice_items(&self, invoice_id: Uuid) -> Result<Vec<InvoiceItem>, RepositoryError>;
+    async fn find_invoice_items(
+        &self,
+        invoice_id: Uuid,
+    ) -> Result<Vec<InvoiceItem>, RepositoryError>;
 
     async fn next_invoice_number(&self, year: i32) -> Result<String, RepositoryError>;
 }

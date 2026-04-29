@@ -35,15 +35,16 @@ pub(super) async fn list_appointments(
     let page = query.page.unwrap_or(1).max(1);
     let limit = query.limit.unwrap_or(25).clamp(1, 100);
     let repository_limit = i64::from(page.saturating_mul(limit)).max(100);
-    let (date_from, date_to) =
-        if let Some(date) = query.date {
-            (
-                date.and_hms_opt(0, 0, 0).map(|dt| Utc.from_utc_datetime(&dt)),
-                date.and_hms_opt(23, 59, 59).map(|dt| Utc.from_utc_datetime(&dt)),
-            )
-        } else {
-            (query.date_from, query.date_to)
-        };
+    let (date_from, date_to) = if let Some(date) = query.date {
+        (
+            date.and_hms_opt(0, 0, 0)
+                .map(|dt| Utc.from_utc_datetime(&dt)),
+            date.and_hms_opt(23, 59, 59)
+                .map(|dt| Utc.from_utc_datetime(&dt)),
+        )
+    } else {
+        (query.date_from, query.date_to)
+    };
 
     let criteria = AppointmentSearchCriteria {
         patient_id: None,

@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use chrono::{Datelike, NaiveDate, TimeZone, Utc, Weekday};
 
-use chrono::NaiveTime;
 use super::shared::{ToUiError, UiResult, UiResultExt};
+use chrono::NaiveTime;
 use opengp_domain::domain::appointment::{
     AppointmentCalendarQuery, AppointmentRepository, AppointmentSearchCriteria, AppointmentService,
     AvailabilityService, CalendarAppointment, CalendarDayView, NewAppointmentData,
@@ -72,10 +72,7 @@ impl AppointmentUiService {
 
     /// Lists all active practitioners.
     pub async fn get_practitioners(&self) -> UiResult<Vec<Practitioner>> {
-        self.practitioner_repo
-            .list_active()
-            .await
-            .map_ui_repo_err()
+        self.practitioner_repo.list_active().await.map_ui_repo_err()
     }
 
     /// Get schedule for a specific date
@@ -83,13 +80,13 @@ impl AppointmentUiService {
     /// Fetches all appointments for the given date and groups them by practitioner
     /// to create a CalendarDayView for calendar rendering.
     pub async fn get_schedule(&self, date: NaiveDate) -> UiResult<CalendarDayView> {
-         // Build date range for the day
-         // SAFETY: Valid hours (0, 23) and valid seconds (0, 59) will always produce Some
-         #[allow(clippy::unwrap_used)]
-         let start_of_day = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
-         // SAFETY: Valid hours (23) and valid seconds (59) will always produce Some
-         #[allow(clippy::unwrap_used)]
-         let end_of_day = Utc.from_utc_datetime(&date.and_hms_opt(23, 59, 59).unwrap());
+        // Build date range for the day
+        // SAFETY: Valid hours (0, 23) and valid seconds (0, 59) will always produce Some
+        #[allow(clippy::unwrap_used)]
+        let start_of_day = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
+        // SAFETY: Valid hours (23) and valid seconds (59) will always produce Some
+        #[allow(clippy::unwrap_used)]
+        let end_of_day = Utc.from_utc_datetime(&date.and_hms_opt(23, 59, 59).unwrap());
 
         // Build search criteria for the date
         let criteria = AppointmentSearchCriteria {
@@ -139,11 +136,13 @@ impl AppointmentUiService {
 
             // Sort by start time for overlap detection
             practitioner_appointments.sort_by_key(|a| a.start_time);
-            
+
             // Detect overlaps: for each pair where start_i < end_j and end_i > start_j
             for i in 0..practitioner_appointments.len() {
                 for j in (i + 1)..practitioner_appointments.len() {
-                    if practitioner_appointments[j].start_time < practitioner_appointments[i].end_time {
+                    if practitioner_appointments[j].start_time
+                        < practitioner_appointments[i].end_time
+                    {
                         practitioner_appointments[i].is_overlapping = true;
                         practitioner_appointments[j].is_overlapping = true;
                     } else {
@@ -226,59 +225,64 @@ impl AppointmentUiService {
             .map_ui_err()
     }
 
-     /// Marks an appointment as no show.
-      pub async fn mark_no_show(
-          &self,
-          appointment_id: uuid::Uuid,
-          user_id: uuid::Uuid,
-      ) -> UiResult<()> {
-          self.domain_service
-              .mark_no_show(appointment_id, user_id)
-              .await
-              .map(|_| ())
-              .map_ui_err()
-      }
+    /// Marks an appointment as no show.
+    pub async fn mark_no_show(
+        &self,
+        appointment_id: uuid::Uuid,
+        user_id: uuid::Uuid,
+    ) -> UiResult<()> {
+        self.domain_service
+            .mark_no_show(appointment_id, user_id)
+            .await
+            .map(|_| ())
+            .map_ui_err()
+    }
 
-      /// Marks an appointment as billing.
-       pub async fn mark_billing(
-           &self,
-           appointment_id: uuid::Uuid,
-           user_id: uuid::Uuid,
-       ) -> UiResult<()> {
-           self.domain_service
-               .mark_billing(appointment_id, user_id)
-               .await
-               .map(|_| ())
-               .map_ui_err()
-       }
+    /// Marks an appointment as billing.
+    pub async fn mark_billing(
+        &self,
+        appointment_id: uuid::Uuid,
+        user_id: uuid::Uuid,
+    ) -> UiResult<()> {
+        self.domain_service
+            .mark_billing(appointment_id, user_id)
+            .await
+            .map(|_| ())
+            .map_ui_err()
+    }
 
-      /// Reschedules an appointment to a new time.
-       pub async fn reschedule_appointment(
-           &self,
-           appointment_id: uuid::Uuid,
-           new_start_time: chrono::DateTime<chrono::Utc>,
-           new_duration_minutes: i64,
-           user_id: uuid::Uuid,
-       ) -> UiResult<()> {
-           self.domain_service
-               .reschedule_appointment(appointment_id, new_start_time, new_duration_minutes, user_id)
-               .await
-               .map(|_| ())
-               .map_ui_err()
-       }
+    /// Reschedules an appointment to a new time.
+    pub async fn reschedule_appointment(
+        &self,
+        appointment_id: uuid::Uuid,
+        new_start_time: chrono::DateTime<chrono::Utc>,
+        new_duration_minutes: i64,
+        user_id: uuid::Uuid,
+    ) -> UiResult<()> {
+        self.domain_service
+            .reschedule_appointment(
+                appointment_id,
+                new_start_time,
+                new_duration_minutes,
+                user_id,
+            )
+            .await
+            .map(|_| ())
+            .map_ui_err()
+    }
 
-      /// Returns the available time slots for a practitioner on a given date.
-      pub async fn get_available_slots(
-          &self,
-          practitioner_id: uuid::Uuid,
-          date: NaiveDate,
-          duration: u32,
-      ) -> UiResult<Vec<NaiveTime>> {
-          self.availability_service
-              .get_available_slots(practitioner_id, date, duration as i64)
-              .await
-              .map_ui_err()
-      }
+    /// Returns the available time slots for a practitioner on a given date.
+    pub async fn get_available_slots(
+        &self,
+        practitioner_id: uuid::Uuid,
+        date: NaiveDate,
+        duration: u32,
+    ) -> UiResult<Vec<NaiveTime>> {
+        self.availability_service
+            .get_available_slots(practitioner_id, date, duration as i64)
+            .await
+            .map_ui_err()
+    }
 }
 
 #[cfg(test)]
@@ -323,7 +327,7 @@ mod tests {
 
         let practitioner_id = Uuid::new_v4();
         let base = Utc::now();
-        
+
         let a = CalendarAppointment {
             id: Uuid::new_v4(),
             patient_id: Uuid::new_v4(),
@@ -354,7 +358,7 @@ mod tests {
             notes: None,
             is_overlapping: false,
         };
-        
+
         let mut appts = vec![a, b];
         appts.sort_by_key(|a| a.start_time);
         for i in 0..appts.len() {
@@ -379,7 +383,7 @@ mod tests {
 
         let practitioner_id = Uuid::new_v4();
         let base = Utc::now();
-        
+
         let a = CalendarAppointment {
             id: Uuid::new_v4(),
             patient_id: Uuid::new_v4(),
@@ -410,7 +414,7 @@ mod tests {
             notes: None,
             is_overlapping: false,
         };
-        
+
         let mut appts = vec![a, b];
         appts.sort_by_key(|a| a.start_time);
         for i in 0..appts.len() {

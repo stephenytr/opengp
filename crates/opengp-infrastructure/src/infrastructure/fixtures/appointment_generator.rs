@@ -951,7 +951,10 @@ mod tests {
         let (appointments, _) = generator.generate_schedule();
 
         for appointment in &appointments {
-            let weekday = appointment.start_time.with_timezone(&chrono::Local).weekday();
+            let weekday = appointment
+                .start_time
+                .with_timezone(&chrono::Local)
+                .weekday();
             assert!(
                 weekday != Weekday::Sat && weekday != Weekday::Sun,
                 "Should not have appointments on weekends"

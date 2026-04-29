@@ -4,8 +4,8 @@ use crate::ui::theme::Theme;
 use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 use crossterm::event::{KeyEvent, MouseEvent};
 use opengp_domain::domain::clinical::Consultation;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Clone)]
 pub struct ConsultationList {
@@ -138,7 +138,11 @@ impl ConsultationList {
         })
     }
 
-    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ConsultationListAction> {
+    pub fn handle_mouse(
+        &mut self,
+        mouse: MouseEvent,
+        area: Rect,
+    ) -> Option<ConsultationListAction> {
         let mut list = self.as_list()?;
         let action = list.handle_mouse(mouse, area);
         self.sync_from(&list);
@@ -146,7 +150,9 @@ impl ConsultationList {
             UnifiedListAction::Select(i) => ConsultationListAction::Select(i),
             UnifiedListAction::Open(c) => ConsultationListAction::Open(Box::new(c)),
             UnifiedListAction::New => ConsultationListAction::New,
-            UnifiedListAction::ContextMenu { index, x, y, .. } => ConsultationListAction::ContextMenu { index, x, y },
+            UnifiedListAction::ContextMenu { index, x, y, .. } => {
+                ConsultationListAction::ContextMenu { index, x, y }
+            }
             _ => ConsultationListAction::Select(self.selected_index),
         })
     }
@@ -156,7 +162,11 @@ impl ConsultationList {
             self.consultations.clone(),
             columns(),
             self.theme.clone(),
-            UnifiedListConfig::new("Consultations", 2, "No consultations found. Press n to add a new consultation."),
+            UnifiedListConfig::new(
+                "Consultations",
+                2,
+                "No consultations found. Press n to add a new consultation.",
+            ),
         );
         list.selected_index = self.selected_index;
         list.scroll_offset = self.scroll_offset;

@@ -35,10 +35,7 @@ impl ClinicalUiService {
 
     /// Retrieves a single consultation by id.
     pub async fn get_consultation(&self, id: Uuid) -> UiResult<Option<Consultation>> {
-        self.service
-            .find_consultation(id)
-            .await
-            .map_ui_repo_err()
+        self.service.find_consultation(id).await.map_ui_repo_err()
     }
 
     /// Creates a new consultation for the given patient and practitioner.

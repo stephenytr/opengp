@@ -2,11 +2,11 @@ use std::rc::Rc;
 
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
-use crossterm::event::{MouseEvent, MouseButton, MouseEventKind};
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use opengp_domain::domain::billing::{ClaimStatus, MedicareClaim};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 use uuid::Uuid;
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Debug, Clone)]
 pub struct ClaimList {
@@ -61,14 +61,19 @@ impl ClaimList {
             UnifiedListAction::Open(_) => ClaimListAction::ViewDetail,
             UnifiedListAction::ContextMenu { index, x, y } => {
                 if let Some(claim) = self.claims.get(index) {
-                    ClaimListAction::ContextMenu { x, y, claim_id: claim.id }
+                    ClaimListAction::ContextMenu {
+                        x,
+                        y,
+                        claim_id: claim.id,
+                    }
                 } else {
                     ClaimListAction::Select(index)
                 }
             }
-            UnifiedListAction::New | UnifiedListAction::Edit(_) | UnifiedListAction::Delete(_) | UnifiedListAction::ToggleInactive => {
-                ClaimListAction::Select(self.selected_index)
-            }
+            UnifiedListAction::New
+            | UnifiedListAction::Edit(_)
+            | UnifiedListAction::Delete(_)
+            | UnifiedListAction::ToggleInactive => ClaimListAction::Select(self.selected_index),
         })
     }
 
@@ -111,7 +116,9 @@ fn columns() -> Vec<UnifiedColumnDef<MedicareClaim>> {
         col("Reference", 18, |c| {
             c.claim_reference.clone().unwrap_or_else(|| "-".to_string())
         }),
-        col("Date", 12, |c| c.service_date.format("%d/%m/%Y").to_string()),
+        col("Date", 12, |c| {
+            c.service_date.format("%d/%m/%Y").to_string()
+        }),
         col("Patient", 12, |c| short_patient(c)),
         col("Type", 14, |c| c.claim_type.to_string()),
         col("Total Claimed", 14, |c| format!("${:.2}", c.total_claimed)),

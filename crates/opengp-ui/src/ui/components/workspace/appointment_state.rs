@@ -1,6 +1,6 @@
-use uuid::Uuid;
-use opengp_domain::domain::appointment::Appointment;
 use crate::ui::components::shared::PaginatedState;
+use opengp_domain::domain::appointment::Appointment;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct PatientAppointmentState {

@@ -21,8 +21,8 @@ use opengp_domain::domain::clinical::{
     ServiceError as ClinicalServiceError, Severity, SmokingStatus, UpdateSocialHistoryData,
 };
 use opengp_domain::domain::patient::{
-    Address, EmergencyContact, Gender, Ihi, MedicareNumber,
-    NewPatientData, PhoneNumber, ServiceError as PatientServiceError, UpdatePatientData,
+    Address, EmergencyContact, Gender, Ihi, MedicareNumber, NewPatientData, PhoneNumber,
+    ServiceError as PatientServiceError, UpdatePatientData,
 };
 use opengp_domain::domain::user::Role;
 use serde::Deserialize;
@@ -326,11 +326,21 @@ pub(super) fn patient_request_to_new_data(
             }),
             None => None,
         },
-        concession_type: payload.concession_type.as_deref().and_then(|s| s.parse().ok()),
+        concession_type: payload
+            .concession_type
+            .as_deref()
+            .and_then(|s| s.parse().ok()),
         concession_number: payload.concession_number,
-        preferred_language: Some(payload.preferred_language.unwrap_or_else(|| "English".to_string())),
+        preferred_language: Some(
+            payload
+                .preferred_language
+                .unwrap_or_else(|| "English".to_string()),
+        ),
         interpreter_required: Some(payload.interpreter_required.unwrap_or(false)),
-        aboriginal_torres_strait_islander: payload.atsi_status.as_deref().and_then(|s| s.parse().ok()),
+        aboriginal_torres_strait_islander: payload
+            .atsi_status
+            .as_deref()
+            .and_then(|s| s.parse().ok()),
         occupation: None,
         employment_status: None,
         health_fund: None,
@@ -376,11 +386,17 @@ pub(super) fn patient_request_to_update_data(
             }),
             None => None,
         },
-        concession_type: payload.concession_type.as_deref().and_then(|s| s.parse().ok()),
+        concession_type: payload
+            .concession_type
+            .as_deref()
+            .and_then(|s| s.parse().ok()),
         concession_number: payload.concession_number,
         preferred_language: payload.preferred_language,
         interpreter_required: payload.interpreter_required,
-        aboriginal_torres_strait_islander: payload.atsi_status.as_deref().and_then(|s| s.parse().ok()),
+        aboriginal_torres_strait_islander: payload
+            .atsi_status
+            .as_deref()
+            .and_then(|s| s.parse().ok()),
         occupation: None,
         employment_status: None,
         health_fund: None,
@@ -789,13 +805,21 @@ pub(super) fn patient_to_response(
         medicare_expiry: patient.medicare_expiry,
         ihi: patient.ihi.map(|i| i.to_string()),
         emergency_contact_name: patient.emergency_contact.as_ref().map(|ec| ec.name.clone()),
-        emergency_contact_phone: patient.emergency_contact.as_ref().map(|ec| ec.phone.clone()),
-        emergency_contact_relationship: patient.emergency_contact.as_ref().map(|ec| ec.relationship.clone()),
+        emergency_contact_phone: patient
+            .emergency_contact
+            .as_ref()
+            .map(|ec| ec.phone.clone()),
+        emergency_contact_relationship: patient
+            .emergency_contact
+            .as_ref()
+            .map(|ec| ec.relationship.clone()),
         concession_type: patient.concession_type.map(|c| c.to_string()),
         concession_number: patient.concession_number,
         preferred_language: Some(patient.preferred_language),
         interpreter_required: Some(patient.interpreter_required),
-        atsi_status: patient.aboriginal_torres_strait_islander.map(|a| a.to_string()),
+        atsi_status: patient
+            .aboriginal_torres_strait_islander
+            .map(|a| a.to_string()),
         is_active: patient.is_active,
         version: patient.version,
     }

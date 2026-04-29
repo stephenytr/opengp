@@ -114,17 +114,15 @@ impl MedicalHistoryState {
 
     /// Move to the next item in the list.
     pub fn next_item(&mut self) {
-        self.medical_history_list.selected_index =
-            (self.medical_history_list.selected_index + 1)
-                .min(self.medical_history.len().saturating_sub(1));
+        self.medical_history_list.selected_index = (self.medical_history_list.selected_index + 1)
+            .min(self.medical_history.len().saturating_sub(1));
     }
 
     /// Move to the previous item in the list.
     pub fn prev_item(&mut self) {
-        self.medical_history_list.selected_index = self.medical_history_list.selected_index.saturating_sub(1);
+        self.medical_history_list.selected_index =
+            self.medical_history_list.selected_index.saturating_sub(1);
     }
-
-
 }
 
 #[cfg(test)]

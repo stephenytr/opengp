@@ -1,11 +1,8 @@
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 use opengp_theme_converter::{
-    parse_by_extension,
-    map_alacritty_to_opengp,
-    render_opengp_toml,
-    check_contrast
+    check_contrast, map_alacritty_to_opengp, parse_by_extension, render_opengp_toml,
 };
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "opengp_theme_converter")]
@@ -29,7 +26,7 @@ enum Commands {
     },
 }
 
-fn run() ->  Result<(), Box<dyn std::error::Error>> {
+fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -38,10 +35,10 @@ fn run() ->  Result<(), Box<dyn std::error::Error>> {
             let alacritty_theme = parse_by_extension(&input, &content)?;
             let opengp_theme = map_alacritty_to_opengp(&alacritty_theme);
             let toml = render_opengp_toml(&opengp_theme)?;
-            
+
             match output {
                 Some(path) => std::fs::write(&path, &toml)?,
-                None => println!("{toml}")
+                None => println!("{toml}"),
             }
         }
         Commands::Validate { file } => {
@@ -59,4 +56,4 @@ fn main() {
         eprintln!("Error: {e}");
         std::process::exit(1);
     }
-} 
+}

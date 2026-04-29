@@ -3,8 +3,8 @@
 //! Manages the lifecycle and state of vital signs recording, form interaction,
 //! and detail modal display.
 
-use crate::ui::theme::Theme;
 use crate::ui::components::clinical::{VitalSignsForm, VitalSignsList, VitalsDetailModal};
+use crate::ui::theme::Theme;
 use opengp_config::healthcare::HealthcareConfig;
 use opengp_domain::domain::clinical::VitalSigns;
 
@@ -46,10 +46,7 @@ impl VitalsState {
 
     /// Open the vital signs form.
     pub fn open_vitals_form(&mut self, theme: Theme) {
-        self.vitals_form = Some(VitalSignsForm::new(
-            theme,
-            self.healthcare_config.clone(),
-        ));
+        self.vitals_form = Some(VitalSignsForm::new(theme, self.healthcare_config.clone()));
     }
 
     /// Close the vital signs form.
@@ -344,7 +341,7 @@ mod tests {
     #[test]
     fn test_navigation_next_prev() {
         let mut state = VitalsState::new(test_theme(), test_healthcare_config());
-        
+
         for _ in 0..3 {
             let vitals = VitalSigns {
                 id: Uuid::new_v4(),
@@ -370,7 +367,7 @@ mod tests {
         let _initial_index = state.vitals_list.selected_index;
         state.next_item();
         let _next_index = state.vitals_list.selected_index;
-        
+
         state.prev_item();
     }
 }

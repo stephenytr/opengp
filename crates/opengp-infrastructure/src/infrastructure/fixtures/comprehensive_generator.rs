@@ -5,7 +5,9 @@
 
 use uuid::Uuid;
 
-use opengp_domain::domain::clinical::{Allergy, Consultation, FamilyHistory, MedicalHistory, VitalSigns};
+use opengp_domain::domain::clinical::{
+    Allergy, Consultation, FamilyHistory, MedicalHistory, VitalSigns,
+};
 use opengp_domain::domain::patient::Patient;
 
 use super::billing_generator::{BillingData, BillingGenerator, BillingGeneratorConfig};
@@ -134,7 +136,8 @@ impl ComprehensivePatientGenerator {
         let consultation_ids = consultations.iter().map(|c| c.id).collect();
 
         let mut billing_gen = BillingGenerator::new(self.config.billing_config.clone());
-        let billing = billing_gen.generate_for_patient(patient.id, practitioner_id, consultation_ids);
+        let billing =
+            billing_gen.generate_for_patient(patient.id, practitioner_id, consultation_ids);
 
         ComprehensivePatientProfile {
             patient,
@@ -203,8 +206,10 @@ mod tests {
     #[test]
     fn test_comprehensive_profile_with_practitioner_pool() {
         let practitioner_ids = vec![
-            Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap_or_else(|_| Uuid::new_v4()),
-            Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap_or_else(|_| Uuid::new_v4()),
+            Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000")
+                .unwrap_or_else(|_| Uuid::new_v4()),
+            Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001")
+                .unwrap_or_else(|_| Uuid::new_v4()),
         ];
 
         let config = ComprehensivePatientGeneratorConfig {

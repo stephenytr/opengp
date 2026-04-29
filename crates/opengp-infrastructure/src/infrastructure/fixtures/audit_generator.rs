@@ -106,10 +106,7 @@ impl AuditGenerator {
             "user",
         ];
 
-        types
-            .choose(&mut self.rng)
-            .unwrap_or(&types[0])
-            .to_string()
+        types.choose(&mut self.rng).unwrap_or(&types[0]).to_string()
     }
 
     /// Generate a random audit action

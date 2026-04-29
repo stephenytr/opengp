@@ -1,9 +1,9 @@
 use opengp::infrastructure::fixtures::{
-    ComprehensiveFixtureGenerator, ComprehensiveFixtureGeneratorConfig, PatientGeneratorConfig,
     AppointmentHistoryGeneratorConfig, BillingGeneratorConfig, ClinicalDataGeneratorConfig,
+    ComprehensiveFixtureGenerator, ComprehensiveFixtureGeneratorConfig, PatientGeneratorConfig,
 };
-use uuid::Uuid;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 fn main() {
     println!("OpenGP Comprehensive Fixture Generator Example\n");
@@ -57,11 +57,30 @@ fn main() {
 
     println!("Configuration:");
     println!("  Patient count: {}", config.patient_count);
-    println!("  Min appointments per patient: {}", config.appointment_history_config.min_appointments_per_patient);
-    println!("  Max appointments per patient: {}", config.appointment_history_config.max_appointments_per_patient);
-    println!("  Bulk billing: {}%", config.billing_config.bulk_billing_percentage * 100.0);
-    println!("  Private billing: {}%", config.billing_config.private_billing_percentage * 100.0);
-    println!("  DVA billing: {}%", config.billing_config.dva_percentage * 100.0);
+    println!(
+        "  Min appointments per patient: {}",
+        config
+            .appointment_history_config
+            .min_appointments_per_patient
+    );
+    println!(
+        "  Max appointments per patient: {}",
+        config
+            .appointment_history_config
+            .max_appointments_per_patient
+    );
+    println!(
+        "  Bulk billing: {}%",
+        config.billing_config.bulk_billing_percentage * 100.0
+    );
+    println!(
+        "  Private billing: {}%",
+        config.billing_config.private_billing_percentage * 100.0
+    );
+    println!(
+        "  DVA billing: {}%",
+        config.billing_config.dva_percentage * 100.0
+    );
     println!();
 
     print!("Generating comprehensive fixtures...");
@@ -72,7 +91,9 @@ fn main() {
     print_summary_statistics(&profiles);
 }
 
-fn print_summary_statistics(profiles: &[opengp::infrastructure::fixtures::ComprehensiveFixtureProfile]) {
+fn print_summary_statistics(
+    profiles: &[opengp::infrastructure::fixtures::ComprehensiveFixtureProfile],
+) {
     println!("==============================================");
     println!("Summary Statistics:");
     println!("==============================================\n");
@@ -109,10 +130,16 @@ fn print_summary_statistics(profiles: &[opengp::infrastructure::fixtures::Compre
     let total_appointments: usize = profiles.iter().map(|p| p.appointments.len()).sum();
     println!("\nAppointment Data:");
     println!("  Total appointments generated: {}", total_appointments);
-    println!("  Average appointments per patient: {:.1}", total_appointments as f32 / profiles.len() as f32);
+    println!(
+        "  Average appointments per patient: {:.1}",
+        total_appointments as f32 / profiles.len() as f32
+    );
 
     let total_invoices: usize = profiles.iter().map(|p| p.billing.invoices.len()).sum();
-    let total_medicare_claims: usize = profiles.iter().map(|p| p.billing.medicare_claims.len()).sum();
+    let total_medicare_claims: usize = profiles
+        .iter()
+        .map(|p| p.billing.medicare_claims.len())
+        .sum();
     let total_dva_claims: usize = profiles.iter().map(|p| p.billing.dva_claims.len()).sum();
     let total_payments: usize = profiles.iter().map(|p| p.billing.payments.len()).sum();
 

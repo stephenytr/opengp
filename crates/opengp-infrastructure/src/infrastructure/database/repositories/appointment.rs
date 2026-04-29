@@ -482,7 +482,9 @@ impl AppointmentRepository for SqlxAppointmentRepository {
         }
 
         let limit = criteria.limit.unwrap_or(100).max(1);
-        query_builder.push(" ORDER BY start_time LIMIT ").push_bind(limit);
+        query_builder
+            .push(" ORDER BY start_time LIMIT ")
+            .push_bind(limit);
 
         let rows = query_builder
             .build_query_as::<AppointmentRow>()

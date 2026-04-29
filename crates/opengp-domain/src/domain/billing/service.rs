@@ -1,10 +1,10 @@
-use std::sync::Arc;
 use chrono::{Datelike, Utc};
 use serde_json::json;
+use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::service;
 use crate::domain::clinical::ConsultationRepository;
+use crate::service;
 
 use super::error::{BillingError, RepositoryError, ServiceError, ValidationError};
 use super::model::{
@@ -237,8 +237,9 @@ impl BillingService {
             "total_claimed": invoice.total_amount,
         });
 
-        Ok(serde_json::to_string_pretty(&payload)
-            .map_err(|err| ServiceError::Validation(ValidationError::ClaimSerializationFailed(err.to_string())))?)
+        Ok(serde_json::to_string_pretty(&payload).map_err(|err| {
+            ServiceError::Validation(ValidationError::ClaimSerializationFailed(err.to_string()))
+        })?)
     }
 
     pub async fn find_patient_balance(&self, patient_id: Uuid) -> Result<f64, BillingError> {
@@ -257,7 +258,9 @@ mod tests {
     use crate::domain::billing::{
         BillingType, ClaimType, InvoiceItem, InvoiceStatus, MBSItem, RepositoryError,
     };
-    use crate::domain::clinical::{Consultation, RepositoryError as ClinicalRepositoryError, TimerState};
+    use crate::domain::clinical::{
+        Consultation, RepositoryError as ClinicalRepositoryError, TimerState,
+    };
     use async_trait::async_trait;
     use chrono::{DateTime, NaiveDate, Utc};
     use std::sync::Mutex;
@@ -325,7 +328,10 @@ mod tests {
                 .invoices
                 .lock()
                 .expect("invoices lock should not be poisoned");
-            if let Some(existing) = invoices.iter_mut().find(|existing| existing.id == invoice.id) {
+            if let Some(existing) = invoices
+                .iter_mut()
+                .find(|existing| existing.id == invoice.id)
+            {
                 *existing = invoice.clone();
             }
             Ok(invoice)
@@ -494,7 +500,10 @@ mod tests {
             Ok(None)
         }
 
-        async fn get_timer_state(&self, _id: Uuid) -> Result<Option<TimerState>, ClinicalRepositoryError> {
+        async fn get_timer_state(
+            &self,
+            _id: Uuid,
+        ) -> Result<Option<TimerState>, ClinicalRepositoryError> {
             Ok(None)
         }
     }
@@ -514,12 +523,8 @@ mod tests {
     }
 
     fn test_consultation(is_signed: bool) -> Consultation {
-        let mut consultation = Consultation::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            None,
-            Uuid::new_v4(),
-        );
+        let mut consultation =
+            Consultation::new(Uuid::new_v4(), Uuid::new_v4(), None, Uuid::new_v4());
         if is_signed {
             consultation.sign(Uuid::new_v4());
         }
@@ -715,7 +720,10 @@ mod tests {
         let invoice = service
             .create_invoice_from_consultation(
                 consultation_id,
-                vec![("23".to_string(), 89.0, true), ("10990".to_string(), 25.0, false)],
+                vec![
+                    ("23".to_string(), 89.0, true),
+                    ("10990".to_string(), 25.0, false),
+                ],
                 BillingType::PrivateBilling,
                 Uuid::new_v4(),
             )
@@ -748,7 +756,9 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(ServiceError::Validation(ValidationError::ConsultationNotSigned))
+            Err(ServiceError::Validation(
+                ValidationError::ConsultationNotSigned
+            ))
         ));
     }
 
@@ -807,9 +817,18 @@ mod tests {
 
         assert_eq!(parsed["invoice_id"], invoice.id.to_string());
         assert_eq!(parsed["patient_id"], invoice.patient_id.to_string());
-        assert_eq!(parsed["practitioner_id"], invoice.practitioner_id.to_string());
+        assert_eq!(
+            parsed["practitioner_id"],
+            invoice.practitioner_id.to_string()
+        );
         assert_eq!(parsed["service_date"], invoice.invoice_date.to_string());
-        assert_eq!(parsed["items"].as_array().expect("items should be array").len(), 1);
+        assert_eq!(
+            parsed["items"]
+                .as_array()
+                .expect("items should be array")
+                .len(),
+            1
+        );
         assert_eq!(parsed["total_claimed"], invoice.total_amount);
     }
 

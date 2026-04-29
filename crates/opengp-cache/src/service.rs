@@ -381,7 +381,10 @@ impl CacheServiceImpl {
         Ok(fetched)
     }
 
-    pub async fn try_acquire_stampede_lock(&self, guard: &StampedeGuard) -> Result<bool, CacheError> {
+    pub async fn try_acquire_stampede_lock(
+        &self,
+        guard: &StampedeGuard,
+    ) -> Result<bool, CacheError> {
         if !self.circuit_breaker.allow_request() {
             return Err(CacheError::ConnectionFailed(
                 "Circuit breaker is open".to_string(),

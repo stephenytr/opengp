@@ -1,10 +1,11 @@
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{Event, KeyEvent};
+use rat_event::ct_event;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::theme::Theme;
 
@@ -49,8 +50,10 @@ impl LoginScreen {
             return None;
         }
 
-        match key.code {
-            KeyCode::Tab | KeyCode::Down => {
+        let event = Event::Key(key);
+
+        match &event {
+            ct_event!(keycode press Tab) => {
                 self.focus = match self.focus {
                     LoginFocus::Username => LoginFocus::Password,
                     LoginFocus::Password => LoginFocus::Submit,
@@ -58,7 +61,15 @@ impl LoginScreen {
                 };
                 None
             }
-            KeyCode::BackTab | KeyCode::Up => {
+            ct_event!(keycode press Down) => {
+                self.focus = match self.focus {
+                    LoginFocus::Username => LoginFocus::Password,
+                    LoginFocus::Password => LoginFocus::Submit,
+                    LoginFocus::Submit => LoginFocus::Username,
+                };
+                None
+            }
+            ct_event!(keycode press BackTab) => {
                 self.focus = match self.focus {
                     LoginFocus::Username => LoginFocus::Submit,
                     LoginFocus::Password => LoginFocus::Username,
@@ -66,7 +77,15 @@ impl LoginScreen {
                 };
                 None
             }
-            KeyCode::Backspace => {
+            ct_event!(keycode press Up) => {
+                self.focus = match self.focus {
+                    LoginFocus::Username => LoginFocus::Submit,
+                    LoginFocus::Password => LoginFocus::Username,
+                    LoginFocus::Submit => LoginFocus::Password,
+                };
+                None
+            }
+            ct_event!(keycode press Backspace) => {
                 match self.focus {
                     LoginFocus::Username => {
                         self.username.pop();
@@ -78,7 +97,7 @@ impl LoginScreen {
                 }
                 None
             }
-            KeyCode::Enter => {
+            ct_event!(keycode press Enter) => {
                 if self.focus != LoginFocus::Submit {
                     self.focus = match self.focus {
                         LoginFocus::Username => LoginFocus::Password,
@@ -101,10 +120,10 @@ impl LoginScreen {
                     password: self.password.clone(),
                 })
             }
-            KeyCode::Char(c) => {
+            ct_event!(key press c) => {
                 match self.focus {
-                    LoginFocus::Username => self.username.push(c),
-                    LoginFocus::Password => self.password.push(c),
+                    LoginFocus::Username => self.username.push(*c),
+                    LoginFocus::Password => self.password.push(*c),
                     LoginFocus::Submit => {}
                 }
                 None
@@ -229,7 +248,7 @@ impl Widget for LoginScreen {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossterm::event::KeyModifiers;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     #[test]
     fn masks_password_characters() {

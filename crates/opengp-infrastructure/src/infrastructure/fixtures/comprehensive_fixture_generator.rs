@@ -1,7 +1,9 @@
 use uuid::Uuid;
 
 use opengp_domain::domain::appointment::Appointment;
-use opengp_domain::domain::clinical::{Allergy, Consultation, FamilyHistory, MedicalHistory, VitalSigns};
+use opengp_domain::domain::clinical::{
+    Allergy, Consultation, FamilyHistory, MedicalHistory, VitalSigns,
+};
 use opengp_domain::domain::patient::Patient;
 
 use super::appointment_history_generator::{
@@ -77,20 +79,21 @@ impl ComprehensiveFixtureGenerator {
             .or_else(|| self.config.practitioner_ids.first().copied())
             .unwrap_or_else(Uuid::new_v4);
 
-        let mut clinical_generator = ClinicalDataGenerator::new(self.config.clinical_config.clone());
+        let mut clinical_generator =
+            ClinicalDataGenerator::new(self.config.clinical_config.clone());
         let medical_history = clinical_generator.generate_medical_history(patient.id);
         let allergies = clinical_generator.generate_allergies(patient.id);
         let consultations = clinical_generator.generate_consultations(patient.id, practitioner_id);
         let vitals = clinical_generator.generate_vitals(patient.id);
         let family_history = clinical_generator.generate_family_history(patient.id);
-        let consultation_ids = consultations.iter().map(|consultation| consultation.id).collect();
+        let consultation_ids = consultations
+            .iter()
+            .map(|consultation| consultation.id)
+            .collect();
 
         let mut billing_generator = BillingGenerator::new(self.billing_config());
-        let billing = billing_generator.generate_for_patient(
-            patient.id,
-            practitioner_id,
-            consultation_ids,
-        );
+        let billing =
+            billing_generator.generate_for_patient(patient.id, practitioner_id, consultation_ids);
 
         ComprehensiveFixtureProfile {
             patient,

@@ -16,7 +16,9 @@ impl App {
         if !self.authenticated {
             return None;
         }
-        self.workspace_manager_mut().active_mut().and_then(|w| w.pending_billing.take())
+        self.workspace_manager_mut()
+            .active_mut()
+            .and_then(|w| w.pending_billing.take())
     }
 
     pub fn open_billing_invoice_detail(&mut self, invoice_id: uuid::Uuid) {
@@ -43,7 +45,9 @@ impl App {
             }
         }
 
-        workspace_manager.active_mut().and_then(|w| w.billing.as_mut())
+        workspace_manager
+            .active_mut()
+            .and_then(|w| w.billing.as_mut())
     }
 
     pub fn load_billing_data(&mut self) {
@@ -51,7 +55,9 @@ impl App {
             Some(ws) => ws.patient_id,
             None => return,
         };
-        let _ = self.command_tx.send(AppCommand::LoadBillingData { patient_id });
+        let _ = self
+            .command_tx
+            .send(AppCommand::LoadBillingData { patient_id });
     }
 
     pub fn request_load_billing(&mut self) {
@@ -59,7 +65,10 @@ impl App {
             Some(ws) => ws.patient_id,
             None => return,
         };
-        if self.workspace_manager().is_subtab_loading(SubtabKind::Billing) {
+        if self
+            .workspace_manager()
+            .is_subtab_loading(SubtabKind::Billing)
+        {
             return;
         }
         let _ = self.command_tx.send(AppCommand::LoadPatientWorkspaceData {

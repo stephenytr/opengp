@@ -1,15 +1,15 @@
 use chrono::Datelike;
 use chrono::NaiveDate;
 use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::Widget;
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
+use crate::ui::input::DoubleClickDetector;
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{CalendarMode, CalendarWidget};
-use crate::ui::input::DoubleClickDetector;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -294,7 +294,7 @@ impl Widget for Calendar {
         } else {
             self.widget.hovered_day_index = None;
         }
-        
+
         self.widget
             .render_calendar(area, buf, CalendarMode::Scheduling);
     }
@@ -407,7 +407,6 @@ mod tests {
         }
     }
 }
-
 
 impl HasFocus for Calendar {
     fn build(&self, builder: &mut FocusBuilder) {

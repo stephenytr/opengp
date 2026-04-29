@@ -2,10 +2,10 @@
 //! These tests define the expected behavior of workspace keybind dispatch
 //! Tests should FAIL initially (RED), then pass after implementation (GREEN)
 
-use crate::ui::view_models::PatientListItem;
-use crate::ui::components::workspace::{WorkspaceManager, WorkspaceError};
+use crate::ui::components::workspace::{WorkspaceError, WorkspaceManager};
 use crate::ui::components::SubtabKind;
 use crate::ui::theme::Theme;
+use crate::ui::view_models::PatientListItem;
 use chrono::NaiveDate;
 use opengp_domain::domain::patient::Gender;
 use uuid::Uuid;
@@ -31,18 +31,18 @@ fn test_workspace_manager_cycle_next_basic() {
     let p1 = test_patient(None);
     let p2 = test_patient(None);
     let p3 = test_patient(None);
-    
+
     manager.open_patient(p1).unwrap();
     manager.open_patient(p2).unwrap();
     manager.open_patient(p3).unwrap();
     manager.active_index = Some(0);
-    
+
     manager.cycle_next();
     assert_eq!(manager.active_index, Some(1));
-    
+
     manager.cycle_next();
     assert_eq!(manager.active_index, Some(2));
-    
+
     manager.cycle_next();
     assert_eq!(manager.active_index, Some(0));
 }
@@ -54,15 +54,15 @@ fn test_workspace_manager_cycle_prev_basic() {
     let p1 = test_patient(None);
     let p2 = test_patient(None);
     let p3 = test_patient(None);
-    
+
     manager.open_patient(p1).unwrap();
     manager.open_patient(p2).unwrap();
     manager.open_patient(p3).unwrap();
     manager.active_index = Some(0);
-    
+
     manager.cycle_prev();
     assert_eq!(manager.active_index, Some(2));
-    
+
     manager.cycle_prev();
     assert_eq!(manager.active_index, Some(1));
 }
@@ -73,11 +73,11 @@ fn test_workspace_manager_close_active() {
     let mut manager = WorkspaceManager::new(theme, 5);
     let p1 = test_patient(None);
     let p2 = test_patient(None);
-    
+
     manager.open_patient(p1).unwrap();
     manager.open_patient(p2).unwrap();
     assert_eq!(manager.workspaces.len(), 2);
-    
+
     manager.close_active().unwrap();
     assert_eq!(manager.workspaces.len(), 1);
     assert_eq!(manager.active_index, Some(0));
@@ -89,10 +89,10 @@ fn test_workspace_manager_select_by_index_valid() {
     let mut manager = WorkspaceManager::new(theme, 5);
     let p1 = test_patient(None);
     let p2 = test_patient(None);
-    
+
     manager.open_patient(p1).unwrap();
     manager.open_patient(p2).unwrap();
-    
+
     manager.select_by_index(1).unwrap();
     assert_eq!(manager.active_index, Some(1));
 }
@@ -102,9 +102,9 @@ fn test_workspace_manager_select_by_index_out_of_range() {
     let theme = Theme::default();
     let mut manager = WorkspaceManager::new(theme, 5);
     let p1 = test_patient(None);
-    
+
     manager.open_patient(p1).unwrap();
-    
+
     let result = manager.select_by_index(5);
     assert!(matches!(result, Err(WorkspaceError::IndexOutOfRange)));
 }
@@ -116,10 +116,10 @@ fn test_workspace_manager_open_at_limit() {
     let p1 = test_patient(None);
     let p2 = test_patient(None);
     let p3 = test_patient(None);
-    
+
     manager.open_patient(p1).unwrap();
     manager.open_patient(p2).unwrap();
-    
+
     let result = manager.open_patient(p3);
     assert!(matches!(result, Err(WorkspaceError::AlreadyAtLimit)));
 }
@@ -131,12 +131,12 @@ fn test_subtab_kind_sequence() {
     let theme = Theme::default();
     let mut manager = WorkspaceManager::new(theme, 5);
     let patient = test_patient(None);
-    
+
     manager.open_patient(patient).unwrap();
     let workspace = manager.active_mut().unwrap();
-    
+
     assert_eq!(workspace.active_subtab, SubtabKind::Clinical);
-    
+
     fn next_subtab(current: SubtabKind) -> SubtabKind {
         match current {
             SubtabKind::Clinical => SubtabKind::Billing,
@@ -152,7 +152,7 @@ fn test_subtab_kind_sequence() {
             SubtabKind::Immunisation => SubtabKind::Clinical,
         }
     }
-    
+
     let next = next_subtab(workspace.active_subtab);
     assert_eq!(next, SubtabKind::Billing);
 }
@@ -162,14 +162,14 @@ fn test_workspace_is_loaded_tracking() {
     let theme = Theme::default();
     let mut manager = WorkspaceManager::new(theme, 5);
     let patient = test_patient(None);
-    
+
     manager.open_patient(patient).unwrap();
-    
+
     assert!(!manager.is_subtab_loaded(SubtabKind::Clinical));
-    
+
     manager.mark_subtab_loaded(SubtabKind::Clinical);
     assert!(manager.is_subtab_loaded(SubtabKind::Clinical));
-    
+
     assert!(!manager.is_subtab_loaded(SubtabKind::Billing));
 }
 
@@ -178,10 +178,10 @@ fn test_subtab_cycle_next_wraps_clinical_to_billing() {
     let mut workspace_manager = WorkspaceManager::new(Theme::default(), 5);
     let patient = test_patient(None);
     workspace_manager.open_patient(patient).unwrap();
-    
+
     let workspace = workspace_manager.active_mut().unwrap();
     assert_eq!(workspace.active_subtab, SubtabKind::Clinical);
-    
+
     workspace.active_subtab = SubtabKind::Billing;
     assert_eq!(workspace.active_subtab, SubtabKind::Billing);
 }
@@ -191,10 +191,10 @@ fn test_subtab_cycle_prev_wraps_clinical_to_appointments() {
     let mut workspace_manager = WorkspaceManager::new(Theme::default(), 5);
     let patient = test_patient(None);
     workspace_manager.open_patient(patient).unwrap();
-    
+
     let workspace = workspace_manager.active_mut().unwrap();
     assert_eq!(workspace.active_subtab, SubtabKind::Clinical);
-    
+
     workspace.active_subtab = SubtabKind::Appointments;
     assert_eq!(workspace.active_subtab, SubtabKind::Appointments);
 }
@@ -205,14 +205,14 @@ fn test_close_active_removes_workspace() {
     let mut manager = WorkspaceManager::new(theme, 5);
     let p1 = test_patient(None);
     let p2 = test_patient(None);
-    
+
     manager.open_patient(p1).unwrap();
     manager.open_patient(p2).unwrap();
     assert_eq!(manager.workspaces.len(), 2);
     assert_eq!(manager.active_index, Some(1));
-    
+
     manager.close_active().unwrap();
-    
+
     assert_eq!(manager.workspaces.len(), 1);
     assert_eq!(manager.active_index, Some(0));
 }
@@ -224,16 +224,16 @@ fn test_next_prev_tab_cycle_through_patients() {
     let p1 = test_patient(None);
     let p2 = test_patient(None);
     let p3 = test_patient(None);
-    
+
     manager.open_patient(p1).unwrap();
     manager.open_patient(p2).unwrap();
     manager.open_patient(p3).unwrap();
-    
+
     assert_eq!(manager.active_index, Some(2));
-    
+
     manager.cycle_next();
     assert_eq!(manager.active_index, Some(0));
-    
+
     manager.cycle_prev();
     assert_eq!(manager.active_index, Some(2));
 }
@@ -244,11 +244,11 @@ fn test_select_by_index_valid() {
     let mut manager = WorkspaceManager::new(theme, 5);
     let p1 = test_patient(None);
     let p2 = test_patient(None);
-    
+
     manager.open_patient(p1).unwrap();
     manager.open_patient(p2).unwrap();
     assert_eq!(manager.active_index, Some(1));
-    
+
     manager.select_by_index(0).unwrap();
     assert_eq!(manager.active_index, Some(0));
 }
@@ -260,12 +260,12 @@ fn test_open_patient_idempotent_returns_existing_index() {
     let patient_id = Uuid::new_v4();
     let p1 = test_patient(Some(patient_id));
     let p2 = test_patient(None);
-    
+
     let idx1 = manager.open_patient(p1.clone()).unwrap();
     manager.open_patient(p2).unwrap();
-    
+
     let idx2 = manager.open_patient(p1).unwrap();
-    
+
     assert_eq!(idx1, idx2);
     assert_eq!(manager.workspaces.len(), 2);
 }
@@ -276,9 +276,9 @@ fn test_open_at_max_limit_returns_error() {
     let mut manager = WorkspaceManager::new(theme, 1);
     let p1 = test_patient(None);
     let p2 = test_patient(None);
-    
+
     manager.open_patient(p1).unwrap();
-    
+
     let result = manager.open_patient(p2);
     assert!(matches!(result, Err(WorkspaceError::AlreadyAtLimit)));
     assert_eq!(manager.workspaces.len(), 1);

@@ -3,11 +3,11 @@
 //! Provides tab bar for switching between main application sections.
 
 use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::input::DoubleClickDetector;
 use crate::ui::shared::{hover_style, invert_color};
@@ -177,8 +177,8 @@ impl TabBar {
 
     /// Handle key event
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<Tab> {
+        use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
         use crossterm::event::KeyEventKind;
-        use crate::ui::keybinds::{KeyContext, KeybindRegistry, Action};
 
         if key.kind != KeyEventKind::Press {
             return None;

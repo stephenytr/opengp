@@ -81,8 +81,12 @@ impl BillingUiService {
 
     fn map_billing_error(error: BillingError) -> UiServiceError {
         match error {
-            ServiceError::InvoiceNotFound(id) => UiServiceError::NotFound(format!("Invoice not found: {id}")),
-            ServiceError::ClaimNotFound(id) => UiServiceError::NotFound(format!("Claim not found: {id}")),
+            ServiceError::InvoiceNotFound(id) => {
+                UiServiceError::NotFound(format!("Invoice not found: {id}"))
+            }
+            ServiceError::ClaimNotFound(id) => {
+                UiServiceError::NotFound(format!("Claim not found: {id}"))
+            }
             ServiceError::ConsultationNotFound(id) => {
                 UiServiceError::NotFound(format!("Consultation not found: {id}"))
             }

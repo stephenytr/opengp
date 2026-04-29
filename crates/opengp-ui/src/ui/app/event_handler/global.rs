@@ -13,16 +13,29 @@ impl App {
     pub fn handle_global_mouse_event(&mut self, mouse: MouseEvent, area: Rect) {
         const MAIN_TAB_WIDTH: u16 = 38;
         let main_tab_bar_area = Rect::new(area.x, area.y, MAIN_TAB_WIDTH, 1);
-        let patient_tab_bar_area = Rect::new(area.x + MAIN_TAB_WIDTH, area.y, area.width.saturating_sub(MAIN_TAB_WIDTH), 1);
+        let patient_tab_bar_area = Rect::new(
+            area.x + MAIN_TAB_WIDTH,
+            area.y,
+            area.width.saturating_sub(MAIN_TAB_WIDTH),
+            1,
+        );
 
-        if self.tab_bar.handle_mouse(mouse, main_tab_bar_area).is_some() {
+        if self
+            .tab_bar
+            .handle_mouse(mouse, main_tab_bar_area)
+            .is_some()
+        {
             self.refresh_status_bar();
             self.refresh_context();
             return;
         }
 
         if !self.workspace_manager.workspaces.is_empty() {
-            if self.workspace_manager.handle_patient_tab_mouse(mouse, patient_tab_bar_area).is_some() {
+            if self
+                .workspace_manager
+                .handle_patient_tab_mouse(mouse, patient_tab_bar_area)
+                .is_some()
+            {
                 self.tab_bar.select(Tab::PatientWorkspace);
                 self.refresh_status_bar();
                 self.refresh_context();
@@ -65,14 +78,19 @@ impl App {
             }
         }
 
-        let clinical_row_offset = if self.workspace_manager.active().is_some() { 2 } else { 1 };
+        let clinical_row_offset = if self.workspace_manager.active().is_some() {
+            2
+        } else {
+            1
+        };
 
         if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
             let content_area = Rect::new(
                 area.x,
                 area.y + clinical_row_offset,
                 area.width,
-                area.height.saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
+                area.height
+                    .saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
             );
             if let Some(action) = self.patient_list.handle_mouse(mouse, content_area) {
                 match action {
@@ -82,8 +100,11 @@ impl App {
                     }
                     crate::ui::components::patient::PatientListAction::FocusSearch => {}
                     crate::ui::components::patient::PatientListAction::SearchChanged => {}
-                    crate::ui::components::patient::PatientListAction::ContextMenu { x: _, y: _, patient_id: _ } => {
-                    }
+                    crate::ui::components::patient::PatientListAction::ContextMenu {
+                        x: _,
+                        y: _,
+                        patient_id: _,
+                    } => {}
                 }
             }
         }
@@ -95,7 +116,8 @@ impl App {
                 area.x,
                 area.y + clinical_row_offset,
                 area.width,
-                area.height.saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
+                area.height
+                    .saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
             );
 
             match self.appointment_state.current_view {
@@ -139,12 +161,15 @@ impl App {
                         self.appointment_state.calendar.focused = true;
                         self.appointment_state.focused = false;
                         match action {
-                            crate::ui::components::appointment::CalendarAction::SelectDate(date) => {
+                            crate::ui::components::appointment::CalendarAction::SelectDate(
+                                date,
+                            ) => {
                                 self.appointment_state.selected_date = Some(date);
                                 self.request_refresh_appointments(date);
                             }
                             crate::ui::components::appointment::CalendarAction::FocusDate(_) => {}
-                            crate::ui::components::appointment::CalendarAction::MonthChanged(_) => {}
+                            crate::ui::components::appointment::CalendarAction::MonthChanged(_) => {
+                            }
                             crate::ui::components::appointment::CalendarAction::GoToToday => {}
                         }
                     }
@@ -172,23 +197,32 @@ impl App {
         if self.tab_bar.selected() == Tab::PatientWorkspace {
             if let Some(workspace) = self.workspace_manager.active_mut() {
                 if let Some(ref mut billing_state) = workspace.billing {
-                    use crate::ui::components::billing::{ClaimList, InvoiceList, PaymentList, BillingView};
+                    use crate::ui::components::billing::{
+                        BillingView, ClaimList, InvoiceList, PaymentList,
+                    };
                     use crossterm::event::MouseEventKind;
 
                     let billing_content_area = Rect::new(
                         area.x,
                         area.y + clinical_row_offset,
                         area.width,
-                        area.height.saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
+                        area.height
+                            .saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
                     );
 
-                    if matches!(mouse.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
+                    if matches!(
+                        mouse.kind,
+                        MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
+                    ) {
                         match billing_state.view {
                             BillingView::ClaimList => {
                                 for _ in 0..3 {
                                     if matches!(mouse.kind, MouseEventKind::ScrollUp) {
-                                        billing_state.claim_selected_index = billing_state.claim_selected_index.saturating_sub(1);
-                                    } else if billing_state.claim_selected_index < billing_state.claims.len().saturating_sub(1) {
+                                        billing_state.claim_selected_index =
+                                            billing_state.claim_selected_index.saturating_sub(1);
+                                    } else if billing_state.claim_selected_index
+                                        < billing_state.claims.len().saturating_sub(1)
+                                    {
                                         billing_state.claim_selected_index += 1;
                                     }
                                 }
@@ -197,8 +231,11 @@ impl App {
                             BillingView::InvoiceList => {
                                 for _ in 0..3 {
                                     if matches!(mouse.kind, MouseEventKind::ScrollUp) {
-                                        billing_state.invoice_selected_index = billing_state.invoice_selected_index.saturating_sub(1);
-                                    } else if billing_state.invoice_selected_index < billing_state.invoices.len().saturating_sub(1) {
+                                        billing_state.invoice_selected_index =
+                                            billing_state.invoice_selected_index.saturating_sub(1);
+                                    } else if billing_state.invoice_selected_index
+                                        < billing_state.invoices.len().saturating_sub(1)
+                                    {
                                         billing_state.invoice_selected_index += 1;
                                     }
                                 }
@@ -207,8 +244,11 @@ impl App {
                             BillingView::PaymentList => {
                                 for _ in 0..3 {
                                     if matches!(mouse.kind, MouseEventKind::ScrollUp) {
-                                        billing_state.payment_selected_index = billing_state.payment_selected_index.saturating_sub(1);
-                                    } else if billing_state.payment_selected_index < billing_state.payments.len().saturating_sub(1) {
+                                        billing_state.payment_selected_index =
+                                            billing_state.payment_selected_index.saturating_sub(1);
+                                    } else if billing_state.payment_selected_index
+                                        < billing_state.payments.len().saturating_sub(1)
+                                    {
                                         billing_state.payment_selected_index += 1;
                                     }
                                 }
@@ -230,9 +270,12 @@ impl App {
 
                     match billing_state.view {
                         BillingView::ClaimList => {
-                            let mut claim_list = ClaimList::new(billing_state.claims.clone(), self.theme.clone());
+                            let mut claim_list =
+                                ClaimList::new(billing_state.claims.clone(), self.theme.clone());
                             claim_list.selected_index = billing_state.claim_selected_index;
-                            if let Some(action) = claim_list.handle_mouse(mouse, billing_content_area) {
+                            if let Some(action) =
+                                claim_list.handle_mouse(mouse, billing_content_area)
+                            {
                                 match action {
                                     crate::ui::components::billing::ClaimListAction::Select(_) => {
                                         billing_state.claim_selected_index = claim_list.selected_index;
@@ -254,7 +297,9 @@ impl App {
                             let mut invoice_list = InvoiceList::new(self.theme.clone());
                             invoice_list.set_invoices(billing_state.invoices.clone());
                             invoice_list.selected_index = billing_state.invoice_selected_index;
-                            if let Some(action) = invoice_list.handle_mouse(mouse, billing_content_area) {
+                            if let Some(action) =
+                                invoice_list.handle_mouse(mouse, billing_content_area)
+                            {
                                 match action {
                                     crate::ui::components::billing::InvoiceListAction::Select(_) => {
                                         billing_state.invoice_selected_index = invoice_list.selected_index;
@@ -273,9 +318,14 @@ impl App {
                             }
                         }
                         BillingView::PaymentList => {
-                            let mut payment_list = PaymentList::new(billing_state.payments.clone(), self.theme.clone());
+                            let mut payment_list = PaymentList::new(
+                                billing_state.payments.clone(),
+                                self.theme.clone(),
+                            );
                             payment_list.selected_index = billing_state.payment_selected_index;
-                            if let Some(action) = payment_list.handle_mouse(mouse, billing_content_area) {
+                            if let Some(action) =
+                                payment_list.handle_mouse(mouse, billing_content_area)
+                            {
                                 match action {
                                     crate::ui::components::billing::PaymentListAction::Select(_) => {
                                         billing_state.payment_selected_index = payment_list.selected_index;
@@ -309,50 +359,69 @@ impl App {
                     let vitals = clinical_state.vitals.vital_signs.clone();
                     clinical_state.vitals.vitals_list.vitals = vitals;
                     let medical_history = clinical_state.medical_history.medical_history.clone();
-                    clinical_state.medical_history.medical_history_list.conditions = medical_history;
+                    clinical_state
+                        .medical_history
+                        .medical_history_list
+                        .conditions = medical_history;
                     let family_history = clinical_state.family_history.family_history.clone();
                     clinical_state.family_history.family_history_list.entries = family_history;
 
                     let content_top = area.y + 2;
                     let content_height = area.height.saturating_sub(2 + STATUS_BAR_HEIGHT);
-                    let clinical_content_area = Rect::new(
-                        area.x,
-                        content_top,
-                        area.width,
-                        content_height,
-                    );
+                    let clinical_content_area =
+                        Rect::new(area.x, content_top, area.width, content_height);
 
                     match clinical_state.view {
                         crate::ui::components::clinical::ClinicalView::Consultations => {
-                            if let Some(action) = clinical_state.consultations.consultation_list.handle_mouse(mouse, clinical_content_area) {
+                            if let Some(action) = clinical_state
+                                .consultations
+                                .consultation_list
+                                .handle_mouse(mouse, clinical_content_area)
+                            {
                                 match action {
                                     _ => {}
                                 }
                             }
                         }
                         crate::ui::components::clinical::ClinicalView::VitalSigns => {
-                            if let Some(action) = clinical_state.vitals.vitals_list.handle_mouse(mouse, clinical_content_area) {
+                            if let Some(action) = clinical_state
+                                .vitals
+                                .vitals_list
+                                .handle_mouse(mouse, clinical_content_area)
+                            {
                                 match action {
                                     _ => {}
                                 }
                             }
                         }
                         crate::ui::components::clinical::ClinicalView::Allergies => {
-                            if let Some(action) = clinical_state.allergies.allergy_list.handle_mouse(mouse, clinical_content_area) {
+                            if let Some(action) = clinical_state
+                                .allergies
+                                .allergy_list
+                                .handle_mouse(mouse, clinical_content_area)
+                            {
                                 match action {
                                     _ => {}
                                 }
                             }
                         }
                         crate::ui::components::clinical::ClinicalView::MedicalHistory => {
-                            if let Some(action) = clinical_state.medical_history.medical_history_list.handle_mouse(mouse, clinical_content_area) {
+                            if let Some(action) = clinical_state
+                                .medical_history
+                                .medical_history_list
+                                .handle_mouse(mouse, clinical_content_area)
+                            {
                                 match action {
                                     _ => {}
                                 }
                             }
                         }
                         crate::ui::components::clinical::ClinicalView::FamilyHistory => {
-                            if let Some(action) = clinical_state.family_history.family_history_list.handle_mouse(mouse, clinical_content_area) {
+                            if let Some(action) = clinical_state
+                                .family_history
+                                .family_history_list
+                                .handle_mouse(mouse, clinical_content_area)
+                            {
                                 match action {
                                     _ => {}
                                 }
@@ -363,6 +432,5 @@ impl App {
                 }
             }
         }
-
     }
 }

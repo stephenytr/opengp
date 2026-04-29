@@ -186,8 +186,8 @@ mod tests {
         // NOT save_error, error_message, or other variants
 
         use crate::ui::components::appointment::AppointmentForm;
-        use crate::ui::screens::login::LoginScreen;
         use crate::ui::components::status_bar::StatusBar;
+        use crate::ui::screens::login::LoginScreen;
 
         let theme = Theme::default();
 
@@ -215,8 +215,8 @@ mod tests {
     fn test_error_field_none_initialization() {
         // Verify that error fields initialize to None
         use crate::ui::components::appointment::AppointmentForm;
-        use crate::ui::screens::login::LoginScreen;
         use crate::ui::components::status_bar::StatusBar;
+        use crate::ui::screens::login::LoginScreen;
 
         let theme = Theme::default();
         let healthcare_config = opengp_config::healthcare::HealthcareConfig::default();
@@ -236,20 +236,20 @@ mod tests {
     #[test]
     fn test_error_field_can_be_cleared() {
         // Verify that error fields can be set to None
-        use crate::ui::screens::login::LoginScreen;
         use crate::ui::components::status_bar::StatusBar;
+        use crate::ui::screens::login::LoginScreen;
 
         let theme = Theme::default();
 
         let mut login = LoginScreen::new(theme.clone());
         login.set_error(Some("Error".to_string()));
         login.set_error(None); // Clear error
-        // If this compiles, error field supports Option<String> pattern
+                               // If this compiles, error field supports Option<String> pattern
 
         let mut status = StatusBar::new(theme.clone());
         status.set_error(Some("Error".to_string()));
         status.set_error(None); // Clear error
-        // If this compiles, error field supports Option<String> pattern
+                                // If this compiles, error field supports Option<String> pattern
     }
 
     // ============================================================================
@@ -264,7 +264,10 @@ mod tests {
 
         // Verify all required fields exist and have correct types
         assert_eq!(state.page, 0, "page field should initialize to 0");
-        assert_eq!(state.page_size, 20, "page_size field should initialize to 20");
+        assert_eq!(
+            state.page_size, 20,
+            "page_size field should initialize to 20"
+        );
         assert!(!state.loading, "loading field should initialize to false");
         assert!(
             state.error.is_none(),
@@ -409,10 +412,18 @@ mod tests {
         let items = vec![10, 20, 30, 40, 50];
         let mut list = PaginatedList::new(items);
 
-        assert_eq!(list.selected(), Some(&10), "selected should return first item");
+        assert_eq!(
+            list.selected(),
+            Some(&10),
+            "selected should return first item"
+        );
 
         list.selected_index = 2;
-        assert_eq!(list.selected(), Some(&30), "selected should return item at index");
+        assert_eq!(
+            list.selected(),
+            Some(&30),
+            "selected should return item at index"
+        );
 
         list.selected_index = 10;
         assert_eq!(
@@ -470,17 +481,20 @@ mod tests {
             },
         ];
 
-        let list = ClinicalTableList::new(
-            items.clone(),
-            columns,
-            Theme::default(),
-            "Test Table",
-            None,
-        );
+        let list =
+            ClinicalTableList::new(items.clone(), columns, Theme::default(), "Test Table", None);
 
         // Verify all required fields exist
-        assert_eq!(list.items.len(), 2, "items field should store provided items");
-        assert_eq!(list.columns.len(), 2, "columns field should store column defs");
+        assert_eq!(
+            list.items.len(),
+            2,
+            "items field should store provided items"
+        );
+        assert_eq!(
+            list.columns.len(),
+            2,
+            "columns field should store column defs"
+        );
         assert_eq!(
             list.selected_index, 0,
             "selected_index should initialize to 0"

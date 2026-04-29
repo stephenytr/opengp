@@ -4,8 +4,8 @@ use crate::ui::theme::Theme;
 use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 use crossterm::event::{KeyEvent, MouseEvent};
 use opengp_domain::domain::clinical::Allergy;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Clone)]
 pub struct AllergyList {
@@ -93,10 +93,12 @@ impl AllergyList {
             UnifiedListAction::Select(i) => AllergyListAction::Select(i),
             UnifiedListAction::Open(a) => AllergyListAction::Open(a),
             UnifiedListAction::New => AllergyListAction::New,
-            UnifiedListAction::ContextMenu { index, x, y } => AllergyListAction::ContextMenu { index, x, y },
-            UnifiedListAction::Edit(_) | UnifiedListAction::Delete(_) | UnifiedListAction::ToggleInactive => {
-                AllergyListAction::Select(self.selected_index)
+            UnifiedListAction::ContextMenu { index, x, y } => {
+                AllergyListAction::ContextMenu { index, x, y }
             }
+            UnifiedListAction::Edit(_)
+            | UnifiedListAction::Delete(_)
+            | UnifiedListAction::ToggleInactive => AllergyListAction::Select(self.selected_index),
         })
     }
 
@@ -105,7 +107,11 @@ impl AllergyList {
             self.allergies.clone(),
             columns(),
             self.theme.clone(),
-            UnifiedListConfig::new("Allergies", 2, "No allergies found. Press n to add a new allergy."),
+            UnifiedListConfig::new(
+                "Allergies",
+                2,
+                "No allergies found. Press n to add a new allergy.",
+            ),
         );
         list.selected_index = self.selected_index;
         list.scroll_offset = self.scroll_offset;

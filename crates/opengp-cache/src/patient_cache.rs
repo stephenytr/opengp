@@ -109,5 +109,4 @@ mod tests {
         let key = patient_cache_key(id);
         assert_eq!(key, format!("patient:{}", id));
     }
-
 }

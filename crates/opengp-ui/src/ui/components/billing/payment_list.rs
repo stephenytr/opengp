@@ -4,9 +4,9 @@ use crate::ui::theme::Theme;
 use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 use crossterm::event::MouseEvent;
 use opengp_domain::domain::billing::Payment;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 use uuid::Uuid;
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Debug, Clone)]
 pub struct PaymentList {
@@ -60,14 +60,19 @@ impl PaymentList {
             UnifiedListAction::Open(_) => PaymentListAction::ViewDetail,
             UnifiedListAction::ContextMenu { index, x, y } => {
                 if let Some(payment) = self.payments.get(index) {
-                    PaymentListAction::ContextMenu { x, y, payment_id: payment.id }
+                    PaymentListAction::ContextMenu {
+                        x,
+                        y,
+                        payment_id: payment.id,
+                    }
                 } else {
                     PaymentListAction::Select(index)
                 }
             }
-            UnifiedListAction::New | UnifiedListAction::Edit(_) | UnifiedListAction::Delete(_) | UnifiedListAction::ToggleInactive => {
-                PaymentListAction::Select(self.selected_index)
-            }
+            UnifiedListAction::New
+            | UnifiedListAction::Edit(_)
+            | UnifiedListAction::Delete(_)
+            | UnifiedListAction::ToggleInactive => PaymentListAction::Select(self.selected_index),
         })
     }
 
@@ -107,12 +112,16 @@ fn col(
 
 fn columns() -> Vec<UnifiedColumnDef<Payment>> {
     vec![
-        col("Date", 12, |p| p.payment_date.format("%d/%m/%Y").to_string()),
+        col("Date", 12, |p| {
+            p.payment_date.format("%d/%m/%Y").to_string()
+        }),
         col("Invoice #", 12, |p| p.invoice_id.to_string()),
         col("Patient", 36, |p| p.patient_id.to_string()),
         col("Amount", 12, |p| format!("${:.2}", p.amount)),
         col("Method", 12, |p| p.payment_method.to_string()),
-        col("Reference", 10, |p| p.reference.clone().unwrap_or_else(|| "-".to_string())),
+        col("Reference", 10, |p| {
+            p.reference.clone().unwrap_or_else(|| "-".to_string())
+        }),
     ]
 }
 

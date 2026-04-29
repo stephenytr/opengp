@@ -1,18 +1,18 @@
 use crate::ui::app::App;
 use crate::ui::components::appointment::AppointmentView;
+use crate::ui::components::clinical::allergy_list::AllergyList;
+use crate::ui::components::clinical::consultation_list::ConsultationList;
+use crate::ui::components::clinical::family_history_list::FamilyHistoryList;
+use crate::ui::components::clinical::medical_history_list::MedicalHistoryList;
+use crate::ui::components::clinical::vitals_list::VitalSignsList;
 use crate::ui::components::clinical::ClinicalView;
 use crate::ui::components::clinical_row::{ClinicalMenuKind, ClinicalRow};
-use crate::ui::components::clinical::consultation_list::ConsultationList;
-use crate::ui::components::clinical::allergy_list::AllergyList;
-use crate::ui::components::clinical::vitals_list::VitalSignsList;
-use crate::ui::components::clinical::medical_history_list::MedicalHistoryList;
-use crate::ui::components::clinical::family_history_list::FamilyHistoryList;
 use crate::ui::components::patient_tab_bar::PatientTabBar;
 use crate::ui::components::status_bar::STATUS_BAR_HEIGHT;
 use crate::ui::components::tabs::Tab;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::Frame;
 use ratatui::widgets::Widget;
+use ratatui::Frame;
 
 impl App {
     pub fn render(&mut self, frame: &mut Frame) {
@@ -47,25 +47,30 @@ impl App {
         // Left: Main TabBar (Schedule | Patient Search) - fixed ~25 chars
         // Right: PatientTabBar (open patient colour tabs) - fills remaining space
         const MAIN_TAB_WIDTH: u16 = 38;
-        let [main_tab_area, patient_tab_area] = Layout::horizontal([
-            Constraint::Length(MAIN_TAB_WIDTH),
-            Constraint::Min(0),
-        ]).areas(tab_bar_area);
+        let [main_tab_area, patient_tab_area] =
+            Layout::horizontal([Constraint::Length(MAIN_TAB_WIDTH), Constraint::Min(0)])
+                .areas(tab_bar_area);
 
         // Render main TabBar on left portion
-        self.tab_bar.clone().render(main_tab_area, frame.buffer_mut());
+        self.tab_bar
+            .clone()
+            .render(main_tab_area, frame.buffer_mut());
 
         let patient_workspace_active = self.tab_bar.selected() == Tab::PatientWorkspace
             && self.workspace_manager.active().is_some();
 
         if !self.workspace_manager.workspaces.is_empty() {
-            let patient_tabs = self.workspace_manager.workspaces
+            let patient_tabs = self
+                .workspace_manager
+                .workspaces
                 .iter()
-                .map(|ws| crate::ui::components::patient_tab_bar::PatientTab::new(
-                    ws.patient_id,
-                    ws.patient_snapshot.full_name.clone(),
-                    ws.colour,
-                ))
+                .map(|ws| {
+                    crate::ui::components::patient_tab_bar::PatientTab::new(
+                        ws.patient_id,
+                        ws.patient_snapshot.full_name.clone(),
+                        ws.colour,
+                    )
+                })
                 .collect::<Vec<_>>();
 
             let active_idx = self.workspace_manager.active_index.unwrap_or(0);
@@ -75,7 +80,9 @@ impl App {
             let patient_tab_bar = if patient_workspace_active {
                 PatientTabBar::new(patient_tabs, active_idx, theme).with_hovered(hovered_patient)
             } else {
-                PatientTabBar::new(patient_tabs, active_idx, theme).with_no_active().with_hovered(hovered_patient)
+                PatientTabBar::new(patient_tabs, active_idx, theme)
+                    .with_no_active()
+                    .with_hovered(hovered_patient)
             };
             patient_tab_bar.render(patient_tab_area, frame.buffer_mut());
         }
@@ -87,9 +94,13 @@ impl App {
             let active_clinical_idx = active_workspace.active_clinical_menu.index();
 
             let timer_text = active_workspace.clinical.as_ref().and_then(|cs| {
-                let started_at = cs.consultations.consultations
+                let started_at = cs
+                    .consultations
+                    .consultations
                     .iter()
-                    .find(|c| c.consultation_started_at.is_some() && c.consultation_ended_at.is_none())
+                    .find(|c| {
+                        c.consultation_started_at.is_some() && c.consultation_ended_at.is_none()
+                    })
                     .and_then(|c| c.consultation_started_at)
                     .or(cs.consultations.active_timer_started_at);
                 started_at.map(|t| {
@@ -189,7 +200,9 @@ impl App {
             Tab::Schedule => self.render_appointment_tab(frame, area),
             Tab::PatientSearch => self.render_patient_tab(frame, area),
             Tab::PatientWorkspace => {
-                let is_billing = self.workspace_manager.active()
+                let is_billing = self
+                    .workspace_manager
+                    .active()
                     .map(|ws| ws.active_clinical_menu == ClinicalMenuKind::Billing)
                     .unwrap_or(false);
                 if is_billing {
@@ -371,8 +384,6 @@ impl App {
         }
     }
 
-
-
     fn render_workspace_clinical(&mut self, frame: &mut Frame, area: Rect) {
         use ratatui::widgets::Paragraph;
 
@@ -381,7 +392,7 @@ impl App {
                 match clinical_state.view {
                     ClinicalView::PatientSummary => {
                         use crate::ui::components::clinical::PatientSummaryComponent;
-                        
+
                         let summary = PatientSummaryComponent::with_patient(
                             Some(workspace.patient_snapshot.clone()),
                             self.theme.clone(),
@@ -389,9 +400,7 @@ impl App {
                         .with_allergies(clinical_state.allergies.allergies.clone())
                         .with_conditions(clinical_state.medical_history.medical_history.clone())
                         .with_consultations(clinical_state.consultations.consultations.clone())
-                        .with_vitals(
-                            clinical_state.vitals.vital_signs.first().cloned(),
-                        );
+                        .with_vitals(clinical_state.vitals.vital_signs.first().cloned());
 
                         frame.render_widget(summary, area);
                     }
@@ -401,7 +410,8 @@ impl App {
                         consultation_list.selected_index = existing.selected_index;
                         consultation_list.scroll_offset = existing.scroll_offset;
                         consultation_list.hovered_index = existing.hovered_index;
-                        consultation_list.consultations = clinical_state.consultations.consultations.clone();
+                        consultation_list.consultations =
+                            clinical_state.consultations.consultations.clone();
 
                         frame.render_widget(consultation_list, area);
                     }
@@ -427,25 +437,29 @@ impl App {
                     }
                     ClinicalView::MedicalHistory => {
                         let existing = &clinical_state.medical_history.medical_history_list;
-                        let mut medical_history_list = MedicalHistoryList::new(existing.theme.clone());
+                        let mut medical_history_list =
+                            MedicalHistoryList::new(existing.theme.clone());
                         medical_history_list.selected_index = existing.selected_index;
                         medical_history_list.scroll_offset = existing.scroll_offset;
                         medical_history_list.hovered_index = existing.hovered_index;
-                        medical_history_list.conditions = clinical_state.medical_history.medical_history.clone();
+                        medical_history_list.conditions =
+                            clinical_state.medical_history.medical_history.clone();
                         frame.render_widget(medical_history_list, area);
                     }
                     ClinicalView::FamilyHistory => {
                         let existing = &clinical_state.family_history.family_history_list;
-                        let mut family_history_list = FamilyHistoryList::new(existing.theme.clone());
+                        let mut family_history_list =
+                            FamilyHistoryList::new(existing.theme.clone());
                         family_history_list.selected_index = existing.selected_index;
                         family_history_list.scroll_offset = existing.scroll_offset;
                         family_history_list.hovered_index = existing.hovered_index;
-                        family_history_list.entries = clinical_state.family_history.family_history.clone();
+                        family_history_list.entries =
+                            clinical_state.family_history.family_history.clone();
                         frame.render_widget(family_history_list, area);
                     }
                     ClinicalView::SocialHistory => {
                         use crate::ui::components::clinical::SocialHistoryComponent;
-                        
+
                         let social_history = SocialHistoryComponent::new(
                             self.theme.clone(),
                             &clinical_state.social_history.social_history_config,
@@ -459,12 +473,13 @@ impl App {
             } else {
                 frame.render_widget(Paragraph::new("Loading clinical data..."), area);
             }
-
         }
     }
 
     fn render_workspace_billing(&mut self, frame: &mut Frame, area: Rect) {
-        use crate::ui::components::billing::{BillingView, ClaimList, InvoiceDetail, InvoiceList, PaymentList};
+        use crate::ui::components::billing::{
+            BillingView, ClaimList, InvoiceDetail, InvoiceList, PaymentList,
+        };
         use ratatui::widgets::Paragraph;
 
         if let Some(workspace) = self.workspace_manager.active() {
@@ -477,23 +492,29 @@ impl App {
                     }
                     BillingView::InvoiceDetail(invoice_id) => {
                         let mut invoice_detail = InvoiceDetail::new();
-                        if let Some(invoice) = billing_state.invoices.iter().find(|i| i.id == invoice_id) {
+                        if let Some(invoice) =
+                            billing_state.invoices.iter().find(|i| i.id == invoice_id)
+                        {
                             invoice_detail.set_invoice(invoice.clone());
                             invoice_detail.set_payments(
-                                billing_state.payments.iter()
+                                billing_state
+                                    .payments
+                                    .iter()
                                     .filter(|p| p.invoice_id == invoice_id)
                                     .cloned()
-                                    .collect()
+                                    .collect(),
                             );
                         }
                         invoice_detail.render(area, frame.buffer_mut());
                     }
                     BillingView::ClaimList => {
-                        let claim_list = ClaimList::new(billing_state.claims.clone(), self.theme.clone());
+                        let claim_list =
+                            ClaimList::new(billing_state.claims.clone(), self.theme.clone());
                         claim_list.render(area, frame.buffer_mut());
                     }
                     BillingView::PaymentList => {
-                        let payment_list = PaymentList::new(billing_state.payments.clone(), self.theme.clone());
+                        let payment_list =
+                            PaymentList::new(billing_state.payments.clone(), self.theme.clone());
                         payment_list.render(area, frame.buffer_mut());
                     }
                 }

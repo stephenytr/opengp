@@ -6,11 +6,9 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use super::shared::{ToUiError, UiResult, UiServiceError, UiResultExt};
+use super::shared::{ToUiError, UiResult, UiResultExt, UiServiceError};
 use crate::ui::view_models::PatientListItem;
-use opengp_domain::domain::patient::{
-    NewPatientData, Patient, PatientService, UpdatePatientData,
-};
+use opengp_domain::domain::patient::{NewPatientData, Patient, PatientService, UpdatePatientData};
 
 #[cfg(test)]
 use opengp_domain::domain::patient::Address;
@@ -29,10 +27,7 @@ impl PatientUiService {
 
     /// List all active patients
     pub async fn list_patients(&self) -> UiResult<Vec<Patient>> {
-        self.service
-            .list_active_patients()
-            .await
-            .map_ui_repo_err()
+        self.service.list_active_patients().await.map_ui_repo_err()
     }
 
     /// List all active patients as view items
@@ -43,10 +38,7 @@ impl PatientUiService {
 
     /// Search patients by query
     pub async fn search_patients(&self, query: &str) -> UiResult<Vec<Patient>> {
-        self.service
-            .search_patients(query)
-            .await
-            .map_ui_repo_err()
+        self.service.search_patients(query).await.map_ui_repo_err()
     }
 
     /// Get a patient by ID
@@ -55,15 +47,15 @@ impl PatientUiService {
             .find_patient(id)
             .await
             .map_ui_repo_err()?
-            .ok_or(UiServiceError::NotFound(format!("Patient not found: {}", id)))
+            .ok_or(UiServiceError::NotFound(format!(
+                "Patient not found: {}",
+                id
+            )))
     }
 
     /// Create a new patient
     pub async fn create_patient(&self, data: NewPatientData) -> UiResult<Patient> {
-        self.service
-            .register_patient(data)
-            .await
-            .map_ui_repo_err()
+        self.service.register_patient(data).await.map_ui_repo_err()
     }
 
     /// Update an existing patient
@@ -73,7 +65,10 @@ impl PatientUiService {
             .find_patient(id)
             .await
             .map_ui_repo_err()?
-            .ok_or(UiServiceError::NotFound(format!("Patient not found: {}", id)))?
+            .ok_or(UiServiceError::NotFound(format!(
+                "Patient not found: {}",
+                id
+            )))?
             .version;
 
         self.service
@@ -89,7 +84,10 @@ impl PatientUiService {
             .find_patient(id)
             .await
             .map_ui_repo_err()?
-            .ok_or(UiServiceError::NotFound(format!("Patient not found: {}", id)))?;
+            .ok_or(UiServiceError::NotFound(format!(
+                "Patient not found: {}",
+                id
+            )))?;
 
         // TODO: Implement deactivate in repository
         // For now, we'll just return Ok

@@ -7,20 +7,20 @@ pub mod validation;
 use serde::{Deserialize, Serialize};
 
 pub use crate::error::ThemeConverterError;
+pub use crate::mapping::color::{contrast_ratio, parse_hex, to_opengp_color};
 pub use crate::mapping::mapper::map_alacritty_to_opengp;
-pub use crate::mapping::color::{parse_hex, to_opengp_color, contrast_ratio};
 pub use crate::output::render_opengp_toml;
 pub use crate::parse::parse_by_extension;
 pub use crate::validation::contrast::{check_contrast, ContrastWarning};
 pub use crate::validation::fallbacks::fallback_for_field;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct AlacrittyTheme { 
+pub struct AlacrittyTheme {
     pub colors: AlacrittyColors,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct AlacrittyColors { 
+pub struct AlacrittyColors {
     pub primary: AlacrittyPrimary,
     pub normal: Ansi8,
     pub bright: Ansi8,
@@ -99,7 +99,8 @@ pub struct AlacrittyHints {
     #[serde(default)]
     pub end: Option<AlacrittyFgBg>,
     #[serde(default)]
-    pub line_indicator: Option<AlacrittyFgBg>,}
+    pub line_indicator: Option<AlacrittyFgBg>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OpenGPTheme {

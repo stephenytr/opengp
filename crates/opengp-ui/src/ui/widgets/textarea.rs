@@ -135,15 +135,20 @@ impl TextareaState {
     /// Returns true if the key was consumed by the textarea, or false
     /// if the caller should handle the key at a higher level.
     pub fn handle_key(&mut self, key: KeyEvent) -> bool {
-        use ratatui::crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
+        use crossterm::event::{Event, KeyEventKind, KeyModifiers};
+        use rat_event::ct_event;
 
         if key.kind != KeyEventKind::Press {
             return false;
         }
 
-        match key.code {
-            KeyCode::Tab | KeyCode::Esc | KeyCode::BackTab => return false,
-            KeyCode::Enter => {
+        let event = Event::Key(key);
+
+        match &event {
+            ct_event!(keycode press Tab) => return false,
+            ct_event!(keycode press Esc) => return false,
+            ct_event!(keycode press BackTab) => return false,
+            ct_event!(keycode press Enter) => {
                 if matches!(self.height_mode, HeightMode::SingleLine) {
                     return false;
                 }
@@ -151,14 +156,14 @@ impl TextareaState {
                     return false;
                 }
             }
-            KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            ct_event!(key press CONTROL-'m') => {
                 if matches!(self.height_mode, HeightMode::SingleLine) {
                     return false;
                 }
                 return false;
             }
-            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => return false,
-            KeyCode::Char(_) => {
+            ct_event!(key press CONTROL-'s') => return false,
+            ct_event!(key press c) => {
                 if let Some(limit) = self.max_length {
                     let current_len: usize = self
                         .textarea

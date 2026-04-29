@@ -1,8 +1,12 @@
 use chrono::NaiveDate;
+use ratatui::layout::Rect;
 use std::time::Instant;
 use uuid::Uuid;
-use ratatui::layout::Rect;
 
+use crate::ui::app::{
+    AppContextMenuAction, AppointmentStatusTransition, PendingClinicalSaveData, PendingPatientData,
+    PendingRescheduleData, RetryOperation,
+};
 use crate::ui::components::appointment::{
     AppointmentDetailModal, AppointmentForm, AppointmentState,
 };
@@ -12,12 +16,8 @@ use crate::ui::components::status_bar::StatusBar;
 use crate::ui::components::tabs::{Tab, TabBar};
 use crate::ui::components::workspace::WorkspaceManager;
 use crate::ui::keybinds::KeyContext;
-use crate::ui::app::{
-    PendingPatientData, PendingClinicalSaveData, AppointmentStatusTransition,
-    RetryOperation, PendingRescheduleData, AppContextMenuAction,
-};
-use opengp_domain::domain::appointment::NewAppointmentData;
 use crate::ui::widgets::ContextMenuState;
+use opengp_domain::domain::appointment::NewAppointmentData;
 
 /// AppState contains all mutable UI and session state.
 /// It is mutated by event handlers and rendered each frame.

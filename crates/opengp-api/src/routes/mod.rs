@@ -187,10 +187,10 @@ mod tests {
     use axum::body::Body;
     use axum::http::header;
     use http::{HeaderMap, HeaderValue, Request, StatusCode};
+    use opengp_config::Config;
     use opengp_domain::domain::api::LoginResponse;
     use opengp_domain::domain::audit::{AuditAction, AuditEmitter, AuditEmitterError, AuditEntry};
     use opengp_domain::domain::user::Session;
-    use opengp_config::Config;
     use tokio::sync::RwLock;
     use tower::util::ServiceExt;
 

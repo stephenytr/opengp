@@ -8,8 +8,8 @@ pub mod appointment_history_generator;
 pub mod audit_generator;
 pub mod billing_generator;
 pub mod clinical_generator;
-pub mod comprehensive_generator;
 pub mod comprehensive_fixture_generator;
+pub mod comprehensive_generator;
 #[cfg(feature = "immunisation")]
 pub mod immunisation_generator;
 pub mod patient_generator;
@@ -27,11 +27,11 @@ pub use appointment_history_generator::{
 pub use audit_generator::{AuditGenerator, AuditGeneratorConfig};
 pub use billing_generator::{BillingData, BillingGenerator, BillingGeneratorConfig};
 pub use clinical_generator::{ClinicalDataGenerator, ClinicalDataGeneratorConfig};
-pub use comprehensive_generator::{
-    ComprehensivePatientGenerator, ComprehensivePatientGeneratorConfig, ComprehensivePatientProfile,
-};
 pub use comprehensive_fixture_generator::{
     ComprehensiveFixtureGenerator, ComprehensiveFixtureGeneratorConfig, ComprehensiveFixtureProfile,
+};
+pub use comprehensive_generator::{
+    ComprehensivePatientGenerator, ComprehensivePatientGeneratorConfig, ComprehensivePatientProfile,
 };
 #[cfg(feature = "immunisation")]
 pub use immunisation_generator::{ImmunisationGenerator, ImmunisationGeneratorConfig};

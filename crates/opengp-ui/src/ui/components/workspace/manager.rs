@@ -1,11 +1,11 @@
-use uuid::Uuid;
+use super::workspace::{PatientWorkspace, WorkspaceError};
+use crate::ui::components::SubtabKind;
+use crate::ui::input::{DoubleClickDetector, HoverState};
+use crate::ui::theme::Theme;
+use crate::ui::view_models::PatientListItem;
 use crossterm::event::{MouseEvent, MouseEventKind};
 use ratatui::layout::{Position, Rect};
-use crate::ui::view_models::PatientListItem;
-use crate::ui::theme::Theme;
-use crate::ui::components::SubtabKind;
-use crate::ui::input::{HoverState, DoubleClickDetector};
-use super::workspace::{PatientWorkspace, WorkspaceError};
+use uuid::Uuid;
 
 pub struct WorkspaceManager {
     pub workspaces: Vec<PatientWorkspace>,
@@ -32,10 +32,7 @@ impl WorkspaceManager {
         }
     }
 
-    pub fn open_patient(
-        &mut self,
-        patient: PatientListItem,
-    ) -> Result<usize, WorkspaceError> {
+    pub fn open_patient(&mut self, patient: PatientListItem) -> Result<usize, WorkspaceError> {
         if let Some(idx) = self.find_patient(patient.id) {
             self.active_index = Some(idx);
             return Ok(idx);
@@ -83,7 +80,9 @@ impl WorkspaceManager {
     }
 
     pub fn find_patient(&self, patient_id: Uuid) -> Option<usize> {
-        self.workspaces.iter().position(|w| w.patient_id == patient_id)
+        self.workspaces
+            .iter()
+            .position(|w| w.patient_id == patient_id)
     }
 
     pub fn cycle_next(&mut self) {
@@ -228,7 +227,7 @@ mod tests {
 
         manager.open_patient(p1).unwrap();
         manager.open_patient(p2).unwrap();
-        
+
         let result = manager.open_patient(p3);
         assert!(matches!(result, Err(WorkspaceError::AlreadyAtLimit)));
         assert_eq!(manager.workspaces.len(), 2);

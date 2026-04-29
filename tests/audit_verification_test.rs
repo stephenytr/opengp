@@ -96,9 +96,7 @@ async fn audit_comprehensive() {
     let patient = patient_service
         .register_patient(NewPatientData {
             ihi: None,
-            medicare_number: Some(
-                format!("{:010}", Uuid::new_v4().as_u128() % 10000000000).into(),
-            ),
+            medicare_number: Some(format!("{:010}", Uuid::new_v4().as_u128() % 10000000000).into()),
             medicare_irn: Some(1),
             medicare_expiry: None,
             title: Some("Mr".to_string()),

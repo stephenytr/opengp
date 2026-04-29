@@ -2,11 +2,12 @@ use std::rc::Rc;
 
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseEvent};
+use crossterm::event::{Event, KeyEvent, KeyEventKind, MouseEvent};
 use opengp_domain::domain::billing::{Invoice, InvoiceStatus};
+use rat_event::ct_event;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 use uuid::Uuid;
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Debug, Clone)]
 pub struct InvoiceList {
@@ -87,21 +88,23 @@ impl InvoiceList {
             return None;
         }
 
+        let event = Event::Key(key);
+
         // Handle search mode - keys accumulate in search
-        match key.code {
-            KeyCode::Backspace => {
+        match &event {
+            ct_event!(keycode press Backspace) => {
                 self.search_query.pop();
                 Some(InvoiceListAction::SearchChanged(self.search_query.clone()))
             }
-            KeyCode::Char(c) => {
-                self.search_query.push(c);
-                Some(InvoiceListAction::SearchChanged(self.search_query.clone()))
-            }
-            KeyCode::Enter => self
+            ct_event!(key press 'n') => Some(InvoiceListAction::New),
+            ct_event!(keycode press Enter) => self
                 .filtered_invoices()
                 .get(self.selected_index)
                 .map(|inv| InvoiceListAction::Open(inv.id)),
-            KeyCode::Char('n') => Some(InvoiceListAction::New),
+            ct_event!(key press c) => {
+                self.search_query.push(*c);
+                Some(InvoiceListAction::SearchChanged(self.search_query.clone()))
+            }
             _ => {
                 // Delegate navigation to UnifiedList
                 let mut list = self.as_list();
@@ -126,7 +129,11 @@ impl InvoiceList {
             UnifiedListAction::Open(inv) => InvoiceListAction::Open(inv.id),
             UnifiedListAction::ContextMenu { index, x, y } => {
                 if let Some(inv) = self.filtered_invoices().get(index) {
-                    InvoiceListAction::ContextMenu { x, y, invoice_id: inv.id }
+                    InvoiceListAction::ContextMenu {
+                        x,
+                        y,
+                        invoice_id: inv.id,
+                    }
                 } else {
                     InvoiceListAction::Select(index)
                 }
@@ -173,7 +180,9 @@ fn col(
 fn columns() -> Vec<UnifiedColumnDef<Invoice>> {
     vec![
         col("Invoice #", 16, |inv| inv.invoice_number.clone()),
-        col("Date", 12, |inv| inv.invoice_date.format("%d/%m/%Y").to_string()),
+        col("Date", 12, |inv| {
+            inv.invoice_date.format("%d/%m/%Y").to_string()
+        }),
         col("Patient", 14, |inv| short_patient(inv)),
         col("Total", 12, |inv| format!("${:.2}", inv.total_amount)),
         col("Status", 16, |inv| inv.status.to_string()),

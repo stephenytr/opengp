@@ -1,5 +1,5 @@
-use crate::AlacrittyTheme;
 use crate::mapping::color::map_color_field;
+use crate::AlacrittyTheme;
 pub fn fallback_for_field(field: &str, theme: &AlacrittyTheme) -> String {
     match field {
         "primary" => map_color_field(&theme.colors.bright.blue),

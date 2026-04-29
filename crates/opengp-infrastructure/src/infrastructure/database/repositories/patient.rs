@@ -155,13 +155,15 @@ impl PatientRow {
             } else {
                 None
             },
-            concession_type: self.concession_type
+            concession_type: self
+                .concession_type
                 .as_deref()
                 .and_then(|s| s.parse::<ConcessionType>().ok()),
             concession_number: self.concession_number,
             preferred_language: self.preferred_language,
             interpreter_required: self.interpreter_required,
-            aboriginal_torres_strait_islander: self.atsi_status
+            aboriginal_torres_strait_islander: self
+                .atsi_status
                 .as_deref()
                 .and_then(|s| s.parse::<AtsiStatus>().ok()),
             occupation: None,
@@ -246,31 +248,27 @@ impl PatientRepository for SqlxPatientRepository {
     async fn list_active(&self, limit: Option<i64>) -> Result<Vec<Patient>, RepositoryError> {
         debug!("Executing patient list_active query");
         let rows = match limit {
-            Some(limit_value) => {
-                sqlx::query_as::<_, PatientRow>(&format!(
-                    "{} WHERE is_active = TRUE ORDER BY last_name, first_name LIMIT $1",
-                    PATIENT_SELECT_QUERY
-                ))
-                .bind(limit_value)
-                .fetch_all(&self.pool)
-                .await
-                .map_err(|err| {
-                    error!(error = %err, limit = limit_value, "Patient list_active query failed");
-                    sqlx_to_patient_error(err)
-                })?
-            }
-            None => {
-                sqlx::query_as::<_, PatientRow>(&format!(
-                    "{} WHERE is_active = TRUE ORDER BY last_name, first_name",
-                    PATIENT_SELECT_QUERY
-                ))
-                .fetch_all(&self.pool)
-                .await
-                .map_err(|err| {
-                    error!(error = %err, "Patient list_active query failed");
-                    sqlx_to_patient_error(err)
-                })?
-            }
+            Some(limit_value) => sqlx::query_as::<_, PatientRow>(&format!(
+                "{} WHERE is_active = TRUE ORDER BY last_name, first_name LIMIT $1",
+                PATIENT_SELECT_QUERY
+            ))
+            .bind(limit_value)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|err| {
+                error!(error = %err, limit = limit_value, "Patient list_active query failed");
+                sqlx_to_patient_error(err)
+            })?,
+            None => sqlx::query_as::<_, PatientRow>(&format!(
+                "{} WHERE is_active = TRUE ORDER BY last_name, first_name",
+                PATIENT_SELECT_QUERY
+            ))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|err| {
+                error!(error = %err, "Patient list_active query failed");
+                sqlx_to_patient_error(err)
+            })?,
         };
 
         debug!(
@@ -538,7 +536,12 @@ impl PatientRepository for SqlxPatientRepository {
         .bind(&patient.concession_number)
         .bind(&patient.preferred_language)
         .bind(patient.interpreter_required)
-        .bind(patient.aboriginal_torres_strait_islander.as_ref().map(|a| a.to_string()))
+        .bind(
+            patient
+                .aboriginal_torres_strait_islander
+                .as_ref()
+                .map(|a| a.to_string()),
+        )
         .bind(patient.is_active)
         .bind(patient.is_deceased)
         .bind(patient.updated_at)

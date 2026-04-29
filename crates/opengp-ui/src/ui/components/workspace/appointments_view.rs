@@ -3,12 +3,12 @@
 //! Displays a paginated list of appointments for a specific patient within the workspace.
 //! Supports navigation (↑↓), Enter to view read-only detail modal, and lazy-loading on first visit.
 
-use uuid::Uuid;
-use crate::ui::theme::Theme;
-use crate::ui::view_models::AppointmentViewItem;
 use crate::ui::services::appointment_service::AppointmentUiService;
 use crate::ui::services::shared::UiServiceError;
+use crate::ui::theme::Theme;
+use crate::ui::view_models::AppointmentViewItem;
 use opengp_domain::domain::appointment::Appointment;
+use uuid::Uuid;
 
 /// Actions triggered from the appointments view
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,15 +46,13 @@ impl PatientAppointmentsView {
 
     /// Format appointment list items for display.
     pub fn format_items(appointments: &[Appointment]) -> Vec<AppointmentViewItem> {
-        appointments
-            .iter()
-            .map(Self::format_appointment)
-            .collect()
+        appointments.iter().map(Self::format_appointment).collect()
     }
 
     /// Format appointment data from domain model to view item.
     fn format_appointment(appointment: &Appointment) -> AppointmentViewItem {
-        let duration_minutes = ((appointment.end_time - appointment.start_time).num_minutes()) as i64;
+        let duration_minutes =
+            ((appointment.end_time - appointment.start_time).num_minutes()) as i64;
         AppointmentViewItem {
             id: appointment.id,
             patient_id: appointment.patient_id,
@@ -80,11 +78,11 @@ pub struct AppointmentViewService;
 
 impl AppointmentViewService {
     /// Load appointments for a patient using the appointment repository
-    /// 
+    ///
     /// This method encapsulates the logic to fetch a patient's appointments
     /// from the UI service. The appointment service supports filtering by patient_id
     /// via AppointmentSearchCriteria.
-    /// 
+    ///
     /// # TODO
     /// Requires a dedicated method in AppointmentUiService:
     /// ```ignore
@@ -98,7 +96,7 @@ impl AppointmentViewService {
         _patient_id: Uuid,
     ) -> Result<Vec<Appointment>, UiServiceError> {
         Err(UiServiceError::Repository(
-            "Requires AppointmentUiService::list_patient_appointments method".to_string()
+            "Requires AppointmentUiService::list_patient_appointments method".to_string(),
         ))
     }
 }
@@ -135,8 +133,8 @@ impl Widget for PatientAppointmentsView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
     use crate::ui::components::shared::PaginatedState;
+    use chrono::Utc;
     use opengp_domain::domain::appointment::AppointmentStatus;
     use opengp_domain::domain::appointment::AppointmentType;
 
@@ -174,7 +172,7 @@ mod tests {
     fn test_format_appointment() {
         let patient_id = Uuid::new_v4();
         let appt = create_test_appointment(patient_id);
-        
+
         let item = PatientAppointmentsView::format_appointment(&appt);
         assert_eq!(item.id, appt.id);
         assert_eq!(item.patient_id, patient_id);
@@ -185,7 +183,7 @@ mod tests {
     fn test_appointment_view_action_enum() {
         let up = AppointmentViewAction::NavigateUp;
         let down = AppointmentViewAction::NavigateDown;
-        
+
         assert_ne!(up, down);
         assert_eq!(up, AppointmentViewAction::NavigateUp);
     }
@@ -195,10 +193,10 @@ mod tests {
         let mut state = PaginatedState::new();
         assert_eq!(state.page, 0);
         assert_eq!(state.page_size, 20);
-        
+
         state.next_page(50);
         assert_eq!(state.page, 1);
-        
+
         state.prev_page();
         assert_eq!(state.page, 0);
     }

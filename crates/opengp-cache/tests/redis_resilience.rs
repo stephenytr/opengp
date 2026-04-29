@@ -6,9 +6,7 @@
 //! - Circuit breaker state transitions
 //! - Cache invalidation chains
 
-use opengp_cache::{
-    CircuitBreaker, CacheConfig, CacheServiceImpl, RedisPool,
-};
+use opengp_cache::{CacheConfig, CacheServiceImpl, CircuitBreaker, RedisPool};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,8 +16,8 @@ use tokio::sync::Barrier;
 async fn is_redis_available() -> bool {
     // Try to connect to Redis on default localhost:6379
     // If REDIS_URL is set, try that; otherwise default to localhost
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
     match RedisPool::from_url(&redis_url, 5).await {
         Ok(pool) => {
@@ -51,9 +49,9 @@ macro_rules! skip_if_no_redis {
 async fn test_redis_unavailable_falls_back_to_db() {
     // This test demonstrates the fallback pattern when Redis is unavailable
     // The circuit breaker ensures we don't hammer an unavailable Redis server
-    
+
     let circuit = CircuitBreaker::with_config(5, Duration::from_secs(30));
-    
+
     // Circuit starts closed
     assert_eq!(
         circuit.state(),
@@ -66,7 +64,7 @@ async fn test_redis_unavailable_falls_back_to_db() {
     // In real scenario, this would be actual Redis connection timeouts
     for i in 1..=5 {
         circuit.record_failure();
-        
+
         if i < 5 {
             // Before threshold is reached, circuit stays closed
             assert_eq!(
@@ -84,13 +82,13 @@ async fn test_redis_unavailable_falls_back_to_db() {
         opengp_cache::circuit::CircuitState::Open,
         "Circuit should open after 5 failures"
     );
-    
+
     // Circuit rejects further requests immediately (fallback to DB)
     assert!(
         !circuit.allow_request(),
         "Circuit breaker should reject new requests when open"
     );
-    
+
     // Application would catch this and serve from database instead
 }
 
@@ -102,8 +100,8 @@ async fn test_redis_unavailable_falls_back_to_db() {
 async fn test_cache_stampede_prevention() {
     skip_if_no_redis!();
 
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
     let pool = RedisPool::from_url(&redis_url, 10)
         .await
@@ -255,8 +253,8 @@ async fn test_circuit_breaker_transition() {
 async fn test_cache_invalidation_chain() {
     skip_if_no_redis!();
 
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
     let pool = RedisPool::from_url(&redis_url, 5)
         .await
@@ -297,10 +295,8 @@ async fn test_cache_invalidation_chain() {
         .expect("Failed to set search cache");
 
     // Verify both are cached
-    let cached_patient: Option<String> = cache
-        .get(patient_id)
-        .await
-        .expect("Failed to get patient");
+    let cached_patient: Option<String> =
+        cache.get(patient_id).await.expect("Failed to get patient");
     assert!(cached_patient.is_some(), "Patient should be in cache");
 
     let cached_search: Option<Vec<String>> = cache
@@ -342,8 +338,8 @@ async fn test_cache_invalidation_chain() {
 async fn test_cache_invalidation_pattern() {
     skip_if_no_redis!();
 
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
     let pool = RedisPool::from_url(&redis_url, 5)
         .await
@@ -393,4 +389,3 @@ async fn test_cache_invalidation_pattern() {
         assert!(cached.is_none(), "Patient {} should be gone", i);
     }
 }
-

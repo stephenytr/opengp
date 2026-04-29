@@ -10,8 +10,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Widget};
 use uuid::Uuid;
 
-use crate::ui::theme::Theme;
 use crate::ui::shared::invert_color;
+use crate::ui::theme::Theme;
 
 /// Patient data for tab display
 #[derive(Debug, Clone)]
@@ -49,11 +49,7 @@ pub struct PatientTabBar {
 }
 
 impl PatientTabBar {
-    pub fn new(
-        patients: Vec<PatientTab>,
-        active_index: usize,
-        theme: Theme,
-    ) -> Self {
+    pub fn new(patients: Vec<PatientTab>, active_index: usize, theme: Theme) -> Self {
         Self {
             patients,
             active_index: Some(active_index),
@@ -117,12 +113,7 @@ impl Widget for PatientTabBar {
         }
 
         let patient_rows = self.calculate_patient_rows() as u16;
-        let patient_area = Rect::new(
-            area.x,
-            area.y,
-            area.width,
-            patient_rows,
-        );
+        let patient_area = Rect::new(area.x, area.y, area.width, patient_rows);
 
         if !self.patients.is_empty() && !patient_area.is_empty() {
             self.render_patient_tabs(patient_area, buf);
@@ -214,11 +205,7 @@ mod tests {
             Color::Cyan,
         )];
         let theme = create_test_theme();
-        let bar = PatientTabBar::new(
-            patients,
-            0,
-            theme,
-        );
+        let bar = PatientTabBar::new(patients, 0, theme);
 
         assert_eq!(bar.calculate_patient_rows(), 1);
     }
@@ -281,11 +268,7 @@ mod tests {
         )];
 
         let theme = create_test_theme();
-        let bar = PatientTabBar::new(
-            patients,
-            0,
-            theme,
-        );
+        let bar = PatientTabBar::new(patients, 0, theme);
 
         assert_eq!(bar.row_count(), 1);
     }

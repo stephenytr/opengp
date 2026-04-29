@@ -4,8 +4,8 @@ use crate::ui::theme::Theme;
 use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 use crossterm::event::{KeyEvent, MouseEvent};
 use opengp_domain::domain::clinical::FamilyHistory;
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 const EMPTY_MESSAGE: &str = "No family history found. Press n to add an entry.";
 
@@ -80,7 +80,11 @@ impl FamilyHistoryList {
         action
     }
 
-    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<FamilyHistoryListAction> {
+    pub fn handle_mouse(
+        &mut self,
+        mouse: MouseEvent,
+        area: Rect,
+    ) -> Option<FamilyHistoryListAction> {
         let mut list = self.as_list();
         let action = list.handle_mouse(mouse, area).and_then(map_action);
         self.sync_from(&list);
@@ -121,7 +125,9 @@ fn map_action(action: UnifiedListAction<FamilyHistory>) -> Option<FamilyHistoryL
         UnifiedListAction::Open(entry) => Some(FamilyHistoryListAction::Open(entry)),
         UnifiedListAction::New => Some(FamilyHistoryListAction::New),
         UnifiedListAction::Delete(entry) => Some(FamilyHistoryListAction::Delete(entry)),
-        UnifiedListAction::ContextMenu { index, x, y } => Some(FamilyHistoryListAction::ContextMenu { index, x, y }),
+        UnifiedListAction::ContextMenu { index, x, y } => {
+            Some(FamilyHistoryListAction::ContextMenu { index, x, y })
+        }
         UnifiedListAction::Edit(_) | UnifiedListAction::ToggleInactive => None,
     }
 }
@@ -129,7 +135,9 @@ fn map_action(action: UnifiedListAction<FamilyHistory>) -> Option<FamilyHistoryL
 fn columns() -> Vec<UnifiedColumnDef<FamilyHistory>> {
     vec![
         UnifiedColumnDef::<FamilyHistory>::new("Condition", 25, |e| e.condition.clone()),
-        UnifiedColumnDef::<FamilyHistory>::new("Relationship", 20, |e| e.relative_relationship.clone()),
+        UnifiedColumnDef::<FamilyHistory>::new("Relationship", 20, |e| {
+            e.relative_relationship.clone()
+        }),
         UnifiedColumnDef::<FamilyHistory>::new("Age", 10, |e| {
             e.age_at_diagnosis
                 .map(|age| format!("{} years", age))

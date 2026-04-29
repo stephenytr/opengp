@@ -154,5 +154,4 @@ mod tests {
         let key = search_cache_key(hash);
         assert_eq!(key, "search:abc123");
     }
-
 }

@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::layout::Rect;
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -65,7 +65,10 @@ impl std::fmt::Debug for AppointmentState {
             .field("loading", &self.loading)
             .field("hidden_columns", &self.hidden_columns)
             .field("practitioners_view", &self.practitioners_view)
-            .field("selected_practitioner_index", &self.selected_practitioner_index)
+            .field(
+                "selected_practitioner_index",
+                &self.selected_practitioner_index,
+            )
             .field("selected_time_slot", &self.selected_time_slot)
             .field("viewport_start_hour", &self.viewport_start_hour)
             .field("viewport_end_hour", &self.viewport_end_hour)
@@ -367,14 +370,17 @@ impl AppointmentState {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ScheduleAction> {
-        use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
+        use crossterm::event::{Event, KeyEventKind, KeyModifiers};
+        use rat_event::ct_event;
 
         if key.kind != KeyEventKind::Press {
             return None;
         }
 
+        let event = Event::Key(key);
+
         // Handle Ctrl+D to toggle debug overlay
-        if key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        if matches!(&event, ct_event!(key press CONTROL-'d')) {
             #[cfg(debug_assertions)]
             {
                 self.debug_overlay_visible = !self.debug_overlay_visible;
@@ -518,7 +524,7 @@ impl AppointmentState {
         slot >= start_slot && slot <= end_slot
     }
 
-     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ScheduleAction> {
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ScheduleAction> {
         use crate::ui::layout::TIME_COLUMN_WIDTH;
 
         match mouse.kind {
@@ -549,7 +555,10 @@ impl AppointmentState {
                         if col_width > 0 {
                             let practitioner_index = (col / col_width) as usize;
                             if practitioner_index < self.practitioners_view.len() {
-                                self.hovered_slot.set_hovered((practitioner_index, slot), (mouse.column, mouse.row));
+                                self.hovered_slot.set_hovered(
+                                    (practitioner_index, slot),
+                                    (mouse.column, mouse.row),
+                                );
                                 return None;
                             }
                         }
@@ -600,7 +609,10 @@ impl AppointmentState {
             }
             MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
                 // Check for double-click
-                if self.schedule_double_click_detector.check_double_click_now(&mouse) {
+                if self
+                    .schedule_double_click_detector
+                    .check_double_click_now(&mouse)
+                {
                     let time_column_width = TIME_COLUMN_WIDTH;
                     let inner = area.inner(ratatui::layout::Margin {
                         horizontal: 1,
@@ -616,24 +628,31 @@ impl AppointmentState {
                         let practitioner_cols = inner.width.saturating_sub(time_column_width);
 
                         if practitioner_cols > 0 && !self.practitioners_view.is_empty() {
-                            let col_width = practitioner_cols / self.practitioners_view.len() as u16;
+                            let col_width =
+                                practitioner_cols / self.practitioners_view.len() as u16;
                             if col_width > 0 {
                                 let practitioner_index = (col / col_width) as usize;
                                 if practitioner_index < self.practitioners_view.len() {
                                     self.selected_practitioner_index = practitioner_index;
 
                                     // Try to select existing appointment, or trigger new creation
-                                    if let Some(apt) = self.get_appointment_at_slot_for_practitioner(
-                                        slot,
-                                        self.selected_practitioner_index,
-                                    ) {
+                                    if let Some(apt) = self
+                                        .get_appointment_at_slot_for_practitioner(
+                                            slot,
+                                            self.selected_practitioner_index,
+                                        )
+                                    {
                                         return Some(ScheduleAction::SelectAppointment(apt.id));
                                     } else {
                                         // Create new appointment at this slot
                                         let time_str = self.slot_to_time(slot);
                                         return Some(ScheduleAction::CreateAtSlot {
-                                            practitioner_id: self.practitioners_view[practitioner_index].id,
-                                            date: self.selected_date.unwrap_or_else(|| chrono::Utc::now().date_naive()),
+                                            practitioner_id: self.practitioners_view
+                                                [practitioner_index]
+                                                .id,
+                                            date: self
+                                                .selected_date
+                                                .unwrap_or_else(|| chrono::Utc::now().date_naive()),
                                             time: time_str,
                                         });
                                     }
@@ -677,8 +696,12 @@ impl AppointmentState {
                                     // Return new creation action for context menu
                                     let time_str = self.slot_to_time(slot);
                                     return Some(ScheduleAction::CreateAtSlot {
-                                        practitioner_id: self.practitioners_view[practitioner_index].id,
-                                        date: self.selected_date.unwrap_or_else(|| chrono::Utc::now().date_naive()),
+                                        practitioner_id: self.practitioners_view
+                                            [practitioner_index]
+                                            .id,
+                                        date: self
+                                            .selected_date
+                                            .unwrap_or_else(|| chrono::Utc::now().date_naive()),
                                         time: time_str,
                                     });
                                 }

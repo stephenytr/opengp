@@ -8,15 +8,15 @@ use chrono::NaiveDate;
 use opengp_config::forms::ValidationRules;
 use opengp_config::AllergyConfig;
 use opengp_domain::domain::clinical::{Allergy, AllergyType, Severity};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use uuid::Uuid;
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::shared::{FormAction, FormMode};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
     format_date, impl_form_field_wrapper, parse_date, DatePickerPopup, DropdownOption,
-    DropdownWidget, FormField, FormFieldMeta, FormNavigation,
-    FormState, FormValidator, HeightMode, TextareaState,
+    DropdownWidget, FormField, FormFieldMeta, FormNavigation, FormState, FormValidator, HeightMode,
+    TextareaState,
 };
 
 const FIELD_ALLERGEN: &str = "allergen";

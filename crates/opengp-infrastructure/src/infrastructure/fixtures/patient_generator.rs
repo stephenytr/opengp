@@ -651,7 +651,10 @@ mod tests {
             let medicare = generator.generate_medicare_number();
             let digits: Vec<u32> = medicare
                 .chars()
-                .map(|c| c.to_digit(10).expect("generated medicare should be numeric"))
+                .map(|c| {
+                    c.to_digit(10)
+                        .expect("generated medicare should be numeric")
+                })
                 .collect();
 
             let sum: u32 = digits
@@ -1030,15 +1033,13 @@ mod tests {
                     );
                 }
 
-                let mut irns: Vec<u8> = members
-                    .iter()
-                    .filter_map(|m| m.medicare_irn)
-                    .collect();
+                let mut irns: Vec<u8> = members.iter().filter_map(|m| m.medicare_irn).collect();
                 irns.sort_unstable();
 
                 for (idx, &irn) in irns.iter().enumerate() {
                     assert_eq!(
-                        irn as usize, idx + 1,
+                        irn as usize,
+                        idx + 1,
                         "Family member IRNs should be sequential starting from 1"
                     );
                 }

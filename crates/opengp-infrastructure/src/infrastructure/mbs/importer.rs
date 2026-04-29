@@ -98,12 +98,11 @@ impl SqlxMbsRepository {
         let mut updated: u32 = 0;
 
         for item in &items {
-            let existing = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(1) FROM mbs_items WHERE item_num = $1",
-            )
-            .bind(item.item_num)
-            .fetch_one(&mut *tx)
-            .await?;
+            let existing =
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(1) FROM mbs_items WHERE item_num = $1")
+                    .bind(item.item_num)
+                    .fetch_one(&mut *tx)
+                    .await?;
 
             if existing > 0 {
                 updated += 1;
@@ -257,9 +256,10 @@ impl SqlxMbsRepository {
     }
 
     pub async fn count(&self) -> Result<i64, MbsImportError> {
-        let total = sqlx::query_scalar::<_, i64>("SELECT COUNT(1) FROM mbs_items WHERE is_active = true")
-            .fetch_one(&self.pool)
-            .await?;
+        let total =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(1) FROM mbs_items WHERE is_active = true")
+                .fetch_one(&self.pool)
+                .await?;
 
         Ok(total)
     }

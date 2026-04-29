@@ -6,7 +6,9 @@
 use crate::ui::theme::Theme;
 use opengp_domain::domain::clinical::FamilyHistory;
 
-use crate::ui::components::clinical::{FamilyHistoryDetailModal, FamilyHistoryForm, FamilyHistoryList};
+use crate::ui::components::clinical::{
+    FamilyHistoryDetailModal, FamilyHistoryForm, FamilyHistoryList,
+};
 
 /// Family history state management component
 ///
@@ -54,8 +56,10 @@ impl FamilyHistoryState {
 
     /// Open the family history detail modal with the given family history.
     pub fn open_family_history_detail(&mut self, family_history: FamilyHistory) {
-        self.family_history_detail_modal =
-            Some(FamilyHistoryDetailModal::new(family_history, self.theme.clone()));
+        self.family_history_detail_modal = Some(FamilyHistoryDetailModal::new(
+            family_history,
+            self.theme.clone(),
+        ));
     }
 
     /// Close the family history detail modal.

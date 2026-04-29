@@ -183,7 +183,10 @@ fn print_new_features_demo(patients: &[Patient]) {
         }
     }
 
-    let family_group_count = family_groups.values().filter(|group| group.len() > 1).count();
+    let family_group_count = family_groups
+        .values()
+        .filter(|group| group.len() > 1)
+        .count();
     println!("  Family groups found: {}", family_group_count);
 
     if let Some((base_num, group)) = family_groups.iter().find(|(_, g)| g.len() > 1) {
@@ -203,10 +206,7 @@ fn print_new_features_demo(patients: &[Patient]) {
     // New Patient Fields
     println!("\n\nNew Patient Fields:");
 
-    let with_occupation = patients
-        .iter()
-        .filter(|p| p.occupation.is_some())
-        .count();
+    let with_occupation = patients.iter().filter(|p| p.occupation.is_some()).count();
     println!(
         "  With occupation: {} ({:.1}%)",
         with_occupation,
@@ -223,10 +223,7 @@ fn print_new_features_demo(patients: &[Patient]) {
         (with_employment as f32 / patients.len() as f32) * 100.0
     );
 
-    let with_health_fund = patients
-        .iter()
-        .filter(|p| p.health_fund.is_some())
-        .count();
+    let with_health_fund = patients.iter().filter(|p| p.health_fund.is_some()).count();
     println!(
         "  With health fund: {} ({:.1}%)",
         with_health_fund,

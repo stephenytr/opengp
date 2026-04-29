@@ -47,7 +47,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_migrations(&pool).await?;
     let pool = pool.as_postgres().clone();
 
-    println!("✓ Database connected: {}\n", config.app.api_server.database.url);
+    println!(
+        "✓ Database connected: {}\n",
+        config.app.api_server.database.url
+    );
 
     let crypto = Arc::new(EncryptionService::new()?);
     let patient_repository = Arc::new(SqlxPatientRepository::new(pool.clone(), crypto));

@@ -123,8 +123,7 @@ impl AllergyState {
     /// Remove an allergy by ID.
     pub fn remove_allergy(&mut self, id: uuid::Uuid) {
         self.allergies.retain(|a| a.id != id);
-        if self.allergy_list.selected_index >= self.allergies.len() && !self.allergies.is_empty()
-        {
+        if self.allergy_list.selected_index >= self.allergies.len() && !self.allergies.is_empty() {
             self.allergy_list.selected_index = self.allergies.len() - 1;
         }
     }
@@ -138,7 +137,6 @@ impl AllergyState {
     pub fn prev_item(&mut self) {
         self.allergy_list.prev();
     }
-
 }
 
 #[cfg(test)]

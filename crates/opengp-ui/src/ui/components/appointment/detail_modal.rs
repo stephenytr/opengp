@@ -3,11 +3,11 @@
 //! Read-only modal displaying appointment details with options to view clinical notes.
 
 use crossterm::event::{KeyEvent, KeyModifiers};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Clear, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 use uuid::Uuid;
 
 use crate::ui::theme::Theme;
@@ -348,7 +348,8 @@ impl AppointmentDetailModal {
     /// Handle keyboard input and return an action if triggered.
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<AppointmentDetailModalAction> {
         use crate::ui::widgets::{DropdownAction, InlinePickerAction};
-        use crossterm::event::{KeyCode, KeyEventKind};
+        use crossterm::event::{Event, KeyEventKind};
+        use rat_event::ct_event;
 
         if key.kind != KeyEventKind::Press {
             return None;
@@ -382,39 +383,43 @@ impl AppointmentDetailModal {
             return None;
         }
 
+        let event = Event::Key(key);
+
         if self.focused_button == 1 {
-            match key.code {
-                KeyCode::Enter
-                | KeyCode::Esc
-                | KeyCode::Up
-                | KeyCode::Down
-                | KeyCode::Char('j')
-                | KeyCode::Char('k')
-                | KeyCode::Tab
-                | KeyCode::BackTab => {
-                    if let Some(action) = self.status_dropdown.handle_key(key) {
-                        return match action {
-                            DropdownAction::Selected(_) => self.get_dropdown_action(),
-                            DropdownAction::Closed => {
-                                if key.code == KeyCode::Tab {
+            let dropdown_keys = matches!(&event, ct_event!(keycode press Enter))
+                || matches!(&event, ct_event!(keycode press Esc))
+                || matches!(&event, ct_event!(keycode press Up))
+                || matches!(&event, ct_event!(keycode press Down))
+                || matches!(&event, ct_event!(key press 'j'))
+                || matches!(&event, ct_event!(key press 'k'))
+                || matches!(&event, ct_event!(keycode press Tab))
+                || matches!(&event, ct_event!(keycode press BackTab));
+            if dropdown_keys {
+                if let Some(action) = self.status_dropdown.handle_key(key) {
+                    return match action {
+                        DropdownAction::Selected(_) => self.get_dropdown_action(),
+                        DropdownAction::Closed => {
+                            match &event {
+                                ct_event!(keycode press Tab) => {
                                     self.next_button();
-                                } else if key.code == KeyCode::BackTab {
+                                }
+                                ct_event!(keycode press BackTab) => {
                                     self.prev_button();
                                 }
-                                None
+                                _ => {}
                             }
-                            DropdownAction::Opened | DropdownAction::FocusChanged => None,
-                            DropdownAction::ContextMenu { .. } => None,
-                        };
-                    }
+                            None
+                        }
+                        DropdownAction::Opened | DropdownAction::FocusChanged => None,
+                        DropdownAction::ContextMenu { .. } => None,
+                    };
                 }
-                _ => {}
             }
         }
 
-        match key.code {
-            KeyCode::Esc => Some(AppointmentDetailModalAction::Close),
-            KeyCode::Tab => {
+        match &event {
+            ct_event!(keycode press Esc) => Some(AppointmentDetailModalAction::Close),
+            ct_event!(keycode press Tab) => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
                     self.prev_button();
                 } else {
@@ -422,19 +427,27 @@ impl AppointmentDetailModal {
                 }
                 None
             }
-            KeyCode::BackTab => {
+            ct_event!(keycode press BackTab) => {
                 self.prev_button();
                 None
             }
-            KeyCode::Left | KeyCode::Up => {
+            ct_event!(keycode press Left) => {
                 self.prev_button();
                 None
             }
-            KeyCode::Right | KeyCode::Down => {
+            ct_event!(keycode press Up) => {
+                self.prev_button();
+                None
+            }
+            ct_event!(keycode press Right) => {
                 self.next_button();
                 None
             }
-            KeyCode::Enter => {
+            ct_event!(keycode press Down) => {
+                self.next_button();
+                None
+            }
+            ct_event!(keycode press Enter) => {
                 if self.focused_button == 1 {
                     if let Some(action) = self.status_dropdown.handle_key(key) {
                         match action {

@@ -99,14 +99,12 @@ pub(super) async fn get_patient(
                 source = "cache";
                 Some(cached_patient)
             }
-            _ => {
-                state
-                    .services
-                    .patient_service
-                    .find_patient(id)
-                    .await
-                    .map_err(patient_service_error_to_response)?
-            }
+            _ => state
+                .services
+                .patient_service
+                .find_patient(id)
+                .await
+                .map_err(patient_service_error_to_response)?,
         }
     } else {
         state
@@ -117,8 +115,8 @@ pub(super) async fn get_patient(
             .map_err(patient_service_error_to_response)?
     };
 
-    let patient = patient
-        .ok_or_else(|| not_found_response("patient_not_found", "Patient not found"))?;
+    let patient =
+        patient.ok_or_else(|| not_found_response("patient_not_found", "Patient not found"))?;
 
     if !patient.is_active {
         return Err(not_found_response("patient_not_found", "Patient not found"));

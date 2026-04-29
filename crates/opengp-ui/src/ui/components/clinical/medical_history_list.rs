@@ -4,8 +4,8 @@ use crate::ui::theme::Theme;
 use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 use crossterm::event::{KeyEvent, MouseEvent};
 use opengp_domain::domain::clinical::{ConditionStatus, MedicalHistory, Severity};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 pub type MedicalHistoryListAction = UnifiedListAction<MedicalHistory>;
 
@@ -46,7 +46,11 @@ impl MedicalHistoryList {
         action
     }
 
-    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<MedicalHistoryListAction> {
+    pub fn handle_mouse(
+        &mut self,
+        mouse: MouseEvent,
+        area: Rect,
+    ) -> Option<MedicalHistoryListAction> {
         let mut list = self.as_list();
         let action = list.handle_mouse(mouse, area);
         self.sync_from(&list);
@@ -58,7 +62,11 @@ impl MedicalHistoryList {
             self.conditions.clone(),
             Self::columns(),
             self.theme.clone(),
-            UnifiedListConfig::new("Medical History", 2, "No medical history found. Press n to add a condition."),
+            UnifiedListConfig::new(
+                "Medical History",
+                2,
+                "No medical history found. Press n to add a condition.",
+            ),
         );
         list.selected_index = self.selected_index;
         list.scroll_offset = self.scroll_offset;

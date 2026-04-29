@@ -47,7 +47,7 @@ pub use medical_history_state::MedicalHistoryState;
 pub use patient_summary::PatientSummaryComponent;
 pub use social_history::{SocialHistoryAction, SocialHistoryComponent};
 pub use social_history_state::SocialHistoryState;
-pub use state::{ClinicalFormView, ClinicalState, ClinicalView, ClinicalSubDomain};
+pub use state::{ClinicalFormView, ClinicalState, ClinicalSubDomain, ClinicalView};
 pub use vitals_detail_modal::{VitalsDetailModal, VitalsDetailModalAction};
 pub use vitals_form::{VitalSignsForm, VitalSignsFormAction};
 pub use vitals_list::{VitalSignsList, VitalSignsListAction};

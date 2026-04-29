@@ -206,12 +206,7 @@ mod tests {
             Ok(self
                 .existing_patients
                 .iter()
-                .find(|p| {
-                    p.medicare_number
-                        .as_ref()
-                        .map(|m| m.as_str())
-                        == Some(medicare)
-                })
+                .find(|p| p.medicare_number.as_ref().map(|m| m.as_str()) == Some(medicare))
                 .cloned())
         }
 

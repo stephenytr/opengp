@@ -92,7 +92,10 @@ async fn main() -> Result<(), BackfillError> {
         }
     }
 
-    info!(updated = total_updated, "Medicare search hash backfill complete");
+    info!(
+        updated = total_updated,
+        "Medicare search hash backfill complete"
+    );
     Ok(())
 }
 

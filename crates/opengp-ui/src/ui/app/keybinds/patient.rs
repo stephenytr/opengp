@@ -14,7 +14,9 @@ impl App {
                     if let Some(patient_item) = self.patient_list.get_patient_by_id(id).cloned() {
                         match self.open_patient_workspace(patient_item) {
                             Ok(_) => {}
-                            Err(crate::ui::components::workspace::WorkspaceError::AlreadyAtLimit) => {
+                            Err(
+                                crate::ui::components::workspace::WorkspaceError::AlreadyAtLimit,
+                            ) => {
                                 let max = self.workspace_manager.max_open;
                                 let error_msg = format!(
                                     "Max open patients reached (max: {}). Close a tab first.",
@@ -38,7 +40,11 @@ impl App {
                         self.current_context = KeyContext::PatientList;
                     }
                 }
-                crate::ui::components::patient::PatientListAction::ContextMenu { x: _, y: _, patient_id: _ } => {
+                crate::ui::components::patient::PatientListAction::ContextMenu {
+                    x: _,
+                    y: _,
+                    patient_id: _,
+                } => {
                     // Context menu support to be implemented in future
                 }
             }

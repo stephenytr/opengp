@@ -1,9 +1,9 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use uuid::Uuid;
 
-use opengp_domain::domain::appointment::{AppointmentStatus, NewAppointmentData};
-use crate::ui::app::{PendingClinicalSaveData, PendingBillingSaveData};
+use crate::ui::app::{PendingBillingSaveData, PendingClinicalSaveData};
 use crate::ui::components::SubtabKind;
+use opengp_domain::domain::appointment::{AppointmentStatus, NewAppointmentData};
 
 #[derive(Debug)]
 pub enum AppCommand {

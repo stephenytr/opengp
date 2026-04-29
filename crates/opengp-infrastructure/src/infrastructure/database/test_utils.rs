@@ -9,7 +9,9 @@ use uuid::Uuid;
 
 use crate::infrastructure::database::{create_pool, run_migrations, DatabaseConfig};
 use opengp_domain::domain::appointment::{Appointment, AppointmentType};
-use opengp_domain::domain::patient::{Address, Gender, Ihi, MedicareNumber, NewPatientData, Patient, PhoneNumber};
+use opengp_domain::domain::patient::{
+    Address, Gender, Ihi, MedicareNumber, NewPatientData, Patient, PhoneNumber,
+};
 
 /// Create a PostgreSQL test pool and apply migrations
 ///

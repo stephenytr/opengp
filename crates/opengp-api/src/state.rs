@@ -5,9 +5,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use opengp_domain::domain::audit::AuditEmitter;
-use opengp_cache::{CacheServiceImpl, CircuitBreaker, CacheConfig, RedisPool};
+use opengp_cache::{CacheConfig, CacheServiceImpl, CircuitBreaker, RedisPool};
 use opengp_config::Config;
+use opengp_domain::domain::audit::AuditEmitter;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::PgPool;
 
@@ -54,8 +54,12 @@ impl ApiState {
         let pool = PgPoolOptions::new()
             .max_connections(config.app.api_server.database.max_connections)
             .min_connections(config.app.api_server.database.min_connections)
-            .acquire_timeout(Duration::from_secs(config.app.api_server.database.connect_timeout_secs))
-            .idle_timeout(Duration::from_secs(config.app.api_server.database.idle_timeout_secs))
+            .acquire_timeout(Duration::from_secs(
+                config.app.api_server.database.connect_timeout_secs,
+            ))
+            .idle_timeout(Duration::from_secs(
+                config.app.api_server.database.idle_timeout_secs,
+            ))
             .test_before_acquire(true)
             .connect_with(connect_options)
             .await

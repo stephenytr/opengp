@@ -24,22 +24,18 @@ impl App {
         };
 
         match keybind.action {
-            Action::NextBillingView => {
-                match billing_state.view {
-                    BillingView::InvoiceList => billing_state.show_claim_list(),
-                    BillingView::ClaimList => billing_state.show_payment_list(),
-                    BillingView::PaymentList => billing_state.show_invoice_list(),
-                    BillingView::InvoiceDetail(_) => {}
-                }
-            }
-            Action::PrevBillingView => {
-                match billing_state.view {
-                    BillingView::InvoiceList => billing_state.show_payment_list(),
-                    BillingView::ClaimList => billing_state.show_invoice_list(),
-                    BillingView::PaymentList => billing_state.show_claim_list(),
-                    BillingView::InvoiceDetail(_) => {}
-                }
-            }
+            Action::NextBillingView => match billing_state.view {
+                BillingView::InvoiceList => billing_state.show_claim_list(),
+                BillingView::ClaimList => billing_state.show_payment_list(),
+                BillingView::PaymentList => billing_state.show_invoice_list(),
+                BillingView::InvoiceDetail(_) => {}
+            },
+            Action::PrevBillingView => match billing_state.view {
+                BillingView::InvoiceList => billing_state.show_payment_list(),
+                BillingView::ClaimList => billing_state.show_invoice_list(),
+                BillingView::PaymentList => billing_state.show_claim_list(),
+                BillingView::InvoiceDetail(_) => {}
+            },
             Action::NavigateUp | Action::NavigateDown => {}
             Action::Enter => {}
             Action::NewInvoice => {}

@@ -3,9 +3,9 @@ use tracing::{info, instrument, warn};
 use uuid::Uuid;
 
 use crate::domain::audit::{AuditEmitter, AuditEntry};
-use crate::domain::patient::{PatientService, ServiceError as PatientServiceError};
 #[cfg(test)]
 use crate::domain::patient::{Ihi, MedicareNumber};
+use crate::domain::patient::{PatientService, ServiceError as PatientServiceError};
 use crate::service;
 
 use super::dto::{
@@ -124,7 +124,11 @@ impl ClinicalService {
         patient_id: Uuid,
     ) -> Result<Vec<Consultation>, ServiceError> {
         info!("Listing consultations for patient: {}", patient_id);
-        let consultations = self.repos.consultation.find_by_patient(patient_id, None).await?;
+        let consultations = self
+            .repos
+            .consultation
+            .find_by_patient(patient_id, None)
+            .await?;
         Ok(consultations)
     }
 

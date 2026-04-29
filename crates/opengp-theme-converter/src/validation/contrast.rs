@@ -1,9 +1,8 @@
-use crate::mapping::color::{parse_hex, contrast_ratio};
+use crate::mapping::color::{contrast_ratio, parse_hex};
 
 pub const WCAG_AA_NORMAL: f32 = 4.5;
 pub const WCAG_AA_LARGE: f32 = 3.0;
 pub const WCAG_AAA_NORMAL: f32 = 7.0;
-
 
 #[derive(Debug)]
 pub struct ContrastWarning {
@@ -17,7 +16,7 @@ pub fn check_contrast(
     _bg_field: &str,
     fg_color: &str,
     bg_color: &str,
-    ) -> Option<ContrastWarning> {
+) -> Option<ContrastWarning> {
     let fg = parse_hex(fg_color).ok()?;
     let bg = parse_hex(bg_color).ok()?;
     let ratio = contrast_ratio(fg, bg);

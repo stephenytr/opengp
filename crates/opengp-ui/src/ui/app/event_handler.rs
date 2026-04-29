@@ -116,8 +116,6 @@ impl App {
             return Action::Unknown;
         }
 
-
-
         if self.appointment_form.is_some() {
             return self.handle_appointment_form_keys(key);
         }
@@ -211,7 +209,8 @@ impl App {
                     }
                 }
                 Action::New => {
-                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
+                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none()
+                    {
                         self.patient_form = Some(crate::ui::components::patient::PatientForm::new(
                             self.theme.clone(),
                             &self.patient_config,
@@ -220,7 +219,8 @@ impl App {
                     }
                 }
                 Action::Edit => {
-                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
+                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none()
+                    {
                         if let Some(patient_id) = self.patient_list.selected_patient_id() {
                             self.request_edit_patient(patient_id);
                         }
@@ -257,13 +257,19 @@ impl App {
                     }
                 },
                 Action::NavigateDown => {
-                    if (self.tab_bar.selected() == Tab::PatientSearch || self.tab_bar.selected() == Tab::PatientWorkspace) && self.patient_form.is_none() {
+                    if (self.tab_bar.selected() == Tab::PatientSearch
+                        || self.tab_bar.selected() == Tab::PatientWorkspace)
+                        && self.patient_form.is_none()
+                    {
                         let visible_rows = self.calculate_visible_patient_rows();
                         self.patient_list.move_down_and_scroll(visible_rows);
                     }
                 }
                 Action::NavigateUp => {
-                    if (self.tab_bar.selected() == Tab::PatientSearch || self.tab_bar.selected() == Tab::PatientWorkspace) && self.patient_form.is_none() {
+                    if (self.tab_bar.selected() == Tab::PatientSearch
+                        || self.tab_bar.selected() == Tab::PatientWorkspace)
+                        && self.patient_form.is_none()
+                    {
                         let visible_rows = self.calculate_visible_patient_rows();
                         self.patient_list.move_up_and_scroll(visible_rows);
                     }
@@ -289,7 +295,9 @@ impl App {
                     }
                 }
                 Action::Enter => {
-                    if self.tab_bar.selected() == Tab::PatientSearch || self.tab_bar.selected() == Tab::PatientWorkspace {
+                    if self.tab_bar.selected() == Tab::PatientSearch
+                        || self.tab_bar.selected() == Tab::PatientWorkspace
+                    {
                         return self.handle_patient_keys(key);
                     }
                     if self.tab_bar.selected() == Tab::Schedule {
@@ -297,9 +305,7 @@ impl App {
                     }
                 }
                 Action::NewAppointment => {
-                    if self.tab_bar.selected() == Tab::Schedule
-                        && self.appointment_form.is_none()
-                    {
+                    if self.tab_bar.selected() == Tab::Schedule && self.appointment_form.is_none() {
                         self.appointment_form = Some(AppointmentForm::new(
                             self.theme.clone(),
                             self.healthcare_config.clone(),
@@ -373,7 +379,8 @@ impl App {
                 }
 
                 Action::OpenPatientFromList => {
-                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none() {
+                    if self.tab_bar.selected() == Tab::PatientSearch && self.patient_form.is_none()
+                    {
                         if let Some(patient) = self.patient_list.selected_patient().cloned() {
                             match self.open_patient_workspace(patient) {
                                 Ok(_) => {}

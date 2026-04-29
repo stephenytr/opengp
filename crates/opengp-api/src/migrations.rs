@@ -13,10 +13,7 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), crate::ApiError> {
         return Ok(());
     };
 
-    info!(
-        "Running migrations from: {}",
-        migrations_dir.display()
-    );
+    info!("Running migrations from: {}", migrations_dir.display());
 
     let mut entries = std::fs::read_dir(migrations_dir)
         .map_err(|e| crate::ApiError::Configuration(e.to_string()))?

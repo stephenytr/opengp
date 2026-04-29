@@ -1,6 +1,6 @@
 use crate::ui::components::clinical::{
-    AllergyState, ConsultationState, FamilyHistoryState, MedicalHistoryState,
-    SocialHistoryState, VitalsState,
+    AllergyState, ConsultationState, FamilyHistoryState, MedicalHistoryState, SocialHistoryState,
+    VitalsState,
 };
 use crate::ui::theme::Theme;
 use opengp_config::{
@@ -138,7 +138,11 @@ impl ClinicalState {
         self.form_view = ClinicalFormView::None;
     }
 
-    pub fn open_allergy_detail(&mut self, allergy: opengp_domain::domain::clinical::Allergy, _theme: &Theme) {
+    pub fn open_allergy_detail(
+        &mut self,
+        allergy: opengp_domain::domain::clinical::Allergy,
+        _theme: &Theme,
+    ) {
         self.allergies.open_allergy_detail(allergy);
     }
 
@@ -146,24 +150,39 @@ impl ClinicalState {
         self.allergies.close_allergy_detail();
     }
 
-    pub fn open_medical_history_detail(&mut self, medical_history: opengp_domain::domain::clinical::MedicalHistory, _theme: &Theme) {
-        self.medical_history.open_medical_history_detail(medical_history);
+    pub fn open_medical_history_detail(
+        &mut self,
+        medical_history: opengp_domain::domain::clinical::MedicalHistory,
+        _theme: &Theme,
+    ) {
+        self.medical_history
+            .open_medical_history_detail(medical_history);
     }
 
     pub fn close_medical_history_detail(&mut self) {
         self.medical_history.close_medical_history_detail();
     }
 
-    pub fn open_vitals_detail(&mut self, vitals: opengp_domain::domain::clinical::VitalSigns, _theme: &Theme) {
-        self.vitals.open_vitals_detail(vitals, self.vitals.theme.clone());
+    pub fn open_vitals_detail(
+        &mut self,
+        vitals: opengp_domain::domain::clinical::VitalSigns,
+        _theme: &Theme,
+    ) {
+        self.vitals
+            .open_vitals_detail(vitals, self.vitals.theme.clone());
     }
 
     pub fn close_vitals_detail(&mut self) {
         self.vitals.close_vitals_detail();
     }
 
-    pub fn open_family_history_detail(&mut self, family_history: opengp_domain::domain::clinical::FamilyHistory, _theme: &Theme) {
-        self.family_history.open_family_history_detail(family_history);
+    pub fn open_family_history_detail(
+        &mut self,
+        family_history: opengp_domain::domain::clinical::FamilyHistory,
+        _theme: &Theme,
+    ) {
+        self.family_history
+            .open_family_history_detail(family_history);
     }
 
     pub fn close_family_history_detail(&mut self) {
@@ -344,8 +363,13 @@ impl ClinicalState {
             ClinicalView::Allergies => self.allergies.allergy_list.next(),
             ClinicalView::MedicalHistory => {
                 self.medical_history.medical_history_list.selected_index =
-                    (self.medical_history.medical_history_list.selected_index + 1)
-                        .min(self.medical_history.medical_history_list.conditions.len().saturating_sub(1))
+                    (self.medical_history.medical_history_list.selected_index + 1).min(
+                        self.medical_history
+                            .medical_history_list
+                            .conditions
+                            .len()
+                            .saturating_sub(1),
+                    )
             }
             ClinicalView::VitalSigns => self.vitals.vitals_list.next(),
             ClinicalView::SocialHistory => {}
@@ -359,8 +383,11 @@ impl ClinicalState {
             ClinicalView::Consultations => self.consultations.consultation_list.prev(),
             ClinicalView::Allergies => self.allergies.allergy_list.prev(),
             ClinicalView::MedicalHistory => {
-                self.medical_history.medical_history_list.selected_index =
-                    self.medical_history.medical_history_list.selected_index.saturating_sub(1)
+                self.medical_history.medical_history_list.selected_index = self
+                    .medical_history
+                    .medical_history_list
+                    .selected_index
+                    .saturating_sub(1)
             }
             ClinicalView::VitalSigns => self.vitals.vitals_list.prev(),
             ClinicalView::SocialHistory => {}
@@ -396,12 +423,21 @@ impl ClinicalState {
         }
         match self.view {
             ClinicalView::PatientSummary => {}
-            ClinicalView::Consultations => self.consultations.consultation_list.adjust_scroll(visible_rows),
+            ClinicalView::Consultations => self
+                .consultations
+                .consultation_list
+                .adjust_scroll(visible_rows),
             ClinicalView::Allergies => self.allergies.allergy_list.adjust_scroll(visible_rows),
-            ClinicalView::MedicalHistory => self.medical_history.medical_history_list.adjust_scroll(visible_rows),
+            ClinicalView::MedicalHistory => self
+                .medical_history
+                .medical_history_list
+                .adjust_scroll(visible_rows),
             ClinicalView::VitalSigns => self.vitals.vitals_list.adjust_scroll(visible_rows),
             ClinicalView::SocialHistory => {}
-            ClinicalView::FamilyHistory => self.family_history.family_history_list.adjust_scroll(visible_rows),
+            ClinicalView::FamilyHistory => self
+                .family_history
+                .family_history_list
+                .adjust_scroll(visible_rows),
         }
     }
 
@@ -410,7 +446,9 @@ impl ClinicalState {
             ClinicalView::PatientSummary => 0,
             ClinicalView::Consultations => self.consultations.consultation_list.selected_index(),
             ClinicalView::Allergies => self.allergies.allergy_list.selected_index,
-            ClinicalView::MedicalHistory => self.medical_history.medical_history_list.selected_index,
+            ClinicalView::MedicalHistory => {
+                self.medical_history.medical_history_list.selected_index
+            }
             ClinicalView::VitalSigns => self.vitals.vitals_list.selected_index,
             ClinicalView::SocialHistory => 0,
             ClinicalView::FamilyHistory => self.family_history.family_history_list.selected_index,
@@ -773,7 +811,10 @@ mod tests {
 
         // Allergies delegates to allergy_list
         state.view = ClinicalView::Allergies;
-        assert_eq!(state.scroll_offset(), state.allergies.allergy_list.scroll_offset);
+        assert_eq!(
+            state.scroll_offset(),
+            state.allergies.allergy_list.scroll_offset
+        );
 
         // SocialHistory → 0
         state.view = ClinicalView::SocialHistory;
@@ -823,12 +864,12 @@ mod tests {
     fn test_set_sub_loading_scoped() {
         use super::ClinicalSubDomain;
         let mut state = test_state();
-        
+
         // Initially all loading should be false
         assert!(!state.consultations.loading);
         assert!(!state.allergies.loading);
         assert!(!state.vitals.loading);
-        
+
         // Setting one domain's loading should NOT affect others
         state.set_sub_loading(ClinicalSubDomain::Allergies, true);
         assert!(state.allergies.loading);
@@ -837,11 +878,11 @@ mod tests {
         assert!(!state.medical_history.loading);
         assert!(!state.family_history.loading);
         assert!(!state.social_history.loading);
-        
+
         // Setting another domain should not affect Allergies
         state.set_sub_loading(ClinicalSubDomain::Vitals, true);
-        assert!(state.allergies.loading);  // Still true
-        assert!(state.vitals.loading);     // Now true
+        assert!(state.allergies.loading); // Still true
+        assert!(state.vitals.loading); // Now true
         assert!(!state.consultations.loading);
     }
 }

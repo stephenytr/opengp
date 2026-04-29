@@ -6,9 +6,7 @@ use axum::{
     Extension, Json,
 };
 use chrono::Utc;
-use opengp_domain::domain::api::{
-    ApiErrorResponse, LoginRequest,
-};
+use opengp_domain::domain::api::{ApiErrorResponse, LoginRequest};
 use opengp_domain::domain::audit::{AuditAction, AuditEntry};
 use opengp_domain::domain::user::AuthError;
 use serde::{Deserialize, Serialize};

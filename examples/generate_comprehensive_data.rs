@@ -9,17 +9,17 @@ use chrono::Utc;
 use opengp::infrastructure::crypto::EncryptionService;
 use opengp::infrastructure::fixtures::{
     AppointmentGenerator, AppointmentGeneratorConfig, BillingGeneratorConfig,
-    ClinicalDataGeneratorConfig, ComprehensivePatientGenerator, ComprehensivePatientGeneratorConfig,
-    PatientGeneratorConfig,
+    ClinicalDataGeneratorConfig, ComprehensivePatientGenerator,
+    ComprehensivePatientGeneratorConfig, PatientGeneratorConfig,
 };
 use opengp_config::Config;
 use opengp_domain::domain::appointment::Appointment;
+use opengp_domain::domain::billing::{DVAClaim, Invoice, MedicareClaim, Payment};
 use opengp_domain::domain::clinical::{
     AlcoholStatus, Allergy, Consultation, ExerciseFrequency, FamilyHistory, MedicalHistory,
     SmokingStatus, SocialHistory, VitalSigns,
 };
 use opengp_domain::domain::patient::Patient;
-use opengp_domain::domain::billing::{DVAClaim, Invoice, MedicareClaim, Payment};
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -81,8 +81,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = PgPoolOptions::new()
         .max_connections(config.app.api_server.database.max_connections)
         .min_connections(config.app.api_server.database.min_connections)
-        .acquire_timeout(Duration::from_secs(config.app.api_server.database.connect_timeout_secs))
-        .idle_timeout(Duration::from_secs(config.app.api_server.database.idle_timeout_secs))
+        .acquire_timeout(Duration::from_secs(
+            config.app.api_server.database.connect_timeout_secs,
+        ))
+        .idle_timeout(Duration::from_secs(
+            config.app.api_server.database.idle_timeout_secs,
+        ))
         .connect_with(connect_options)
         .await?;
 
@@ -372,7 +376,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         stats.social_history_created
     );
     println!("  ✓ Vital signs records: {}", stats.vitals_created);
-    println!("  ✓ Family history records: {}", stats.family_history_created);
+    println!(
+        "  ✓ Family history records: {}",
+        stats.family_history_created
+    );
     println!("  ✓ Invoices created: {}", stats.invoices_created);
     println!(
         "  ✓ Medicare claims created: {}",
@@ -961,7 +968,11 @@ async fn insert_social_history(
     Ok(())
 }
 
-async fn insert_vitals(pool: &PgPool, vitals: &VitalSigns, actor_id: Uuid) -> Result<(), sqlx::Error> {
+async fn insert_vitals(
+    pool: &PgPool,
+    vitals: &VitalSigns,
+    actor_id: Uuid,
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         INSERT INTO vital_signs (
@@ -1180,7 +1191,11 @@ async fn insert_dva_claim(pool: &PgPool, claim: &DVAClaim) -> Result<(), sqlx::E
     Ok(())
 }
 
-async fn insert_payment(pool: &PgPool, payment: &Payment, actor_id: Uuid) -> Result<(), sqlx::Error> {
+async fn insert_payment(
+    pool: &PgPool,
+    payment: &Payment,
+    actor_id: Uuid,
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         INSERT INTO payments (

@@ -3,11 +3,11 @@
 //! Read-only modal displaying medical history details with actions to close or edit.
 
 use crossterm::event::{KeyEvent, KeyModifiers};
+use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Clear, Widget};
-use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::theme::Theme;
 use opengp_domain::domain::clinical::MedicalHistory;
@@ -95,15 +95,17 @@ impl MedicalHistoryDetailModal {
 
     /// Handle keyboard input and return an action if triggered.
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<MedicalHistoryDetailModalAction> {
-        use crossterm::event::{KeyCode, KeyEventKind};
+        use crossterm::event::Event;
+        use rat_event::ct_event;
 
-        if key.kind != KeyEventKind::Press {
+        if key.kind != crossterm::event::KeyEventKind::Press {
             return None;
         }
 
-        match key.code {
-            KeyCode::Esc => Some(MedicalHistoryDetailModalAction::Close),
-            KeyCode::Tab => {
+        let event = Event::Key(key);
+        match &event {
+            ct_event!(keycode press Esc) => Some(MedicalHistoryDetailModalAction::Close),
+            ct_event!(keycode press Tab) => {
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
                     self.prev_button();
                 } else {
@@ -111,11 +113,11 @@ impl MedicalHistoryDetailModal {
                 }
                 None
             }
-            KeyCode::BackTab => {
+            ct_event!(keycode press BackTab) => {
                 self.prev_button();
                 None
             }
-            KeyCode::Enter => self.handle_enter_on_focused_button(),
+            ct_event!(keycode press Enter) => self.handle_enter_on_focused_button(),
             _ => None,
         }
     }

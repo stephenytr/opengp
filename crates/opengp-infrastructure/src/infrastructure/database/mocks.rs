@@ -90,16 +90,14 @@ impl PatientRepository for MockPatientRepository {
         let storage = self.storage.lock().await;
         Ok(storage
             .iter()
-            .find(|p| {
-                p.medicare_number
-                    .as_ref()
-                    .map(|m| m.as_str())
-                    == Some(medicare)
-            })
+            .find(|p| p.medicare_number.as_ref().map(|m| m.as_str()) == Some(medicare))
             .cloned())
     }
 
-    async fn list_active(&self, limit: Option<i64>) -> Result<Vec<Patient>, PatientRepositoryError> {
+    async fn list_active(
+        &self,
+        limit: Option<i64>,
+    ) -> Result<Vec<Patient>, PatientRepositoryError> {
         let storage = self.storage.lock().await;
         let mut active: Vec<Patient> = storage.iter().filter(|p| p.is_active).cloned().collect();
         if let Some(limit_value) = limit {

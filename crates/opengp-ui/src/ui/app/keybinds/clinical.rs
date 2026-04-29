@@ -1,15 +1,14 @@
 use crate::ui::app::{App, PendingClinicalSaveData};
 use crate::ui::components::clinical::{
-    AllergyDetailModalAction, ClinicalFormView, ClinicalView,
-    ConsultationFormAction, FamilyHistoryDetailModalAction, FamilyHistoryFormAction,
-    MedicalHistoryDetailModalAction, MedicalHistoryFormAction,
-    VitalsDetailModalAction,
+    AllergyDetailModalAction, ClinicalFormView, ClinicalView, ConsultationFormAction,
+    FamilyHistoryDetailModalAction, FamilyHistoryFormAction, MedicalHistoryDetailModalAction,
+    MedicalHistoryFormAction, VitalsDetailModalAction,
 };
 use crate::ui::components::SubtabKind;
 use crate::ui::keybinds::{Action, KeyContext};
 use crate::ui::shared::FormAction;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::ui::widgets::FormNavigation;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 impl App {
     pub(crate) fn handle_clinical_keys(&mut self, key: KeyEvent) -> Action {
@@ -115,16 +114,19 @@ impl App {
                             FormAction::Submit => {
                                 let payload = {
                                     let clinical_state = self.clinical_state_mut();
-                                    clinical_state.allergies.allergy_form.as_mut().and_then(|form| {
-                                        if form.validate() {
-                                            Some(PendingClinicalSaveData::Allergy {
-                                                patient_id,
-                                                allergy: form.to_allergy(patient_id, current_user_id),
-                                            })
-                                        } else {
-                                            None
-                                        }
-                                    })
+                                    clinical_state.allergies.allergy_form.as_mut().and_then(
+                                        |form| {
+                                            if form.validate() {
+                                                Some(PendingClinicalSaveData::Allergy {
+                                                    patient_id,
+                                                    allergy: form
+                                                        .to_allergy(patient_id, current_user_id),
+                                                })
+                                            } else {
+                                                None
+                                            }
+                                        },
+                                    )
                                 };
 
                                 if let Some(payload) = payload {
@@ -132,8 +134,9 @@ impl App {
                                     self.clinical_state_mut().close_form();
                                     self.status_bar.clear_error();
                                 } else {
-                                    self.status_bar
-                                        .set_error(Some("Please fill in required fields".to_string()));
+                                    self.status_bar.set_error(Some(
+                                        "Please fill in required fields".to_string(),
+                                    ));
                                 }
                             }
                             FormAction::Cancel => {
@@ -180,8 +183,9 @@ impl App {
                                     self.clinical_state_mut().close_form();
                                     self.status_bar.clear_error();
                                 } else {
-                                    self.status_bar
-                                        .set_error(Some("Please fill in required fields".to_string()));
+                                    self.status_bar.set_error(Some(
+                                        "Please fill in required fields".to_string(),
+                                    ));
                                 }
                             }
                             MedicalHistoryFormAction::Cancel => {
@@ -211,7 +215,8 @@ impl App {
                                         if form.validate() {
                                             Some(PendingClinicalSaveData::VitalSigns {
                                                 patient_id,
-                                                vitals: form.to_vital_signs(patient_id, current_user_id),
+                                                vitals: form
+                                                    .to_vital_signs(patient_id, current_user_id),
                                             })
                                         } else {
                                             None
@@ -224,8 +229,9 @@ impl App {
                                     self.clinical_state_mut().close_form();
                                     self.status_bar.clear_error();
                                 } else {
-                                    self.status_bar
-                                        .set_error(Some("Please fill in required fields".to_string()));
+                                    self.status_bar.set_error(Some(
+                                        "Please fill in required fields".to_string(),
+                                    ));
                                 }
                             }
                             FormAction::Cancel => {
@@ -258,7 +264,8 @@ impl App {
                                         .as_mut()
                                         .map(|form| PendingClinicalSaveData::FamilyHistory {
                                             patient_id,
-                                            entry: form.to_family_history(patient_id, current_user_id),
+                                            entry: form
+                                                .to_family_history(patient_id, current_user_id),
                                         })
                                 };
 
@@ -267,8 +274,9 @@ impl App {
                                     self.clinical_state_mut().close_form();
                                     self.status_bar.clear_error();
                                 } else {
-                                    self.status_bar
-                                        .set_error(Some("Please fill in required fields".to_string()));
+                                    self.status_bar.set_error(Some(
+                                        "Please fill in required fields".to_string(),
+                                    ));
                                 }
                             }
                             FamilyHistoryFormAction::Cancel => {
@@ -325,8 +333,9 @@ impl App {
                                     self.clinical_state_mut().close_consultation_form();
                                     self.status_bar.clear_error();
                                 } else {
-                                    self.status_bar
-                                        .set_error(Some("Please fill in required fields".to_string()));
+                                    self.status_bar.set_error(Some(
+                                        "Please fill in required fields".to_string(),
+                                    ));
                                 }
                             }
                             ConsultationFormAction::Cancel => {
@@ -353,12 +362,22 @@ impl App {
                 Action::ToggleConsultationTimer => {
                     let timer_payload = {
                         let clinical_state = self.clinical_state_mut();
-                        let selected = clinical_state.consultations.consultation_list.selected().cloned();
+                        let selected = clinical_state
+                            .consultations
+                            .consultation_list
+                            .selected()
+                            .cloned();
                         selected.map(|c| {
-                            if c.consultation_started_at.is_some() && c.consultation_ended_at.is_none() {
-                                PendingClinicalSaveData::TimerStop { consultation_id: c.id }
+                            if c.consultation_started_at.is_some()
+                                && c.consultation_ended_at.is_none()
+                            {
+                                PendingClinicalSaveData::TimerStop {
+                                    consultation_id: c.id,
+                                }
                             } else {
-                                PendingClinicalSaveData::TimerStart { consultation_id: c.id }
+                                PendingClinicalSaveData::TimerStart {
+                                    consultation_id: c.id,
+                                }
                             }
                         })
                     };
@@ -403,7 +422,9 @@ impl App {
                         crate::ui::components::clinical::ConsultationListAction::Select(_)
                         | crate::ui::components::clinical::ConsultationListAction::NextPage
                         | crate::ui::components::clinical::ConsultationListAction::PrevPage
-                        | crate::ui::components::clinical::ConsultationListAction::ContextMenu { .. } => {}
+                        | crate::ui::components::clinical::ConsultationListAction::ContextMenu {
+                            ..
+                        } => {}
                     }
                     return Action::Enter;
                 }
@@ -417,7 +438,8 @@ impl App {
                 if let Some(action) = list_action {
                     match action {
                         crate::ui::components::clinical::AllergyListAction::Open(allergy) => {
-                            self.clinical_state_mut().open_allergy_detail(allergy, &theme);
+                            self.clinical_state_mut()
+                                .open_allergy_detail(allergy, &theme);
                         }
                         crate::ui::components::clinical::AllergyListAction::New => {
                             self.clinical_state_mut().open_allergy_form();
@@ -425,7 +447,9 @@ impl App {
                         crate::ui::components::clinical::AllergyListAction::Select(_)
                         | crate::ui::components::clinical::AllergyListAction::ToggleInactive
                         | crate::ui::components::clinical::AllergyListAction::Delete(_)
-                        | crate::ui::components::clinical::AllergyListAction::ContextMenu { .. } => {}
+                        | crate::ui::components::clinical::AllergyListAction::ContextMenu {
+                            ..
+                        } => {}
                     }
                     return Action::Enter;
                 }
@@ -467,7 +491,9 @@ impl App {
                         crate::ui::components::clinical::VitalSignsListAction::Select(_)
                         | crate::ui::components::clinical::VitalSignsListAction::NextPage
                         | crate::ui::components::clinical::VitalSignsListAction::PrevPage
-                        | crate::ui::components::clinical::VitalSignsListAction::ContextMenu { .. } => {}
+                        | crate::ui::components::clinical::VitalSignsListAction::ContextMenu {
+                            ..
+                        } => {}
                     }
                     return Action::Enter;
                 }
@@ -495,7 +521,9 @@ impl App {
                         }
                         crate::ui::components::clinical::FamilyHistoryListAction::Select(_)
                         | crate::ui::components::clinical::FamilyHistoryListAction::Delete(_)
-                        | crate::ui::components::clinical::FamilyHistoryListAction::ContextMenu { .. } => {}
+                        | crate::ui::components::clinical::FamilyHistoryListAction::ContextMenu {
+                            ..
+                        } => {}
                     }
                     return Action::Enter;
                 }
@@ -505,10 +533,7 @@ impl App {
         Action::Unknown
     }
 
-    fn handle_allergy_modal_action(
-        &mut self,
-        action: AllergyDetailModalAction,
-    ) {
+    fn handle_allergy_modal_action(&mut self, action: AllergyDetailModalAction) {
         match action {
             AllergyDetailModalAction::Close => {
                 self.clinical_state_mut().close_allergy_detail();
@@ -520,10 +545,7 @@ impl App {
         }
     }
 
-    fn handle_medical_history_modal_action(
-        &mut self,
-        action: MedicalHistoryDetailModalAction,
-    ) {
+    fn handle_medical_history_modal_action(&mut self, action: MedicalHistoryDetailModalAction) {
         match action {
             MedicalHistoryDetailModalAction::Close => {
                 self.clinical_state_mut().close_medical_history_detail();
@@ -535,10 +557,7 @@ impl App {
         }
     }
 
-    fn handle_vitals_modal_action(
-        &mut self,
-        action: VitalsDetailModalAction,
-    ) {
+    fn handle_vitals_modal_action(&mut self, action: VitalsDetailModalAction) {
         match action {
             VitalsDetailModalAction::Close => {
                 self.clinical_state_mut().close_vitals_detail();
@@ -550,10 +569,7 @@ impl App {
         }
     }
 
-    fn handle_family_history_modal_action(
-        &mut self,
-        action: FamilyHistoryDetailModalAction,
-    ) {
+    fn handle_family_history_modal_action(&mut self, action: FamilyHistoryDetailModalAction) {
         match action {
             FamilyHistoryDetailModalAction::Close => {
                 self.clinical_state_mut().close_family_history_detail();
@@ -614,10 +630,18 @@ mod tests {
         let _ = app.workspace_manager.open_patient(patient);
         app.clinical_state_mut().show_consultations();
 
-        let action = app.handle_clinical_keys(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+        let action =
+            app.handle_clinical_keys(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
 
         assert_eq!(action, Action::Enter);
-        assert!(matches!(app.clinical_state_mut().form_view, ClinicalFormView::ConsultationForm));
-        assert!(app.clinical_state_mut().consultations.consultation_form.is_some());
+        assert!(matches!(
+            app.clinical_state_mut().form_view,
+            ClinicalFormView::ConsultationForm
+        ));
+        assert!(app
+            .clinical_state_mut()
+            .consultations
+            .consultation_form
+            .is_some());
     }
 }
