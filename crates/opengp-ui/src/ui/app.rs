@@ -34,7 +34,7 @@ pub use app_state::AppState;
 pub use command::AppCommand;
 pub use error::AppError;
 pub use event::AppEvent;
-pub use global::GlobalState;
+pub use global::{DialogContent, GlobalState};
 
 const DEFAULT_PATIENT_PAGE_LIMIT: u32 = 100;
 const DEFAULT_APPOINTMENT_PAGE_LIMIT: u32 = 100;

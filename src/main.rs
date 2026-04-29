@@ -22,7 +22,8 @@ use opengp_infrastructure::infrastructure::database::repositories::{
 use opengp_infrastructure::infrastructure::database::{create_pool, DatabaseConfig};
 use opengp_ui::api::ApiClient;
 use opengp_ui::ui::app::{
-    AppCommand, AppError, AppEvent, AppState, GlobalState, PendingPatientData, RetryOperation,
+    AppCommand, AppError, AppEvent, AppState, DialogContent, GlobalState, PendingPatientData,
+    RetryOperation,
 };
 use opengp_ui::ui::components::appointment::{
     AppointmentDetailModalAction, AppointmentForm, AppointmentFormAction, AppointmentState,
@@ -103,7 +104,6 @@ async fn bootstrap(config: Config) -> Result<(GlobalState, AppState), AppError> 
         tab_bar: TabBar::new(theme.clone()),
         previous_tab: Tab::Schedule,
         status_bar: StatusBar::schedule(theme.clone()),
-        help_overlay: HelpOverlay::new(theme.clone()),
         login_screen: opengp_ui::ui::screens::LoginScreen::new(theme.clone()),
         authenticated: has_session_token,
         current_context: KeyContext::Global,
@@ -111,12 +111,9 @@ async fn bootstrap(config: Config) -> Result<(GlobalState, AppState), AppError> 
         current_user_id: uuid::Uuid::nil(),
         terminal_size: Rect::new(0, 0, 80, 24),
         patient_list: PatientList::new(theme.clone()),
-        patient_form: None,
         pending_patient_data: None,
         pending_edit_patient_id: None,
         appointment_state: AppointmentState::new(theme.clone(), config.app.calendar.clone()),
-        appointment_form: None,
-        appointment_detail_modal: None,
         pending_load_practitioners: false,
         pending_load_booked_slots: None,
         pending_appointment_save: None,
@@ -149,6 +146,7 @@ async fn bootstrap(config: Config) -> Result<(GlobalState, AppState), AppError> 
 
     let global = GlobalState {
         salsa_ctx: SalsaAppContext::default(),
+        dialogs: Default::default(),
         api_client: Some(api_client),
         billing_ui_service: billing_service,
         clinical_ui_service,
@@ -298,40 +296,99 @@ fn init(state: &mut AppState, _ctx: &mut GlobalState) -> Result<(), AppError> {
     Ok(())
 }
 
+fn dialog_render(
+    area: Rect,
+    buf: &mut Buffer,
+    dialog: &mut dyn std::any::Any,
+    _state: &mut AppState,
+) {
+    let Some(dialog) = dialog.downcast_mut::<DialogContent>() else {
+        return;
+    };
+
+    match dialog {
+        DialogContent::HelpOverlay(help) => help.clone().render(area, buf),
+        DialogContent::PatientForm(form) => form.clone().render(area, buf),
+        DialogContent::AppointmentForm(form) => form.clone().render(area, buf),
+        DialogContent::AppointmentDetailModal(modal) => modal.clone().render(area, buf),
+    }
+}
+
+fn push_dialog(ctx: &GlobalState, dialog: DialogContent) {
+    ctx.dialogs.push(dialog_render, |_event, _dialog, _state| Ok(Outcome::Continue.into()), dialog);
+}
+
+fn dialog_index(ctx: &GlobalState, predicate: impl Fn(&DialogContent) -> bool) -> Option<usize> {
+    for index in (0..ctx.dialogs.len()).rev() {
+        let Some(dialog) = ctx.dialogs.get::<DialogContent>(index) else {
+            continue;
+        };
+        if predicate(&dialog) {
+            return Some(index);
+        }
+    }
+    None
+}
+
+fn close_dialog(ctx: &GlobalState, predicate: impl Fn(&DialogContent) -> bool) -> bool {
+    if let Some(index) = dialog_index(ctx, predicate) {
+        ctx.dialogs.remove(index);
+        return true;
+    }
+    false
+}
+
+fn toggle_help_dialog(state: &mut AppState, ctx: &GlobalState) {
+    if close_dialog(ctx, |dialog| matches!(dialog, DialogContent::HelpOverlay(_))) {
+        return;
+    }
+
+    let mut help_overlay = HelpOverlay::new(ctx.theme.clone());
+    help_overlay.set_context(state.current_context);
+    help_overlay.show();
+    push_dialog(ctx, DialogContent::HelpOverlay(help_overlay));
+}
+
 fn render(
     area: Rect,
     buf: &mut Buffer,
     state: &mut AppState,
-    _ctx: &mut GlobalState,
+    ctx: &mut GlobalState,
 ) -> Result<(), AppError> {
-    if state.help_overlay.is_visible() {
-        state.help_overlay.clone().render(area, buf);
-        return Ok(());
-    }
-
     if !state.authenticated {
         state.login_screen.clone().render(area, buf);
-        return Ok(());
+    } else {
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Min(1),
+                Constraint::Length(1),
+            ])
+            .split(area);
+
+        state.tab_bar.clone().render(layout[0], buf);
+
+        match state.tab_bar.selected() {
+            Tab::Schedule => Paragraph::new("Schedule").render(layout[1], buf),
+            Tab::PatientSearch => state.patient_list.clone().render(layout[1], buf),
+            Tab::PatientWorkspace => Paragraph::new("Patient workspace").render(layout[1], buf),
+        }
+
+        state.status_bar.clone().render(layout[2], buf);
     }
 
-    let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1),
-            Constraint::Min(1),
-            Constraint::Length(1),
-        ])
-        .split(area);
-
-    state.tab_bar.clone().render(layout[0], buf);
-
-    match state.tab_bar.selected() {
-        Tab::Schedule => Paragraph::new("Schedule").render(layout[1], buf),
-        Tab::PatientSearch => state.patient_list.clone().render(layout[1], buf),
-        Tab::PatientWorkspace => Paragraph::new("Patient workspace").render(layout[1], buf),
+    if let Some(index) = ctx.dialogs.top::<DialogContent>() {
+        if let Some(mut dialog) = ctx.dialogs.get_mut::<DialogContent>(index) {
+            match &mut *dialog {
+                DialogContent::HelpOverlay(help) => help.clone().render(area, buf),
+                DialogContent::PatientForm(form) => form.clone().render(area, buf),
+                DialogContent::AppointmentForm(form) => form.clone().render(area, buf),
+                DialogContent::AppointmentDetailModal(modal) => modal.clone().render(area, buf),
+            }
+        }
     }
 
-    state.status_bar.clone().render(layout[2], buf);
     Ok(())
 }
 
@@ -342,16 +399,6 @@ fn build_focus(state: &AppState) -> Focus {
         .widget(&state.login_screen)
         .widget(&state.patient_list)
         .widget(&state.appointment_state);
-
-    if let Some(patient_form) = state.patient_form.as_ref() {
-        builder.widget(patient_form);
-    }
-    if let Some(appointment_form) = state.appointment_form.as_ref() {
-        builder.widget(appointment_form);
-    }
-    if let Some(detail_modal) = state.appointment_detail_modal.as_ref() {
-        builder.widget(detail_modal);
-    }
     if let Some(context_menu) = state.context_menu_state.as_ref() {
         builder.widget(context_menu);
     }
@@ -378,23 +425,29 @@ fn refresh_status_and_context(state: &mut AppState, ctx: &GlobalState) {
         KeyContext::Global
     } else if state.tab_bar.is_focused() {
         KeyContext::TabBar
-    } else if state
-        .patient_form
-        .as_ref()
-        .is_some_and(HasFocus::is_focused)
-    {
-        KeyContext::PatientForm
-    } else if state
-        .appointment_form
-        .as_ref()
-        .is_some_and(HasFocus::is_focused)
-        || state
-            .appointment_detail_modal
-            .as_ref()
-            .is_some_and(HasFocus::is_focused)
-    {
-        KeyContext::Schedule
     } else {
+        let mut dialog_context = None;
+        if let Some(index) = ctx.dialogs.top::<DialogContent>() {
+            if let Some(dialog) = ctx.dialogs.get::<DialogContent>(index) {
+                dialog_context = match &*dialog {
+                    DialogContent::HelpOverlay(_) => Some(KeyContext::Global),
+                    DialogContent::PatientForm(form) if form.is_focused() => {
+                        Some(KeyContext::PatientForm)
+                    }
+                    DialogContent::AppointmentForm(form) if form.is_focused() => {
+                        Some(KeyContext::Schedule)
+                    }
+                    DialogContent::AppointmentDetailModal(modal) if modal.is_focused() => {
+                        Some(KeyContext::Schedule)
+                    }
+                    _ => None,
+                };
+            }
+        }
+
+        if let Some(context) = dialog_context {
+            context
+        } else {
         match state.tab_bar.selected() {
             Tab::PatientSearch | Tab::PatientWorkspace => {
                 if state.patient_list.is_searching() {
@@ -410,17 +463,26 @@ fn refresh_status_and_context(state: &mut AppState, ctx: &GlobalState) {
                 AppointmentView::Schedule => KeyContext::Schedule,
             },
         }
+        }
     };
-
-    state.help_overlay.set_context(state.current_context);
 }
 
-fn handle_patient_form_key(state: &mut AppState, key: crossterm::event::KeyEvent) -> bool {
+enum DialogKeyResult {
+    NotHandled,
+    HandledKeep,
+    HandledClose,
+}
+
+fn handle_patient_form_key(
+    state: &mut AppState,
+    dialog: &mut DialogContent,
+    key: crossterm::event::KeyEvent,
+) -> DialogKeyResult {
     let mut consumed = false;
     let mut close_form = false;
     let mut pending_patient_data = None;
 
-    if let Some(form) = state.patient_form.as_mut() {
+    if let DialogContent::PatientForm(form) = dialog {
         if let Some(action) = form.handle_key(key) {
             consumed = true;
             match action {
@@ -455,15 +517,22 @@ fn handle_patient_form_key(state: &mut AppState, key: crossterm::event::KeyEvent
     if let Some(data) = pending_patient_data {
         state.pending_patient_data = Some(data);
     }
-    if close_form {
-        state.patient_form = None;
-    }
 
-    consumed
+    if close_form {
+        DialogKeyResult::HandledClose
+    } else if consumed {
+        DialogKeyResult::HandledKeep
+    } else {
+        DialogKeyResult::NotHandled
+    }
 }
 
-fn handle_appointment_form_key(state: &mut AppState, key: crossterm::event::KeyEvent) -> bool {
-    if let Some(form) = state.appointment_form.as_mut() {
+fn handle_appointment_form_key(
+    state: &mut AppState,
+    dialog: &mut DialogContent,
+    key: crossterm::event::KeyEvent,
+) -> DialogKeyResult {
+    if let DialogContent::AppointmentForm(form) = dialog {
         if let Some(action) = form.handle_key(key) {
             match action {
                 AppointmentFormAction::FocusChanged | AppointmentFormAction::ValueChanged => {}
@@ -480,13 +549,13 @@ fn handle_appointment_form_key(state: &mut AppState, key: crossterm::event::KeyE
                     }
                 }
                 AppointmentFormAction::Cancel => {
-                    state.appointment_form = None;
                     state.status_bar.clear_error();
+                    return DialogKeyResult::HandledClose;
                 }
                 AppointmentFormAction::SaveComplete => {
-                    state.appointment_form = None;
                     state.status_bar.clear_error();
                     state.pending_appointment_list_refresh = Some(chrono::Utc::now().date_naive());
+                    return DialogKeyResult::HandledClose;
                 }
                 AppointmentFormAction::OpenTimePicker {
                     practitioner_id,
@@ -494,24 +563,26 @@ fn handle_appointment_form_key(state: &mut AppState, key: crossterm::event::KeyE
                     duration,
                 } => {
                     let practitioner_id_i64 = practitioner_id.as_u128() as i64;
-                    if let Some(form) = state.appointment_form.as_mut() {
-                        form.open_time_picker(practitioner_id_i64, date, duration);
-                    }
+                    form.open_time_picker(practitioner_id_i64, date, duration);
                     state.pending_load_booked_slots = Some((practitioner_id, date, duration));
                 }
             }
-            return true;
+            return DialogKeyResult::HandledKeep;
         }
     }
-    false
+    DialogKeyResult::NotHandled
 }
 
-fn handle_detail_modal_key(state: &mut AppState, key: crossterm::event::KeyEvent) -> bool {
-    if let Some(modal) = state.appointment_detail_modal.as_mut() {
+fn handle_detail_modal_key(
+    state: &mut AppState,
+    dialog: &mut DialogContent,
+    key: crossterm::event::KeyEvent,
+) -> DialogKeyResult {
+    if let DialogContent::AppointmentDetailModal(modal) = dialog {
         if let Some(action) = modal.handle_key(key) {
             match action {
                 AppointmentDetailModalAction::Close => {
-                    state.appointment_detail_modal = None;
+                    return DialogKeyResult::HandledClose;
                 }
                 AppointmentDetailModalAction::MarkStatus(status) => {
                     let appointment_id = modal.appointment_id();
@@ -519,7 +590,7 @@ fn handle_detail_modal_key(state: &mut AppState, key: crossterm::event::KeyEvent
                         appointment_id,
                         opengp_ui::ui::app::AppointmentStatusTransition::SetStatus(status),
                     ));
-                    state.appointment_detail_modal = None;
+                    return DialogKeyResult::HandledClose;
                 }
                 AppointmentDetailModalAction::OpenTimePicker {
                     practitioner_id,
@@ -529,31 +600,28 @@ fn handle_detail_modal_key(state: &mut AppState, key: crossterm::event::KeyEvent
                     state.pending_load_booked_slots = Some((practitioner_id, date, duration));
                 }
                 AppointmentDetailModalAction::RescheduleTime => {
-                    if let Some(modal) = state.appointment_detail_modal.as_ref() {
-                        if let (Some(new_date), Some(new_time)) = (
-                            modal.pending_reschedule_date(),
-                            modal.pending_reschedule_time(),
-                        ) {
-                            state.pending_reschedule =
-                                Some(opengp_ui::ui::app::PendingRescheduleData {
-                                    appointment_id: modal.appointment_id(),
-                                    new_date: Some(new_date),
-                                    new_time: Some(new_time),
-                                    practitioner_id: modal.appointment().practitioner_id,
-                                    duration_minutes: modal.appointment().duration_minutes() as i64,
-                                });
-                            state.appointment_detail_modal = None;
-                        }
+                    if let (Some(new_date), Some(new_time)) = (
+                        modal.pending_reschedule_date(),
+                        modal.pending_reschedule_time(),
+                    ) {
+                        state.pending_reschedule = Some(opengp_ui::ui::app::PendingRescheduleData {
+                            appointment_id: modal.appointment_id(),
+                            new_date: Some(new_date),
+                            new_time: Some(new_time),
+                            practitioner_id: modal.appointment().practitioner_id,
+                            duration_minutes: modal.appointment().duration_minutes() as i64,
+                        });
+                        return DialogKeyResult::HandledClose;
                     }
                 }
                 AppointmentDetailModalAction::ViewClinicalNotes
                 | AppointmentDetailModalAction::StartConsultation
                 | AppointmentDetailModalAction::RescheduleDate => {}
             }
-            return true;
+            return DialogKeyResult::HandledKeep;
         }
     }
-    false
+    DialogKeyResult::NotHandled
 }
 
 fn event_fn(
@@ -571,18 +639,6 @@ fn event_fn(
                 if focus.focused().is_none() {
                     if !state.authenticated {
                         focus.focus(&state.login_screen);
-                    } else if state
-                        .patient_form
-                        .as_ref()
-                        .is_some_and(|w| state.tab_bar.selected() != Tab::Schedule)
-                    {
-                        if let Some(form) = state.patient_form.as_ref() {
-                            focus.focus(form);
-                        }
-                    } else if let Some(form) = state.appointment_form.as_ref() {
-                        focus.focus(form);
-                    } else if let Some(modal) = state.appointment_detail_modal.as_ref() {
-                        focus.focus(modal);
                     } else {
                         match state.tab_bar.selected() {
                             Tab::Schedule => focus.focus(&state.appointment_state),
@@ -599,6 +655,43 @@ fn event_fn(
                 }
 
                 refresh_status_and_context(state, ctx);
+
+                if let Some(index) = ctx.dialogs.top::<DialogContent>() {
+                    let dialog_result = if let Some(mut dialog) = ctx.dialogs.get_mut::<DialogContent>(index) {
+                        match &mut *dialog {
+                            DialogContent::HelpOverlay(_) => {
+                                if key.code == KeyCode::Esc || key.code == KeyCode::F(1) {
+                                    DialogKeyResult::HandledClose
+                                } else {
+                                    DialogKeyResult::HandledKeep
+                                }
+                            }
+                            DialogContent::PatientForm(_) => {
+                                handle_patient_form_key(state, &mut dialog, *key)
+                            }
+                            DialogContent::AppointmentForm(_) => {
+                                handle_appointment_form_key(state, &mut dialog, *key)
+                            }
+                            DialogContent::AppointmentDetailModal(_) => {
+                                handle_detail_modal_key(state, &mut dialog, *key)
+                            }
+                        }
+                    } else {
+                        DialogKeyResult::NotHandled
+                    };
+
+                    match dialog_result {
+                        DialogKeyResult::HandledClose => {
+                            _ = ctx.dialogs.pop();
+                            refresh_status_and_context(state, ctx);
+                            return Ok(Control::Changed);
+                        }
+                        DialogKeyResult::HandledKeep | DialogKeyResult::NotHandled => {
+                            refresh_status_and_context(state, ctx);
+                            return Ok(Control::Continue);
+                        }
+                    }
+                }
 
                 if state.server_unavailable_error.is_some() {
                     match key.code {
@@ -630,14 +723,6 @@ fn event_fn(
                         }
                         _ => {}
                     }
-                }
-
-                if state.help_overlay.is_visible() {
-                    if key.code == KeyCode::Esc || key.code == KeyCode::F(1) {
-                        state.help_overlay.hide();
-                        return Ok(Control::Changed);
-                    }
-                    return Ok(Control::Continue);
                 }
 
                 if state
@@ -692,7 +777,7 @@ fn event_fn(
                     {
                         match action {
                             Action::OpenHelp => {
-                                state.help_overlay.toggle();
+                                toggle_help_dialog(state, ctx);
                                 return Ok(Control::Changed);
                             }
                             Action::Quit => {
@@ -709,36 +794,6 @@ fn event_fn(
                 if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('q') {
                     state.should_quit = true;
                     return Ok(Control::Quit);
-                }
-
-                if state
-                    .appointment_form
-                    .as_ref()
-                    .is_some_and(HasFocus::is_focused)
-                    && handle_appointment_form_key(state, *key)
-                {
-                    refresh_status_and_context(state, ctx);
-                    return Ok(Control::Changed);
-                }
-
-                if state
-                    .appointment_detail_modal
-                    .as_ref()
-                    .is_some_and(HasFocus::is_focused)
-                    && handle_detail_modal_key(state, *key)
-                {
-                    refresh_status_and_context(state, ctx);
-                    return Ok(Control::Changed);
-                }
-
-                if state
-                    .patient_form
-                    .as_ref()
-                    .is_some_and(HasFocus::is_focused)
-                    && handle_patient_form_key(state, *key)
-                {
-                    refresh_status_and_context(state, ctx);
-                    return Ok(Control::Changed);
                 }
 
                 if state.patient_list.is_focused() {
@@ -788,34 +843,32 @@ fn event_fn(
                                 date,
                                 time,
                             } => {
-                                state.appointment_form = Some(AppointmentForm::new(
+                                let mut form = AppointmentForm::new(
                                     ctx.theme.clone(),
                                     ctx.healthcare_config.clone(),
-                                ));
-                                if let Some(form) = state.appointment_form.as_mut() {
-                                    if let Some(schedule_data) =
-                                        state.appointment_state.schedule_data.as_ref()
+                                );
+                                if let Some(schedule_data) = state.appointment_state.schedule_data.as_ref()
+                                {
+                                    if let Some(practitioner) = schedule_data
+                                        .practitioners
+                                        .iter()
+                                        .find(|p| p.practitioner_id == practitioner_id)
                                     {
-                                        if let Some(practitioner) = schedule_data
-                                            .practitioners
-                                            .iter()
-                                            .find(|p| p.practitioner_id == practitioner_id)
-                                        {
-                                            form.set_practitioner(
-                                                practitioner_id,
-                                                practitioner.practitioner_name.clone(),
-                                            );
-                                        }
+                                        form.set_practitioner(
+                                            practitioner_id,
+                                            practitioner.practitioner_name.clone(),
+                                        );
                                     }
-                                    form.set_value(
-                                        opengp_ui::ui::components::appointment::AppointmentFormField::Date,
-                                        opengp_ui::ui::widgets::format_date(date),
-                                    );
-                                    form.set_value(
-                                        opengp_ui::ui::components::appointment::AppointmentFormField::StartTime,
-                                        time,
-                                    );
                                 }
+                                form.set_value(
+                                    opengp_ui::ui::components::appointment::AppointmentFormField::Date,
+                                    opengp_ui::ui::widgets::format_date(date),
+                                );
+                                form.set_value(
+                                    opengp_ui::ui::components::appointment::AppointmentFormField::StartTime,
+                                    time,
+                                );
+                                push_dialog(ctx, DialogContent::AppointmentForm(form));
                                 state.pending_load_practitioners = true;
                             }
                             ScheduleAction::NavigateTimeSlot(_)
@@ -828,7 +881,7 @@ fn event_fn(
 
                 match key.code {
                     KeyCode::F(1) => {
-                        state.help_overlay.toggle();
+                        toggle_help_dialog(state, ctx);
                         Ok(Control::Changed)
                     }
                     KeyCode::F(2) => {
@@ -866,7 +919,7 @@ fn event_fn(
                                     return Ok(Control::Changed);
                                 }
                                 Action::OpenHelp => {
-                                    state.help_overlay.toggle();
+                                    toggle_help_dialog(state, ctx);
                                     return Ok(Control::Changed);
                                 }
                                 Action::Quit => {
@@ -875,12 +928,18 @@ fn event_fn(
                                 }
                                 Action::New => {
                                     if state.tab_bar.selected() == Tab::PatientSearch
-                                        && state.patient_form.is_none()
+                                        && dialog_index(ctx, |dialog| {
+                                            matches!(dialog, DialogContent::PatientForm(_))
+                                        })
+                                        .is_none()
                                     {
-                                        state.patient_form = Some(PatientForm::new(
-                                            ctx.theme.clone(),
-                                            &ctx.patient_config,
-                                        ));
+                                        push_dialog(
+                                            ctx,
+                                            DialogContent::PatientForm(PatientForm::new(
+                                                ctx.theme.clone(),
+                                                &ctx.patient_config,
+                                            )),
+                                        );
                                         refresh_status_and_context(state, ctx);
                                         return Ok(Control::Changed);
                                     }
@@ -897,16 +956,24 @@ fn event_fn(
                                 }
                                 Action::Escape => {
                                     let mut changed = false;
-                                    if state.patient_form.take().is_some() {
+                                    if close_dialog(ctx, |dialog| {
+                                        matches!(
+                                            dialog,
+                                            DialogContent::PatientForm(_)
+                                                | DialogContent::AppointmentForm(_)
+                                                | DialogContent::AppointmentDetailModal(_)
+                                        )
+                                    }) {
                                         changed = true;
                                     }
-                                    if state.appointment_form.take().is_some() {
-                                        changed = true;
-                                    }
+
                                     if state.tab_bar.selected() == Tab::Schedule
                                         && state.appointment_state.current_view
                                             == AppointmentView::Schedule
-                                        && state.appointment_form.is_none()
+                                        && dialog_index(ctx, |dialog| {
+                                            matches!(dialog, DialogContent::AppointmentForm(_))
+                                        })
+                                        .is_none()
                                     {
                                         state.appointment_state.current_view =
                                             AppointmentView::Calendar;
@@ -936,10 +1003,13 @@ fn event_fn(
                                 }
                                 Action::NewAppointment => {
                                     if state.tab_bar.selected() == Tab::Schedule {
-                                        state.appointment_form = Some(AppointmentForm::new(
-                                            ctx.theme.clone(),
-                                            ctx.healthcare_config.clone(),
-                                        ));
+                                        push_dialog(
+                                            ctx,
+                                            DialogContent::AppointmentForm(AppointmentForm::new(
+                                                ctx.theme.clone(),
+                                                ctx.healthcare_config.clone(),
+                                            )),
+                                        );
                                         state.pending_load_practitioners = true;
                                         return Ok(Control::Changed);
                                     }
@@ -982,7 +1052,13 @@ fn event_fn(
         AppEvent::AppointmentSaved(result) => {
             match result {
                 Ok(()) => {
-                    state.appointment_detail_modal = None;
+                    close_dialog(ctx, |dialog| {
+                        matches!(
+                            dialog,
+                            DialogContent::AppointmentDetailModal(_)
+                                | DialogContent::AppointmentForm(_)
+                        )
+                    });
                     state.status_bar.clear_error();
                 }
                 Err(err) => state.status_bar.set_error(Some(err.clone())),
@@ -1002,7 +1078,9 @@ fn event_fn(
         AppEvent::AppointmentStatusUpdated(result) => {
             match result {
                 Ok((_, date)) => {
-                    state.appointment_detail_modal = None;
+                    close_dialog(ctx, |dialog| {
+                        matches!(dialog, DialogContent::AppointmentDetailModal(_))
+                    });
                     state.pending_appointment_list_refresh = Some(*date);
                     state.status_bar.clear_error();
                 }
@@ -1013,7 +1091,9 @@ fn event_fn(
         AppEvent::AppointmentRescheduled(result) => {
             match result {
                 Ok((_, date)) => {
-                    state.appointment_detail_modal = None;
+                    close_dialog(ctx, |dialog| {
+                        matches!(dialog, DialogContent::AppointmentDetailModal(_))
+                    });
                     state.pending_appointment_list_refresh = Some(*date);
                     state.status_bar.clear_error();
                 }
@@ -1024,7 +1104,9 @@ fn event_fn(
         AppEvent::AppointmentCancelled(result) => {
             match result {
                 Ok(()) => {
-                    state.appointment_detail_modal = None;
+                    close_dialog(ctx, |dialog| {
+                        matches!(dialog, DialogContent::AppointmentDetailModal(_))
+                    });
                     state.status_bar.clear_error();
                 }
                 Err(err) => state.status_bar.set_error(Some(err.clone())),

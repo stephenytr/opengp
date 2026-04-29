@@ -2,18 +2,32 @@ use rat_salsa::{SalsaAppContext, SalsaContext};
 use std::sync::Arc;
 
 use crate::api::ApiClient;
+use crate::ui::app::AppState;
 use crate::ui::app::error::AppError;
 use crate::ui::app::event::AppEvent;
+use crate::ui::components::appointment::{AppointmentDetailModal, AppointmentForm};
+use crate::ui::components::help::HelpOverlay;
+use crate::ui::components::patient::PatientForm;
 use crate::ui::keybinds::KeybindRegistry;
 use crate::ui::services::{
     AppointmentUiService, BillingUiService, ClinicalUiService, PatientUiService,
 };
 use crate::ui::theme::Theme;
+use rat_dialog::DialogStack;
+
+#[derive(Clone)]
+pub enum DialogContent {
+    HelpOverlay(HelpOverlay),
+    PatientForm(PatientForm),
+    AppointmentForm(AppointmentForm),
+    AppointmentDetailModal(AppointmentDetailModal),
+}
 
 /// GlobalState holds long-lived dependencies and the rat-salsa execution context.
 /// It does NOT contain mutable UI state — that belongs in AppState.
 pub struct GlobalState {
     pub salsa_ctx: SalsaAppContext<AppEvent, AppError>,
+    pub dialogs: DialogStack<AppEvent, AppState, AppError>,
     pub api_client: Option<Arc<ApiClient>>,
     pub billing_ui_service: Option<Arc<BillingUiService>>,
     pub clinical_ui_service: Option<Arc<ClinicalUiService>>,

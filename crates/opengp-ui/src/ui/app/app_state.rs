@@ -8,10 +8,9 @@ use crate::ui::app::{
     PendingRescheduleData, RetryOperation,
 };
 use crate::ui::components::appointment::{
-    AppointmentDetailModal, AppointmentForm, AppointmentState,
+    AppointmentState,
 };
-use crate::ui::components::help::HelpOverlay;
-use crate::ui::components::patient::{PatientForm, PatientList};
+use crate::ui::components::patient::PatientList;
 use crate::ui::components::status_bar::StatusBar;
 use crate::ui::components::tabs::{Tab, TabBar};
 use crate::ui::components::workspace::WorkspaceManager;
@@ -26,7 +25,6 @@ pub struct AppState {
     pub tab_bar: TabBar,
     pub previous_tab: Tab,
     pub status_bar: StatusBar,
-    pub help_overlay: HelpOverlay,
     pub login_screen: crate::ui::screens::LoginScreen,
     pub authenticated: bool,
     pub current_context: KeyContext,
@@ -36,14 +34,11 @@ pub struct AppState {
 
     // Patient UI
     pub patient_list: PatientList,
-    pub patient_form: Option<PatientForm>,
     pub pending_patient_data: Option<PendingPatientData>,
     pub pending_edit_patient_id: Option<Uuid>,
 
     // Appointment UI
     pub appointment_state: AppointmentState,
-    pub appointment_form: Option<AppointmentForm>,
-    pub appointment_detail_modal: Option<AppointmentDetailModal>,
     pub pending_load_practitioners: bool,
     pub pending_load_booked_slots: Option<(Uuid, NaiveDate, u32)>,
     pub pending_appointment_save: Option<(NewAppointmentData, i32)>,
