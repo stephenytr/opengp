@@ -4,6 +4,7 @@ use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::Widget;
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::keybinds::{Action, KeyContext, KeybindRegistry};
 use crate::ui::theme::Theme;
@@ -40,6 +41,7 @@ pub struct Calendar {
     pub focused_date: NaiveDate,
     pub hovered_day: Option<NaiveDate>,
     pub double_click_detector: DoubleClickDetector,
+    pub focus: FocusFlag,
 }
 
 impl Calendar {
@@ -62,6 +64,7 @@ impl Calendar {
             focused_date: today,
             hovered_day: None,
             double_click_detector: DoubleClickDetector::default(),
+            focus: FocusFlag::default(),
         };
         calendar.rebuild_days();
         calendar
@@ -402,5 +405,20 @@ mod tests {
         if today.day() != 15 {
             assert!(!today_still_selected);
         }
+    }
+}
+
+
+impl HasFocus for Calendar {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }
