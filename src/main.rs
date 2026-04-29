@@ -130,10 +130,7 @@ async fn bootstrap(config: Config) -> Result<(GlobalState, AppState), AppError> 
         pending_practitioners_list_refresh: false,
         pending_login_request: None,
         active_login_attempt: None,
-        server_unavailable_error: None,
-        server_unavailable_retry: None,
         active_appointment_refresh_date: None,
-        context_menu_state: None,
         last_billing_render: None,
         hovered_clinical_menu: None,
         command_tx,
@@ -311,6 +308,8 @@ fn dialog_render(
         DialogContent::PatientForm(form) => form.clone().render(area, buf),
         DialogContent::AppointmentForm(form) => form.clone().render(area, buf),
         DialogContent::AppointmentDetailModal(modal) => modal.clone().render(area, buf),
+        DialogContent::ContextMenu(_) => {},
+        DialogContent::ServerUnavailable { .. } => {},
     }
 }
 
@@ -349,6 +348,26 @@ fn toggle_help_dialog(state: &mut AppState, ctx: &GlobalState) {
     push_dialog(ctx, DialogContent::HelpOverlay(help_overlay));
 }
 
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(area);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(vertical[1])[1]
+}
+
 fn render(
     area: Rect,
     buf: &mut Buffer,
@@ -385,6 +404,21 @@ fn render(
                 DialogContent::PatientForm(form) => form.clone().render(area, buf),
                 DialogContent::AppointmentForm(form) => form.clone().render(area, buf),
                 DialogContent::AppointmentDetailModal(modal) => modal.clone().render(area, buf),
+                DialogContent::ContextMenu(menu) => menu.clone().render(area, buf),
+                DialogContent::ServerUnavailable { error, retry: _ } => {
+                    use ratatui::widgets::Clear;
+                    let error_area = centered_rect(60, 20, area);
+                    Clear.render(error_area, buf);
+                    let border = ratatui::widgets::Block::default()
+                        .title("Server Unavailable")
+                        .borders(ratatui::widgets::Borders::ALL)
+                        .style(ratatui::style::Style::default().red());
+                    border.clone().render(error_area, buf);
+                    
+                    let inner = border.inner(error_area);
+                    Paragraph::new(format!("{}\n\n(Press 'r' to retry or Esc to dismiss)", error))
+                        .render(inner, buf);
+                }
             }
         }
     }
@@ -399,9 +433,6 @@ fn build_focus(state: &AppState) -> Focus {
         .widget(&state.login_screen)
         .widget(&state.patient_list)
         .widget(&state.appointment_state);
-    if let Some(context_menu) = state.context_menu_state.as_ref() {
-        builder.widget(context_menu);
-    }
 
     builder.build()
 }
@@ -675,6 +706,8 @@ fn event_fn(
                             DialogContent::AppointmentDetailModal(_) => {
                                 handle_detail_modal_key(state, &mut dialog, *key)
                             }
+                            DialogContent::ContextMenu(_) => DialogKeyResult::NotHandled,
+                            DialogContent::ServerUnavailable { .. } => DialogKeyResult::NotHandled,
                         }
                     } else {
                         DialogKeyResult::NotHandled
@@ -693,69 +726,73 @@ fn event_fn(
                     }
                 }
 
-                if state.server_unavailable_error.is_some() {
-                    match key.code {
-                        KeyCode::Char('r') | KeyCode::Char('R') => {
-                            if let Some(operation) = state.server_unavailable_retry.clone() {
-                                match operation {
-                                    RetryOperation::Login { username, password } => {
-                                        state.pending_login_request = Some((username, password));
-                                    }
-                                    RetryOperation::RefreshPatients => {
-                                        state.pending_patient_list_refresh = true;
-                                    }
-                                    RetryOperation::RefreshAppointments { date } => {
-                                        state.pending_appointment_list_refresh = Some(date);
-                                    }
-                                    RetryOperation::RefreshConsultations { patient_id } => {
-                                        state.pending_consultation_list_refresh = Some(patient_id);
-                                    }
-                                }
-                                state.server_unavailable_error = None;
-                                state.server_unavailable_retry = None;
-                            }
-                            return Ok(Control::Changed);
-                        }
-                        KeyCode::Esc => {
-                            state.server_unavailable_error = None;
-                            state.server_unavailable_retry = None;
-                            return Ok(Control::Changed);
-                        }
-                        _ => {}
-                    }
-                }
-
-                if state
-                    .context_menu_state
-                    .as_ref()
-                    .is_some_and(|menu| menu.is_visible())
-                {
-                    if let Some(context_menu) = state.context_menu_state.as_mut() {
-                        if let Some(action) = context_menu.handle_key(*key) {
-                            match action {
-                                opengp_ui::ui::widgets::ContextMenuAction::Selected(app_action) => {
-                                    state.context_menu_state = None;
-                                    match app_action {
-                                        opengp_ui::ui::app::AppContextMenuAction::PatientEdit(id) => {
-                                            state.pending_edit_patient_id = Some(id);
+                if let Some(index) = ctx.dialogs.top::<DialogContent>() {
+                    if let Some(dialog) = ctx.dialogs.get::<DialogContent>(index) {
+                        match &*dialog {
+                            DialogContent::ServerUnavailable { error: _, retry } => {
+                                match key.code {
+                                    KeyCode::Char('r') | KeyCode::Char('R') => {
+                                        if let Some(operation) = retry.clone() {
+                                            match operation {
+                                                RetryOperation::Login { username, password } => {
+                                                    state.pending_login_request = Some((username, password));
+                                                }
+                                                RetryOperation::RefreshPatients => {
+                                                    state.pending_patient_list_refresh = true;
+                                                }
+                                                RetryOperation::RefreshAppointments { date } => {
+                                                    state.pending_appointment_list_refresh = Some(date);
+                                                }
+                                                RetryOperation::RefreshConsultations { patient_id } => {
+                                                    state.pending_consultation_list_refresh = Some(patient_id);
+                                                }
+                                            }
+                                            _ = ctx.dialogs.pop();
                                         }
-                                        opengp_ui::ui::app::AppContextMenuAction::PatientDelete(_)
-                                        | opengp_ui::ui::app::AppContextMenuAction::PatientViewHistory(_)
-                                        | opengp_ui::ui::app::AppContextMenuAction::AppointmentEdit(_)
-                                        | opengp_ui::ui::app::AppContextMenuAction::AppointmentCancel(_)
-                                        | opengp_ui::ui::app::AppContextMenuAction::AppointmentReschedule(_)
-                                        | opengp_ui::ui::app::AppContextMenuAction::ClinicalEdit(_)
-                                        | opengp_ui::ui::app::AppContextMenuAction::ClinicalDelete(_)
-                                        | opengp_ui::ui::app::AppContextMenuAction::BillingEdit(_)
-                                        | opengp_ui::ui::app::AppContextMenuAction::BillingViewInvoice(_) => {}
+                                        return Ok(Control::Changed);
+                                    }
+                                    KeyCode::Esc => {
+                                        _ = ctx.dialogs.pop();
+                                        return Ok(Control::Changed);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            DialogContent::ContextMenu(menu) => {
+                                if menu.is_visible() {
+                                    if let Some(mut menu_mut) = ctx.dialogs.get_mut::<DialogContent>(index) {
+                                        if let DialogContent::ContextMenu(ref mut context_menu) = &mut *menu_mut {
+                                            if let Some(action) = context_menu.handle_key(*key) {
+                                                match action {
+                                                    opengp_ui::ui::widgets::ContextMenuAction::Selected(app_action) => {
+                                                        _ = ctx.dialogs.pop();
+                                                        match app_action {
+                                                            opengp_ui::ui::app::AppContextMenuAction::PatientEdit(id) => {
+                                                                state.pending_edit_patient_id = Some(id);
+                                                            }
+                                                            opengp_ui::ui::app::AppContextMenuAction::PatientDelete(_)
+                                                            | opengp_ui::ui::app::AppContextMenuAction::PatientViewHistory(_)
+                                                            | opengp_ui::ui::app::AppContextMenuAction::AppointmentEdit(_)
+                                                            | opengp_ui::ui::app::AppContextMenuAction::AppointmentCancel(_)
+                                                            | opengp_ui::ui::app::AppContextMenuAction::AppointmentReschedule(_)
+                                                            | opengp_ui::ui::app::AppContextMenuAction::ClinicalEdit(_)
+                                                            | opengp_ui::ui::app::AppContextMenuAction::ClinicalDelete(_)
+                                                            | opengp_ui::ui::app::AppContextMenuAction::BillingEdit(_)
+                                                            | opengp_ui::ui::app::AppContextMenuAction::BillingViewInvoice(_) => {}
+                                                        }
+                                                    }
+                                                    opengp_ui::ui::widgets::ContextMenuAction::Dismissed => {
+                                                        _ = ctx.dialogs.pop();
+                                                    }
+                                                    opengp_ui::ui::widgets::ContextMenuAction::FocusChanged => {}
+                                                }
+                                                return Ok(Control::Changed);
+                                            }
+                                        }
                                     }
                                 }
-                                opengp_ui::ui::widgets::ContextMenuAction::Dismissed => {
-                                    state.context_menu_state = None;
-                                }
-                                opengp_ui::ui::widgets::ContextMenuAction::FocusChanged => {}
                             }
-                            return Ok(Control::Changed);
+                            _ => {}
                         }
                     }
                 }

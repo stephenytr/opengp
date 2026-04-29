@@ -4,8 +4,8 @@ use std::time::Instant;
 use uuid::Uuid;
 
 use crate::ui::app::{
-    AppContextMenuAction, AppointmentStatusTransition, PendingClinicalSaveData, PendingPatientData,
-    PendingRescheduleData, RetryOperation,
+    AppointmentStatusTransition, PendingClinicalSaveData, PendingPatientData,
+    PendingRescheduleData,
 };
 use crate::ui::components::appointment::{
     AppointmentState,
@@ -15,7 +15,6 @@ use crate::ui::components::status_bar::StatusBar;
 use crate::ui::components::tabs::{Tab, TabBar};
 use crate::ui::components::workspace::WorkspaceManager;
 use crate::ui::keybinds::KeyContext;
-use crate::ui::widgets::ContextMenuState;
 use opengp_domain::domain::appointment::NewAppointmentData;
 
 /// AppState contains all mutable UI and session state.
@@ -61,12 +60,9 @@ pub struct AppState {
     // Login/retry/server-failure state
     pub pending_login_request: Option<(String, String)>,
     pub active_login_attempt: Option<(String, String)>,
-    pub server_unavailable_error: Option<String>,
-    pub server_unavailable_retry: Option<RetryOperation>,
     pub active_appointment_refresh_date: Option<NaiveDate>,
 
     // Context-menu/modals/render auxiliaries
-    pub context_menu_state: Option<ContextMenuState<AppContextMenuAction>>,
     pub last_billing_render: Option<Instant>,
     pub hovered_clinical_menu: Option<usize>,
 

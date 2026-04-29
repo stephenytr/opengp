@@ -2,7 +2,7 @@ use rat_salsa::{SalsaAppContext, SalsaContext};
 use std::sync::Arc;
 
 use crate::api::ApiClient;
-use crate::ui::app::AppState;
+use crate::ui::app::{AppState, AppContextMenuAction, RetryOperation};
 use crate::ui::app::error::AppError;
 use crate::ui::app::event::AppEvent;
 use crate::ui::components::appointment::{AppointmentDetailModal, AppointmentForm};
@@ -13,6 +13,7 @@ use crate::ui::services::{
     AppointmentUiService, BillingUiService, ClinicalUiService, PatientUiService,
 };
 use crate::ui::theme::Theme;
+use crate::ui::widgets::ContextMenuState;
 use rat_dialog::DialogStack;
 
 #[derive(Clone)]
@@ -21,6 +22,11 @@ pub enum DialogContent {
     PatientForm(PatientForm),
     AppointmentForm(AppointmentForm),
     AppointmentDetailModal(AppointmentDetailModal),
+    ContextMenu(ContextMenuState<AppContextMenuAction>),
+    ServerUnavailable {
+        error: String,
+        retry: Option<RetryOperation>,
+    },
 }
 
 /// GlobalState holds long-lived dependencies and the rat-salsa execution context.

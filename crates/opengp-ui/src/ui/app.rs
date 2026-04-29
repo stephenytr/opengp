@@ -559,6 +559,7 @@ impl App {
             .map(|s| s.is_visible())
             .unwrap_or(false)
     }
+
 }
 
 impl Default for App {
