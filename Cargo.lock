@@ -2266,6 +2266,8 @@ dependencies = [
  "opengp-domain",
  "opengp-infrastructure",
  "opengp-ui",
+ "rat-event",
+ "rat-focus",
  "rat-salsa",
  "ratatui",
  "serde",
