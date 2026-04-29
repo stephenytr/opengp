@@ -31,6 +31,10 @@ strum.workspace = true
 strum_macros.workspace = true
 derive_builder.workspace = true
 ratatui-textarea.workspace = true
+rat-salsa.workspace = true
+rat-event.workspace = true
+rat-focus.workspace = true
+rat-dialog.workspace = true
 regex.workspace = true
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 

@@ -84,6 +84,10 @@ strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 derive_builder = "0.20"
 ratatui-textarea = "0.8"
+rat-salsa = { version = "4.0.3", features = ["async"] }
+rat-event = "2.1"
+rat-focus = "2.1"
+rat-dialog = "2"
 deadpool-redis = "0.23"
 redis = "0.28"
 toml = "0.8"
