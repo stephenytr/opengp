@@ -8,7 +8,7 @@ use crate::ui::components::SubtabKind;
 use crate::ui::keybinds::{Action, KeyContext};
 use crate::ui::shared::FormAction;
 use crate::ui::widgets::FormNavigation;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
 impl App {
     pub(crate) fn handle_clinical_keys(&mut self, key: KeyEvent) -> Action {
