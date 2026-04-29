@@ -9,6 +9,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 use sublime_fuzzy::best_match;
 use uuid::Uuid;
 
@@ -33,6 +34,7 @@ pub struct PatientList {
     theme: Theme,
     hovered_index: Option<usize>,
     double_click_detector: DoubleClickDetector,
+    pub focus: FocusFlag,
 }
 
 impl Clone for PatientList {
@@ -48,6 +50,7 @@ impl Clone for PatientList {
             theme: self.theme.clone(),
             hovered_index: self.hovered_index,
             double_click_detector: self.double_click_detector.clone(),
+            focus: self.focus.clone(),
         }
     }
 }
@@ -65,6 +68,7 @@ impl PatientList {
             theme,
             hovered_index: None,
             double_click_detector: DoubleClickDetector::default(),
+            focus: FocusFlag::default(),
         }
     }
 
@@ -563,6 +567,20 @@ impl Widget for PatientList {
             .widths(col_widths);
 
         table.render(inner, buf);
+    }
+}
+
+impl HasFocus for PatientList {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }
 

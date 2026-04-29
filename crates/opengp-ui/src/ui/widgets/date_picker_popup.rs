@@ -8,6 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::{Clear, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use super::CalendarWidget;
 use crate::ui::shared::hover_style;
@@ -35,6 +36,7 @@ pub struct DatePickerPopup {
     theme: Theme,
     hovered_index: Option<usize>,
     popup_area: Option<Rect>,
+    pub focus: FocusFlag,
 }
 
 impl DatePickerPopup {
@@ -47,6 +49,7 @@ impl DatePickerPopup {
             theme,
             hovered_index: None,
             popup_area: None,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -698,5 +701,19 @@ mod tests {
     fn test_default_creates_new_popup() {
         let popup = DatePickerPopup::default();
         assert!(!popup.is_visible());
+    }
+}
+
+impl HasFocus for DatePickerPopup {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

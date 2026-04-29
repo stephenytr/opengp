@@ -6,6 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseEvent};
 use opengp_domain::domain::billing::{Invoice, InvoiceStatus};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 use uuid::Uuid;
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Debug, Clone)]
 pub struct InvoiceList {
@@ -15,6 +16,7 @@ pub struct InvoiceList {
     pub hovered_index: Option<usize>,
     pub theme: Theme,
     pub search_query: String,
+    pub focus: FocusFlag,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +46,7 @@ impl InvoiceList {
             hovered_index: None,
             theme,
             search_query: String::new(),
+            focus: FocusFlag::default(),
         }
     }
 
@@ -179,4 +182,18 @@ fn columns() -> Vec<UnifiedColumnDef<Invoice>> {
 
 fn short_patient(invoice: &Invoice) -> String {
     invoice.patient_id.to_string().chars().take(8).collect()
+}
+
+impl HasFocus for InvoiceList {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
+    }
 }

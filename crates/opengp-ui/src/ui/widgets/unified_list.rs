@@ -7,6 +7,7 @@ use ratatui::layout::{Constraint, Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::input::DoubleClickDetector;
 use crate::ui::shared::{hover_style, invert_color, selected_hover_style};
@@ -113,6 +114,7 @@ pub struct UnifiedList<T: Clone> {
     pub hovered_index: Option<usize>,
     pub double_click_detector: DoubleClickDetector,
     pub config: UnifiedListConfig<T>,
+    pub focus: FocusFlag,
 }
 
 impl<T: Clone> UnifiedList<T> {
@@ -135,6 +137,7 @@ impl<T: Clone> UnifiedList<T> {
             hovered_index: None,
             double_click_detector: DoubleClickDetector::default(),
             config,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -611,5 +614,19 @@ let open = list.handle_key(key(KeyCode::Enter));
                 .is_some_and(|cell| cell.style().bg == Some(selected_bg))
         });
         assert!(has_selected_bg);
+    }
+}
+
+impl<T: Clone> HasFocus for UnifiedList<T> {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

@@ -7,6 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::input::DoubleClickDetector;
 use crate::ui::shared::{hover_style, invert_color};
@@ -92,6 +93,7 @@ pub struct TabBar {
     hovered_tab: Option<usize>,
     /// Double-click detector for tab switching
     double_click_detector: DoubleClickDetector,
+    pub focus: FocusFlag,
 }
 
 /// Individual tab item
@@ -120,6 +122,7 @@ impl TabBar {
             theme,
             hovered_tab: None,
             double_click_detector: DoubleClickDetector::default(),
+            focus: FocusFlag::default(),
         }
     }
 
@@ -366,5 +369,19 @@ mod tests {
     fn test_tab_names() {
         assert_eq!(Tab::Schedule.name(), "Schedule");
         assert_eq!(Tab::PatientSearch.name(), "Patient Search");
+    }
+}
+
+impl HasFocus for TabBar {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

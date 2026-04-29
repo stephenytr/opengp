@@ -9,6 +9,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
@@ -104,6 +105,7 @@ impl FormStateField for MedicalHistoryFormField {
 pub struct MedicalHistoryForm {
     state: FormState<MedicalHistoryFormField>,
     validator: FormValidator,
+    pub focus: FocusFlag,
 }
 
 impl Clone for MedicalHistoryForm {
@@ -111,6 +113,7 @@ impl Clone for MedicalHistoryForm {
         Self {
             state: self.state.clone(),
             validator: build_validator(),
+            focus: self.focus.clone(),
         }
     }
 }
@@ -142,6 +145,7 @@ impl MedicalHistoryForm {
         Self {
             state,
             validator: build_validator(),
+            focus: FocusFlag::default(),
         }
     }
 
@@ -549,4 +553,18 @@ fn build_validator() -> FormValidator {
     rules.insert(FIELD_SEVERITY.to_string(), ValidationRules::default());
     rules.insert(FIELD_NOTES.to_string(), ValidationRules::default());
     FormValidator::new(&rules)
+}
+
+impl HasFocus for MedicalHistoryForm {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> ratatui::layout::Rect {
+        ratatui::layout::Rect::default()
+    }
 }

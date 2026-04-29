@@ -9,6 +9,7 @@ use opengp_config::forms::ValidationRules;
 use opengp_config::AllergyConfig;
 use opengp_domain::domain::clinical::{Allergy, AllergyType, Severity};
 use uuid::Uuid;
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::shared::{FormAction, FormMode};
 use crate::ui::theme::Theme;
@@ -114,6 +115,7 @@ pub struct AllergyForm {
     is_valid: bool,
     validator: FormValidator,
     date_picker: DatePickerPopup,
+    pub focus: FocusFlag,
 }
 
 impl Clone for AllergyForm {
@@ -127,6 +129,7 @@ impl Clone for AllergyForm {
             is_valid: self.is_valid,
             validator: build_validator(),
             date_picker: self.date_picker.clone(),
+            focus: self.focus.clone(),
         }
     }
 }
@@ -172,6 +175,7 @@ impl AllergyForm {
             is_valid: false,
             validator: FormValidator::new(&HashMap::new()),
             date_picker: DatePickerPopup::new(theme.clone()),
+            focus: FocusFlag::default(),
         };
 
         form.form_state.textareas.insert(
@@ -344,6 +348,20 @@ impl FormNavigation for AllergyForm {
 
     fn set_current_field(&mut self, field: Self::FormField) {
         self.form_state.focused_field = field;
+    }
+}
+
+impl HasFocus for AllergyForm {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> ratatui::layout::Rect {
+        ratatui::layout::Rect::default()
     }
 }
 

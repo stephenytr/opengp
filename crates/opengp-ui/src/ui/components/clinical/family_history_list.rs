@@ -5,6 +5,7 @@ use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, Unifi
 use crossterm::event::{KeyEvent, MouseEvent};
 use opengp_domain::domain::clinical::FamilyHistory;
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 const EMPTY_MESSAGE: &str = "No family history found. Press n to add an entry.";
 
@@ -16,6 +17,7 @@ pub struct FamilyHistoryList {
     pub loading: bool,
     pub theme: Theme,
     pub hovered_index: Option<usize>,
+    pub focus: FocusFlag,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +42,7 @@ impl FamilyHistoryList {
             loading: false,
             theme,
             hovered_index: None,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -145,4 +148,18 @@ fn columns() -> Vec<UnifiedColumnDef<FamilyHistory>> {
                 .unwrap_or_else(|| "-".to_string())
         }),
     ]
+}
+
+impl HasFocus for FamilyHistoryList {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
+    }
 }

@@ -7,6 +7,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 use sublime_fuzzy::best_match;
 use uuid::Uuid;
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
@@ -71,6 +72,7 @@ pub struct SearchableListState<T: Searchable> {
     pub open: bool,
     pub focused: bool,
     _marker: PhantomData<T>,
+    pub focus: FocusFlag,
 }
 
 impl<T: Searchable> SearchableListState<T> {
@@ -85,6 +87,7 @@ impl<T: Searchable> SearchableListState<T> {
             open: false,
             focused: false,
             _marker: PhantomData,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -912,5 +915,19 @@ mod tests {
         assert!(state.is_open());
         state.close();
         assert!(!state.is_open());
+    }
+}
+
+impl<T: Searchable> HasFocus for SearchableListState<T> {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

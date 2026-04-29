@@ -11,6 +11,7 @@ use crossterm::event::KeyEvent;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::Widget;
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use super::{DatePickerAction, DatePickerPopup, TimePickerAction, TimePickerPopup};
 use crate::ui::theme::Theme;
@@ -34,6 +35,7 @@ pub enum InlinePickerAction {
 pub struct InlinePicker {
     date_picker: DatePickerPopup,
     time_picker: TimePickerPopup,
+    pub focus: FocusFlag,
 }
 
 impl InlinePicker {
@@ -42,6 +44,7 @@ impl InlinePicker {
         Self {
             date_picker: DatePickerPopup::new(theme.clone()),
             time_picker: TimePickerPopup::with_theme(theme),
+            focus: FocusFlag::default(),
         }
     }
 
@@ -260,5 +263,19 @@ mod tests {
         picker.open_time_picker(1, date, 30);
         assert!(!picker.date_picker.is_visible());
         assert!(picker.time_picker.is_visible());
+    }
+}
+
+impl HasFocus for InlinePicker {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

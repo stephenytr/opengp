@@ -11,6 +11,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 use uuid::Uuid;
 
 use crate::ui::input::to_ratatui_key;
@@ -208,6 +209,7 @@ pub struct AppointmentForm {
     practitioner_picker: SearchableListState<PractitionerViewItem>,
     date_picker: DatePickerPopup,
     time_picker: TimePickerPopup,
+    pub focus: FocusFlag,
 }
 
 const APPOINTMENT_TYPE_ORDER: [AppointmentType; 13] = [
@@ -247,6 +249,7 @@ impl Clone for AppointmentForm {
             practitioner_picker: self.practitioner_picker.clone(),
             date_picker: self.date_picker.clone(),
             time_picker: self.time_picker.clone(),
+            focus: self.focus.clone(),
         }
     }
 }
@@ -384,6 +387,7 @@ impl AppointmentForm {
             practitioner_picker: SearchableListState::new(Vec::new()),
             date_picker: DatePickerPopup::new(theme),
             time_picker: TimePickerPopup::new(),
+            focus: FocusFlag::default(),
         }
     }
 
@@ -1489,6 +1493,20 @@ fn parse_time(s: &str) -> Option<NaiveTime> {
     }
 
     None
+}
+
+impl HasFocus for AppointmentForm {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

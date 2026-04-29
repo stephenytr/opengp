@@ -6,6 +6,7 @@ use crossterm::event::{MouseEvent, MouseButton, MouseEventKind};
 use opengp_domain::domain::billing::{ClaimStatus, MedicareClaim};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 use uuid::Uuid;
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Debug, Clone)]
 pub struct ClaimList {
@@ -14,6 +15,7 @@ pub struct ClaimList {
     pub scroll_offset: usize,
     pub hovered_index: Option<usize>,
     pub theme: Theme,
+    pub focus: FocusFlag,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,6 +40,7 @@ impl ClaimList {
             scroll_offset: 0,
             hovered_index: None,
             theme,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -118,4 +121,18 @@ fn columns() -> Vec<UnifiedColumnDef<MedicareClaim>> {
 
 fn short_patient(claim: &MedicareClaim) -> String {
     claim.patient_id.to_string().chars().take(8).collect()
+}
+
+impl HasFocus for ClaimList {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
+    }
 }

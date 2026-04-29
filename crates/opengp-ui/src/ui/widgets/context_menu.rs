@@ -3,6 +3,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Clear, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::theme::Theme;
 
@@ -30,6 +31,7 @@ pub struct ContextMenuState<A> {
     pub visible: bool,
     pub position: Position,
     pub theme: Theme,
+    pub focus: FocusFlag,
 }
 
 impl<A> ContextMenuState<A> {
@@ -40,6 +42,7 @@ impl<A> ContextMenuState<A> {
             visible: false,
             position: Position::new(0, 0),
             theme,
+            focus: FocusFlag::default(),
         };
         state.selected_index = state.first_enabled_index().unwrap_or(0);
         state
@@ -378,5 +381,19 @@ mod tests {
         };
         let cell = &buf[(area.x + 1, area.y + 1)];
         assert_eq!(cell.symbol(), "E");
+    }
+}
+
+impl<A: Clone> HasFocus for ContextMenuState<A> {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

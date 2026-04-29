@@ -7,6 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Clear, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::theme::Theme;
 use opengp_domain::domain::clinical::FamilyHistory;
@@ -32,6 +33,7 @@ pub struct FamilyHistoryDetailModal {
     theme: Theme,
     /// Which button is focused (raw index)
     focused_button: usize,
+    pub focus: FocusFlag,
 }
 
 impl FamilyHistoryDetailModal {
@@ -41,6 +43,7 @@ impl FamilyHistoryDetailModal {
             family_history,
             theme,
             focused_button: 0,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -350,5 +353,19 @@ mod tests {
         let enter_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
         let action = modal.handle_key(enter_key);
         assert_eq!(action, Some(FamilyHistoryDetailModalAction::Edit));
+    }
+}
+
+impl HasFocus for FamilyHistoryDetailModal {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

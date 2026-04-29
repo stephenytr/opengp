@@ -5,6 +5,7 @@ use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, Unifi
 use crossterm::event::{KeyEvent, MouseEvent};
 use opengp_domain::domain::clinical::{ConditionStatus, MedicalHistory, Severity};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 pub type MedicalHistoryListAction = UnifiedListAction<MedicalHistory>;
 
@@ -16,6 +17,7 @@ pub struct MedicalHistoryList {
     pub loading: bool,
     pub theme: Theme,
     pub hovered_index: Option<usize>,
+    pub focus: FocusFlag,
 }
 
 impl MedicalHistoryList {
@@ -27,6 +29,7 @@ impl MedicalHistoryList {
             loading: false,
             theme,
             hovered_index: None,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -117,5 +120,19 @@ impl MedicalHistoryList {
 impl Widget for MedicalHistoryList {
     fn render(self, area: Rect, buf: &mut Buffer) {
         self.as_list().render(area, buf);
+    }
+}
+
+impl HasFocus for MedicalHistoryList {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

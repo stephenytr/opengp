@@ -1,6 +1,7 @@
 use chrono::NaiveDate;
 use crossterm::event::{KeyEvent, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -46,6 +47,7 @@ pub struct AppointmentState {
     pub debug_overlay_visible: bool,
     pub hovered_slot: HoverState<(usize, u8)>,
     pub schedule_double_click_detector: DoubleClickDetector,
+    pub focus: FocusFlag,
 }
 
 impl std::fmt::Debug for AppointmentState {
@@ -73,6 +75,7 @@ impl std::fmt::Debug for AppointmentState {
             .field("debug_overlay_visible", &self.debug_overlay_visible)
             .field("hovered_slot", &"<HoverState>")
             .field("schedule_double_click_detector", &"<DoubleClickDetector>")
+            .field("focus", &"<FocusFlag>")
             .finish()
     }
 }
@@ -132,6 +135,7 @@ impl AppointmentState {
             debug_overlay_visible: false,
             hovered_slot: HoverState::new(),
             schedule_double_click_detector: DoubleClickDetector::default(),
+            focus: FocusFlag::default(),
         }
     }
 
@@ -706,6 +710,20 @@ impl AppointmentState {
             }
             _ => None,
         }
+    }
+}
+
+impl HasFocus for AppointmentState {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }
 

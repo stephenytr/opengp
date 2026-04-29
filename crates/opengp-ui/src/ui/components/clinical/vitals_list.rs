@@ -5,6 +5,7 @@ use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, Unifi
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseEvent};
 use opengp_domain::domain::clinical::VitalSigns;
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Clone)]
 pub struct VitalSignsList {
@@ -14,6 +15,7 @@ pub struct VitalSignsList {
     pub loading: bool,
     pub theme: Theme,
     pub hovered_index: Option<usize>,
+    pub focus: FocusFlag,
 }
 
 #[derive(Debug, Clone)]
@@ -77,6 +79,7 @@ impl VitalSignsList {
             loading: false,
             theme,
             hovered_index: None,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -158,5 +161,19 @@ impl VitalSignsList {
 impl Widget for VitalSignsList {
     fn render(self, area: Rect, buf: &mut Buffer) {
         self.as_list().render(area, buf);
+    }
+}
+
+impl HasFocus for VitalSignsList {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

@@ -11,6 +11,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::symbols::border;
 use ratatui::widgets::{Block, Clear, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::shared::hover_style;
 use crate::ui::theme::Theme;
@@ -37,6 +38,7 @@ pub struct TimePickerPopup {
     theme: Theme,
     hovered_index: Option<usize>,
     popup_area: Option<Rect>,
+    pub focus: FocusFlag,
 }
 
 const GRID_COLS: u8 = 4;
@@ -62,6 +64,7 @@ impl TimePickerPopup {
             theme: Theme::default(),
             hovered_index: None,
             popup_area: None,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -84,6 +87,7 @@ impl TimePickerPopup {
             theme,
             hovered_index: None,
             popup_area: None,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -556,5 +560,19 @@ mod tests {
 
         assert!(action.is_none());
         assert!(popup.is_visible());
+    }
+}
+
+impl HasFocus for TimePickerPopup {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

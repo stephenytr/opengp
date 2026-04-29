@@ -14,6 +14,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Clone)]
 pub struct SocialHistoryData {
@@ -128,6 +129,7 @@ pub struct SocialHistoryComponent {
     dropdowns: HashMap<String, DropdownWidget>,
     validator: FormValidator,
     scroll: ScrollableFormState,
+    pub focus: FocusFlag,
 }
 
 impl Clone for SocialHistoryComponent {
@@ -145,6 +147,7 @@ impl Clone for SocialHistoryComponent {
             dropdowns: self.dropdowns.clone(),
             validator: build_validator(),
             scroll: self.scroll.clone(),
+            focus: self.focus.clone(),
         }
     }
 }
@@ -185,6 +188,7 @@ impl SocialHistoryComponent {
             dropdowns: build_dropdowns(theme, config),
             validator: build_validator(),
             scroll: ScrollableFormState::new(),
+            focus: FocusFlag::default(),
         }
     }
 
@@ -566,6 +570,20 @@ impl crate::ui::widgets::DynamicForm for SocialHistoryComponent {
 
     fn set_error(&mut self, field_id: &str, error: Option<String>) {
         self.set_error_by_id(field_id, error);
+    }
+}
+
+impl HasFocus for SocialHistoryComponent {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> ratatui::layout::Rect {
+        ratatui::layout::Rect::default()
     }
 }
 

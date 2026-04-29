@@ -5,6 +5,7 @@ use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, Unifi
 use crossterm::event::{KeyEvent, MouseEvent};
 use opengp_domain::domain::clinical::Allergy;
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Clone)]
 pub struct AllergyList {
@@ -15,6 +16,7 @@ pub struct AllergyList {
     pub loading: bool,
     pub theme: Theme,
     pub hovered_index: Option<usize>,
+    pub focus: FocusFlag,
 }
 
 #[derive(Debug, Clone)]
@@ -37,6 +39,7 @@ impl AllergyList {
             loading: false,
             theme,
             hovered_index: None,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -232,5 +235,19 @@ mod tests {
         let action = list.handle_key(key_k);
         assert!(matches!(action, Some(AllergyListAction::Select(0))));
         assert_eq!(list.selected_index, 0);
+    }
+}
+
+impl HasFocus for AllergyList {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

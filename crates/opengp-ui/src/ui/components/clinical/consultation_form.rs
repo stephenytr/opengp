@@ -7,6 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::shared::FormMode;
@@ -104,6 +105,7 @@ pub struct ConsultationForm {
     state: FormState<ConsultationFormField>,
     field_ids: Vec<String>,
     pub is_valid: bool,
+    pub focus: FocusFlag,
 }
 
 impl Clone for ConsultationForm {
@@ -112,6 +114,7 @@ impl Clone for ConsultationForm {
             state: self.state.clone(),
             field_ids: self.field_ids.clone(),
             is_valid: self.is_valid,
+            focus: self.focus.clone(),
         }
     }
 }
@@ -155,6 +158,7 @@ impl ConsultationForm {
             state,
             field_ids,
             is_valid: true,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -402,6 +406,20 @@ impl FormNavigation for ConsultationForm {
 
     fn set_current_field(&mut self, field: Self::FormField) {
         self.state.focused_field = field;
+    }
+}
+
+impl HasFocus for ConsultationForm {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> ratatui::layout::Rect {
+        ratatui::layout::Rect::default()
     }
 }
 

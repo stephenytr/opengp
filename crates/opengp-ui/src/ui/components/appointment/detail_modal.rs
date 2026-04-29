@@ -7,6 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Clear, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 use uuid::Uuid;
 
 use crate::ui::theme::Theme;
@@ -57,6 +58,7 @@ pub struct AppointmentDetailModal {
     pending_reschedule_date: Option<chrono::NaiveDate>,
     /// Pending reschedule time selected from time picker
     pending_reschedule_time: Option<chrono::NaiveTime>,
+    pub focus: FocusFlag,
 }
 
 impl Clone for AppointmentDetailModal {
@@ -70,6 +72,7 @@ impl Clone for AppointmentDetailModal {
             inline_picker: self.inline_picker.clone(),
             pending_reschedule_date: self.pending_reschedule_date,
             pending_reschedule_time: self.pending_reschedule_time,
+            focus: self.focus.clone(),
         }
     }
 }
@@ -134,6 +137,7 @@ impl AppointmentDetailModal {
             inline_picker: InlinePicker::new(theme),
             pending_reschedule_date: None,
             pending_reschedule_time: None,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -649,6 +653,20 @@ impl Widget for AppointmentDetailModal {
         if self.inline_picker.is_visible() {
             self.inline_picker.clone().render(area, buf);
         }
+    }
+}
+
+impl HasFocus for AppointmentDetailModal {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }
 

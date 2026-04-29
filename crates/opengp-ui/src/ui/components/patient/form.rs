@@ -17,6 +17,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Paragraph, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 use uuid::Uuid;
 
 use crate::ui::input::{to_ratatui_key, HoverState};
@@ -240,6 +241,7 @@ pub struct PatientForm {
     validator: FormValidator,
     date_picker: DatePickerPopup,
     hovered_field: HoverState<String>,
+    pub focus: FocusFlag,
 }
 
 impl Clone for PatientForm {
@@ -256,6 +258,7 @@ impl Clone for PatientForm {
             validator: build_validator(&self.field_configs),
             date_picker: self.date_picker.clone(),
             hovered_field: self.hovered_field.clone(),
+            focus: self.focus.clone(),
         }
     }
 }
@@ -368,6 +371,7 @@ impl PatientForm {
             validator: FormValidator::new(&HashMap::new()),
             date_picker: DatePickerPopup::new(theme),
             hovered_field: HoverState::new(),
+            focus: FocusFlag::default(),
         };
 
         form.validator = build_validator(&form.field_configs);
@@ -1568,6 +1572,20 @@ impl Widget for PatientForm {
         if self.date_picker.is_visible() {
             self.date_picker.render(area, buf);
         }
+    }
+}
+
+impl HasFocus for PatientForm {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }
 

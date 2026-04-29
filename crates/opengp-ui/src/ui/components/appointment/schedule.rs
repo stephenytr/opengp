@@ -7,6 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, StatefulWidget, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -54,6 +55,7 @@ pub struct Schedule {
     /// Calendar configuration
     config: CalendarConfig,
     appointment_abbreviations: HashMap<String, String>,
+    pub focus: FocusFlag,
 }
 
 impl Schedule {
@@ -63,6 +65,7 @@ impl Schedule {
             theme,
             config,
             appointment_abbreviations: HashMap::new(),
+            focus: FocusFlag::default(),
         }
     }
 
@@ -628,6 +631,20 @@ impl StatefulWidget for Schedule {
         if state.debug_overlay_visible {
             self.render_debug_overlay(area, buf, state);
         }
+    }
+}
+
+impl HasFocus for Schedule {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }
 

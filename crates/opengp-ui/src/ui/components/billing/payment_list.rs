@@ -6,6 +6,7 @@ use crossterm::event::MouseEvent;
 use opengp_domain::domain::billing::Payment;
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 use uuid::Uuid;
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 #[derive(Debug, Clone)]
 pub struct PaymentList {
@@ -14,6 +15,7 @@ pub struct PaymentList {
     pub scroll_offset: usize,
     pub hovered_index: Option<usize>,
     pub theme: Theme,
+    pub focus: FocusFlag,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,6 +39,7 @@ impl PaymentList {
             scroll_offset: 0,
             hovered_index: None,
             theme,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -111,4 +114,18 @@ fn columns() -> Vec<UnifiedColumnDef<Payment>> {
         col("Method", 12, |p| p.payment_method.to_string()),
         col("Reference", 10, |p| p.reference.clone().unwrap_or_else(|| "-".to_string())),
     ]
+}
+
+impl HasFocus for PaymentList {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
+    }
 }

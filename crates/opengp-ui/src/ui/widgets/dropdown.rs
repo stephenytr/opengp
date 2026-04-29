@@ -5,6 +5,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::shared::hover_style;
 use crate::ui::theme::Theme;
@@ -52,6 +53,7 @@ pub struct DropdownWidget {
     pub focused: bool,
     /// Tracks the hovered option index when dropdown is open.
     pub hovered_index: Option<usize>,
+    pub focus: FocusFlag,
 }
 
 impl Clone for DropdownWidget {
@@ -68,6 +70,7 @@ impl Clone for DropdownWidget {
             theme: self.theme.clone(),
             focused: self.focused,
             hovered_index: self.hovered_index,
+            focus: self.focus.clone(),
         }
     }
 }
@@ -87,6 +90,7 @@ impl DropdownWidget {
             theme,
             focused: false,
             hovered_index: None,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -657,5 +661,19 @@ mod tests {
             DropdownWidget::new("Test", vec![], theme).error(Some("Builder error".to_string()));
 
         assert_eq!(dropdown.error, Some("Builder error".to_string()));
+    }
+}
+
+impl HasFocus for DropdownWidget {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

@@ -1,4 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use ratatui::layout::Rect;
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::shared::ModalAction;
 use crate::theme::Theme;
@@ -24,6 +26,7 @@ pub struct ModalState<B: ModalButton> {
     pub focused_button: B,
     pub button_order: Vec<B>,
     pub theme: Theme,
+    pub focus: FocusFlag,
 }
 
 impl<B: ModalButton> ModalState<B> {
@@ -33,6 +36,7 @@ impl<B: ModalButton> ModalState<B> {
             focused_button,
             button_order: B::all(),
             theme,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -216,5 +220,19 @@ mod tests {
 
         state.prev_button();
         assert_eq!(state.focused_button(), TestButton::Cancel);
+    }
+}
+
+impl<B: ModalButton> HasFocus for ModalState<B> {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

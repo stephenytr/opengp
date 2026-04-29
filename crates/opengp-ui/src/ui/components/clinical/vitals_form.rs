@@ -12,6 +12,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
@@ -149,6 +150,7 @@ pub struct VitalSignsForm {
     validator: FormValidator,
     rule_engine: FormRuleEngine,
     healthcare_config: HealthcareConfig,
+    pub focus: FocusFlag,
 }
 
 impl Clone for VitalSignsForm {
@@ -162,6 +164,7 @@ impl Clone for VitalSignsForm {
             validator: FormValidator::new(&self.validation_rules),
             rule_engine: self.rule_engine.clone(),
             healthcare_config: self.healthcare_config.clone(),
+            focus: self.focus.clone(),
         }
     }
 }
@@ -191,6 +194,7 @@ impl VitalSignsForm {
             rule_engine: build_rule_engine(),
             validation_rules,
             healthcare_config,
+            focus: FocusFlag::default(),
         }
     }
 
@@ -503,6 +507,20 @@ impl FormNavigation for VitalSignsForm {
     fn set_current_field(&mut self, field: Self::FormField) {
         self.focused_field = field;
         self.form_state.focused_field = field;
+    }
+}
+
+impl HasFocus for VitalSignsForm {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> ratatui::layout::Rect {
+        ratatui::layout::Rect::default()
     }
 }
 

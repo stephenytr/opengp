@@ -6,6 +6,7 @@ use ratatui::layout::{Constraint, Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 const TABLE_HEADER_ROWS: u16 = 2;
 use crate::ui::input::DoubleClickDetector;
@@ -56,6 +57,7 @@ pub struct ClinicalTableList<T> {
     pub hovered_index: Option<usize>,
     /// Detects double-click interactions on rows
     pub double_click_detector: DoubleClickDetector,
+    pub focus: FocusFlag,
 }
 
 impl<T> ClinicalTableList<T> {
@@ -86,6 +88,7 @@ impl<T> ClinicalTableList<T> {
             empty_message: "No entries found. Press n to add an entry.".to_string(),
             hovered_index: None,
             double_click_detector: DoubleClickDetector::default(),
+            focus: FocusFlag::default(),
         }
     }
 
@@ -652,5 +655,19 @@ mod tests {
         let mut key = key(KeyCode::Down);
         key.kind = KeyEventKind::Release;
         assert_eq!(list.handle_key(key), None::<ListAction<TestItem>>);
+    }
+}
+
+impl<T: Clone> HasFocus for ClinicalTableList<T> {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }

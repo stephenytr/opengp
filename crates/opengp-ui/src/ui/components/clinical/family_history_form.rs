@@ -8,6 +8,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::input::to_ratatui_key;
 use crate::ui::theme::Theme;
@@ -90,6 +91,7 @@ pub struct FamilyHistoryForm {
     field_ids: Vec<String>,
     pub is_valid: bool,
     validator: FormValidator,
+    pub focus: FocusFlag,
 }
 
 impl Clone for FamilyHistoryForm {
@@ -99,6 +101,7 @@ impl Clone for FamilyHistoryForm {
             field_ids: self.field_ids.clone(),
             is_valid: self.is_valid,
             validator: build_validator(),
+            focus: self.focus.clone(),
         }
     }
 }
@@ -178,6 +181,20 @@ impl FormNavigation for FamilyHistoryForm {
     }
 }
 
+impl HasFocus for FamilyHistoryForm {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus.clone()
+    }
+
+    fn area(&self) -> ratatui::layout::Rect {
+        ratatui::layout::Rect::default()
+    }
+}
+
 impl FamilyHistoryForm {
     pub fn new(theme: Theme) -> Self {
         let fields = FamilyHistoryFormField::all();
@@ -199,6 +216,7 @@ impl FamilyHistoryForm {
             field_ids,
             is_valid: false,
             validator: build_validator(),
+            focus: FocusFlag::default(),
         }
     }
 

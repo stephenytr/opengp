@@ -4,6 +4,7 @@ use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Widget};
+use rat_focus::{FocusFlag, HasFocus, FocusBuilder};
 
 use crate::ui::theme::Theme;
 
@@ -27,6 +28,7 @@ pub struct LoginScreen {
     focus: LoginFocus,
     loading: bool,
     error: Option<String>,
+    pub focus_flag: FocusFlag,
 }
 
 impl LoginScreen {
@@ -38,6 +40,7 @@ impl LoginScreen {
             focus: LoginFocus::Username,
             loading: false,
             error: None,
+            focus_flag: FocusFlag::default(),
         }
     }
 
@@ -253,5 +256,19 @@ mod tests {
             login.error.as_deref(),
             Some("Username and password are required")
         );
+    }
+}
+
+impl HasFocus for LoginScreen {
+    fn build(&self, builder: &mut FocusBuilder) {
+        builder.leaf_widget(self);
+    }
+
+    fn focus(&self) -> FocusFlag {
+        self.focus_flag.clone()
+    }
+
+    fn area(&self) -> Rect {
+        Rect::default()
     }
 }
