@@ -1,4 +1,3 @@
-mod api_polling;
 mod appointment;
 mod billing;
 mod clinical;

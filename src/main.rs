@@ -124,13 +124,6 @@ async fn bootstrap(config: Config) -> Result<(GlobalState, AppState), AppError> 
         pending_appointment_list_refresh: None,
         pending_consultation_list_refresh: None,
         pending_practitioners_list_refresh: false,
-        patient_list_fetch_task: None,
-        appointment_list_fetch_task: None,
-        practitioners_list_fetch_task: None,
-        reschedule_task: None,
-        status_update_task: None,
-        login_task: None,
-        clinical_workspace_load_task: None,
         pending_login_request: None,
         active_login_attempt: None,
         server_unavailable_error: None,
@@ -295,7 +288,7 @@ fn render(area: Rect, buf: &mut Buffer, state: &mut AppState, _ctx: &mut GlobalS
     Ok(())
 }
 
-fn event_fn(event: &AppEvent, state: &mut AppState, _ctx: &mut GlobalState) -> Result<Control<AppEvent>, AppError> {
+fn event_fn(event: &AppEvent, state: &mut AppState, ctx: &mut GlobalState) -> Result<Control<AppEvent>, AppError> {
     use crossterm::event::{Event, KeyCode, KeyModifiers};
 
     match event {
@@ -368,9 +361,117 @@ fn event_fn(event: &AppEvent, state: &mut AppState, _ctx: &mut GlobalState) -> R
             }
             Ok(Control::Changed)
         }
+        AppEvent::AppointmentSaved(result) => {
+            match result {
+                Ok(()) => {
+                    state.appointment_detail_modal = None;
+                    state.status_bar.clear_error();
+                }
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::AppointmentsRefreshed(result) => {
+            match result {
+                Ok(schedule) => {
+                    state.appointment_state.schedule_data = Some(schedule.clone());
+                    state.status_bar.clear_error();
+                }
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::AppointmentStatusUpdated(result) => {
+            match result {
+                Ok((_, date)) => {
+                    state.appointment_detail_modal = None;
+                    state.pending_appointment_list_refresh = Some(*date);
+                    state.status_bar.clear_error();
+                }
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::AppointmentRescheduled(result) => {
+            match result {
+                Ok((_, date)) => {
+                    state.appointment_detail_modal = None;
+                    state.pending_appointment_list_refresh = Some(*date);
+                    state.status_bar.clear_error();
+                }
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::AppointmentCancelled(result) => {
+            match result {
+                Ok(()) => {
+                    state.appointment_detail_modal = None;
+                    state.status_bar.clear_error();
+                }
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::PractitionersLoaded(result) => {
+            match result {
+                Ok(_view_items) => {
+                    state.status_bar.clear_error();
+                }
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::AvailableSlotsLoaded(result) => {
+            match result {
+                Ok(_slots) => {
+                    state.status_bar.clear_error();
+                }
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::ClinicalDataSaved(result) => {
+            match result {
+                Ok(_) => {
+                    state.status_bar.clear_error();
+                }
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::BillingDataSaved(result) => {
+            match result {
+                Ok(_) => {
+                    state.status_bar.clear_error();
+                }
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::PatientWorkspaceDataLoaded { patient_id, subtab, result } => {
+            match result {
+                Ok(_load_result) => {
+                    state.status_bar.clear_error();
+                }
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
+        AppEvent::BillingDataLoaded(result) => {
+            match result {
+                Ok(_) => {
+                    state.status_bar.clear_error();
+                }
+                Err(err) => state.status_bar.set_error(Some(err.clone())),
+            }
+            Ok(Control::Changed)
+        }
         _ => Ok(Control::Continue),
     }
 }
+
+
 
 fn error_fn(err: AppError, state: &mut AppState, _ctx: &mut GlobalState) -> Result<Control<AppEvent>, AppError> {
     state.status_bar.set_error(Some(err.to_string()));

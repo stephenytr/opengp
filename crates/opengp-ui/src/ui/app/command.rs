@@ -14,7 +14,6 @@ pub enum AppCommand {
         data: NewAppointmentData,
         version: i32,
     },
-    AppointmentSaveResult(Result<(), String>),
     UpdateAppointmentStatus {
         id: Uuid,
         status: AppointmentStatus,

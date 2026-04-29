@@ -15,8 +15,6 @@ use crate::ui::keybinds::KeyContext;
 use crate::ui::app::{
     PendingPatientData, PendingClinicalSaveData, AppointmentStatusTransition,
     RetryOperation, PendingRescheduleData, AppContextMenuAction,
-    ClinicalWorkspaceLoadTask, PatientListFetchTask, AppointmentListFetchTask,
-    PractitionerListFetchTask, RescheduleTask, StatusUpdateTask, LoginTask,
 };
 use opengp_domain::domain::appointment::NewAppointmentData;
 use crate::ui::widgets::ContextMenuState;
@@ -64,15 +62,6 @@ pub struct AppState {
     pub pending_appointment_list_refresh: Option<NaiveDate>,
     pub pending_consultation_list_refresh: Option<Uuid>,
     pub pending_practitioners_list_refresh: bool,
-
-    // In-flight async task tracking
-    pub patient_list_fetch_task: Option<PatientListFetchTask>,
-    pub appointment_list_fetch_task: Option<AppointmentListFetchTask>,
-    pub practitioners_list_fetch_task: Option<PractitionerListFetchTask>,
-    pub reschedule_task: Option<RescheduleTask>,
-    pub status_update_task: Option<StatusUpdateTask>,
-    pub login_task: Option<LoginTask>,
-    pub clinical_workspace_load_task: Option<(Uuid, ClinicalWorkspaceLoadTask)>,
 
     // Login/retry/server-failure state
     pub pending_login_request: Option<(String, String)>,

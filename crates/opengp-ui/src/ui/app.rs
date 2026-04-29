@@ -40,24 +40,6 @@ const DEFAULT_PATIENT_PAGE_LIMIT: u32 = 100;
 const DEFAULT_APPOINTMENT_PAGE_LIMIT: u32 = 100;
 const DEFAULT_CONSULTATION_PAGE_LIMIT: u32 = 100;
 
-type PatientListFetchTask =
-    tokio::task::JoinHandle<Result<Vec<crate::ui::view_models::PatientListItem>, ApiTaskError>>;
-type AppointmentListFetchTask = tokio::task::JoinHandle<
-    Result<opengp_domain::domain::appointment::CalendarDayView, ApiTaskError>,
->;
-type ConsultationListFetchTask = tokio::task::JoinHandle<
-    Result<Vec<opengp_domain::domain::clinical::Consultation>, ApiTaskError>,
->;
-type PractitionerListFetchTask =
-    tokio::task::JoinHandle<Result<Vec<opengp_domain::domain::user::Practitioner>, ApiTaskError>>;
-type RescheduleTask =
-    tokio::task::JoinHandle<Result<(uuid::Uuid, chrono::NaiveDate), (String, bool)>>;
-type StatusUpdateTask =
-    tokio::task::JoinHandle<Result<(uuid::Uuid, NaiveDate), String>>;
-type LoginTask = tokio::task::JoinHandle<
-    Result<opengp_domain::domain::api::LoginResponse, crate::api::ApiClientError>,
->;
-
 #[derive(Debug)]
 pub struct ClinicalWorkspaceLoadResult {
     pub patient_id: uuid::Uuid,
@@ -68,8 +50,6 @@ pub struct ClinicalWorkspaceLoadResult {
     pub family_history: Result<Vec<opengp_domain::domain::clinical::FamilyHistory>, crate::api::ApiClientError>,
     pub consultations: Result<Vec<opengp_domain::domain::clinical::Consultation>, crate::api::ApiClientError>,
 }
-
-type ClinicalWorkspaceLoadTask = tokio::task::JoinHandle<ClinicalWorkspaceLoadResult>;
 
 pub enum ApiTaskError {
     Unauthorized,
@@ -135,16 +115,9 @@ pub struct App {
     pending_patient_list_refresh: bool,
     pending_appointment_list_refresh: Option<NaiveDate>,
     pub pending_consultation_list_refresh: Option<uuid::Uuid>,
-    pending_practitioners_list_refresh: bool,
-     patient_list_fetch_task: Option<PatientListFetchTask>,
-       appointment_list_fetch_task: Option<AppointmentListFetchTask>,
-       practitioners_list_fetch_task: Option<PractitionerListFetchTask>,
-      reschedule_task: Option<RescheduleTask>,
-      status_update_task: Option<StatusUpdateTask>,
-      pending_login_request: Option<(String, String)>,
-      login_task: Option<LoginTask>,
-      clinical_workspace_load_task: Option<(uuid::Uuid, ClinicalWorkspaceLoadTask)>,
-    server_unavailable_error: Option<String>,
+     pending_practitioners_list_refresh: bool,
+       pending_login_request: Option<(String, String)>,
+     server_unavailable_error: Option<String>,
     server_unavailable_retry: Option<RetryOperation>,
     active_login_attempt: Option<(String, String)>,
     active_appointment_refresh_date: Option<NaiveDate>,
@@ -341,15 +314,8 @@ impl App {
             pending_appointment_list_refresh: None,
             pending_consultation_list_refresh: None,
             pending_practitioners_list_refresh: false,
-             patient_list_fetch_task: None,
-              appointment_list_fetch_task: None,
-              practitioners_list_fetch_task: None,
-              reschedule_task: None,
-              status_update_task: None,
-              pending_login_request: None,
-             login_task: None,
-             clinical_workspace_load_task: None,
-             server_unavailable_error: None,
+               pending_login_request: None,
+              server_unavailable_error: None,
             server_unavailable_retry: None,
             active_login_attempt: None,
             active_appointment_refresh_date: None,
@@ -391,17 +357,7 @@ impl App {
         &mut self.workspace_manager
     }
 
-    pub fn has_clinical_workspace_load_task(&self) -> bool {
-        self.clinical_workspace_load_task.is_some()
-    }
 
-    pub fn set_clinical_workspace_load_task(
-        &mut self,
-        patient_id: uuid::Uuid,
-        task: tokio::task::JoinHandle<ClinicalWorkspaceLoadResult>,
-    ) {
-        self.clinical_workspace_load_task = Some((patient_id, task));
-    }
 
     pub fn billing_ui_service(&self) -> Option<Arc<BillingUiService>> {
         self.billing_ui_service.clone()
