@@ -8,7 +8,6 @@ use crate::ui::components::patient::PatientList;
 use crate::ui::components::status_bar::StatusBar;
 use crate::ui::components::tabs::{Tab, TabBar};
 use crate::ui::components::workspace::WorkspaceManager;
-use crate::ui::keybinds::KeyContext;
 
 /// AppState contains all mutable UI and session state.
 /// It is mutated by event handlers and rendered each frame.
@@ -19,7 +18,6 @@ pub struct AppState {
     pub status_bar: StatusBar,
     pub login_screen: crate::ui::screens::LoginScreen,
     pub authenticated: bool,
-    pub current_context: KeyContext,
     pub should_quit: bool,
     pub current_user_id: Uuid,
     pub terminal_size: Rect,
@@ -45,8 +43,4 @@ pub struct AppState {
     // Context-menu/modals/render auxiliaries
     pub last_billing_render: Option<Instant>,
     pub hovered_clinical_menu: Option<usize>,
-
-    // Channel fields (to be removed after full rat-salsa migration)
-    pub command_tx: tokio::sync::mpsc::UnboundedSender<crate::ui::app::AppCommand>,
-    pub command_rx: Option<tokio::sync::mpsc::UnboundedReceiver<crate::ui::app::AppCommand>>,
 }

@@ -22,7 +22,6 @@ pub use ui::view_models;
 pub use ui::widgets;
 
 // Re-export commonly used types
-pub use ui::app::App;
 pub use ui::components::tabs::Tab;
 pub use ui::keybinds::{Action, KeybindRegistry};
 pub use ui::shared::{FormAction, FormMode};

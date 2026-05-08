@@ -19,7 +19,6 @@ pub mod widgets;
 #[cfg(test)]
 mod tests;
 
-pub use app::App;
 pub use components::tabs::Tab;
 pub use keybinds::{Action, KeybindRegistry};
 pub use screens::{LoginAction, LoginScreen};

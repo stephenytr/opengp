@@ -1,5 +1,4 @@
 use super::appointment_state::PatientAppointmentState;
-use crate::ui::app::PendingBillingSaveData;
 use crate::ui::components::billing::PatientBillingState;
 use crate::ui::components::clinical::ClinicalState;
 use crate::ui::components::clinical_row::ClinicalMenuKind;
@@ -58,7 +57,6 @@ pub struct PatientWorkspace {
     pub clinical: Option<ClinicalState>,
     pub billing: Option<PatientBillingState>,
     pub appointments: Option<PatientAppointmentState>,
-    pub pending_billing: Option<PendingBillingSaveData>,
 }
 
 impl SubtabKind {
@@ -92,7 +90,6 @@ impl PatientWorkspace {
             clinical: None,
             billing: None,
             appointments: None,
-            pending_billing: None,
         }
     }
 
