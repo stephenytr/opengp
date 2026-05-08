@@ -15,7 +15,6 @@ use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
-use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::shared::{FormAction, FormMode};
 use crate::ui::theme::Theme;
@@ -391,12 +390,11 @@ impl VitalSignsForm {
         }
 
         let field_id = self.focused_field.id().to_string();
-        let ratatui_key = to_ratatui_key(key);
         let consumed = self
             .form_state
             .textareas
             .get_mut(&field_id)
-            .map(|textarea| textarea.handle_key(ratatui_key))
+            .map(|textarea| textarea.handle_key(key))
             .unwrap_or(false);
 
         if consumed {

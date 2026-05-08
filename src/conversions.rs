@@ -192,10 +192,16 @@ pub fn domain_patient_from_api_response(response: PatientResponse) -> Patient {
         last_name: response.last_name,
         preferred_name: None,
         date_of_birth: response.date_of_birth,
-        gender: parse_api_gender(&response.gender).unwrap_or_else(|e| {
-            tracing::warn!("Failed to parse gender: {}", e);
-            Gender::PreferNotToSay
-        }),
+        gender: match response.gender.trim().to_ascii_lowercase().as_str() {
+            "male" => Gender::Male,
+            "female" => Gender::Female,
+            "other" => Gender::Other,
+            "prefer_not_to_say" | "prefer-not-to-say" => Gender::PreferNotToSay,
+            _ => {
+                tracing::warn!("Unknown gender: {}", response.gender);
+                Gender::PreferNotToSay
+            }
+        },
         address: opengp_domain::domain::patient::Address::default(),
         phone_home: None,
         phone_mobile: response.phone_mobile.map(PhoneNumber::new_lenient),
@@ -226,14 +232,23 @@ pub fn domain_allergy_from_api_response(
         id: response.id,
         patient_id: response.patient_id,
         allergen: response.allergen,
-        allergy_type: parse_api_allergy_type(&response.allergy_type).unwrap_or_else(|e| {
-            tracing::warn!("Failed to parse allergy type: {}", e);
-            opengp_domain::domain::clinical::AllergyType::Other
-        }),
-        severity: parse_api_severity(&response.severity).unwrap_or_else(|e| {
-            tracing::warn!("Failed to parse severity: {}", e);
-            opengp_domain::domain::clinical::Severity::Severe
-        }),
+        allergy_type: match response.allergy_type.trim().to_ascii_lowercase().as_str() {
+            "drug" => opengp_domain::domain::clinical::AllergyType::Drug,
+            "food" => opengp_domain::domain::clinical::AllergyType::Food,
+            "environmental" => opengp_domain::domain::clinical::AllergyType::Environmental,
+            _ => {
+                tracing::warn!("Unknown allergy type: {}", response.allergy_type);
+                opengp_domain::domain::clinical::AllergyType::Other
+            }
+        },
+        severity: match response.severity.trim().to_ascii_lowercase().as_str() {
+            "mild" => opengp_domain::domain::clinical::Severity::Mild,
+            "moderate" => opengp_domain::domain::clinical::Severity::Moderate,
+            _ => {
+                tracing::warn!("Unknown severity: {}", response.severity);
+                opengp_domain::domain::clinical::Severity::Severe
+            }
+        },
         reaction: response.reaction,
         onset_date: response.onset_date,
         notes: response.notes,
@@ -253,15 +268,26 @@ pub fn domain_medical_history_from_api_response(
         patient_id: response.patient_id,
         condition: response.condition,
         diagnosis_date: response.diagnosis_date,
-        status: parse_api_condition_status(&response.status).unwrap_or_else(|e| {
-            tracing::warn!("Failed to parse condition status: {}", e);
-            opengp_domain::domain::clinical::ConditionStatus::Active
-        }),
-        severity: response.severity.map(|severity| {
-            parse_api_severity(&severity).unwrap_or_else(|e| {
-                tracing::warn!("Failed to parse severity: {}", e);
-                opengp_domain::domain::clinical::Severity::Severe
-            })
+        status: match response.status.trim().to_ascii_lowercase().as_str() {
+            "active" => opengp_domain::domain::clinical::ConditionStatus::Active,
+            "resolved" => opengp_domain::domain::clinical::ConditionStatus::Resolved,
+            "chronic" => opengp_domain::domain::clinical::ConditionStatus::Chronic,
+            "recurring" => opengp_domain::domain::clinical::ConditionStatus::Recurring,
+            "in_remission" | "in-remission" => opengp_domain::domain::clinical::ConditionStatus::InRemission,
+            _ => {
+                tracing::warn!("Unknown condition status: {}", response.status);
+                opengp_domain::domain::clinical::ConditionStatus::Active
+            }
+        },
+         severity: response.severity.map(|severity| {
+            match severity.trim().to_ascii_lowercase().as_str() {
+                "mild" => opengp_domain::domain::clinical::Severity::Mild,
+                "moderate" => opengp_domain::domain::clinical::Severity::Moderate,
+                _ => {
+                    tracing::warn!("Unknown severity: {}", severity);
+                    opengp_domain::domain::clinical::Severity::Severe
+                }
+            }
         }),
         notes: response.notes,
         is_active: response.is_active,
@@ -323,22 +349,40 @@ pub fn domain_social_history_from_api_response(
     opengp_domain::domain::clinical::SocialHistory {
         id: response.id,
         patient_id: response.patient_id,
-        smoking_status: parse_api_smoking_status(&response.smoking_status).unwrap_or_else(|e| {
-            tracing::warn!("Failed to parse smoking status: {}", e);
-            opengp_domain::domain::clinical::SmokingStatus::NeverSmoked
-        }),
+        smoking_status: match response.smoking_status.trim().to_ascii_lowercase().as_str() {
+            "never_smoked" | "never-smoked" => opengp_domain::domain::clinical::SmokingStatus::NeverSmoked,
+            "current_smoker" | "current-smoker" => opengp_domain::domain::clinical::SmokingStatus::CurrentSmoker,
+            "ex_smoker" | "ex-smoker" => opengp_domain::domain::clinical::SmokingStatus::ExSmoker,
+            _ => {
+                tracing::warn!("Unknown smoking status: {}", response.smoking_status);
+                opengp_domain::domain::clinical::SmokingStatus::NeverSmoked
+            }
+        },
         cigarettes_per_day: response.cigarettes_per_day,
         smoking_quit_date: response.smoking_quit_date,
-        alcohol_status: parse_api_alcohol_status(&response.alcohol_status).unwrap_or_else(|e| {
-            tracing::warn!("Failed to parse alcohol status: {}", e);
-            opengp_domain::domain::clinical::AlcoholStatus::None
-        }),
+        alcohol_status: match response.alcohol_status.trim().to_ascii_lowercase().as_str() {
+            "none" => opengp_domain::domain::clinical::AlcoholStatus::None,
+            "occasional" => opengp_domain::domain::clinical::AlcoholStatus::Occasional,
+            "moderate" => opengp_domain::domain::clinical::AlcoholStatus::Moderate,
+            "heavy" => opengp_domain::domain::clinical::AlcoholStatus::Heavy,
+            _ => {
+                tracing::warn!("Unknown alcohol status: {}", response.alcohol_status);
+                opengp_domain::domain::clinical::AlcoholStatus::None
+            }
+        },
         standard_drinks_per_week: response.standard_drinks_per_week,
-        exercise_frequency: response.exercise_frequency.map(|frequency| {
-            parse_api_exercise_frequency(&frequency).unwrap_or_else(|e| {
-                tracing::warn!("Failed to parse exercise frequency: {}", e);
-                opengp_domain::domain::clinical::ExerciseFrequency::None
-            })
+         exercise_frequency: response.exercise_frequency.map(|frequency| {
+            match frequency.trim().to_ascii_lowercase().as_str() {
+                "none" => opengp_domain::domain::clinical::ExerciseFrequency::None,
+                "rarely" => opengp_domain::domain::clinical::ExerciseFrequency::Rarely,
+                "once_or_twice_per_week" | "once-or-twice-per-week" => opengp_domain::domain::clinical::ExerciseFrequency::OnceOrTwicePerWeek,
+                "three_to_five_times" | "three-to-five-times" => opengp_domain::domain::clinical::ExerciseFrequency::ThreeToFiveTimes,
+                "daily" => opengp_domain::domain::clinical::ExerciseFrequency::Daily,
+                _ => {
+                    tracing::warn!("Unknown exercise frequency: {}", frequency);
+                    opengp_domain::domain::clinical::ExerciseFrequency::None
+                }
+            }
         }),
         occupation: response.occupation,
         living_situation: response.living_situation,
@@ -459,95 +503,4 @@ pub fn exercise_frequency_to_api_string(
     }
 }
 
-pub fn parse_api_gender(gender: &str) -> Result<Gender, String> {
-    match gender.trim().to_ascii_lowercase().as_str() {
-        "male" => Ok(Gender::Male),
-        "female" => Ok(Gender::Female),
-        "other" => Ok(Gender::Other),
-        "prefer_not_to_say" | "prefer-not-to-say" => Ok(Gender::PreferNotToSay),
-        _ => Err(format!("Unknown gender: {}", gender)),
-    }
-}
 
-pub fn parse_api_allergy_type(
-    allergy_type: &str,
-) -> Result<opengp_domain::domain::clinical::AllergyType, String> {
-    match allergy_type.trim().to_ascii_lowercase().as_str() {
-        "drug" => Ok(opengp_domain::domain::clinical::AllergyType::Drug),
-        "food" => Ok(opengp_domain::domain::clinical::AllergyType::Food),
-        "environmental" => Ok(opengp_domain::domain::clinical::AllergyType::Environmental),
-        _ => Err(format!("Unknown allergy type: {}", allergy_type)),
-    }
-}
-
-pub fn parse_api_severity(
-    severity: &str,
-) -> Result<opengp_domain::domain::clinical::Severity, String> {
-    match severity.trim().to_ascii_lowercase().as_str() {
-        "mild" => Ok(opengp_domain::domain::clinical::Severity::Mild),
-        "moderate" => Ok(opengp_domain::domain::clinical::Severity::Moderate),
-        _ => Err(format!("Unknown severity: {}", severity)),
-    }
-}
-
-pub fn parse_api_condition_status(
-    condition_status: &str,
-) -> Result<opengp_domain::domain::clinical::ConditionStatus, String> {
-    match condition_status.trim().to_ascii_lowercase().as_str() {
-        "active" => Ok(opengp_domain::domain::clinical::ConditionStatus::Active),
-        "resolved" => Ok(opengp_domain::domain::clinical::ConditionStatus::Resolved),
-        "chronic" => Ok(opengp_domain::domain::clinical::ConditionStatus::Chronic),
-        "recurring" => Ok(opengp_domain::domain::clinical::ConditionStatus::Recurring),
-        "in_remission" | "in-remission" => {
-            Ok(opengp_domain::domain::clinical::ConditionStatus::InRemission)
-        }
-        _ => Err(format!("Unknown condition status: {}", condition_status)),
-    }
-}
-
-pub fn parse_api_smoking_status(
-    smoking_status: &str,
-) -> Result<opengp_domain::domain::clinical::SmokingStatus, String> {
-    match smoking_status.trim().to_ascii_lowercase().as_str() {
-        "never_smoked" | "never-smoked" => {
-            Ok(opengp_domain::domain::clinical::SmokingStatus::NeverSmoked)
-        }
-        "current_smoker" | "current-smoker" => {
-            Ok(opengp_domain::domain::clinical::SmokingStatus::CurrentSmoker)
-        }
-        "ex_smoker" | "ex-smoker" => Ok(opengp_domain::domain::clinical::SmokingStatus::ExSmoker),
-        _ => Err(format!("Unknown smoking status: {}", smoking_status)),
-    }
-}
-
-pub fn parse_api_alcohol_status(
-    alcohol_status: &str,
-) -> Result<opengp_domain::domain::clinical::AlcoholStatus, String> {
-    match alcohol_status.trim().to_ascii_lowercase().as_str() {
-        "none" => Ok(opengp_domain::domain::clinical::AlcoholStatus::None),
-        "occasional" => Ok(opengp_domain::domain::clinical::AlcoholStatus::Occasional),
-        "moderate" => Ok(opengp_domain::domain::clinical::AlcoholStatus::Moderate),
-        "heavy" => Ok(opengp_domain::domain::clinical::AlcoholStatus::Heavy),
-        _ => Err(format!("Unknown alcohol status: {}", alcohol_status)),
-    }
-}
-
-pub fn parse_api_exercise_frequency(
-    exercise_frequency: &str,
-) -> Result<opengp_domain::domain::clinical::ExerciseFrequency, String> {
-    match exercise_frequency.trim().to_ascii_lowercase().as_str() {
-        "none" => Ok(opengp_domain::domain::clinical::ExerciseFrequency::None),
-        "rarely" => Ok(opengp_domain::domain::clinical::ExerciseFrequency::Rarely),
-        "once_or_twice_per_week" | "once-or-twice-per-week" => {
-            Ok(opengp_domain::domain::clinical::ExerciseFrequency::OnceOrTwicePerWeek)
-        }
-        "three_to_five_times" | "three-to-five-times" => {
-            Ok(opengp_domain::domain::clinical::ExerciseFrequency::ThreeToFiveTimes)
-        }
-        "daily" => Ok(opengp_domain::domain::clinical::ExerciseFrequency::Daily),
-        _ => Err(format!(
-            "Unknown exercise frequency: {}",
-            exercise_frequency
-        )),
-    }
-}

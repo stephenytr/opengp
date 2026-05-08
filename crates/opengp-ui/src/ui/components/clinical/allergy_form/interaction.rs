@@ -5,7 +5,6 @@ use super::{
     AllergyForm, AllergyFormAction, AllergyFormField, AllergyType, FIELD_ALLERGEN,
     FIELD_ALLERGY_TYPE, FIELD_ONSET_DATE, FIELD_SEVERITY,
 };
-use crate::ui::input::to_ratatui_key;
 use crate::ui::shared::FormAction;
 use crate::ui::widgets::{
     format_date, parse_date, DatePickerAction, DropdownAction, DropdownWidget, FormNavigation,
@@ -192,9 +191,8 @@ impl AllergyForm {
             .dropdowns
             .contains_key(self.form_state.focused_field.id())
         {
-            let ratatui_key = to_ratatui_key(key);
             if let Some(textarea) = self.focused_textarea_mut() {
-                let consumed = textarea.handle_key(ratatui_key);
+                let consumed = textarea.handle_key(key);
                 if consumed {
                     let field_id = self.form_state.focused_field.id().to_string();
                     self.validate_field_by_id(&field_id);

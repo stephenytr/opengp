@@ -1,22 +1,15 @@
 //! Shared input handling helpers and traits
 //!
 //! Provides:
-//! - `to_ratatui_key()`: Converts crossterm KeyEvent to ratatui KeyEvent
 //! - `is_key_press()`: Guards against non-press key events
 //! - `HandleEvent` trait: For components that handle keyboard events
 //! - `HandleMouse` trait: For components that handle mouse events
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
 use ratatui::layout::Rect;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-type RatatuiKeyEvent = ratatui::crossterm::event::KeyEvent;
-type RatatuiKeyCode = ratatui::crossterm::event::KeyCode;
-type RatatuiKeyModifiers = ratatui::crossterm::event::KeyModifiers;
-type RatatuiKeyEventKind = ratatui::crossterm::event::KeyEventKind;
-type RatatuiKeyEventState = ratatui::crossterm::event::KeyEventState;
 
 /// Maximum duration between clicks to count as a double click.
 pub const DOUBLE_CLICK_THRESHOLD_MS: u64 = 300;
@@ -163,58 +156,6 @@ impl DoubleClickDetector {
     }
 }
 
-/// Converts a crossterm KeyEvent to a ratatui KeyEvent
-///
-/// Ratatui and crossterm define separate KeyEvent types with same structure.
-/// This function bridges between them by converting each field.
-pub fn to_ratatui_key(key: KeyEvent) -> RatatuiKeyEvent {
-    let code = match key.code {
-        KeyCode::Backspace => RatatuiKeyCode::Backspace,
-        KeyCode::Enter => RatatuiKeyCode::Enter,
-        KeyCode::Left => RatatuiKeyCode::Left,
-        KeyCode::Right => RatatuiKeyCode::Right,
-        KeyCode::Up => RatatuiKeyCode::Up,
-        KeyCode::Down => RatatuiKeyCode::Down,
-        KeyCode::Home => RatatuiKeyCode::Home,
-        KeyCode::End => RatatuiKeyCode::End,
-        KeyCode::PageUp => RatatuiKeyCode::PageUp,
-        KeyCode::PageDown => RatatuiKeyCode::PageDown,
-        KeyCode::Tab => RatatuiKeyCode::Tab,
-        KeyCode::BackTab => RatatuiKeyCode::BackTab,
-        KeyCode::Delete => RatatuiKeyCode::Delete,
-        KeyCode::Insert => RatatuiKeyCode::Insert,
-        KeyCode::F(n) => RatatuiKeyCode::F(n),
-        KeyCode::Char(c) => RatatuiKeyCode::Char(c),
-        KeyCode::Null => RatatuiKeyCode::Null,
-        KeyCode::Esc => RatatuiKeyCode::Esc,
-        KeyCode::CapsLock => RatatuiKeyCode::CapsLock,
-        KeyCode::ScrollLock => RatatuiKeyCode::ScrollLock,
-        KeyCode::NumLock => RatatuiKeyCode::NumLock,
-        KeyCode::PrintScreen => RatatuiKeyCode::PrintScreen,
-        KeyCode::Pause => RatatuiKeyCode::Pause,
-        KeyCode::Menu => RatatuiKeyCode::Menu,
-        KeyCode::KeypadBegin => RatatuiKeyCode::KeypadBegin,
-        _ => RatatuiKeyCode::Null,
-    };
-
-    let modifiers = RatatuiKeyModifiers::from_bits_truncate(key.modifiers.bits());
-
-    let kind = match key.kind {
-        KeyEventKind::Press => RatatuiKeyEventKind::Press,
-        KeyEventKind::Repeat => RatatuiKeyEventKind::Repeat,
-        KeyEventKind::Release => RatatuiKeyEventKind::Release,
-    };
-
-    let state = RatatuiKeyEventState::from_bits_truncate(key.state.bits());
-
-    RatatuiKeyEvent {
-        code,
-        modifiers,
-        kind,
-        state,
-    }
-}
-
 /// Checks if a key event is a press event (not repeat or release)
 ///
 /// Some terminals send Release events; components should guard against them.
@@ -291,59 +232,6 @@ mod tests {
         let mut key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
         key.kind = KeyEventKind::Repeat;
         assert!(!is_key_press(&key));
-    }
-
-    #[test]
-    fn to_ratatui_key_converts_char_key() {
-        let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
-        let ratatui_key = to_ratatui_key(key);
-        assert_eq!(ratatui_key.code, RatatuiKeyCode::Char('x'));
-    }
-
-    #[test]
-    fn to_ratatui_key_converts_special_keys() {
-        let test_cases = vec![
-            (KeyCode::Enter, RatatuiKeyCode::Enter),
-            (KeyCode::Backspace, RatatuiKeyCode::Backspace),
-            (KeyCode::Tab, RatatuiKeyCode::Tab),
-            (KeyCode::Esc, RatatuiKeyCode::Esc),
-            (KeyCode::Delete, RatatuiKeyCode::Delete),
-            (KeyCode::Insert, RatatuiKeyCode::Insert),
-            (KeyCode::Home, RatatuiKeyCode::Home),
-            (KeyCode::End, RatatuiKeyCode::End),
-            (KeyCode::PageUp, RatatuiKeyCode::PageUp),
-            (KeyCode::PageDown, RatatuiKeyCode::PageDown),
-            (KeyCode::Left, RatatuiKeyCode::Left),
-            (KeyCode::Right, RatatuiKeyCode::Right),
-            (KeyCode::Up, RatatuiKeyCode::Up),
-            (KeyCode::Down, RatatuiKeyCode::Down),
-        ];
-
-        for (crossterm_code, expected_ratatui_code) in test_cases {
-            let key = KeyEvent::new(crossterm_code, KeyModifiers::NONE);
-            let ratatui_key = to_ratatui_key(key);
-            assert_eq!(ratatui_key.code, expected_ratatui_code);
-        }
-    }
-
-    #[test]
-    fn to_ratatui_key_converts_function_keys() {
-        for n in 1..=12 {
-            let key = KeyEvent::new(KeyCode::F(n), KeyModifiers::NONE);
-            let ratatui_key = to_ratatui_key(key);
-            assert_eq!(ratatui_key.code, RatatuiKeyCode::F(n));
-        }
-    }
-
-    #[test]
-    fn to_ratatui_key_preserves_modifiers() {
-        let key = KeyEvent::new(
-            KeyCode::Char('a'),
-            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
-        );
-        let ratatui_key = to_ratatui_key(key);
-        assert!(ratatui_key.modifiers.contains(RatatuiKeyModifiers::CONTROL));
-        assert!(ratatui_key.modifiers.contains(RatatuiKeyModifiers::SHIFT));
     }
 
     #[test]

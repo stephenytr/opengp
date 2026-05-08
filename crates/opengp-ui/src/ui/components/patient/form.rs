@@ -20,7 +20,7 @@ use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Paragraph, Widget};
 use uuid::Uuid;
 
-use crate::ui::input::{to_ratatui_key, HoverState};
+use crate::ui::input::HoverState;
 use crate::ui::shared::{hover_style, FormAction};
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientFormData;
@@ -911,9 +911,8 @@ impl PatientForm {
         }
 
         if !self.form_state.dropdowns.contains_key(&self.focused_field) {
-            let ratatui_key = to_ratatui_key(key);
             if let Some(textarea) = self.focused_textarea_mut() {
-                let consumed = textarea.handle_key(ratatui_key);
+                let consumed = textarea.handle_key(key);
                 if consumed {
                     let field = self.focused_field.clone();
                     self.validate_field_by_id(&field);

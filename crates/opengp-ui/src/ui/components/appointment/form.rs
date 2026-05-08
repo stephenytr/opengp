@@ -15,7 +15,6 @@ use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
-use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::theme::Theme;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
@@ -988,9 +987,8 @@ impl AppointmentForm {
         let focused_field = AppointmentFormField::from_id(&self.focused_field)
             .unwrap_or(AppointmentFormField::Patient);
         if focused_field.is_textarea() {
-            let ratatui_key = to_ratatui_key(key);
             if let Some(textarea) = self.focused_textarea_mut() {
-                let consumed = textarea.handle_key(ratatui_key);
+                let consumed = textarea.handle_key(key);
                 if consumed {
                     let field_id = self.focused_field.clone();
                     self.validate_field_by_id(&field_id);

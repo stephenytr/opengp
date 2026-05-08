@@ -12,7 +12,6 @@ use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Widget};
 use uuid::Uuid;
 
-use crate::ui::input::to_ratatui_key;
 use crate::ui::layout::LABEL_WIDTH;
 use crate::ui::shared::FormMode;
 use crate::ui::theme::Theme;
@@ -234,7 +233,7 @@ impl MedicalHistoryForm {
         if focused.is_textarea() {
             let field_id = focused.id().to_string();
             if let Some(textarea) = self.state.textareas.get_mut(&field_id) {
-                if textarea.handle_key(to_ratatui_key(key)) {
+                if textarea.handle_key(key) {
                     self.validate_field(focused);
                     return Some(MedicalHistoryFormAction::ValueChanged);
                 }

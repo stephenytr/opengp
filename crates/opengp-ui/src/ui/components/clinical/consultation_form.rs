@@ -10,7 +10,6 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Widget};
 
-use crate::ui::input::to_ratatui_key;
 use crate::ui::shared::FormMode;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
@@ -287,9 +286,8 @@ impl ConsultationForm {
         }
 
         if self.focused_field().is_textarea() {
-            let ratatui_key = to_ratatui_key(key);
             if let Some(textarea) = self.focused_textarea_mut() {
-                let consumed = textarea.handle_key(ratatui_key);
+                let consumed = textarea.handle_key(key);
                 if consumed {
                     let focused_field = self.focused_field().id().to_string();
                     self.validate_field_by_id(&focused_field);

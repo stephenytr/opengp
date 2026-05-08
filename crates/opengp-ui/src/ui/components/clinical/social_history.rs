@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use crate::ui::input::to_ratatui_key;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
     format_date, parse_date, DropdownOption, DropdownWidget, FormValidator, HeightMode,
@@ -316,9 +315,8 @@ impl SocialHistoryComponent {
                 );
                 if !is_nav_key {
                     let focused_field_id = self.focused_field.id().to_string();
-                    let ratatui_key = to_ratatui_key(key);
                     if let Some(textarea) = self.textareas.get_mut(&focused_field_id) {
-                        let consumed = textarea.handle_key(ratatui_key);
+                        let consumed = textarea.handle_key(key);
                         if consumed {
                             self.validate_field_by_id(&focused_field_id);
                             return Some(SocialHistoryAction::FieldChanged);
