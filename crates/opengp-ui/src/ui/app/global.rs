@@ -1,10 +1,12 @@
 use rat_salsa::{SalsaAppContext, SalsaContext};
 use std::sync::Arc;
+use chrono::NaiveDate;
+use uuid::Uuid;
 
 use crate::api::ApiClient;
 use crate::ui::app::error::AppError;
 use crate::ui::app::event::AppEvent;
-use crate::ui::app::{AppContextMenuAction, AppState, RetryOperation};
+use crate::ui::app::AppState;
 use crate::ui::components::appointment::{AppointmentDetailModal, AppointmentForm};
 use crate::ui::components::help::HelpOverlay;
 use crate::ui::components::patient::PatientForm;
@@ -15,6 +17,33 @@ use crate::ui::services::{
 use crate::ui::theme::Theme;
 use crate::ui::widgets::ContextMenuState;
 use rat_dialog::DialogStack;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RetryOperation {
+    Login { username: String, password: String },
+    RefreshPatients,
+    RefreshAppointments { date: NaiveDate },
+    RefreshConsultations { patient_id: Uuid },
+}
+
+/// Unified action types for all context menus in the application.
+#[derive(Debug, Clone)]
+pub enum AppContextMenuAction {
+    // Patient actions
+    PatientEdit(Uuid),
+    PatientDelete(Uuid),
+    PatientViewHistory(Uuid),
+    // Appointment actions
+    AppointmentEdit(Uuid),
+    AppointmentCancel(Uuid),
+    AppointmentReschedule(Uuid),
+    // Clinical actions
+    ClinicalEdit(Uuid),
+    ClinicalDelete(Uuid),
+    // Billing actions
+    BillingEdit(Uuid),
+    BillingViewInvoice(Uuid),
+}
 
 #[derive(Clone)]
 pub enum DialogContent {
