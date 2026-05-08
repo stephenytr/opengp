@@ -120,15 +120,16 @@ impl LoginScreen {
                     password: self.password.clone(),
                 })
             }
-            ct_event!(key press c) => {
-                match self.focus {
-                    LoginFocus::Username => self.username.push(*c),
-                    LoginFocus::Password => self.password.push(*c),
-                    LoginFocus::Submit => {}
+            _ => {
+                if let crossterm::event::KeyCode::Char(c) = key.code {
+                    match self.focus {
+                        LoginFocus::Username => self.username.push(c),
+                        LoginFocus::Password => self.password.push(c),
+                        LoginFocus::Submit => {}
+                    }
                 }
                 None
             }
-            _ => None,
         }
     }
 

@@ -22,7 +22,7 @@ use opengp_infrastructure::infrastructure::database::repositories::{
 use opengp_infrastructure::infrastructure::database::{create_pool, DatabaseConfig};
 use opengp_ui::api::ApiClient;
 use opengp_ui::ui::app::{
-    AppCommand, AppError, AppEvent, AppState, DialogContent, GlobalState, RetryOperation,
+    AppError, AppEvent, AppState, DialogContent, GlobalState, RetryOperation,
 };
 use opengp_ui::ui::components::appointment::{
     AppointmentDetailModalAction, AppointmentForm, AppointmentFormAction, AppointmentState,
@@ -99,7 +99,6 @@ async fn bootstrap(config: Config) -> Result<(GlobalState, AppState), AppError> 
         build_services(&config.app.api_server.database, &config.encryption_key).await?;
 
     let keybinds = KeybindRegistry::global();
-    let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel::<AppCommand>();
 
     let mut state = AppState {
         tab_bar: TabBar::new(theme.clone()),
@@ -107,7 +106,6 @@ async fn bootstrap(config: Config) -> Result<(GlobalState, AppState), AppError> 
         status_bar: StatusBar::schedule(theme.clone()),
         login_screen: opengp_ui::ui::screens::LoginScreen::new(theme.clone()),
         authenticated: has_session_token,
-        current_context: KeyContext::Global,
         should_quit: false,
         current_user_id: uuid::Uuid::nil(),
         terminal_size: Rect::new(0, 0, 80, 24),
@@ -121,8 +119,6 @@ async fn bootstrap(config: Config) -> Result<(GlobalState, AppState), AppError> 
         active_appointment_refresh_date: None,
         last_billing_render: None,
         hovered_clinical_menu: None,
-        command_tx,
-        command_rx: Some(command_rx),
     };
 
     if !has_session_token {
@@ -286,6 +282,8 @@ async fn build_services(
 fn init(state: &mut AppState, _ctx: &mut GlobalState) -> Result<(), AppError> {
     if state.authenticated {
         spawn_patient_list_refresh(_ctx);
+        spawn_load_practitioners(_ctx);
+        spawn_refresh_appointments(_ctx, chrono::Utc::now().date_naive());
     }
     Ok(())
 }
@@ -422,43 +420,39 @@ fn spawn_save_appointment(
 fn spawn_update_appointment_status(
     ctx: &GlobalState,
     appointment_id: uuid::Uuid,
-    transition: opengp_ui::ui::app::AppointmentStatusTransition,
+    new_status: opengp_domain::domain::appointment::AppointmentStatus,
     user_id: uuid::Uuid,
     refresh_date: chrono::NaiveDate,
 ) {
     let service = ctx.appointment_ui_service.clone();
     ctx.spawn_async(async move {
         let result = if let Some(svc) = service {
-            match transition {
-                opengp_ui::ui::app::AppointmentStatusTransition::SetStatus(status) => {
-                    let status_result = match status {
-                        opengp_domain::domain::appointment::AppointmentStatus::Arrived => {
-                            svc.mark_arrived(appointment_id, user_id).await
-                        }
-                        opengp_domain::domain::appointment::AppointmentStatus::InProgress => {
-                            svc.mark_in_progress(appointment_id, user_id).await
-                        }
-                        opengp_domain::domain::appointment::AppointmentStatus::Completed => {
-                            svc.mark_completed(appointment_id, user_id).await
-                        }
-                        opengp_domain::domain::appointment::AppointmentStatus::NoShow => {
-                            svc.mark_no_show(appointment_id, user_id).await
-                        }
-                        opengp_domain::domain::appointment::AppointmentStatus::Billing => {
-                            svc.mark_billing(appointment_id, user_id).await
-                        }
-                        opengp_domain::domain::appointment::AppointmentStatus::Scheduled
-                        | opengp_domain::domain::appointment::AppointmentStatus::Confirmed
-                        | opengp_domain::domain::appointment::AppointmentStatus::Rescheduled
-                        | opengp_domain::domain::appointment::AppointmentStatus::Cancelled => {
-                            Ok(())
-                        }
-                    };
-                    status_result
-                        .map(|_| (appointment_id, refresh_date))
-                        .map_err(|e| e.to_string())
+            let status_result = match new_status {
+                opengp_domain::domain::appointment::AppointmentStatus::Arrived => {
+                    svc.mark_arrived(appointment_id, user_id).await
                 }
-            }
+                opengp_domain::domain::appointment::AppointmentStatus::InProgress => {
+                    svc.mark_in_progress(appointment_id, user_id).await
+                }
+                opengp_domain::domain::appointment::AppointmentStatus::Completed => {
+                    svc.mark_completed(appointment_id, user_id).await
+                }
+                opengp_domain::domain::appointment::AppointmentStatus::NoShow => {
+                    svc.mark_no_show(appointment_id, user_id).await
+                }
+                opengp_domain::domain::appointment::AppointmentStatus::Billing => {
+                    svc.mark_billing(appointment_id, user_id).await
+                }
+                opengp_domain::domain::appointment::AppointmentStatus::Scheduled
+                | opengp_domain::domain::appointment::AppointmentStatus::Confirmed
+                | opengp_domain::domain::appointment::AppointmentStatus::Rescheduled
+                | opengp_domain::domain::appointment::AppointmentStatus::Cancelled => {
+                    Ok(())
+                }
+            };
+            status_result
+                .map(|_| (appointment_id, refresh_date))
+                .map_err(|e| e.to_string())
         } else {
             Err("No appointment service".to_string())
         };
@@ -466,9 +460,17 @@ fn spawn_update_appointment_status(
     });
 }
 
+struct PendingRescheduleData {
+    appointment_id: uuid::Uuid,
+    new_date: Option<chrono::NaiveDate>,
+    new_time: Option<chrono::NaiveTime>,
+    practitioner_id: uuid::Uuid,
+    duration_minutes: i64,
+}
+
 fn spawn_reschedule_appointment(
     ctx: &GlobalState,
-    data: opengp_ui::ui::app::PendingRescheduleData,
+    data: PendingRescheduleData,
     user_id: uuid::Uuid,
 ) {
     let service = ctx.appointment_ui_service.clone();
@@ -562,6 +564,58 @@ fn close_dialog(ctx: &GlobalState, predicate: impl Fn(&DialogContent) -> bool) -
     false
 }
 
+fn current_key_context(state: &AppState, ctx: &GlobalState) -> KeyContext {
+    if !state.authenticated {
+        return KeyContext::Global;
+    }
+    if state.tab_bar.is_focused() {
+        return KeyContext::TabBar;
+    }
+    // Check dialog stack for active forms/modals
+    if let Some(index) = ctx.dialogs.top::<DialogContent>() {
+        if let Some(dialog) = ctx.dialogs.get::<DialogContent>(index) {
+            match &*dialog {
+                DialogContent::HelpOverlay(_) => return KeyContext::Global,
+                DialogContent::PatientForm(form) if form.is_focused() => {
+                    return KeyContext::PatientForm;
+                }
+                DialogContent::AppointmentForm(form) if form.is_focused() => {
+                    return KeyContext::Schedule;
+                }
+                DialogContent::AppointmentDetailModal(modal) if modal.is_focused() => {
+                    return KeyContext::Schedule;
+                }
+                _ => {}
+            }
+        }
+    }
+    // Fall through to tab-based context
+    match state.tab_bar.selected() {
+        Tab::PatientSearch => {
+            if state.patient_list.is_searching() {
+                KeyContext::Search
+            } else {
+                KeyContext::PatientList
+            }
+        }
+        Tab::PatientWorkspace => {
+            if state.workspace_manager.active().is_some() {
+                KeyContext::PatientWorkspace
+            } else {
+                KeyContext::PatientList
+            }
+        }
+        Tab::Schedule => match state.appointment_state.current_view {
+            opengp_ui::ui::components::appointment::AppointmentView::Calendar => {
+                KeyContext::Calendar
+            }
+            opengp_ui::ui::components::appointment::AppointmentView::Schedule => {
+                KeyContext::Schedule
+            }
+        },
+    }
+}
+
 fn toggle_help_dialog(state: &mut AppState, ctx: &GlobalState) {
     if close_dialog(ctx, |dialog| {
         matches!(dialog, DialogContent::HelpOverlay(_))
@@ -570,7 +624,7 @@ fn toggle_help_dialog(state: &mut AppState, ctx: &GlobalState) {
     }
 
     let mut help_overlay = HelpOverlay::new(ctx.theme.clone());
-    help_overlay.set_context(state.current_context);
+    help_overlay.set_context(current_key_context(state, ctx));
     help_overlay.show();
     push_dialog(ctx, DialogContent::HelpOverlay(help_overlay));
 }
@@ -616,7 +670,30 @@ fn render(
         state.tab_bar.clone().render(layout[0], buf);
 
         match state.tab_bar.selected() {
-            Tab::Schedule => Paragraph::new("Schedule").render(layout[1], buf),
+            Tab::Schedule => {
+                use opengp_ui::ui::components::appointment::AppointmentView;
+                match state.appointment_state.current_view {
+                    AppointmentView::Calendar => {
+                        state.appointment_state.calendar.clone().render(layout[1], buf);
+                    }
+                    AppointmentView::Schedule => {
+                        use ratatui::layout::{Constraint, Direction, Layout};
+                        let chunks = Layout::default()
+                            .direction(Direction::Horizontal)
+                            .constraints([Constraint::Length(23), Constraint::Min(0)])
+                            .split(layout[1]);
+                        state.appointment_state.calendar.clone().render(chunks[0], buf);
+                        let schedule = state.appointment_state.schedule.clone();
+                        let mut appointment_state = &mut state.appointment_state;
+                        ratatui::widgets::StatefulWidget::render(
+                            schedule,
+                            chunks[1],
+                            buf,
+                            &mut appointment_state,
+                        );
+                    }
+                }
+            }
             Tab::PatientSearch => state.patient_list.clone().render(layout[1], buf),
             Tab::PatientWorkspace => Paragraph::new("Patient workspace").render(layout[1], buf),
         }
@@ -660,7 +737,7 @@ fn build_focus(state: &AppState) -> Focus {
     let mut builder = FocusBuilder::new(None);
     builder
         .widget(&state.tab_bar)
-        .widget(&state.login_screen)
+        // login_screen is excluded — it manages its own Tab key navigation internally
         .widget(&state.patient_list)
         .widget(&state.appointment_state);
 
@@ -682,50 +759,7 @@ fn refresh_status_and_context(state: &mut AppState, ctx: &GlobalState) {
         Tab::Schedule => StatusBar::schedule(ctx.theme.clone()),
     };
 
-    state.current_context = if !state.authenticated {
-        KeyContext::Global
-    } else if state.tab_bar.is_focused() {
-        KeyContext::TabBar
-    } else {
-        let mut dialog_context = None;
-        if let Some(index) = ctx.dialogs.top::<DialogContent>() {
-            if let Some(dialog) = ctx.dialogs.get::<DialogContent>(index) {
-                dialog_context = match &*dialog {
-                    DialogContent::HelpOverlay(_) => Some(KeyContext::Global),
-                    DialogContent::PatientForm(form) if form.is_focused() => {
-                        Some(KeyContext::PatientForm)
-                    }
-                    DialogContent::AppointmentForm(form) if form.is_focused() => {
-                        Some(KeyContext::Schedule)
-                    }
-                    DialogContent::AppointmentDetailModal(modal) if modal.is_focused() => {
-                        Some(KeyContext::Schedule)
-                    }
-                    _ => None,
-                };
-            }
-        }
 
-        if let Some(context) = dialog_context {
-            context
-        } else {
-            match state.tab_bar.selected() {
-                Tab::PatientSearch | Tab::PatientWorkspace => {
-                    if state.patient_list.is_searching() {
-                        KeyContext::Search
-                    } else if state.workspace_manager.active().is_some() {
-                        KeyContext::PatientWorkspace
-                    } else {
-                        KeyContext::PatientList
-                    }
-                }
-                Tab::Schedule => match state.appointment_state.current_view {
-                    AppointmentView::Calendar => KeyContext::Calendar,
-                    AppointmentView::Schedule => KeyContext::Schedule,
-                },
-            }
-        }
-    };
 }
 
 enum DialogKeyResult {
@@ -851,7 +885,7 @@ fn handle_detail_modal_key(
                     spawn_update_appointment_status(
                         ctx,
                         appointment_id,
-                        opengp_ui::ui::app::AppointmentStatusTransition::SetStatus(status),
+                        status,
                         state.current_user_id,
                         refresh_date,
                     );
@@ -871,7 +905,7 @@ fn handle_detail_modal_key(
                     ) {
                         spawn_reschedule_appointment(
                             ctx,
-                            opengp_ui::ui::app::PendingRescheduleData {
+                            PendingRescheduleData {
                                 appointment_id: modal.appointment_id(),
                                 new_date: Some(new_date),
                                 new_time: Some(new_time),
@@ -1050,28 +1084,8 @@ fn event_fn(
                     }) = state.login_screen.handle_key(*key)
                     {
                         spawn_login_request(ctx, username, password);
-                        return Ok(Control::Changed);
                     }
-
-                    if let Some(action) = ctx
-                        .keybinds
-                        .lookup(*key, KeyContext::Global)
-                        .map(|kb| kb.action.clone())
-                    {
-                        match action {
-                            Action::OpenHelp => {
-                                toggle_help_dialog(state, ctx);
-                                return Ok(Control::Changed);
-                            }
-                            Action::Quit => {
-                                state.should_quit = true;
-                                return Ok(Control::Quit);
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    return Ok(Control::Continue);
+                    return Ok(Control::Changed);
                 }
 
                 if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('q') {
@@ -1178,7 +1192,7 @@ fn event_fn(
                     }
                     _ => {
                         let action = KeybindRegistry::global()
-                            .lookup(*key, state.current_context)
+                            .lookup(*key, current_key_context(state, ctx))
                             .map(|k| k.action.clone());
 
                         if let Some(action) = action {
@@ -1306,6 +1320,10 @@ fn event_fn(
                     }
                 }
             }
+            Event::Mouse(mouse) => {
+                handle_mouse_event(state, ctx, *mouse);
+                Ok(Control::Changed)
+            }
             Event::Resize(w, h) => {
                 state.terminal_size = Rect::new(0, 0, *w, *h);
                 Ok(Control::Changed)
@@ -1317,6 +1335,8 @@ fn event_fn(
                 Ok(_) => {
                     state.authenticated = true;
                     spawn_patient_list_refresh(ctx);
+                    spawn_load_practitioners(ctx);
+                    spawn_refresh_appointments(ctx, chrono::Utc::now().date_naive());
                     state.status_bar.clear_error();
                 }
                 Err(err) => {
@@ -1369,7 +1389,17 @@ fn event_fn(
         AppEvent::AppointmentsRefreshed(result) => {
             match result {
                 Ok(schedule) => {
-                    state.appointment_state.schedule_data = Some(schedule.clone());
+                    let practitioner_colours = [
+                        ctx.theme.colors.appointment_confirmed,
+                        ctx.theme.colors.appointment_in_progress,
+                        ctx.theme.colors.appointment_arrived,
+                        ctx.theme.colors.appointment_scheduled,
+                        ctx.theme.colors.primary,
+                        ctx.theme.colors.secondary,
+                    ];
+                    state
+                        .appointment_state
+                        .load_schedule_data_with_colours(schedule.clone(), &practitioner_colours);
                     state.status_bar.clear_error();
                 }
                 Err(err) => state.status_bar.set_error(Some(err.clone())),
@@ -1498,6 +1528,334 @@ fn event_fn(
                 Err(err) => state.status_bar.set_error(Some(err.clone())),
             }
             Ok(Control::Changed)
+        }
+    }
+}
+
+fn handle_mouse_event(state: &mut AppState, ctx: &mut GlobalState, mouse: crossterm::event::MouseEvent) {
+    use crossterm::event::MouseEventKind;
+    use opengp_ui::ui::components::appointment::AppointmentView;
+    use opengp_ui::ui::components::billing::{BillingView, ClaimList, InvoiceList, PaymentList};
+    use opengp_ui::ui::components::clinical_row::{ClinicalMenuKind, ClinicalRow};
+    use opengp_ui::ui::components::status_bar::STATUS_BAR_HEIGHT;
+    use opengp_ui::ui::input::HandleMouse;
+
+    let area = state.terminal_size;
+
+    const MAIN_TAB_WIDTH: u16 = 38;
+    let main_tab_bar_area = Rect::new(area.x, area.y, MAIN_TAB_WIDTH, 1);
+    let patient_tab_bar_area = Rect::new(
+        area.x + MAIN_TAB_WIDTH,
+        area.y,
+        area.width.saturating_sub(MAIN_TAB_WIDTH),
+        1,
+    );
+
+    if state.tab_bar.handle_mouse(mouse, main_tab_bar_area).is_some() {
+        refresh_status_and_context(state, ctx);
+        return;
+    }
+
+    if !state.workspace_manager.workspaces.is_empty() {
+        if state
+            .workspace_manager
+            .handle_patient_tab_mouse(mouse, patient_tab_bar_area)
+            .is_some()
+        {
+            state.tab_bar.select(Tab::PatientWorkspace);
+            refresh_status_and_context(state, ctx);
+            return;
+        }
+
+        if let Some(workspace) = state.workspace_manager.active_mut() {
+            let clinical_row_area = Rect::new(area.x, area.y + 1, area.width, 1);
+            let clinical_items = ClinicalMenuKind::all();
+            let active_clinical_idx = workspace.active_clinical_menu.index();
+            let mut clinical_row = ClinicalRow::new(
+                clinical_items,
+                active_clinical_idx,
+                workspace.colour,
+                ctx.theme.clone(),
+            );
+            if let Some(idx) = clinical_row.handle_mouse(mouse, clinical_row_area) {
+                if let Some(kind) = ClinicalMenuKind::from_index(idx) {
+                    workspace.active_clinical_menu = kind;
+                    refresh_status_and_context(state, ctx);
+                    return;
+                }
+            }
+            state.hovered_clinical_menu = clinical_row.hovered_index();
+        }
+    }
+
+    let clinical_row_offset: u16 = if state.workspace_manager.active().is_some() { 2 } else { 1 };
+
+    if state.tab_bar.selected() == Tab::PatientSearch {
+        let content_area = Rect::new(
+            area.x,
+            area.y + clinical_row_offset,
+            area.width,
+            area.height.saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
+        );
+        if let Some(action) = state.patient_list.handle_mouse(mouse, content_area) {
+            match action {
+                PatientListAction::OpenPatient(id) => {
+                    spawn_load_patient_for_edit(ctx, id);
+                }
+                PatientListAction::SelectionChanged
+                | PatientListAction::FocusSearch
+                | PatientListAction::SearchChanged
+                | PatientListAction::ContextMenu { .. } => {}
+            }
+        }
+    }
+
+    if state.tab_bar.selected() == Tab::Schedule {
+        let appointment_content_area = Rect::new(
+            area.x,
+            area.y + clinical_row_offset,
+            area.width,
+            area.height.saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
+        );
+
+        match state.appointment_state.current_view {
+            AppointmentView::Calendar => {
+                state.appointment_state.calendar.focused = true;
+                state.appointment_state.focused = false;
+                if let Some(action) = state
+                    .appointment_state
+                    .calendar
+                    .handle_mouse(mouse, appointment_content_area)
+                {
+                    match action {
+                        CalendarAction::SelectDate(date) => {
+                            state.appointment_state.selected_date = Some(date);
+                            state.appointment_state.current_view = AppointmentView::Schedule;
+                            spawn_refresh_appointments(ctx, date);
+                            refresh_status_and_context(state, ctx);
+                        }
+                        CalendarAction::FocusDate(_)
+                        | CalendarAction::MonthChanged(_)
+                        | CalendarAction::GoToToday => {}
+                    }
+                }
+            }
+            AppointmentView::Schedule => {
+                let chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Length(23), Constraint::Min(0)])
+                    .split(appointment_content_area);
+
+                if let Some(action) = state
+                    .appointment_state
+                    .calendar
+                    .handle_mouse(mouse, chunks[0])
+                {
+                    state.appointment_state.calendar.focused = true;
+                    state.appointment_state.focused = false;
+                    match action {
+                        CalendarAction::SelectDate(date) => {
+                            state.appointment_state.selected_date = Some(date);
+                            spawn_refresh_appointments(ctx, date);
+                        }
+                        CalendarAction::FocusDate(_)
+                        | CalendarAction::MonthChanged(_)
+                        | CalendarAction::GoToToday => {}
+                    }
+                }
+
+                if let Some(action) = state.appointment_state.handle_mouse(mouse, chunks[1]) {
+                    state.appointment_state.focused = true;
+                    state.appointment_state.calendar.focused = false;
+                    match action {
+                        ScheduleAction::SelectPractitioner(id) => {
+                            state.appointment_state.selected_practitioner = Some(id);
+                        }
+                        ScheduleAction::SelectAppointment(id) => {
+                            state.appointment_state.selected_appointment = Some(id);
+                        }
+                        ScheduleAction::NavigateTimeSlot(_)
+                        | ScheduleAction::NavigatePractitioner(_)
+                        | ScheduleAction::ToggleColumn
+                        | ScheduleAction::CreateAtSlot { .. } => {}
+                    }
+                }
+            }
+        }
+    }
+
+    if state.tab_bar.selected() == Tab::PatientWorkspace {
+        if let Some(workspace) = state.workspace_manager.active_mut() {
+            if let Some(ref mut billing_state) = workspace.billing {
+                let billing_content_area = Rect::new(
+                    area.x,
+                    area.y + clinical_row_offset,
+                    area.width,
+                    area.height.saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
+                );
+
+                if matches!(mouse.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
+                    match billing_state.view {
+                        BillingView::ClaimList => {
+                            for _ in 0..3 {
+                                if matches!(mouse.kind, MouseEventKind::ScrollUp) {
+                                    billing_state.claim_selected_index =
+                                        billing_state.claim_selected_index.saturating_sub(1);
+                                } else if billing_state.claim_selected_index
+                                    < billing_state.claims.len().saturating_sub(1)
+                                {
+                                    billing_state.claim_selected_index += 1;
+                                }
+                            }
+                            return;
+                        }
+                        BillingView::InvoiceList => {
+                            for _ in 0..3 {
+                                if matches!(mouse.kind, MouseEventKind::ScrollUp) {
+                                    billing_state.invoice_selected_index =
+                                        billing_state.invoice_selected_index.saturating_sub(1);
+                                } else if billing_state.invoice_selected_index
+                                    < billing_state.invoices.len().saturating_sub(1)
+                                {
+                                    billing_state.invoice_selected_index += 1;
+                                }
+                            }
+                            return;
+                        }
+                        BillingView::PaymentList => {
+                            for _ in 0..3 {
+                                if matches!(mouse.kind, MouseEventKind::ScrollUp) {
+                                    billing_state.payment_selected_index =
+                                        billing_state.payment_selected_index.saturating_sub(1);
+                                } else if billing_state.payment_selected_index
+                                    < billing_state.payments.len().saturating_sub(1)
+                                {
+                                    billing_state.payment_selected_index += 1;
+                                }
+                            }
+                            return;
+                        }
+                        _ => {}
+                    }
+                }
+
+                if matches!(mouse.kind, MouseEventKind::Moved) {
+                    use std::time::Duration;
+                    if let Some(last) = state.last_billing_render {
+                        if last.elapsed() < Duration::from_millis(16) {
+                            return;
+                        }
+                    }
+                    state.last_billing_render = Some(std::time::Instant::now());
+                }
+
+                match billing_state.view {
+                    BillingView::ClaimList => {
+                        let mut claim_list =
+                            ClaimList::new(billing_state.claims.clone(), ctx.theme.clone());
+                        claim_list.selected_index = billing_state.claim_selected_index;
+                        if let Some(action) = claim_list.handle_mouse(mouse, billing_content_area) {
+                            match action {
+                                opengp_ui::ui::components::billing::ClaimListAction::Select(_) => {
+                                    billing_state.claim_selected_index = claim_list.selected_index;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    BillingView::InvoiceList => {
+                        let mut invoice_list = InvoiceList::new(ctx.theme.clone());
+                        invoice_list.set_invoices(billing_state.invoices.clone());
+                        invoice_list.selected_index = billing_state.invoice_selected_index;
+                        if let Some(action) =
+                            invoice_list.handle_mouse(mouse, billing_content_area)
+                        {
+                            match action {
+                                opengp_ui::ui::components::billing::InvoiceListAction::Select(_) => {
+                                    billing_state.invoice_selected_index =
+                                        invoice_list.selected_index;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    BillingView::PaymentList => {
+                        let mut payment_list = PaymentList::new(
+                            billing_state.payments.clone(),
+                            ctx.theme.clone(),
+                        );
+                        payment_list.selected_index = billing_state.payment_selected_index;
+                        if let Some(action) =
+                            payment_list.handle_mouse(mouse, billing_content_area)
+                        {
+                            match action {
+                                opengp_ui::ui::components::billing::PaymentListAction::Select(_) => {
+                                    billing_state.payment_selected_index =
+                                        payment_list.selected_index;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    if state.tab_bar.selected() == Tab::PatientWorkspace {
+        if let Some(workspace) = state.workspace_manager.active_mut() {
+            if let Some(ref mut clinical_state) = workspace.clinical {
+                let consultations = clinical_state.consultations.consultations.clone();
+                clinical_state.consultations.consultation_list.consultations = consultations;
+                let allergies = clinical_state.allergies.allergies.clone();
+                clinical_state.allergies.allergy_list.allergies = allergies;
+                let vitals = clinical_state.vitals.vital_signs.clone();
+                clinical_state.vitals.vitals_list.vitals = vitals;
+                let medical_history = clinical_state.medical_history.medical_history.clone();
+                clinical_state.medical_history.medical_history_list.conditions = medical_history;
+                let family_history = clinical_state.family_history.family_history.clone();
+                clinical_state.family_history.family_history_list.entries = family_history;
+
+                let content_top = area.y + 2;
+                let content_height = area.height.saturating_sub(2 + STATUS_BAR_HEIGHT);
+                let clinical_content_area =
+                    Rect::new(area.x, content_top, area.width, content_height);
+
+                match clinical_state.view {
+                    opengp_ui::ui::components::clinical::ClinicalView::Consultations => {
+                        let _ = clinical_state
+                            .consultations
+                            .consultation_list
+                            .handle_mouse(mouse, clinical_content_area);
+                    }
+                    opengp_ui::ui::components::clinical::ClinicalView::VitalSigns => {
+                        let _ = clinical_state
+                            .vitals
+                            .vitals_list
+                            .handle_mouse(mouse, clinical_content_area);
+                    }
+                    opengp_ui::ui::components::clinical::ClinicalView::Allergies => {
+                        let _ = clinical_state
+                            .allergies
+                            .allergy_list
+                            .handle_mouse(mouse, clinical_content_area);
+                    }
+                    opengp_ui::ui::components::clinical::ClinicalView::MedicalHistory => {
+                        let _ = clinical_state
+                            .medical_history
+                            .medical_history_list
+                            .handle_mouse(mouse, clinical_content_area);
+                    }
+                    opengp_ui::ui::components::clinical::ClinicalView::FamilyHistory => {
+                        let _ = clinical_state
+                            .family_history
+                            .family_history_list
+                            .handle_mouse(mouse, clinical_content_area);
+                    }
+                    _ => {}
+                }
+            }
         }
     }
 }

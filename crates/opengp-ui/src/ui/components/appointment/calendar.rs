@@ -172,12 +172,12 @@ impl Calendar {
                     self.rebuild_days();
                     Some(CalendarAction::FocusDate(self.widget.focused_date))
                 }
-                Action::PrevWeek => {
+                Action::PrevWeek | Action::NavigateUp => {
                     self.widget.focused_date -= chrono::Duration::days(7);
                     self.rebuild_days();
                     Some(CalendarAction::FocusDate(self.widget.focused_date))
                 }
-                Action::NextWeek => {
+                Action::NextWeek | Action::NavigateDown => {
                     self.widget.focused_date += chrono::Duration::days(7);
                     self.rebuild_days();
                     Some(CalendarAction::FocusDate(self.widget.focused_date))
@@ -231,18 +231,7 @@ impl Calendar {
                 }
                 None
             }
-            MouseEventKind::ScrollUp => {
-                self.widget.next_month();
-                self.rebuild_days();
-                self.hovered_day = None;
-                Some(CalendarAction::MonthChanged(self.current_month))
-            }
-            MouseEventKind::ScrollDown => {
-                self.widget.prev_month();
-                self.rebuild_days();
-                self.hovered_day = None;
-                Some(CalendarAction::MonthChanged(self.current_month))
-            }
+            MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => None,
             MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
                 // Double-click detection
                 if self.double_click_detector.check_double_click_now(&mouse) {

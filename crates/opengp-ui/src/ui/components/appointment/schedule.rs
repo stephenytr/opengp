@@ -221,16 +221,11 @@ impl Schedule {
 
             let header_text = &practitioner.display_name;
             let header_len = header_text.len().min(col_width as usize - 2);
-            buf.set_string(col_x + 1, area.y, &header_text[..header_len], header_style);
+            buf.set_string(col_x, area.y, &header_text[..header_len], header_style);
 
-            let sep_style = if is_selected {
-                Style::default().fg(self.theme.colors.primary)
-            } else {
-                Style::default().fg(self.theme.colors.border)
-            };
-            for y in area.y..area.y + area.height {
-                buf.set_string(col_x, y, "│", sep_style);
-            }
+            // for y in area.y..area.y + area.height {
+            //     buf.set_string(col_x, y, "│", sep_style);
+            // }
 
             if let Some(schedule) = &state.schedule_data {
                 if let Some(practitioner_schedule) = schedule
@@ -330,16 +325,16 @@ impl Schedule {
                         if group.len() <= 2 {
                             for (group_pos, &apt_idx) in group.iter().enumerate() {
                                 let apt = &practitioner_schedule.appointments[apt_idx];
-                                let half_width = col_width.saturating_sub(2) / 2;
+                                let half_width = col_width / 2;
                                 let apt_x = if apt.is_overlapping {
-                                    col_x + 1 + (group_pos as u16 * half_width)
+                                    col_x + (group_pos as u16 * half_width)
                                 } else {
-                                    col_x + 1
+                                    col_x
                                 };
                                 let apt_width = if apt.is_overlapping {
                                     half_width
                                 } else {
-                                    col_width.saturating_sub(2)
+                                    col_width
                                 };
 
                                 self.render_appointment_block(
@@ -352,8 +347,8 @@ impl Schedule {
                                     break;
                                 }
                                 let apt = &practitioner_schedule.appointments[apt_idx];
-                                let half_width = col_width.saturating_sub(2) / 2;
-                                let apt_x = col_x + 1 + (group_pos as u16 * half_width);
+                                let half_width = col_width / 2;
+                                let apt_x = col_x + (group_pos as u16 * half_width);
 
                                 self.render_appointment_block(
                                     buf, apt_x, half_width, apt, max_slot, area, state,
@@ -367,8 +362,8 @@ impl Schedule {
                                     if start_slot <= max_slot {
                                         let y = area.y + 1 + start_slot as u16 * 2;
                                         if y < area.y + area.height {
-                                            let half_width = col_width.saturating_sub(2) / 2;
-                                            let badge_x = col_x + 1 + half_width;
+                                            let half_width = col_width / 2;
+                                            let badge_x = col_x + half_width;
                                             let remaining = group.len() - 2;
                                             let badge_text = format!("+{}", remaining);
                                             buf.set_string(
