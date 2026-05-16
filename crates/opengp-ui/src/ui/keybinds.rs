@@ -291,6 +291,18 @@ impl KeybindRegistry {
             context: KeyContext::Global,
             description: "Quit application",
         });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE),
+            action: Action::SwitchToSchedule,
+            context: KeyContext::Global,
+            description: "Switch to Schedule view",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::F(3), KeyModifiers::NONE),
+            action: Action::SwitchToPatientSearch,
+            context: KeyContext::Global,
+            description: "Switch to Patient Search view",
+        });
     }
 
     /// Register a keybind

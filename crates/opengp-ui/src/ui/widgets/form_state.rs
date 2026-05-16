@@ -225,6 +225,10 @@ impl<F: FormField> FormState<F> {
                 self.prev_field();
                 Some(FormAction::FocusChanged)
             }
+            ct_event!(keycode press BackTab) => {
+                self.prev_field();
+                Some(FormAction::FocusChanged)
+            }
             ct_event!(keycode press Up) => {
                 self.prev_field();
                 Some(FormAction::FocusChanged)

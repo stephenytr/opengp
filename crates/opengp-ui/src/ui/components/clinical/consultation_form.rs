@@ -301,9 +301,6 @@ impl ConsultationForm {
         let event = Event::Key(key);
         match &event {
             ct_event!(keycode press Tab) => {
-                if key.modifiers.contains(KeyModifiers::CONTROL) {
-                    return Some(ConsultationFormAction::Cancel);
-                }
                 if key.modifiers.contains(KeyModifiers::SHIFT) {
                     self.state.prev_field();
                 } else {
@@ -587,5 +584,17 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
         let action = form.handle_key(key);
         assert!(matches!(action, Some(ConsultationFormAction::Submit)));
+    }
+
+    #[test]
+    fn ctrl_tab_does_not_cancel() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let theme = Theme::dark();
+        let mut form = ConsultationForm::new(theme);
+
+        let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::CONTROL);
+        let action = form.handle_key(key);
+        assert!(!matches!(action, Some(ConsultationFormAction::Cancel)));
     }
 }

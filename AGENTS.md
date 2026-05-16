@@ -204,7 +204,7 @@ cargo test -p opengp-cache
 ### B. Form Trait Pattern
 
 - Canonical form navigation uses the `FormNavigation` trait plus the `FormState<F>` enum for type-safe state transitions.
-- `DynamicForm` is deprecated and has been removed from all forms, with six forms migrated to the canonical pattern.
+- `DynamicForm` has been fully removed. Do not implement `DynamicForm` or `DynamicFormMeta`. The canonical form pattern is `FormNavigation + FormState<F>`.
 - Do not implement both `FormNavigation` and `DynamicForm` on the same form type.
 
 ### C. Pagination Patterns
@@ -234,3 +234,4 @@ Do not mix these pagination patterns within the same component.
 
 - The `ClinicalSubState` trait was removed as dead code; it had four implementations and no polymorphic call sites.
 - Nine unused `AppCommand` variants were removed; only three variants remain active in the TUI event loop.
+- `dynamic_form.rs` was deleted; `DynamicForm` and `DynamicFormMeta` traits no longer exist. `social_history.rs` was the last user and has been migrated to `FormNavigation + FormFieldMeta`.

@@ -91,22 +91,6 @@ impl SocialHistoryField {
         }
     }
 
-    fn from_id(field_id: &str) -> Option<Self> {
-        match field_id {
-            FIELD_SMOKING_STATUS => Some(SocialHistoryField::SmokingStatus),
-            FIELD_CIGARETTES_PER_DAY => Some(SocialHistoryField::CigarettesPerDay),
-            FIELD_QUIT_DATE => Some(SocialHistoryField::QuitDate),
-            FIELD_ALCOHOL_STATUS => Some(SocialHistoryField::AlcoholStatus),
-            FIELD_DRINKS_PER_WEEK => Some(SocialHistoryField::DrinksPerWeek),
-            FIELD_EXERCISE_FREQUENCY => Some(SocialHistoryField::ExerciseFrequency),
-            FIELD_OCCUPATION => Some(SocialHistoryField::Occupation),
-            FIELD_LIVING_SITUATION => Some(SocialHistoryField::LivingSituation),
-            FIELD_SUPPORT_NETWORK => Some(SocialHistoryField::SupportNetwork),
-            FIELD_NOTES => Some(SocialHistoryField::Notes),
-            _ => None,
-        }
-    }
-
     fn is_dropdown(&self) -> bool {
         matches!(
             self,
@@ -117,6 +101,16 @@ impl SocialHistoryField {
     }
 }
 
+impl crate::ui::widgets::FormFieldMeta for SocialHistoryField {
+    fn label(&self) -> &'static str {
+        (*self).into()
+    }
+
+    fn is_required(&self) -> bool {
+        false
+    }
+}
+
 pub struct SocialHistoryComponent {
     pub social_history: Option<SocialHistoryData>,
     pub is_editing: bool,
@@ -124,7 +118,6 @@ pub struct SocialHistoryComponent {
     pub loading: bool,
     loading_state: LoadingState,
     theme: Theme,
-    field_ids: Vec<String>,
     errors: HashMap<String, String>,
     textareas: HashMap<String, TextareaState>,
     dropdowns: HashMap<String, DropdownWidget>,
@@ -142,7 +135,6 @@ impl Clone for SocialHistoryComponent {
             loading: self.loading,
             loading_state: self.loading_state.clone(),
             theme: self.theme.clone(),
-            field_ids: self.field_ids.clone(),
             errors: self.errors.clone(),
             textareas: self.textareas.clone(),
             dropdowns: self.dropdowns.clone(),
@@ -164,11 +156,6 @@ pub enum SocialHistoryAction {
 
 impl SocialHistoryComponent {
     pub fn new(theme: Theme, config: &SocialHistoryConfig) -> Self {
-        let field_ids: Vec<String> = SocialHistoryField::all()
-            .iter()
-            .map(|field| field.id().to_string())
-            .collect();
-
         let mut textareas = HashMap::new();
         for field in SocialHistoryField::all() {
             if !field.is_dropdown() {
@@ -183,7 +170,6 @@ impl SocialHistoryComponent {
             loading: false,
             loading_state: LoadingState::new().message("Loading social history..."),
             theme: theme.clone(),
-            field_ids,
             errors: HashMap::new(),
             textareas,
             dropdowns: build_dropdowns(theme, config),
@@ -329,7 +315,7 @@ impl SocialHistoryComponent {
 
             let event = Event::Key(key);
             match &event {
-                ct_event!(keycode press Tab) | ct_event!(keycode press SHIFT-Tab) => {
+                ct_event!(keycode press Tab) => {
                     if key.modifiers.contains(KeyModifiers::SHIFT) {
                         self.prev_field();
                     } else {
@@ -337,7 +323,7 @@ impl SocialHistoryComponent {
                     }
                     Some(SocialHistoryAction::FocusChanged)
                 }
-                ct_event!(keycode press BackTab) | ct_event!(keycode press SHIFT-BackTab) => {
+                ct_event!(keycode press BackTab) => {
                     self.prev_field();
                     Some(SocialHistoryAction::FocusChanged)
                 }
@@ -368,19 +354,29 @@ impl SocialHistoryComponent {
     }
 
     fn next_field(&mut self) {
-        <Self as crate::ui::widgets::DynamicForm>::next_field(self);
-        self.focused_field = SocialHistoryField::from_id(
-            <Self as crate::ui::widgets::DynamicForm>::current_field(self),
-        )
-        .unwrap_or(SocialHistoryField::SmokingStatus);
+        let fields = SocialHistoryField::all();
+        if fields.is_empty() {
+            return;
+        }
+        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
+            let next_idx = (current_idx + 1) % fields.len();
+            self.focused_field = fields[next_idx];
+        }
     }
 
     fn prev_field(&mut self) {
-        <Self as crate::ui::widgets::DynamicForm>::prev_field(self);
-        self.focused_field = SocialHistoryField::from_id(
-            <Self as crate::ui::widgets::DynamicForm>::current_field(self),
-        )
-        .unwrap_or(SocialHistoryField::SmokingStatus);
+        let fields = SocialHistoryField::all();
+        if fields.is_empty() {
+            return;
+        }
+        if let Some(current_idx) = fields.iter().position(|f| *f == self.focused_field) {
+            let prev_idx = if current_idx == 0 {
+                fields.len() - 1
+            } else {
+                current_idx - 1
+            };
+            self.focused_field = fields[prev_idx];
+        }
     }
 
     pub fn get_field_value(&self, field: &SocialHistoryField) -> String {
@@ -529,63 +525,35 @@ impl SocialHistoryComponent {
     }
 }
 
-impl crate::ui::widgets::DynamicFormMeta for SocialHistoryComponent {
-    fn label(&self, field_id: &str) -> String {
-        SocialHistoryField::from_id(field_id)
-            .map(|field| field.label().to_string())
-            .unwrap_or_else(|| field_id.to_string())
-    }
+impl crate::ui::widgets::FormNavigation for SocialHistoryComponent {
+    type FormField = SocialHistoryField;
 
-    fn is_required(&self, _field_id: &str) -> bool {
-        false
-    }
-
-    fn field_type(&self, field_id: &str) -> crate::ui::widgets::FieldType {
-        match SocialHistoryField::from_id(field_id) {
-            Some(SocialHistoryField::QuitDate) => crate::ui::widgets::FieldType::Date,
-            Some(field) if field.is_dropdown() => crate::ui::widgets::FieldType::Select(vec![]),
-            _ => crate::ui::widgets::FieldType::Text,
-        }
-    }
-}
-
-impl crate::ui::widgets::DynamicForm for SocialHistoryComponent {
-    fn field_ids(&self) -> &[String] {
-        &self.field_ids
-    }
-
-    fn current_field(&self) -> &str {
-        self.focused_field.id()
-    }
-
-    fn set_current_field(&mut self, field_id: &str) {
-        if let Some(field) = SocialHistoryField::from_id(field_id) {
-            self.focused_field = field;
-        }
-    }
-
-    fn get_value(&self, field_id: &str) -> String {
-        self.get_value_by_id(field_id)
-    }
-
-    fn set_value(&mut self, field_id: &str, value: String) {
-        self.set_value_by_id(field_id, value);
+    fn fields(&self) -> Vec<Self::FormField> {
+        SocialHistoryField::all()
     }
 
     fn validate(&mut self) -> bool {
         self.errors.clear();
-        for field_id in self.field_ids.clone() {
-            self.validate_field_by_id(&field_id);
+        for field in SocialHistoryField::all() {
+            self.validate_field_by_id(field.id());
         }
         self.errors.is_empty()
     }
 
-    fn get_error(&self, field_id: &str) -> Option<&str> {
-        self.errors.get(field_id).map(|s| s.as_str())
+    fn current_field(&self) -> Self::FormField {
+        self.focused_field
     }
 
-    fn set_error(&mut self, field_id: &str, error: Option<String>) {
-        self.set_error_by_id(field_id, error);
+    fn set_current_field(&mut self, field: Self::FormField) {
+        self.focused_field = field;
+    }
+
+    fn get_error(&self, field: Self::FormField) -> Option<&str> {
+        self.errors.get(field.id()).map(|s| s.as_str())
+    }
+
+    fn set_error(&mut self, field: Self::FormField, error: Option<String>) {
+        self.set_error_by_id(field.id(), error);
     }
 }
 
@@ -1027,7 +995,7 @@ mod tests {
         );
 
         // Shift+Tab should move to previous field
-        let key = KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT);
+        let key = KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE);
         let action = component.handle_key(key);
         assert_eq!(action, Some(SocialHistoryAction::FocusChanged));
         assert_eq!(component.focused_field, SocialHistoryField::SmokingStatus);
@@ -1134,5 +1102,21 @@ mod tests {
 
         component.set_loading(false);
         assert!(!component.is_loading());
+    }
+
+    #[test]
+    fn backtab_fires_prev_field_once() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let theme = Theme::dark();
+        let mut component = SocialHistoryComponent::new(theme, &SocialHistoryConfig::default());
+        component.start_editing();
+
+        component.focused_field = SocialHistoryField::CigarettesPerDay;
+
+        let key = KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE);
+        let action = component.handle_key(key);
+        assert_eq!(action, Some(SocialHistoryAction::FocusChanged));
+        assert_eq!(component.focused_field, SocialHistoryField::SmokingStatus);
     }
 }

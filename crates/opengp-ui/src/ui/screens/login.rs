@@ -1,6 +1,5 @@
 use crossterm::event::{Event, KeyEvent};
 use rat_event::ct_event;
-use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -29,7 +28,6 @@ pub struct LoginScreen {
     focus: LoginFocus,
     loading: bool,
     error: Option<String>,
-    pub focus_flag: FocusFlag,
 }
 
 impl LoginScreen {
@@ -41,11 +39,16 @@ impl LoginScreen {
             focus: LoginFocus::Username,
             loading: false,
             error: None,
-            focus_flag: FocusFlag::default(),
         }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<LoginAction> {
+        use crossterm::event::KeyEventKind;
+
+        if key.kind != KeyEventKind::Press {
+            return None;
+        }
+
         if self.loading {
             return None;
         }
@@ -277,18 +280,33 @@ mod tests {
             Some("Username and password are required")
         );
     }
-}
 
-impl HasFocus for LoginScreen {
-    fn build(&self, builder: &mut FocusBuilder) {
-        builder.leaf_widget(self);
+    #[test]
+    fn tab_cycles_username_password_submit() {
+        let mut login = LoginScreen::new(Theme::dark());
+
+        assert_eq!(login.focus, LoginFocus::Username);
+
+        let _ = login.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(login.focus, LoginFocus::Password);
+
+        let _ = login.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(login.focus, LoginFocus::Submit);
+
+        let _ = login.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(login.focus, LoginFocus::Username);
     }
 
-    fn focus(&self) -> FocusFlag {
-        self.focus_flag.clone()
-    }
+    #[test]
+    fn backtab_cycles_backward() {
+        let mut login = LoginScreen::new(Theme::dark());
 
-    fn area(&self) -> Rect {
-        Rect::default()
+        assert_eq!(login.focus, LoginFocus::Username);
+
+        let _ = login.handle_key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE));
+        assert_eq!(login.focus, LoginFocus::Submit);
+
+        let _ = login.handle_key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE));
+        assert_eq!(login.focus, LoginFocus::Password);
     }
 }

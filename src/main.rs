@@ -939,15 +939,13 @@ fn event_fn(
             Event::Key(key) => {
                 let mut focus = build_focus(state);
 
-                if focus.focused().is_none() {
-                    if !state.authenticated {
-                        focus.focus(&state.login_screen);
-                    } else {
-                        match state.tab_bar.selected() {
-                            Tab::Schedule => focus.focus(&state.appointment_state),
-                            Tab::PatientSearch | Tab::PatientWorkspace => {
-                                focus.focus(&state.patient_list)
-                            }
+                if focus.focused().is_none() && !state.authenticated {
+                    // Login screen bypasses focus tree
+                } else if focus.focused().is_none() {
+                    match state.tab_bar.selected() {
+                        Tab::Schedule => focus.focus(&state.appointment_state),
+                        Tab::PatientSearch | Tab::PatientWorkspace => {
+                            focus.focus(&state.patient_list)
                         }
                     }
                 }

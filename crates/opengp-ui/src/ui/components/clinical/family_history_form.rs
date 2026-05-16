@@ -332,12 +332,6 @@ impl FamilyHistoryForm {
             return Some(FamilyHistoryFormAction::Submit);
         }
 
-        if key.modifiers.contains(KeyModifiers::CONTROL)
-            && matches!(&event, ct_event!(keycode press CONTROL-Tab))
-        {
-            return Some(FamilyHistoryFormAction::Cancel);
-        }
-
         let event = Event::Key(key);
         match &event {
             ct_event!(keycode press Tab) => {
@@ -671,5 +665,17 @@ mod tests {
         let by_string = form.get_value_by_id(FIELD_RELATIONSHIP);
         let by_enum = form.get_value(FamilyHistoryFormField::Relationship);
         assert_eq!(by_string, by_enum);
+    }
+
+    #[test]
+    fn ctrl_tab_does_not_cancel() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let theme = Theme::dark();
+        let mut form = FamilyHistoryForm::new(theme);
+
+        let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::CONTROL);
+        let action = form.handle_key(key);
+        assert!(!matches!(action, Some(FamilyHistoryFormAction::Cancel)));
     }
 }
