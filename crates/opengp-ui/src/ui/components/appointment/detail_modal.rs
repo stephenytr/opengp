@@ -3,6 +3,7 @@
 //! Read-only modal displaying appointment details with options to view clinical notes.
 
 use crossterm::event::{KeyEvent, KeyModifiers};
+use rat_event::{HandleEvent, Regular};
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -41,13 +42,12 @@ pub enum AppointmentDetailModalAction {
 ///
 /// Displays read-only appointment information with options to view clinical notes.
 /// Follows the modal pattern: centered, with clear background, Escape to close.
+/// Focus is managed by a `rat_focus::Focus` container — Tab/BackTab delegate to it.
 pub struct AppointmentDetailModal {
     /// The appointment data to display
     appointment: CalendarAppointment,
     /// Theme for styling
     theme: Theme,
-    /// Which button is focused (0 = Close, 1 = View Clinical Notes)
-    focused_button: usize,
     /// Patient ID for clinical navigation
     patient_id: Uuid,
     /// Status dropdown for selecting valid transitions
@@ -58,7 +58,18 @@ pub struct AppointmentDetailModal {
     pending_reschedule_date: Option<chrono::NaiveDate>,
     /// Pending reschedule time selected from time picker
     pending_reschedule_time: Option<chrono::NaiveTime>,
+    /// Pre-formatted display strings — computed once on construction, never change
+    cached_time: String,
+    cached_date: String,
+    cached_duration: String,
+    cached_type: String,
+    cached_status: String,
     pub focus: FocusFlag,
+    pub close_focus: FocusFlag,
+    pub reschedule_focus: FocusFlag,
+    pub consult_focus: FocusFlag,
+    pub clinical_focus: FocusFlag,
+    focus_container: rat_focus::Focus,
 }
 
 impl Clone for AppointmentDetailModal {
@@ -66,13 +77,22 @@ impl Clone for AppointmentDetailModal {
         Self {
             appointment: self.appointment.clone(),
             theme: self.theme.clone(),
-            focused_button: self.focused_button,
             patient_id: self.patient_id,
             status_dropdown: self.status_dropdown.clone(),
             inline_picker: self.inline_picker.clone(),
             pending_reschedule_date: self.pending_reschedule_date,
             pending_reschedule_time: self.pending_reschedule_time,
+            cached_time: self.cached_time.clone(),
+            cached_date: self.cached_date.clone(),
+            cached_duration: self.cached_duration.clone(),
+            cached_type: self.cached_type.clone(),
+            cached_status: self.cached_status.clone(),
             focus: self.focus.clone(),
+            close_focus: self.close_focus.clone(),
+            reschedule_focus: self.reschedule_focus.clone(),
+            consult_focus: self.consult_focus.clone(),
+            clinical_focus: self.clinical_focus.clone(),
+            focus_container: self.focus_container.clone(),
         }
     }
 }
@@ -128,17 +148,98 @@ impl AppointmentDetailModal {
         };
         status_dropdown.set_value(status_value);
 
+        let close_focus = FocusFlag::named("close");
+        let reschedule_focus = FocusFlag::named("reschedule");
+        let consult_focus = FocusFlag::named("consult");
+        let clinical_focus = FocusFlag::named("clinical");
+        let modal_focus = FocusFlag::named("detail_modal");
+
+        let has_start_consultation = matches!(
+            appointment.status,
+            AppointmentStatus::Arrived | AppointmentStatus::InProgress | AppointmentStatus::Billing
+        );
+
+        let focus_container = {
+            let mut builder = FocusBuilder::new(None);
+            let tag = builder.start(&modal_focus);
+            builder.widget(&close_focus);
+            builder.widget(&status_dropdown);
+            builder.widget(&reschedule_focus);
+            if has_start_consultation {
+                builder.widget(&consult_focus);
+            }
+            builder.widget(&clinical_focus);
+            builder.end(tag);
+            let mut fc = builder.build();
+            fc.focus(&close_focus);
+            fc
+        };
+
+        let cached_time = {
+            let start = appointment.start_time.naive_utc().format("%H:%M").to_string();
+            let end = appointment.end_time.naive_utc().format("%H:%M").to_string();
+            format!("{} - {}", start, end)
+        };
+        let cached_date = appointment
+            .start_time
+            .with_timezone(&chrono::Local)
+            .format("%A %d %B %Y")
+            .to_string();
+        let cached_duration = {
+            let mins = appointment.duration_minutes();
+            if mins >= 60 {
+                let hours = mins / 60;
+                let remaining_mins = mins % 60;
+                if remaining_mins == 0 {
+                    format!("{} hour{}", hours, if hours > 1 { "s" } else { "" })
+                } else {
+                    format!("{}h {}m", hours, remaining_mins)
+                }
+            } else {
+                format!("{} minutes", mins)
+            }
+        };
+        let cached_type = Self::appointment_type_label(appointment.appointment_type);
+        let cached_status = Self::appointment_status_label(appointment.status);
+
         Self {
             appointment: appointment.clone(),
             theme: theme.clone(),
-            focused_button: 0,
             patient_id: appointment.patient_id,
             status_dropdown,
             inline_picker: InlinePicker::new(theme),
             pending_reschedule_date: None,
             pending_reschedule_time: None,
-            focus: FocusFlag::default(),
+            cached_time,
+            cached_date,
+            cached_duration,
+            cached_type,
+            cached_status,
+            focus: modal_focus,
+            close_focus,
+            reschedule_focus,
+            consult_focus,
+            clinical_focus,
+            focus_container,
         }
+    }
+
+    pub fn rebuild_focus(&mut self) {
+        let has_start_consultation = matches!(
+            self.appointment.status,
+            AppointmentStatus::Arrived | AppointmentStatus::InProgress | AppointmentStatus::Billing
+        );
+        let mut builder = FocusBuilder::new(None);
+        let tag = builder.start(&self.focus);
+        builder.widget(&self.close_focus);
+        builder.widget(&self.status_dropdown);
+        builder.widget(&self.reschedule_focus);
+        if has_start_consultation {
+            builder.widget(&self.consult_focus);
+        }
+        builder.widget(&self.clinical_focus);
+        builder.end(tag);
+        self.focus_container = builder.build();
     }
 
     /// Check if a transition from one status to another is valid (mirrors domain logic)
@@ -175,51 +276,9 @@ impl AppointmentDetailModal {
         self.inline_picker.set_booked_slots(booked_slots);
     }
 
-    /// Format the appointment time for display.
-    fn format_time(&self) -> String {
-        let start = self
-            .appointment
-            .start_time
-            .naive_utc()
-            .format("%H:%M")
-            .to_string();
-        let end = self
-            .appointment
-            .end_time
-            .naive_utc()
-            .format("%H:%M")
-            .to_string();
-        format!("{} - {}", start, end)
-    }
-
-    fn format_date(&self) -> String {
-        self.appointment
-            .start_time
-            .with_timezone(&chrono::Local)
-            .format("%A %d %B %Y")
-            .to_string()
-    }
-
-    /// Format the duration for display.
-    fn format_duration(&self) -> String {
-        let mins = self.appointment.duration_minutes();
-        if mins >= 60 {
-            let hours = mins / 60;
-            let remaining_mins = mins % 60;
-            if remaining_mins == 0 {
-                format!("{} hour{}", hours, if hours > 1 { "s" } else { "" })
-            } else {
-                format!("{}h {}m", hours, remaining_mins)
-            }
-        } else {
-            format!("{} minutes", mins)
-        }
-    }
-
-    /// Format the appointment type for display.
-    fn format_type(&self) -> String {
+    fn appointment_type_label(t: opengp_domain::domain::appointment::AppointmentType) -> String {
         use opengp_domain::domain::appointment::AppointmentType;
-        match self.appointment.appointment_type {
+        match t {
             AppointmentType::Standard => "Standard".to_string(),
             AppointmentType::Long => "Long Consultation".to_string(),
             AppointmentType::Brief => "Brief".to_string(),
@@ -236,9 +295,8 @@ impl AppointmentDetailModal {
         }
     }
 
-    /// Format the appointment status for display.
-    fn format_status(&self) -> String {
-        match self.appointment.status {
+    fn appointment_status_label(s: AppointmentStatus) -> String {
+        match s {
             AppointmentStatus::Scheduled => "Scheduled".to_string(),
             AppointmentStatus::Confirmed => "Confirmed".to_string(),
             AppointmentStatus::Arrived => "Arrived".to_string(),
@@ -266,63 +324,38 @@ impl AppointmentDetailModal {
         }
     }
 
-    // ── Navigation ───────────────────────────────────────────────────────────
-
-    /// Move focus to the next button.
-    pub fn next_button(&mut self) {
-        let count = self.button_count();
-        self.focused_button = (self.focused_button + 1) % count;
-    }
-
-    /// Move focus to the previous button.
-    pub fn prev_button(&mut self) {
-        let count = self.button_count();
-        self.focused_button = if self.focused_button == 0 {
-            count - 1
-        } else {
-            self.focused_button - 1
-        };
-    }
-
-    /// Check if the Close button is focused.
     pub fn is_close_focused(&self) -> bool {
-        self.focused_button == 0
+        self.close_focus.is_focused()
     }
 
-    /// Check if the View Clinical Notes button is focused.
     pub fn is_clinical_focused(&self) -> bool {
-        self.focused_button == self.button_count() - 1
+        self.clinical_focus.is_focused()
     }
 
-    /// Get the number of visible buttons (Close, Status Dropdown, Reschedule, Start Consultation, View Clinical Notes)
-    fn button_count(&self) -> usize {
-        let has_start_consultation = matches!(
-            self.appointment.status,
-            AppointmentStatus::Arrived | AppointmentStatus::InProgress | AppointmentStatus::Billing
-        );
-        if has_start_consultation {
-            5 // Close, Status Dropdown, Reschedule, Start Consultation, View Clinical Notes
-        } else {
-            4 // Close, Status Dropdown, Reschedule, View Clinical Notes
-        }
+    pub fn is_status_focused(&self) -> bool {
+        self.status_dropdown.focus.is_focused()
     }
 
-    /// Get the button index for each action
-    fn get_button_index(&self) -> std::collections::HashMap<usize, AppointmentDetailModalAction> {
-        let mut map = std::collections::HashMap::new();
-        map.insert(0, AppointmentDetailModalAction::Close);
-        map.insert(2, AppointmentDetailModalAction::RescheduleDate);
-        let has_start_consultation = matches!(
-            self.appointment.status,
-            AppointmentStatus::Arrived | AppointmentStatus::InProgress | AppointmentStatus::Billing
-        );
-        if has_start_consultation {
-            map.insert(3, AppointmentDetailModalAction::StartConsultation);
-            map.insert(4, AppointmentDetailModalAction::ViewClinicalNotes);
+    pub fn is_reschedule_focused(&self) -> bool {
+        self.reschedule_focus.is_focused()
+    }
+
+    pub fn is_consult_focused(&self) -> bool {
+        self.consult_focus.is_focused()
+    }
+
+    fn focused_action(&self) -> Option<AppointmentDetailModalAction> {
+        if self.close_focus.is_focused() {
+            Some(AppointmentDetailModalAction::Close)
+        } else if self.reschedule_focus.is_focused() {
+            Some(AppointmentDetailModalAction::RescheduleDate)
+        } else if self.consult_focus.is_focused() {
+            Some(AppointmentDetailModalAction::StartConsultation)
+        } else if self.clinical_focus.is_focused() {
+            Some(AppointmentDetailModalAction::ViewClinicalNotes)
         } else {
-            map.insert(3, AppointmentDetailModalAction::ViewClinicalNotes);
+            None
         }
-        map
     }
 
     /// Get action based on dropdown selection
@@ -345,7 +378,6 @@ impl AppointmentDetailModal {
 
     // ── Key handling ───────────────────────────────────────────────────────
 
-    /// Handle keyboard input and return an action if triggered.
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<AppointmentDetailModalAction> {
         use crate::ui::widgets::{DropdownAction, InlinePickerAction};
         use crossterm::event::{Event, KeyEventKind};
@@ -355,7 +387,6 @@ impl AppointmentDetailModal {
             return None;
         }
 
-        // Delegate to inline picker if visible
         if self.inline_picker.is_visible() {
             if let Some(action) = self.inline_picker.handle_key(key) {
                 match action {
@@ -385,140 +416,127 @@ impl AppointmentDetailModal {
 
         let event = Event::Key(key);
 
-        if self.focused_button == 1 {
+        // When the dropdown is open it owns all navigation keys — handle it first
+        // so that Esc/Up/Down/Tab etc. are never stolen by the outer modal logic.
+        if self.status_dropdown.focus.is_focused() && self.status_dropdown.is_open() {
+            if let Some(action) = self.status_dropdown.handle_key(key) {
+                return match action {
+                    DropdownAction::Selected(_) => self.get_dropdown_action(),
+                    DropdownAction::Closed => {
+                        // Dropdown closed via Tab/BackTab — advance focus in the
+                        // same direction so the user continues tabbing naturally.
+                        use crossterm::event::KeyCode;
+                        if key.code == KeyCode::BackTab
+                            || key.modifiers.contains(KeyModifiers::SHIFT)
+                        {
+                            self.focus_container.prev();
+                        } else if key.code == KeyCode::Tab {
+                            self.focus_container.next();
+                        }
+                        None
+                    }
+                    DropdownAction::Opened
+                    | DropdownAction::FocusChanged
+                    | DropdownAction::ContextMenu { .. } => None,
+                };
+            }
+            // Key was not consumed by the dropdown while open — swallow it so
+            // stray keys don't leak through to the modal or the background.
+            return None;
+        }
+
+        match &event {
+            ct_event!(keycode press Esc) => return Some(AppointmentDetailModalAction::Close),
+            ct_event!(keycode press Tab) | ct_event!(keycode press SHIFT-Tab) => {
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    self.focus_container.prev();
+                } else {
+                    self.focus_container.next();
+                }
+                return None;
+            }
+            ct_event!(keycode press BackTab) => {
+                self.focus_container.prev();
+                return None;
+            }
+            ct_event!(keycode press Left) | ct_event!(keycode press Up) => {
+                self.focus_container.prev();
+                return None;
+            }
+            ct_event!(keycode press Right) | ct_event!(keycode press Down) => {
+                if !self.status_dropdown.focus.is_focused() {
+                    self.focus_container.next();
+                    return None;
+                }
+            }
+            _ => {}
+        }
+
+        if self.status_dropdown.focus.is_focused() {
+            // Dropdown is focused but closed — Enter/Down open it; j/k/Up
+            // also route to the dropdown widget for consistency.
             let dropdown_keys = matches!(&event, ct_event!(keycode press Enter))
-                || matches!(&event, ct_event!(keycode press Esc))
                 || matches!(&event, ct_event!(keycode press Up))
                 || matches!(&event, ct_event!(keycode press Down))
                 || matches!(&event, ct_event!(key press 'j'))
-                || matches!(&event, ct_event!(key press 'k'))
-                || matches!(&event, ct_event!(keycode press Tab))
-                || matches!(&event, ct_event!(keycode press BackTab));
+                || matches!(&event, ct_event!(key press 'k'));
             if dropdown_keys {
                 if let Some(action) = self.status_dropdown.handle_key(key) {
                     return match action {
                         DropdownAction::Selected(_) => self.get_dropdown_action(),
-                        DropdownAction::Closed => {
-                            match &event {
-                                ct_event!(keycode press Tab) => {
-                                    self.next_button();
-                                }
-                                ct_event!(keycode press BackTab) => {
-                                    self.prev_button();
-                                }
-                                _ => {}
-                            }
-                            None
-                        }
-                        DropdownAction::Opened | DropdownAction::FocusChanged => None,
-                        DropdownAction::ContextMenu { .. } => None,
+                        DropdownAction::Closed
+                        | DropdownAction::Opened
+                        | DropdownAction::FocusChanged
+                        | DropdownAction::ContextMenu { .. } => None,
                     };
                 }
+                return None;
             }
         }
 
-        match &event {
-            ct_event!(keycode press Esc) => Some(AppointmentDetailModalAction::Close),
-            ct_event!(keycode press Tab) => {
-                if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    self.prev_button();
-                } else {
-                    self.next_button();
-                }
-                None
+        if let ct_event!(keycode press Enter) = &event {
+            if self.reschedule_focus.is_focused() {
+                let current_date = Some(self.appointment.start_time.date_naive());
+                self.inline_picker.open_date_picker(current_date);
+                return Some(AppointmentDetailModalAction::RescheduleDate);
             }
-            ct_event!(keycode press BackTab) => {
-                self.prev_button();
-                None
-            }
-            ct_event!(keycode press Left) => {
-                self.prev_button();
-                None
-            }
-            ct_event!(keycode press Up) => {
-                self.prev_button();
-                None
-            }
-            ct_event!(keycode press Right) => {
-                self.next_button();
-                None
-            }
-            ct_event!(keycode press Down) => {
-                self.next_button();
-                None
-            }
-            ct_event!(keycode press Enter) => {
-                if self.focused_button == 1 {
-                    if let Some(action) = self.status_dropdown.handle_key(key) {
-                        match action {
-                            DropdownAction::Selected(_) => return self.get_dropdown_action(),
-                            DropdownAction::Closed
-                            | DropdownAction::Opened
-                            | DropdownAction::FocusChanged
-                            | DropdownAction::ContextMenu { .. } => return None,
-                        }
-                    }
-                    return None;
-                }
-
-                if self.focused_button == 2 {
-                    let current_date = Some(self.appointment.start_time.date_naive());
-                    self.inline_picker.open_date_picker(current_date);
-                    return Some(AppointmentDetailModalAction::RescheduleDate);
-                }
-
-                let button_map = self.get_button_index();
-                button_map.get(&self.focused_button).copied()
-            }
-            _ => None,
+            return self.focused_action();
         }
+
+        None
     }
 }
 
 // ── Widget ───────────────────────────────────────────────────────────────────
 
-impl Widget for AppointmentDetailModal {
+impl Widget for &AppointmentDetailModal {
     fn render(self, area: Rect, buf: &mut Buffer) {
         if area.is_empty() {
             return;
         }
 
-        // Calculate modal dimensions (centered, 60% width, auto height)
         let modal_width = (area.width as f32 * 0.6) as u16;
         let modal_width = modal_width.clamp(50, 80);
 
-        // Calculate content height based on fields
-        let mut content_lines = 9; // Base fields
+        let mut content_lines = 9;
         if self.appointment.reason.is_some() {
             content_lines += 1;
         }
         if self.appointment.notes.is_some() {
             content_lines += 1;
         }
-        content_lines += 2; // Buttons
+        content_lines += 2;
 
         let modal_height = (content_lines as u16).min(area.height.saturating_sub(4));
 
-        // Center the modal
         let x = area.x + (area.width.saturating_sub(modal_width)) / 2;
         let y = area.y + (area.height.saturating_sub(modal_height)) / 2;
 
         let modal_area = Rect::new(x, y, modal_width, modal_height);
 
-        // Clear the modal area with background color
-        let bg_style = Style::default().bg(self.theme.colors.background);
         Clear.render(modal_area, buf);
+        buf.set_style(modal_area, Style::default().bg(self.theme.colors.background));
 
-        // Fill the modal area with background color
-        for row in modal_area.top()..modal_area.bottom() {
-            for col in modal_area.left()..modal_area.right() {
-                if let Some(cell) = buf.cell_mut((col, row)) {
-                    cell.set_style(bg_style);
-                }
-            }
-        }
-
-        // Render modal block with border
         let block = Block::default()
             .title(" Appointment Details ")
             .borders(Borders::ALL)
@@ -537,7 +555,6 @@ impl Widget for AppointmentDetailModal {
 
         let mut y = inner.y + 1;
 
-        // Helper to render a label-value pair
         let mut render_field = |label: &str, value: &str, style: Option<Style>| {
             if y >= inner.y + inner.height - 3 {
                 return;
@@ -558,61 +575,46 @@ impl Widget for AppointmentDetailModal {
             y += 1;
         };
 
-        // Patient Name
         render_field("Patient:", &self.appointment.patient_name, None);
+        render_field("Date:", &self.cached_date, None);
+        render_field("Time:", &self.cached_time, None);
+        render_field("Duration:", &self.cached_duration, None);
+        render_field("Type:", &self.cached_type, None);
 
-        // Date
-        render_field("Date:", &self.format_date(), None);
-
-        // Time
-        render_field("Time:", &self.format_time(), None);
-
-        // Duration
-        render_field("Duration:", &self.format_duration(), None);
-
-        // Type
-        render_field("Type:", &self.format_type(), None);
-
-        // Status (with color)
         let status_color = self.get_status_color();
         let status_style = Style::default().fg(status_color);
-        render_field("Status:", &self.format_status(), Some(status_style));
+        render_field("Status:", &self.cached_status, Some(status_style));
 
-        // Reason (optional)
         if let Some(ref reason) = self.appointment.reason {
             if !reason.is_empty() {
                 render_field("Reason:", reason, None);
             }
         }
 
-        // Notes (optional)
         if let Some(ref notes) = self.appointment.notes {
             if !notes.is_empty() {
                 render_field("Notes:", notes, None);
             }
         }
 
-        // Render buttons at the bottom
         y += 1;
 
-        // Build button list: Close, Status Dropdown, Reschedule, [Start Consultation], View Clinical Notes
         let has_start_consultation = matches!(
             self.appointment.status,
             AppointmentStatus::Arrived | AppointmentStatus::InProgress | AppointmentStatus::Billing
         );
         let mut buttons: Vec<(&str, bool)> = vec![
-            (" Close ", self.focused_button == 0),
-            (" Status ", self.focused_button == 1),
-            (" Reschedule ", self.focused_button == 2),
+            (" Close ", self.close_focus.is_focused()),
+            (" Status ", self.status_dropdown.focus.is_focused()),
+            (" Reschedule ", self.reschedule_focus.is_focused()),
         ];
         if has_start_consultation {
-            buttons.push((" Consult ", self.focused_button == 3));
-            buttons.push((" Clinical ", self.focused_button == 4));
+            buttons.push((" Consult ", self.consult_focus.is_focused()));
+            buttons.push((" Clinical ", self.clinical_focus.is_focused()));
         } else {
-            buttons.push((" Clinical ", self.focused_button == 3));
+            buttons.push((" Clinical ", self.clinical_focus.is_focused()));
         }
 
-        // Calculate button layout
         let button_width = 13u16;
         let spacing = 2u16;
         let total_buttons_width = button_width * buttons.len() as u16
@@ -621,7 +623,6 @@ impl Widget for AppointmentDetailModal {
         let button_start_x = inner.x + button_start_offset;
         let change_status_button_offset = button_start_offset + button_width + spacing;
 
-        // Render each button
         let mut current_x = button_start_x;
         let button_y = y;
         for (label, is_focused) in &buttons {
@@ -636,7 +637,6 @@ impl Widget for AppointmentDetailModal {
             current_x += button_width + spacing;
         }
 
-        // Help text
         y += 1;
         let help_text = "Tab: Navigate | Enter: Select | Esc: Close";
         let help_x = inner.x + (inner.width.saturating_sub(help_text.len() as u16)) / 2;
@@ -647,7 +647,7 @@ impl Widget for AppointmentDetailModal {
             Style::default().fg(self.theme.colors.disabled),
         );
 
-        if self.focused_button == 1 {
+        if self.status_dropdown.focus.is_focused() {
             let change_status_label_width = " Status ".len() as u16;
             let dropdown_width = button_width.max(change_status_label_width.saturating_add(4));
             let centered_offset = change_status_button_offset
@@ -662,16 +662,33 @@ impl Widget for AppointmentDetailModal {
             dropdown.render(dropdown_area, buf);
         }
 
-        // Render inline picker if visible
         if self.inline_picker.is_visible() {
             self.inline_picker.clone().render(area, buf);
         }
     }
 }
 
+impl Widget for AppointmentDetailModal {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        (&self).render(area, buf);
+    }
+}
+
 impl HasFocus for AppointmentDetailModal {
     fn build(&self, builder: &mut FocusBuilder) {
-        builder.leaf_widget(self);
+        let has_start_consultation = matches!(
+            self.appointment.status,
+            AppointmentStatus::Arrived | AppointmentStatus::InProgress | AppointmentStatus::Billing
+        );
+        let tag = builder.start(self);
+        builder.widget(&self.close_focus);
+        builder.widget(&self.status_dropdown);
+        builder.widget(&self.reschedule_focus);
+        if has_start_consultation {
+            builder.widget(&self.consult_focus);
+        }
+        builder.widget(&self.clinical_focus);
+        builder.end(tag);
     }
 
     fn focus(&self) -> FocusFlag {
@@ -717,7 +734,6 @@ mod tests {
     #[test]
     fn test_modal_creation() {
         let modal = make_modal();
-        // Initial focus is on Close (index 0)
         assert!(modal.is_close_focused());
         assert!(!modal.is_clinical_focused());
     }
@@ -725,60 +741,51 @@ mod tests {
     #[test]
     fn test_button_navigation() {
         let mut modal = make_modal();
-        // make_appointment has Confirmed status
-        // Buttons: Close (0), Change Status (1), Reschedule (2), View Clinical Notes (3)
-
-        // Initial focus is on Close (index 0)
         assert!(modal.is_close_focused());
         assert!(!modal.is_clinical_focused());
 
-        modal.next_button();
-        // Next button is Change Status (index 1)
-        assert!(!modal.is_close_focused());
-        assert!(!modal.is_clinical_focused());
+        let tab = KeyEvent::new(crossterm::event::KeyCode::Tab, KeyModifiers::empty());
 
-        modal.next_button();
-        // Next is Reschedule (index 2)
+        modal.handle_key(tab);
         assert!(!modal.is_close_focused());
-        assert!(!modal.is_clinical_focused());
+        assert!(modal.is_status_focused());
 
-        modal.next_button();
-        // Next is View Clinical Notes (index 3)
-        assert!(!modal.is_close_focused());
+        modal.handle_key(tab);
+        assert!(modal.is_reschedule_focused());
+
+        modal.handle_key(tab);
         assert!(modal.is_clinical_focused());
 
-        modal.next_button();
-        // Wraps to Close (index 0)
+        modal.handle_key(tab);
         assert!(modal.is_close_focused());
 
-        modal.prev_button();
-        // Previous is View Clinical Notes (index 3)
-        assert!(!modal.is_close_focused());
+        let backtab = KeyEvent::new(crossterm::event::KeyCode::BackTab, KeyModifiers::empty());
+        modal.handle_key(backtab);
         assert!(modal.is_clinical_focused());
     }
 
     #[test]
     fn test_format_time() {
         let modal = make_modal();
-        assert_eq!(modal.format_time(), "09:00 - 09:30");
+        assert_eq!(modal.cached_time, "09:00 - 09:30");
     }
 
     #[test]
     fn test_format_duration() {
         let modal = make_modal();
-        assert_eq!(modal.format_duration(), "30 minutes");
+        assert_eq!(modal.cached_duration, "30 minutes");
     }
 
     #[test]
     fn test_format_type() {
         let modal = make_modal();
-        assert_eq!(modal.format_type(), "Long Consultation");
+        assert_eq!(modal.cached_type, "Long Consultation");
     }
 
     #[test]
     fn test_format_status() {
         let modal = make_modal();
-        assert_eq!(modal.format_status(), "Confirmed");
+        assert_eq!(modal.cached_status, "Confirmed");
     }
 
     #[test]
@@ -802,13 +809,13 @@ mod tests {
         };
 
         let mut modal = AppointmentDetailModal::new(appointment, Theme::dark());
-        modal.next_button();
-        assert_eq!(modal.focused_button, 1);
+        let tab = KeyEvent::new(crossterm::event::KeyCode::Tab, KeyModifiers::empty());
+        modal.handle_key(tab);
+        assert!(modal.is_status_focused());
 
         let enter_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
         modal.handle_key(enter_key);
 
-        // With all transitions allowed, navigate to "no_show" (5 steps from arrived)
         modal.status_dropdown.select_next();
         modal.status_dropdown.select_next();
         modal.status_dropdown.select_next();
@@ -828,15 +835,15 @@ mod tests {
     #[test]
     fn test_tab_moves_focus_away_from_status_when_dropdown_closed() {
         let mut modal = make_modal();
-        modal.next_button();
-        assert_eq!(modal.focused_button, 1);
+        let tab = KeyEvent::new(crossterm::event::KeyCode::Tab, KeyModifiers::empty());
+        modal.handle_key(tab);
+        assert!(modal.is_status_focused());
         assert!(!modal.status_dropdown.is_open());
 
-        let tab_key = KeyEvent::new(crossterm::event::KeyCode::Tab, KeyModifiers::empty());
-        let action = modal.handle_key(tab_key);
+        let action = modal.handle_key(tab);
 
         assert_eq!(action, None);
-        assert_eq!(modal.focused_button, 2); // Tab from Status (1) moves to Reschedule (2)
+        assert!(modal.is_reschedule_focused());
     }
 
     #[test]
@@ -860,8 +867,9 @@ mod tests {
         };
 
         let mut modal = AppointmentDetailModal::new(appointment, Theme::dark());
-        modal.next_button();
-        assert_eq!(modal.focused_button, 1);
+        let tab = KeyEvent::new(crossterm::event::KeyCode::Tab, KeyModifiers::empty());
+        modal.handle_key(tab);
+        assert!(modal.is_status_focused());
 
         let open_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
         assert_eq!(modal.handle_key(open_key), None);
@@ -882,17 +890,17 @@ mod tests {
     #[test]
     fn test_tab_closes_open_dropdown_and_moves_focus() {
         let mut modal = make_modal();
-        modal.next_button();
-        assert_eq!(modal.focused_button, 1);
+        let tab = KeyEvent::new(crossterm::event::KeyCode::Tab, KeyModifiers::empty());
+        modal.handle_key(tab);
+        assert!(modal.is_status_focused());
 
         let open_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
         assert_eq!(modal.handle_key(open_key), None);
         assert!(modal.status_dropdown.is_open());
 
-        let tab_key = KeyEvent::new(crossterm::event::KeyCode::Tab, KeyModifiers::empty());
-        assert_eq!(modal.handle_key(tab_key), None);
+        assert_eq!(modal.handle_key(tab), None);
         assert!(!modal.status_dropdown.is_open());
-        assert_eq!(modal.focused_button, 2); // Tab from Status (1) moves to Reschedule (2)
+        assert!(modal.is_reschedule_focused());
     }
 
     #[test]
@@ -993,21 +1001,20 @@ mod tests {
 
     #[test]
     fn test_reschedule_button_visible() {
-        let modal = make_modal();
-        let button_map = modal.get_button_index();
-        assert!(button_map.contains_key(&2));
-        assert_eq!(
-            button_map.get(&2),
-            Some(&AppointmentDetailModalAction::RescheduleDate)
-        );
+        let mut modal = make_modal();
+        let tab = KeyEvent::new(crossterm::event::KeyCode::Tab, KeyModifiers::empty());
+        modal.handle_key(tab);
+        modal.handle_key(tab);
+        assert!(modal.is_reschedule_focused());
     }
 
     #[test]
     fn test_reschedule_button_navigation() {
         let mut modal = make_modal();
-        modal.next_button();
-        modal.next_button();
-        assert_eq!(modal.focused_button, 2);
+        let tab = KeyEvent::new(crossterm::event::KeyCode::Tab, KeyModifiers::empty());
+        modal.handle_key(tab);
+        modal.handle_key(tab);
+        assert!(modal.is_reschedule_focused());
         assert!(!modal.is_close_focused());
         assert!(!modal.is_clinical_focused());
     }
@@ -1015,9 +1022,10 @@ mod tests {
     #[test]
     fn test_reschedule_action_emitted_on_enter() {
         let mut modal = make_modal();
-        modal.next_button();
-        modal.next_button();
-        assert_eq!(modal.focused_button, 2);
+        let tab = KeyEvent::new(crossterm::event::KeyCode::Tab, KeyModifiers::empty());
+        modal.handle_key(tab);
+        modal.handle_key(tab);
+        assert!(modal.is_reschedule_focused());
 
         let enter_key = KeyEvent::new(crossterm::event::KeyCode::Enter, KeyModifiers::empty());
         let action = modal.handle_key(enter_key);

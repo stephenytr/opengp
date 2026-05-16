@@ -553,7 +553,7 @@ impl StatefulWidget for Schedule {
             .map(|d| d.date.format("%A %d %B %Y").to_string())
             .unwrap_or_else(|| "Schedule".to_string());
 
-        let border_style = if state.focused {
+        let border_style = if state.is_focused() {
             Style::default().fg(self.theme.colors.primary)
         } else {
             Style::default().fg(self.theme.colors.border)

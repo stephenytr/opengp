@@ -33,7 +33,6 @@ pub enum CalendarAction {
 pub struct Calendar {
     widget: CalendarWidget,
     pub theme: Theme,
-    pub focused: bool,
     pub days: Vec<CalendarDay>,
     pub appointment_indicators: HashMap<NaiveDate, char>,
     pub current_month: NaiveDate,
@@ -55,7 +54,6 @@ impl Calendar {
         let mut calendar = Self {
             widget,
             theme,
-            focused: false,
             days: Vec::new(),
             appointment_indicators: HashMap::new(),
             current_month,
@@ -207,7 +205,55 @@ impl Calendar {
                 _ => None,
             };
         }
-        None
+
+        // Backward-compatible direct arrow navigation when no keybind is registered.
+        match key.code {
+            crossterm::event::KeyCode::Left => {
+                self.widget.focused_date = self
+                    .widget
+                    .focused_date
+                    .pred_opt()
+                    .unwrap_or(self.widget.focused_date);
+                self.rebuild_days();
+                Some(CalendarAction::FocusDate(self.widget.focused_date))
+            }
+            crossterm::event::KeyCode::Right => {
+                self.widget.focused_date = self
+                    .widget
+                    .focused_date
+                    .succ_opt()
+                    .unwrap_or(self.widget.focused_date);
+                self.rebuild_days();
+                Some(CalendarAction::FocusDate(self.widget.focused_date))
+            }
+            crossterm::event::KeyCode::Up => {
+                self.widget.focused_date -= chrono::Duration::days(7);
+                self.rebuild_days();
+                Some(CalendarAction::FocusDate(self.widget.focused_date))
+            }
+            crossterm::event::KeyCode::Down => {
+                self.widget.focused_date += chrono::Duration::days(7);
+                self.rebuild_days();
+                Some(CalendarAction::FocusDate(self.widget.focused_date))
+            }
+            crossterm::event::KeyCode::PageUp => {
+                self.widget.prev_month();
+                self.rebuild_days();
+                Some(CalendarAction::MonthChanged(self.current_month))
+            }
+            crossterm::event::KeyCode::PageDown => {
+                self.widget.next_month();
+                self.rebuild_days();
+                Some(CalendarAction::MonthChanged(self.current_month))
+            }
+            crossterm::event::KeyCode::Enter => {
+                let focused = self.widget.focused_date;
+                self.widget.set_selected_date(focused);
+                self.rebuild_days();
+                Some(CalendarAction::SelectDate(focused))
+            }
+            _ => None,
+        }
     }
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<CalendarAction> {

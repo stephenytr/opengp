@@ -42,7 +42,6 @@ pub struct AppointmentState {
     pub viewport_start_hour: u8,
     pub viewport_end_hour: u8,
     pub last_inner_height: u16,
-    pub focused: bool,
     pub config: CalendarConfig,
     pub debug_overlay_visible: bool,
     pub hovered_slot: HoverState<(usize, u8)>,
@@ -73,7 +72,6 @@ impl std::fmt::Debug for AppointmentState {
             .field("viewport_start_hour", &self.viewport_start_hour)
             .field("viewport_end_hour", &self.viewport_end_hour)
             .field("last_inner_height", &self.last_inner_height)
-            .field("focused", &self.focused)
             .field("config", &self.config)
             .field("debug_overlay_visible", &self.debug_overlay_visible)
             .field("hovered_slot", &"<HoverState>")
@@ -133,7 +131,6 @@ impl AppointmentState {
             viewport_start_hour: config.viewport_start_hour,
             viewport_end_hour: config.viewport_end_hour,
             last_inner_height: 0,
-            focused: false,
             config,
             debug_overlay_visible: false,
             hovered_slot: HoverState::new(),
@@ -734,7 +731,10 @@ impl AppointmentState {
 
 impl HasFocus for AppointmentState {
     fn build(&self, builder: &mut FocusBuilder) {
+        let tag = builder.start(self);
+        builder.widget(&self.calendar);
         builder.leaf_widget(self);
+        builder.end(tag);
     }
 
     fn focus(&self) -> FocusFlag {

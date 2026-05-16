@@ -278,7 +278,7 @@ impl KeybindRegistry {
 
     /// Register all default keybinds
     fn register_defaults(&mut self) {
-        // Global keybinds only
+        // Global keybinds
         self.register(Keybind {
             key: KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE),
             action: Action::OpenHelp,
@@ -287,6 +287,12 @@ impl KeybindRegistry {
         });
         self.register(Keybind {
             key: KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL),
+            action: Action::Quit,
+            context: KeyContext::Global,
+            description: "Quit application",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
             action: Action::Quit,
             context: KeyContext::Global,
             description: "Quit application",
@@ -302,6 +308,224 @@ impl KeybindRegistry {
             action: Action::SwitchToPatientSearch,
             context: KeyContext::Global,
             description: "Switch to Patient Search view",
+        });
+
+        // ── Schedule keybinds ─────────────────────────────────────────────────
+        // Arrow keys — time slot and practitioner navigation
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
+            action: Action::PrevTimeSlot,
+            context: KeyContext::Schedule,
+            description: "Move to previous time slot",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+            action: Action::NextTimeSlot,
+            context: KeyContext::Schedule,
+            description: "Move to next time slot",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
+            action: Action::PrevPractitioner,
+            context: KeyContext::Schedule,
+            description: "Move to previous practitioner column",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
+            action: Action::NextPractitioner,
+            context: KeyContext::Schedule,
+            description: "Move to next practitioner column",
+        });
+        // Vim-style navigation
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE),
+            action: Action::PrevTimeSlot,
+            context: KeyContext::Schedule,
+            description: "Move to previous time slot",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+            action: Action::NextTimeSlot,
+            context: KeyContext::Schedule,
+            description: "Move to next time slot",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE),
+            action: Action::PrevPractitioner,
+            context: KeyContext::Schedule,
+            description: "Move to previous practitioner column",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE),
+            action: Action::NextPractitioner,
+            context: KeyContext::Schedule,
+            description: "Move to next practitioner column",
+        });
+        // Viewport scrolling
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE),
+            action: Action::ScrollViewportUp,
+            context: KeyContext::Schedule,
+            description: "Scroll viewport up (earlier hours)",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE),
+            action: Action::ScrollViewportDown,
+            context: KeyContext::Schedule,
+            description: "Scroll viewport down (later hours)",
+        });
+        // Interaction
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            action: Action::Enter,
+            context: KeyContext::Schedule,
+            description: "Select appointment or create new at slot",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
+            action: Action::NewAppointment,
+            context: KeyContext::Schedule,
+            description: "Create new appointment",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
+            action: Action::TogglePractitionerColumn,
+            context: KeyContext::Schedule,
+            description: "Toggle selected practitioner column visibility",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            action: Action::Escape,
+            context: KeyContext::Schedule,
+            description: "Return to calendar view",
+        });
+
+        // ── Calendar keybinds ─────────────────────────────────────────────────
+        // Day navigation
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Left, KeyModifiers::NONE),
+            action: Action::PrevDay,
+            context: KeyContext::Calendar,
+            description: "Go to previous day",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
+            action: Action::NextDay,
+            context: KeyContext::Calendar,
+            description: "Go to next day",
+        });
+        // Week navigation
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
+            action: Action::PrevWeek,
+            context: KeyContext::Calendar,
+            description: "Go to previous week",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+            action: Action::NextWeek,
+            context: KeyContext::Calendar,
+            description: "Go to next week",
+        });
+        // Month navigation
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE),
+            action: Action::PrevMonth,
+            context: KeyContext::Calendar,
+            description: "Go to previous month",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE),
+            action: Action::NextMonth,
+            context: KeyContext::Calendar,
+            description: "Go to next month",
+        });
+        // Select date / go to today
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            action: Action::Enter,
+            context: KeyContext::Calendar,
+            description: "Select focused date",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE),
+            action: Action::Today,
+            context: KeyContext::Calendar,
+            description: "Go to today",
+        });
+
+        // ── Patient list keybinds ─────────────────────────────────────────────
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Up, KeyModifiers::NONE),
+            action: Action::NavigateUp,
+            context: KeyContext::PatientList,
+            description: "Move selection up",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+            action: Action::NavigateDown,
+            context: KeyContext::PatientList,
+            description: "Move selection down",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE),
+            action: Action::NavigateUp,
+            context: KeyContext::PatientList,
+            description: "Move selection up",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+            action: Action::NavigateDown,
+            context: KeyContext::PatientList,
+            description: "Move selection down",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Home, KeyModifiers::NONE),
+            action: Action::Home,
+            context: KeyContext::PatientList,
+            description: "Go to first patient",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::End, KeyModifiers::NONE),
+            action: Action::End,
+            context: KeyContext::PatientList,
+            description: "Go to last patient",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE),
+            action: Action::PrevPage,
+            context: KeyContext::PatientList,
+            description: "Page up",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE),
+            action: Action::NextPage,
+            context: KeyContext::PatientList,
+            description: "Page down",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            action: Action::Enter,
+            context: KeyContext::PatientList,
+            description: "Open selected patient",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE),
+            action: Action::Search,
+            context: KeyContext::PatientList,
+            description: "Focus patient search",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
+            action: Action::New,
+            context: KeyContext::PatientList,
+            description: "Create new patient",
+        });
+        self.register(Keybind {
+            key: KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE),
+            action: Action::Edit,
+            context: KeyContext::PatientList,
+            description: "Edit selected patient",
         });
     }
 
