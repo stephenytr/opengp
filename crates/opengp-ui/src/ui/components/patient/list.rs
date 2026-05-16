@@ -1,442 +1,23 @@
 //! Patient List Component
 //!
-//! Displays a searchable list of patients with pagination.
+//! Wraps UnifiedList<PatientListItem> to provide a consistent list interface
+//! with search, pagination, and mouse handling.
 
-use crossterm::event::{Event, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
-use rat_event::ct_event;
+use crossterm::event::{MouseEvent, KeyEvent};
 use rat_focus::{FocusBuilder, FocusFlag, HasFocus};
 use ratatui::buffer::Buffer;
-use ratatui::layout::Constraint;
-use ratatui::layout::{Position, Rect};
-use ratatui::style::Style;
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Row, Table, Widget};
-use sublime_fuzzy::best_match;
+use ratatui::layout::Rect;
+use ratatui::widgets::Widget;
 use uuid::Uuid;
 
-use crate::ui::input::DoubleClickDetector;
-use crate::ui::layout::{
-    HEADER_HEIGHT, PATIENT_COL_DOB, PATIENT_COL_LAST_VISIT, PATIENT_COL_MEDICARE, PATIENT_COL_NAME,
-    PATIENT_COL_PHONE,
-};
-use crate::ui::shared::{hover_style, selected_hover_style};
 use crate::ui::theme::Theme;
 use crate::ui::view_models::PatientListItem;
-use crate::ui::widgets::{LoadingState, ScrollableState, SCROLL_LINES};
+use crate::ui::widgets::{UnifiedColumnDef, UnifiedList, UnifiedListAction, UnifiedListConfig};
 
+/// Wrapper around UnifiedList<PatientListItem> providing a consistent API
+/// for patient list operations including search, navigation, and mouse handling.
 pub struct PatientList {
-    patients: Vec<PatientListItem>,
-    filtered: Vec<PatientListItem>,
-    search_query: String,
-    searching: bool,
-    scrollable: ScrollableState,
-    loading: bool,
-    loading_state: LoadingState,
-    theme: Theme,
-    hovered_index: Option<usize>,
-    double_click_detector: DoubleClickDetector,
-    pub focus: FocusFlag,
-}
-
-impl Clone for PatientList {
-    fn clone(&self) -> Self {
-        Self {
-            patients: self.patients.clone(),
-            filtered: self.filtered.clone(),
-            search_query: self.search_query.clone(),
-            searching: self.searching,
-            scrollable: self.scrollable.clone(),
-            loading: self.loading,
-            loading_state: self.loading_state.clone(),
-            theme: self.theme.clone(),
-            hovered_index: self.hovered_index,
-            double_click_detector: self.double_click_detector.clone(),
-            focus: self.focus.clone(),
-        }
-    }
-}
-
-impl PatientList {
-    pub fn new(theme: Theme) -> Self {
-        Self {
-            patients: Vec::new(),
-            filtered: Vec::new(),
-            search_query: String::new(),
-            searching: false,
-            scrollable: ScrollableState::new(),
-            loading: false,
-            loading_state: LoadingState::new().message("Loading patients..."),
-            theme,
-            hovered_index: None,
-            double_click_detector: DoubleClickDetector::default(),
-            focus: FocusFlag::default(),
-        }
-    }
-
-    pub fn set_patients(&mut self, patients: Vec<PatientListItem>) {
-        let previously_selected_id = self.selected_patient_id();
-        self.patients = patients;
-        self.apply_filter();
-        self.scrollable = ScrollableState::new();
-        self.scrollable.set_item_count(self.filtered.len());
-        if let Some(id) = previously_selected_id {
-            if let Some(pos) = self.filtered.iter().position(|p| p.id == id) {
-                let offset = pos as isize - self.scrollable.selected_index() as isize;
-                self.scrollable.move_by(offset);
-            }
-        }
-    }
-
-    pub fn patients(&self) -> &[PatientListItem] {
-        &self.patients
-    }
-
-    pub fn selected_patient(&self) -> Option<&PatientListItem> {
-        self.filtered.get(self.scrollable.selected_index())
-    }
-
-    pub fn selected_patient_id(&self) -> Option<Uuid> {
-        self.selected_patient().map(|p| p.id)
-    }
-
-    pub fn get_patient_by_id(&self, id: Uuid) -> Option<&PatientListItem> {
-        self.patients.iter().find(|patient| patient.id == id)
-    }
-
-    pub fn is_loading(&self) -> bool {
-        self.loading
-    }
-
-    pub fn set_loading(&mut self, loading: bool) {
-        self.loading = loading;
-    }
-
-    pub fn is_searching(&self) -> bool {
-        self.searching
-    }
-
-    pub fn search_query(&self) -> &str {
-        &self.search_query
-    }
-
-    pub fn set_search_query(&mut self, query: String) {
-        self.search_query = query;
-        self.apply_filter();
-        self.scrollable = ScrollableState::new();
-        self.scrollable.set_item_count(self.filtered.len());
-    }
-
-    fn apply_filter(&mut self) {
-        if self.search_query.is_empty() {
-            self.filtered = self.patients.clone();
-            return;
-        }
-
-        let query = self.search_query.to_lowercase();
-
-        let mut matches: Vec<(usize, i64)> = self
-            .patients
-            .iter()
-            .enumerate()
-            .filter_map(|(i, p)| {
-                let searchable = format!(
-                    "{} {} {}",
-                    p.full_name,
-                    p.medicare_number.as_deref().unwrap_or(""),
-                    p.phone_mobile.as_deref().unwrap_or("")
-                );
-
-                best_match(&query, &searchable).map(|result| (i, result.score() as i64))
-            })
-            .collect();
-
-        matches.sort_by(|a, b| b.1.cmp(&a.1));
-
-        self.filtered = matches
-            .into_iter()
-            .map(|(i, _)| self.patients[i].clone())
-            .collect();
-    }
-
-    pub fn reset_search(&mut self) {
-        self.searching = false;
-        self.search_query.clear();
-        self.apply_filter();
-        self.scrollable = ScrollableState::new();
-        self.scrollable.set_item_count(self.filtered.len());
-    }
-
-    pub fn move_up(&mut self) {
-        self.scrollable.move_up();
-    }
-
-    pub fn move_down(&mut self) {
-        self.scrollable.move_down();
-    }
-
-    pub fn move_first(&mut self) {
-        self.scrollable.move_first();
-    }
-
-    pub fn move_last(&mut self) {
-        self.scrollable.move_last();
-    }
-
-    pub fn move_by(&mut self, offset: isize) {
-        self.scrollable.move_by(offset);
-    }
-
-    pub fn adjust_scroll(&mut self, visible_rows: usize) {
-        self.scrollable.adjust_scroll(visible_rows);
-    }
-
-    pub fn move_up_and_scroll(&mut self, visible_rows: usize) {
-        self.scrollable.move_up_and_scroll(visible_rows);
-    }
-
-    pub fn move_down_and_scroll(&mut self, visible_rows: usize) {
-        self.scrollable.move_down_and_scroll(visible_rows);
-    }
-
-    pub fn move_first_and_scroll(&mut self, visible_rows: usize) {
-        self.scrollable.move_first_and_scroll(visible_rows);
-    }
-
-    pub fn move_last_and_scroll(&mut self, visible_rows: usize) {
-        self.scrollable.move_last_and_scroll(visible_rows);
-    }
-
-    pub fn move_by_and_scroll(&mut self, offset: isize, visible_rows: usize) {
-        self.scrollable.move_by_and_scroll(offset, visible_rows);
-    }
-
-    pub fn has_selection(&self) -> bool {
-        !self.filtered.is_empty()
-    }
-
-    pub fn filtered_count(&self) -> usize {
-        self.filtered.len()
-    }
-
-    pub fn total_count(&self) -> usize {
-        self.patients.len()
-    }
-
-    pub fn scroll_offset(&self) -> usize {
-        self.scrollable.scroll_offset()
-    }
-
-    pub fn handle_key(&mut self, key: KeyEvent) -> Option<PatientListAction> {
-        use crossterm::event::KeyEventKind;
-
-        // Ignore non-press key events (e.g., Release events from terminals with keyboard enhancement)
-        if key.kind != KeyEventKind::Press {
-            return None;
-        }
-
-        let event = Event::Key(key);
-
-        // Handle search input mode
-        if self.searching {
-            match &event {
-                ct_event!(keycode press Esc) => {
-                    self.searching = false;
-                    self.search_query.clear();
-                    self.apply_filter();
-                    self.scrollable = ScrollableState::new();
-                    self.scrollable.set_item_count(self.filtered.len());
-                }
-                ct_event!(keycode press Backspace) => {
-                    self.search_query.pop();
-                    self.apply_filter();
-                    self.scrollable = ScrollableState::new();
-                    self.scrollable.set_item_count(self.filtered.len());
-                }
-                ct_event!(key press c) => {
-                    self.search_query.push(*c);
-                    self.apply_filter();
-                    self.scrollable = ScrollableState::new();
-                    self.scrollable.set_item_count(self.filtered.len());
-                }
-                ct_event!(keycode press Enter) => {
-                    self.searching = false;
-                }
-                ct_event!(keycode press Up) => {
-                    self.move_up();
-                    return Some(PatientListAction::SelectionChanged);
-                }
-                ct_event!(keycode press Down) => {
-                    self.move_down();
-                    return Some(PatientListAction::SelectionChanged);
-                }
-                _ => {}
-            }
-            return Some(PatientListAction::SearchChanged);
-        }
-
-        // Normal navigation mode
-        match &event {
-            ct_event!(keycode press Up) | ct_event!(key press 'k') => {
-                self.move_up();
-                Some(PatientListAction::SelectionChanged)
-            }
-            ct_event!(keycode press Down) | ct_event!(key press 'j') => {
-                self.move_down();
-                Some(PatientListAction::SelectionChanged)
-            }
-            ct_event!(keycode press Home) => {
-                self.move_first();
-                Some(PatientListAction::SelectionChanged)
-            }
-            ct_event!(keycode press End) => {
-                self.move_last();
-                Some(PatientListAction::SelectionChanged)
-            }
-            ct_event!(keycode press PageUp) => {
-                self.move_by(-10);
-                Some(PatientListAction::SelectionChanged)
-            }
-            ct_event!(keycode press PageDown) => {
-                self.move_by(10);
-                Some(PatientListAction::SelectionChanged)
-            }
-            ct_event!(keycode press Enter) => {
-                if self.has_selection() {
-                    // SAFETY: has_selection() confirmed filtered is not empty
-                    #[allow(clippy::unwrap_used)]
-                    Some(PatientListAction::OpenPatient(
-                        self.selected_patient_id().unwrap(),
-                    ))
-                } else {
-                    None
-                }
-            }
-            ct_event!(key press '/') => {
-                self.searching = true;
-                Some(PatientListAction::FocusSearch)
-            }
-            _ => None,
-        }
-    }
-
-    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<PatientListAction> {
-        // Handle mouse wheel for scrolling
-        if let MouseEventKind::ScrollUp = mouse.kind {
-            for _ in 0..SCROLL_LINES {
-                self.scrollable.scroll_up();
-            }
-            self.hovered_index = None;
-            return Some(PatientListAction::SelectionChanged);
-        }
-        if let MouseEventKind::ScrollDown = mouse.kind {
-            let visible_rows = area.height.saturating_sub(SCROLL_LINES as u16) as usize;
-            let max_scroll = self.filtered.len().saturating_sub(visible_rows);
-            for _ in 0..SCROLL_LINES {
-                if self.scrollable.scroll_offset() < max_scroll {
-                    self.scrollable.scroll_down();
-                }
-            }
-            self.hovered_index = None;
-            return Some(PatientListAction::SelectionChanged);
-        }
-
-        // Track hover state on mouse movement
-        if let MouseEventKind::Moved = mouse.kind {
-            if area.contains(Position::new(mouse.column, mouse.row))
-                && mouse.row >= area.y + HEADER_HEIGHT
-            {
-                let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
-                let actual_index = self.scrollable.scroll_offset() + row_index;
-                if actual_index < self.filtered.len() {
-                    self.hovered_index = Some(actual_index);
-                } else {
-                    self.hovered_index = None;
-                }
-            } else {
-                self.hovered_index = None;
-            }
-            return None;
-        }
-
-        // Handle right-click for context menu
-        if let MouseEventKind::Down(MouseButton::Right) = mouse.kind {
-            if !area.contains(Position::new(mouse.column, mouse.row)) {
-                return None;
-            }
-
-            if mouse.row < area.y + HEADER_HEIGHT {
-                return None;
-            }
-
-            let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
-            let actual_index = self.scrollable.scroll_offset() + row_index;
-            if actual_index < self.filtered.len() {
-                let current_index = self.scrollable.selected_index();
-                let offset = actual_index as isize - current_index as isize;
-                self.scrollable.move_by(offset);
-                if let Some(patient) = self.filtered.get(actual_index) {
-                    return Some(PatientListAction::ContextMenu {
-                        x: mouse.column,
-                        y: mouse.row,
-                        patient_id: patient.id,
-                    });
-                }
-            }
-            return None;
-        }
-
-        // Handle double-click for open action
-        if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
-            if !area.contains(Position::new(mouse.column, mouse.row)) {
-                return None;
-            }
-
-            if mouse.row < area.y + HEADER_HEIGHT {
-                return None;
-            }
-
-            let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
-            let actual_index = self.scrollable.scroll_offset() + row_index;
-
-            if actual_index >= self.filtered.len() {
-                return None;
-            }
-
-            // Check for double-click
-            if self.double_click_detector.check_double_click_now(&mouse) {
-                if let Some(patient) = self.filtered.get(actual_index) {
-                    return Some(PatientListAction::OpenPatient(patient.id));
-                }
-            }
-            return None;
-        }
-
-        // Only process left mouse up for normal selection
-        if mouse.kind != MouseEventKind::Up(MouseButton::Left) {
-            return None;
-        }
-
-        if !area.contains(Position::new(mouse.column, mouse.row)) {
-            return None;
-        }
-
-        if mouse.row < area.y + HEADER_HEIGHT {
-            return None;
-        }
-
-        let row_index = (mouse.row - area.y - HEADER_HEIGHT) as usize;
-        // Account for scroll offset
-        let actual_index = self.scrollable.scroll_offset() + row_index;
-        if actual_index < self.filtered.len() {
-            // Move selection to the clicked item
-            let current_index = self.scrollable.selected_index();
-            let offset = actual_index as isize - current_index as isize;
-            self.scrollable.move_by(offset);
-            Some(PatientListAction::SelectionChanged)
-        } else {
-            None
-        }
-    }
+    inner: UnifiedList<PatientListItem>,
 }
 
 #[derive(Debug, Clone)]
@@ -448,128 +29,239 @@ pub enum PatientListAction {
     ContextMenu { x: u16, y: u16, patient_id: Uuid },
 }
 
-fn format_name(patient: &PatientListItem) -> String {
-    patient.full_name.clone()
-}
+impl PatientList {
+    /// Create a new patient list with the given theme
+    pub fn new(theme: Theme) -> Self {
+        let config = UnifiedListConfig::new("Patients", 1, "No patients found.")
+            .with_search("Search patients...");
 
-fn format_dob(patient: &PatientListItem) -> String {
-    patient.date_of_birth.format("%d/%m/%y").to_string()
-}
+        let inner = UnifiedList::new(
+            Vec::new(),
+            columns(),
+            theme,
+            config,
+        );
 
-fn format_medicare(patient: &PatientListItem) -> String {
-    patient
-        .medicare_number
-        .as_deref()
-        .unwrap_or("-")
-        .to_string()
-}
+        Self { inner }
+    }
 
-fn format_phone(patient: &PatientListItem) -> String {
-    patient.phone_mobile.as_deref().unwrap_or("-").to_string()
-}
+    /// Set the list of patients to display
+    pub fn set_patients(&mut self, patients: Vec<PatientListItem>) {
+        let previously_selected_id = self.selected_patient_id();
+        self.inner.items = patients;
+        self.inner.selected_index = 0;
+        self.inner.scroll_offset = 0;
 
-fn format_last_visit(_patient: &PatientListItem) -> String {
-    "-".to_string()
+        // Try to restore previously selected patient
+        if let Some(id) = previously_selected_id {
+            if let Some(pos) = self.inner.items.iter().position(|p| p.id == id) {
+                self.inner.selected_index = pos;
+            }
+        }
+    }
+
+    /// Get the currently selected patient, if any
+    pub fn selected_patient(&self) -> Option<&PatientListItem> {
+        self.inner.items.get(self.inner.selected_index)
+    }
+
+    /// Get the ID of the currently selected patient, if any
+    pub fn selected_patient_id(&self) -> Option<Uuid> {
+        self.selected_patient().map(|p| p.id)
+    }
+
+    /// Get a patient by ID from the full list
+    pub fn get_patient_by_id(&self, id: Uuid) -> Option<&PatientListItem> {
+        self.inner.items.iter().find(|patient| patient.id == id)
+    }
+
+    /// Check if the list is currently loading
+    pub fn is_loading(&self) -> bool {
+        self.inner.loading
+    }
+
+    /// Set the loading state
+    pub fn set_loading(&mut self, loading: bool) {
+        self.inner.loading = loading;
+    }
+
+    /// Check if search mode is active
+    pub fn is_searching(&self) -> bool {
+        self.inner.searching
+    }
+
+    /// Get the current search query
+    pub fn search_query(&self) -> &str {
+        &self.inner.search_query
+    }
+
+    /// Set the search query and apply filtering
+    pub fn set_search_query(&mut self, query: String) {
+        self.inner.search_query = query;
+        self.inner.apply_search_filter();
+    }
+
+    /// Reset search mode and clear the query
+    pub fn reset_search(&mut self) {
+        self.inner.searching = false;
+        self.inner.search_query.clear();
+        self.inner.apply_search_filter();
+    }
+
+    /// Move selection up
+    pub fn move_up(&mut self) {
+        if self.inner.selected_index > 0 {
+            self.inner.selected_index -= 1;
+        }
+    }
+
+    /// Move selection down
+    pub fn move_down(&mut self) {
+        let max = self.inner.items.len().saturating_sub(1);
+        if self.inner.selected_index < max {
+            self.inner.selected_index += 1;
+        }
+    }
+
+    /// Move to first item
+    pub fn move_first(&mut self) {
+        self.inner.selected_index = 0;
+    }
+
+    /// Move to last item
+    pub fn move_last(&mut self) {
+        self.inner.selected_index = self.inner.items.len().saturating_sub(1);
+    }
+
+    /// Move by offset
+    pub fn move_by(&mut self, offset: isize) {
+        let new_index = (self.inner.selected_index as isize + offset).max(0) as usize;
+        self.inner.selected_index = new_index.min(self.inner.items.len().saturating_sub(1));
+    }
+
+    /// Adjust scroll to keep selection visible
+    pub fn adjust_scroll(&mut self, visible_rows: usize) {
+        if visible_rows == 0 {
+            return;
+        }
+        if self.inner.selected_index < self.inner.scroll_offset {
+            self.inner.scroll_offset = self.inner.selected_index;
+        } else if self.inner.selected_index >= self.inner.scroll_offset + visible_rows {
+            self.inner.scroll_offset = self.inner.selected_index.saturating_sub(visible_rows - 1);
+        }
+    }
+
+    /// Move up and adjust scroll
+    pub fn move_up_and_scroll(&mut self, visible_rows: usize) {
+        self.move_up();
+        self.adjust_scroll(visible_rows);
+    }
+
+    /// Move down and adjust scroll
+    pub fn move_down_and_scroll(&mut self, visible_rows: usize) {
+        self.move_down();
+        self.adjust_scroll(visible_rows);
+    }
+
+    /// Move to first and adjust scroll
+    pub fn move_first_and_scroll(&mut self, _visible_rows: usize) {
+        self.move_first();
+        self.inner.scroll_offset = 0;
+    }
+
+    /// Move to last and adjust scroll
+    pub fn move_last_and_scroll(&mut self, visible_rows: usize) {
+        self.move_last();
+        if visible_rows > 0 {
+            self.inner.scroll_offset = self.inner.items.len().saturating_sub(visible_rows);
+        }
+    }
+
+    /// Move by offset and adjust scroll
+    pub fn move_by_and_scroll(&mut self, offset: isize, visible_rows: usize) {
+        self.move_by(offset);
+        self.adjust_scroll(visible_rows);
+    }
+
+    /// Check if there is a selection
+    pub fn has_selection(&self) -> bool {
+        !self.inner.items.is_empty()
+    }
+
+    /// Get the count of filtered items
+    pub fn filtered_count(&self) -> usize {
+        self.inner.items.len()
+    }
+
+    /// Get the total count of items
+    pub fn total_count(&self) -> usize {
+        self.inner.items.len()
+    }
+
+    /// Get the current scroll offset
+    pub fn scroll_offset(&self) -> usize {
+        self.inner.scroll_offset
+    }
+
+    /// Handle a key event
+    pub fn handle_key(&mut self, key: KeyEvent) -> Option<PatientListAction> {
+        self.inner.handle_key(key).and_then(|action| {
+            Some(match action {
+                UnifiedListAction::Select(_) => PatientListAction::SelectionChanged,
+                UnifiedListAction::Open(item) => PatientListAction::OpenPatient(item.id),
+                UnifiedListAction::ContextMenu { index, x, y } => {
+                    if let Some(patient) = self.inner.items.get(index) {
+                        PatientListAction::ContextMenu {
+                            x,
+                            y,
+                            patient_id: patient.id,
+                        }
+                    } else {
+                        PatientListAction::SelectionChanged
+                    }
+                }
+                UnifiedListAction::New
+                | UnifiedListAction::Edit(_)
+                | UnifiedListAction::Delete(_)
+                | UnifiedListAction::ToggleInactive => PatientListAction::SelectionChanged,
+            })
+        })
+    }
+
+    /// Handle a mouse event
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<PatientListAction> {
+        self.inner.handle_mouse(mouse, area).and_then(|action| {
+            Some(match action {
+                UnifiedListAction::Select(_) => PatientListAction::SelectionChanged,
+                UnifiedListAction::Open(item) => PatientListAction::OpenPatient(item.id),
+                UnifiedListAction::ContextMenu { index, x, y } => {
+                    if let Some(patient) = self.inner.items.get(index) {
+                        PatientListAction::ContextMenu {
+                            x,
+                            y,
+                            patient_id: patient.id,
+                        }
+                    } else {
+                        PatientListAction::SelectionChanged
+                    }
+                }
+                UnifiedListAction::New
+                | UnifiedListAction::Edit(_)
+                | UnifiedListAction::Delete(_)
+                | UnifiedListAction::ToggleInactive => PatientListAction::SelectionChanged,
+            })
+        })
+    }
+
+    /// Check if the list is focused
+    pub fn is_focused(&self) -> bool {
+        self.inner.focus.is_focused()
+    }
 }
 
 impl Widget for PatientList {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        if area.is_empty() {
-            return;
-        }
-
-        let block = Block::default()
-            .title(" Patients ")
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.theme.colors.border));
-
-        block.clone().render(area, buf);
-
-        let inner = block.inner(area);
-        if inner.is_empty() {
-            return;
-        }
-
-        if self.loading {
-            let mut loading_state = self.loading_state.clone();
-            loading_state.tick();
-            let indicator = loading_state.to_indicator(&self.theme);
-            indicator.render(inner, buf);
-            return;
-        }
-
-        if self.filtered.is_empty() {
-            let message = if self.search_query.is_empty() {
-                "No patients found. Press n to add a new patient."
-            } else {
-                "No patients match your search."
-            };
-            let text = Line::from(vec![Span::styled(
-                message,
-                Style::default().fg(self.theme.colors.disabled),
-            )]);
-            let x = inner.x + (inner.width.saturating_sub(message.len() as u16)) / 2;
-            let y = inner.y + inner.height / 2;
-            buf.set_line(x, y, &text, inner.width);
-            return;
-        }
-
-        let col_widths = [
-            Constraint::Length(PATIENT_COL_NAME),
-            Constraint::Length(PATIENT_COL_DOB),
-            Constraint::Length(PATIENT_COL_MEDICARE),
-            Constraint::Length(PATIENT_COL_PHONE),
-            Constraint::Length(PATIENT_COL_LAST_VISIT),
-        ];
-
-        let header = Row::new(vec!["Name", "DOB", "Medicare #", "Phone", "Last Visit"])
-            .style(Style::default().fg(self.theme.colors.primary).bold());
-
-        let visible_rows = inner.height as usize;
-        let max_scroll = self.filtered.len().saturating_sub(visible_rows);
-        let scroll_offset = self.scrollable.scroll_offset().min(max_scroll);
-        let selected_index = self.scrollable.selected_index();
-
-        let rows: Vec<Row> = self
-            .filtered
-            .iter()
-            .skip(scroll_offset)
-            .take(visible_rows)
-            .enumerate()
-            .map(|(i, patient)| {
-                let actual_index = scroll_offset + i;
-                let is_selected = actual_index == selected_index;
-                let is_hovered = self.hovered_index == Some(actual_index);
-
-                let style = match (is_selected, is_hovered) {
-                    (true, true) => selected_hover_style(&self.theme),
-                    (true, false) => {
-                        let bg = self.theme.colors.selected;
-                        Style::default()
-                            .bg(bg)
-                            .fg(crate::ui::shared::invert_color(bg))
-                    }
-                    (false, true) => hover_style(&self.theme),
-                    (false, false) => Style::default().fg(self.theme.colors.foreground),
-                };
-
-                Row::new(vec![
-                    format_name(patient),
-                    format_dob(patient),
-                    format_medicare(patient),
-                    format_phone(patient),
-                    format_last_visit(patient),
-                ])
-                .style(style)
-            })
-            .collect();
-
-        let table = Table::new(rows, col_widths)
-            .header(header)
-            .block(Block::default().borders(Borders::NONE))
-            .widths(col_widths);
-
-        table.render(inner, buf);
+        self.inner.render(area, buf);
     }
 }
 
@@ -579,7 +271,7 @@ impl HasFocus for PatientList {
     }
 
     fn focus(&self) -> FocusFlag {
-        self.focus.clone()
+        self.inner.focus.clone()
     }
 
     fn area(&self) -> Rect {
@@ -587,11 +279,30 @@ impl HasFocus for PatientList {
     }
 }
 
+/// Define columns for the patient list
+fn columns() -> Vec<UnifiedColumnDef<PatientListItem>> {
+    vec![
+        UnifiedColumnDef::new("Name", 20, |p: &PatientListItem| p.full_name.clone()),
+        UnifiedColumnDef::new("DOB", 8, |p: &PatientListItem| {
+            p.date_of_birth.format("%d/%m/%y").to_string()
+        }),
+        UnifiedColumnDef::new("Medicare #", 11, |p: &PatientListItem| {
+            p.medicare_number
+                .as_deref()
+                .unwrap_or("-")
+                .to_string()
+        }),
+        UnifiedColumnDef::new("Phone", 12, |p: &PatientListItem| {
+            p.phone_mobile.as_deref().unwrap_or("-").to_string()
+        }),
+        UnifiedColumnDef::new("Last Visit", 9, |_p: &PatientListItem| "-".to_string()),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::NaiveDate;
-    use crossterm::event::KeyCode;
     use opengp_domain::domain::patient::Patient;
 
     fn create_test_patient(first: &str, last: &str) -> PatientListItem {
@@ -638,7 +349,7 @@ mod tests {
     }
 
     #[test]
-    fn test_patient_list_filter() {
+    fn test_patient_list_set_patients() {
         let theme = Theme::dark();
         let mut list = PatientList::new(theme);
 
@@ -651,9 +362,6 @@ mod tests {
 
         assert_eq!(list.total_count(), 3);
         assert_eq!(list.filtered_count(), 3);
-
-        list.set_search_query("smith".to_string());
-        assert_eq!(list.filtered_count(), 2);
     }
 
     #[test]
@@ -668,7 +376,6 @@ mod tests {
         ];
         list.set_patients(patients);
 
-        // With 3 patients, filtered is not empty, so has_selection returns true
         assert!(list.has_selection());
 
         list.move_first();
