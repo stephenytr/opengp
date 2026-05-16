@@ -81,17 +81,10 @@ impl Tab {
 /// Tab bar state
 #[derive(Debug, Clone)]
 pub struct TabBar {
-    /// Currently selected tab
     selected: Tab,
-    /// Whether the tab bar is focused
-    focused: bool,
-    /// Tab labels (with shortcuts)
     tabs: Vec<TabItem>,
-    /// Theme for colors
     theme: Theme,
-    /// Currently hovered tab index (None if not hovering)
     hovered_tab: Option<usize>,
-    /// Double-click detector for tab switching
     double_click_detector: DoubleClickDetector,
     pub focus: FocusFlag,
 }
@@ -117,7 +110,6 @@ impl TabBar {
 
         Self {
             selected: Tab::default(),
-            focused: false,
             tabs,
             theme,
             hovered_tab: None,
@@ -163,16 +155,6 @@ impl TabBar {
             current_index - 1
         };
         self.selected = Tab::from_index(prev_index).unwrap();
-    }
-
-    /// Check if the tab bar is focused
-    pub fn is_focused(&self) -> bool {
-        self.focused
-    }
-
-    /// Set focus state
-    pub fn set_focus(&mut self, focused: bool) {
-        self.focused = focused;
     }
 
     /// Handle key event
@@ -297,7 +279,7 @@ impl Widget for TabBar {
             let tab_area = self.get_tab_area(i, area);
             if let Some(rect) = tab_area {
                 let is_selected = tab_item.tab == self.selected;
-                let is_focused = self.focused && is_selected;
+                let is_focused = self.focus.is_focused() && is_selected;
                 let is_hovered = self.hovered_tab == Some(i);
 
                 // Build the label with shortcut
