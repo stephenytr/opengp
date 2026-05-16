@@ -197,7 +197,12 @@ impl<T: Clone + std::fmt::Debug> UnifiedList<T> {
     }
 
     pub fn move_down(&mut self) {
-        if self.selected_index < self.items.len().saturating_sub(1) {
+        let max_index = if self.searching && !self.filtered_indices.is_empty() {
+            self.filtered_indices.len().saturating_sub(1)
+        } else {
+            self.items.len().saturating_sub(1)
+        };
+        if self.selected_index < max_index {
             self.selected_index += 1;
         }
     }
@@ -207,18 +212,29 @@ impl<T: Clone + std::fmt::Debug> UnifiedList<T> {
     }
 
     pub fn move_last(&mut self) {
-        self.selected_index = self.items.len().saturating_sub(1);
+        let max_index = if self.searching && !self.filtered_indices.is_empty() {
+            self.filtered_indices.len().saturating_sub(1)
+        } else {
+            self.items.len().saturating_sub(1)
+        };
+        self.selected_index = max_index;
     }
 
     pub fn adjust_scroll(&mut self, visible_rows: usize) {
         if visible_rows == 0 {
             return;
         }
+        let max_scroll = if self.searching && !self.filtered_indices.is_empty() {
+            self.filtered_indices.len().saturating_sub(visible_rows)
+        } else {
+            self.items.len().saturating_sub(visible_rows)
+        };
         if self.selected_index < self.scroll_offset {
             self.scroll_offset = self.selected_index;
         } else if self.selected_index >= self.scroll_offset + visible_rows {
             self.scroll_offset = self.selected_index.saturating_sub(visible_rows) + 1;
         }
+        self.scroll_offset = self.scroll_offset.min(max_scroll);
     }
 
     pub fn next(&mut self) {
@@ -252,8 +268,31 @@ impl<T: Clone + std::fmt::Debug> UnifiedList<T> {
             }
         }
 
-        self.selected_index = 0;
+        // Clamp selected_index to valid range in filtered list
+        if self.filtered_indices.is_empty() {
+            self.selected_index = 0;
+        } else {
+            self.selected_index = self.selected_index.min(self.filtered_indices.len() - 1);
+        }
         self.scroll_offset = 0;
+    }
+
+    pub fn start_search(&mut self) {
+        self.searching = true;
+    }
+
+    pub fn end_search(&mut self) {
+        self.searching = false;
+        self.search_query.clear();
+        self.apply_search_filter();
+    }
+
+    pub fn is_searching(&self) -> bool {
+        self.searching
+    }
+
+    pub fn search_query(&self) -> &str {
+        &self.search_query
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<UnifiedListAction<T>> {
@@ -339,8 +378,12 @@ impl<T: Clone + std::fmt::Debug> UnifiedList<T> {
                 Some(UnifiedListAction::Select(self.selected_index))
             }
             ct_event!(keycode press PageDown) => {
-                self.selected_index =
-                    (self.selected_index + 10).min(self.items.len().saturating_sub(1));
+                let max_index = if self.searching && !self.filtered_indices.is_empty() {
+                    self.filtered_indices.len().saturating_sub(1)
+                } else {
+                    self.items.len().saturating_sub(1)
+                };
+                self.selected_index = (self.selected_index + 10).min(max_index);
                 self.adjust_scroll(10);
                 Some(UnifiedListAction::Select(self.selected_index))
             }
@@ -376,7 +419,12 @@ impl<T: Clone + std::fmt::Debug> UnifiedList<T> {
 
         if let MouseEventKind::ScrollDown = mouse.kind {
             let visible_rows = area.height.saturating_sub(self.config.header_rows).max(1) as usize;
-            let max_scroll = self.items.len().saturating_sub(visible_rows);
+            let list_len = if self.searching && !self.filtered_indices.is_empty() {
+                self.filtered_indices.len()
+            } else {
+                self.items.len()
+            };
+            let max_scroll = list_len.saturating_sub(visible_rows);
             self.scroll_offset = (self.scroll_offset + SCROLL_LINES).min(max_scroll);
             self.hovered_index = None;
             return Some(UnifiedListAction::Select(self.selected_index));
@@ -387,12 +435,13 @@ impl<T: Clone + std::fmt::Debug> UnifiedList<T> {
                 && mouse.row >= area.y + self.config.header_rows
             {
                 let row_index = (mouse.row - area.y - self.config.header_rows) as usize;
-                let actual_index = self.scroll_offset + row_index;
-                if actual_index < self.items.len() {
-                    self.hovered_index = Some(actual_index);
+                let actual_index = if self.searching && !self.filtered_indices.is_empty() {
+                    self.filtered_indices.get(self.scroll_offset + row_index).copied()
                 } else {
-                    self.hovered_index = None;
-                }
+                    let idx = self.scroll_offset + row_index;
+                    if idx < self.items.len() { Some(idx) } else { None }
+                };
+                self.hovered_index = actual_index;
             } else {
                 self.hovered_index = None;
             }
@@ -407,11 +456,16 @@ impl<T: Clone + std::fmt::Debug> UnifiedList<T> {
                 return None;
             }
             let row_index = (mouse.row - area.y - self.config.header_rows) as usize;
-            let actual_index = self.scroll_offset + row_index;
-            if actual_index < self.items.len() {
-                self.selected_index = actual_index;
+            let actual_index = if self.searching && !self.filtered_indices.is_empty() {
+                self.filtered_indices.get(self.scroll_offset + row_index).copied()
+            } else {
+                let idx = self.scroll_offset + row_index;
+                if idx < self.items.len() { Some(idx) } else { None }
+            };
+            if let Some(idx) = actual_index {
+                self.selected_index = idx;
                 return Some(UnifiedListAction::ContextMenu {
-                    index: actual_index,
+                    index: idx,
                     x: mouse.column,
                     y: mouse.row,
                 });
@@ -427,13 +481,17 @@ impl<T: Clone + std::fmt::Debug> UnifiedList<T> {
                 return None;
             }
             let row_index = (mouse.row - area.y - self.config.header_rows) as usize;
-            let actual_index = self.scroll_offset + row_index;
-            if actual_index >= self.items.len() {
-                return None;
-            }
-            if self.double_click_detector.check_double_click_now(&mouse) {
-                if let Some(item) = self.items.get(actual_index).cloned() {
-                    return Some(UnifiedListAction::Open(item));
+            let actual_index = if self.searching && !self.filtered_indices.is_empty() {
+                self.filtered_indices.get(self.scroll_offset + row_index).copied()
+            } else {
+                let idx = self.scroll_offset + row_index;
+                if idx < self.items.len() { Some(idx) } else { None }
+            };
+            if let Some(idx) = actual_index {
+                if self.double_click_detector.check_double_click_now(&mouse) {
+                    if let Some(item) = self.items.get(idx).cloned() {
+                        return Some(UnifiedListAction::Open(item));
+                    }
                 }
             }
             return None;
@@ -451,9 +509,14 @@ impl<T: Clone + std::fmt::Debug> UnifiedList<T> {
         }
 
         let row_index = (mouse.row - area.y - self.config.header_rows) as usize;
-        let actual_index = self.scroll_offset + row_index;
-        if actual_index < self.items.len() {
-            self.selected_index = actual_index;
+        let actual_index = if self.searching && !self.filtered_indices.is_empty() {
+            self.filtered_indices.get(self.scroll_offset + row_index).copied()
+        } else {
+            let idx = self.scroll_offset + row_index;
+            if idx < self.items.len() { Some(idx) } else { None }
+        };
+        if let Some(idx) = actual_index {
+            self.selected_index = idx;
             Some(UnifiedListAction::Select(self.selected_index))
         } else {
             None
@@ -510,39 +573,74 @@ impl<T: Clone + std::fmt::Debug> Widget for UnifiedList<T> {
             .height(1);
 
         let visible_rows = inner.height.saturating_sub(self.config.header_rows).max(1) as usize;
-        let max_scroll = self.items.len().saturating_sub(visible_rows);
+        let list_len = if self.searching && !self.filtered_indices.is_empty() {
+            self.filtered_indices.len()
+        } else {
+            self.items.len()
+        };
+        let max_scroll = list_len.saturating_sub(visible_rows);
         let scroll_offset = self.scroll_offset.min(max_scroll);
 
-        let rows: Vec<Row> = self
-            .items
-            .iter()
-            .skip(scroll_offset)
-            .take(visible_rows)
-            .enumerate()
-            .map(|(i, item)| {
-                let actual_index = scroll_offset + i;
-                let is_selected = actual_index == self.selected_index;
-                let is_hovered = self.hovered_index == Some(actual_index);
+        let rows: Vec<Row> = if self.searching && !self.filtered_indices.is_empty() {
+            self.filtered_indices
+                .iter()
+                .skip(scroll_offset)
+                .take(visible_rows)
+                .map(|&actual_index| {
+                    let is_selected = actual_index == self.selected_index;
+                    let is_hovered = self.hovered_index == Some(actual_index);
+                    let item = &self.items[actual_index];
 
-                let style = match (is_selected, is_hovered) {
-                    (true, true) => selected_hover_style(&self.theme),
-                    (true, false) => {
-                        let bg = self.theme.colors.selected;
-                        Style::default().bg(bg).fg(invert_color(bg))
-                    }
-                    (false, true) => hover_style(&self.theme),
-                    (false, false) => Style::default().fg(self.theme.colors.foreground),
-                };
+                    let style = match (is_selected, is_hovered) {
+                        (true, true) => selected_hover_style(&self.theme),
+                        (true, false) => {
+                            let bg = self.theme.colors.selected;
+                            Style::default().bg(bg).fg(invert_color(bg))
+                        }
+                        (false, true) => hover_style(&self.theme),
+                        (false, false) => Style::default().fg(self.theme.colors.foreground),
+                    };
 
-                let cells = self
-                    .columns
-                    .iter()
-                    .map(|col| (col.render)(item))
-                    .collect::<Vec<String>>();
+                    let cells = self
+                        .columns
+                        .iter()
+                        .map(|col| (col.render)(item))
+                        .collect::<Vec<String>>();
 
-                Row::new(cells).style(style).height(1)
-            })
-            .collect();
+                    Row::new(cells).style(style).height(1)
+                })
+                .collect()
+        } else {
+            self.items
+                .iter()
+                .skip(scroll_offset)
+                .take(visible_rows)
+                .enumerate()
+                .map(|(i, item)| {
+                    let actual_index = scroll_offset + i;
+                    let is_selected = actual_index == self.selected_index;
+                    let is_hovered = self.hovered_index == Some(actual_index);
+
+                    let style = match (is_selected, is_hovered) {
+                        (true, true) => selected_hover_style(&self.theme),
+                        (true, false) => {
+                            let bg = self.theme.colors.selected;
+                            Style::default().bg(bg).fg(invert_color(bg))
+                        }
+                        (false, true) => hover_style(&self.theme),
+                        (false, false) => Style::default().fg(self.theme.colors.foreground),
+                    };
+
+                    let cells = self
+                        .columns
+                        .iter()
+                        .map(|col| (col.render)(item))
+                        .collect::<Vec<String>>();
+
+                    Row::new(cells).style(style).height(1)
+                })
+                .collect()
+        };
 
         let table = Table::new(rows, col_widths.clone())
             .header(header)
