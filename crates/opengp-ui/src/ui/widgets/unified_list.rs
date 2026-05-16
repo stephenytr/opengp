@@ -524,14 +524,15 @@ impl<T: Clone + std::fmt::Debug> UnifiedList<T> {
     }
 }
 
-impl<T: Clone + std::fmt::Debug> Widget for UnifiedList<T> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+impl<T: Clone + std::fmt::Debug> UnifiedList<T> {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         if area.is_empty() {
             return;
         }
 
+        let title = format!(" {} ", self.config.title.as_str());
         let block = Block::default()
-            .title(format!(" {} ", self.config.title))
+            .title(title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(self.theme.colors.border));
 
@@ -659,6 +660,18 @@ impl<T: Clone + std::fmt::Debug> Widget for UnifiedList<T> {
             let search_y = inner.y + inner.height.saturating_sub(1);
             buf.set_line(inner.x, search_y, &search_line, inner.width);
         }
+    }
+}
+
+impl<T: Clone + std::fmt::Debug> Widget for UnifiedList<T> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        self.render_ref(area, buf);
+    }
+}
+
+impl<'a, T: Clone + std::fmt::Debug> Widget for &'a UnifiedList<T> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        self.render_ref(area, buf);
     }
 }
 

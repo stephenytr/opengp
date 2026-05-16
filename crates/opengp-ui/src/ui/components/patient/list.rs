@@ -257,11 +257,21 @@ impl PatientList {
     pub fn is_focused(&self) -> bool {
         self.inner.focus.is_focused()
     }
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        (&self.inner).render(area, buf);
+    }
 }
 
 impl Widget for PatientList {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        self.inner.render(area, buf);
+        self.render_ref(area, buf);
+    }
+}
+
+impl<'a> Widget for &'a PatientList {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        self.render_ref(area, buf);
     }
 }
 

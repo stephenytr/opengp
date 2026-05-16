@@ -694,7 +694,7 @@ fn render(
                     }
                 }
             }
-            Tab::PatientSearch => state.patient_list.clone().render(layout[1], buf),
+            Tab::PatientSearch => (&state.patient_list).render(layout[1], buf),
             Tab::PatientWorkspace => Paragraph::new("Patient workspace").render(layout[1], buf),
         }
 
