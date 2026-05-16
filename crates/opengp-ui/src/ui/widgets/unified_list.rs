@@ -550,6 +550,17 @@ impl<T: Clone + std::fmt::Debug> Widget for UnifiedList<T> {
             .widths(col_widths);
 
         table.render(inner, buf);
+
+        // Display search query if searching
+        if self.searching {
+            let search_text = format!("/{}", self.search_query);
+            let search_line = Line::from(vec![Span::styled(
+                search_text,
+                Style::default().fg(self.theme.colors.primary),
+            )]);
+            let search_y = inner.y + inner.height.saturating_sub(1);
+            buf.set_line(inner.x, search_y, &search_line, inner.width);
+        }
     }
 }
 
