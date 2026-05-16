@@ -10,6 +10,12 @@ use crate::ui::app::ClinicalWorkspaceLoadResult;
 use crate::ui::components::SubtabKind;
 use crate::ui::view_models::{PatientListItem, PractitionerViewItem};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceOpenIntent {
+    ViewClinical,
+    StartConsultation,
+}
+
 pub type BookedSlot = chrono::NaiveTime;
 
 #[derive(Debug, Clone)]
@@ -52,6 +58,11 @@ pub enum AppEvent {
     PatientEditLoaded(Result<Patient, String>),
     ConsultationsRefreshed(Result<(), String>),
     LoginResult(Result<LoginResponse, String>),
+    PatientOpenedFromAppointment {
+        patient: Result<PatientListItem, String>,
+        appointment_id: Uuid,
+        intent: WorkspaceOpenIntent,
+    },
 }
 
 impl From<CrosstermEvent> for AppEvent {

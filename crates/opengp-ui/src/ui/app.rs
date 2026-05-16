@@ -5,7 +5,7 @@ mod global;
 
 pub use app_state::AppState;
 pub use error::AppError;
-pub use event::AppEvent;
+pub use event::{AppEvent, WorkspaceOpenIntent};
 pub use global::{AppContextMenuAction, DialogContent, GlobalState, RetryOperation};
 
 const DEFAULT_PATIENT_PAGE_LIMIT: u32 = 100;
