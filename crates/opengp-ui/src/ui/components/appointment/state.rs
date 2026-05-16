@@ -487,7 +487,43 @@ impl AppointmentState {
                 _ => None,
             };
         }
-        None
+
+        // Backward-compatible direct arrow navigation when no keybind is registered.
+        match key.code {
+            crossterm::event::KeyCode::Left => {
+                if self.selected_practitioner_index > 0 {
+                    self.selected_practitioner_index -= 1;
+                }
+                self.practitioners_view
+                    .get(self.selected_practitioner_index)
+                    .map(|p| ScheduleAction::SelectPractitioner(p.id))
+            }
+            crossterm::event::KeyCode::Right => {
+                if self.selected_practitioner_index < self.practitioners_view.len().saturating_sub(1)
+                {
+                    self.selected_practitioner_index += 1;
+                }
+                self.practitioners_view
+                    .get(self.selected_practitioner_index)
+                    .map(|p| ScheduleAction::SelectPractitioner(p.id))
+            }
+            crossterm::event::KeyCode::Up => {
+                if self.selected_time_slot > 0 {
+                    self.selected_time_slot -= 1;
+                    self.scroll_viewport_up_if_needed();
+                }
+                Some(ScheduleAction::NavigateTimeSlot(-1))
+            }
+            crossterm::event::KeyCode::Down => {
+                let max_slot = self.max_time_slot();
+                if self.selected_time_slot < max_slot {
+                    self.selected_time_slot += 1;
+                    self.ensure_slot_visible();
+                }
+                Some(ScheduleAction::NavigateTimeSlot(1))
+            }
+            _ => None,
+        }
     }
 
     pub fn get_appointment_at_selection(&self) -> Option<&CalendarAppointment> {
@@ -524,51 +560,65 @@ impl AppointmentState {
         slot >= start_slot && slot <= end_slot
     }
 
-    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ScheduleAction> {
+    /// Converts absolute mouse coordinates to (practitioner_index, time_slot)
+    /// given the outer schedule widget area (including its border).
+    /// Returns None if the mouse is outside the practitioner grid.
+    fn hit_test(&self, col: u16, row: u16, area: Rect) -> Option<(usize, u8)> {
         use crate::ui::layout::TIME_COLUMN_WIDTH;
 
+        let inner = area.inner(ratatui::layout::Margin {
+            horizontal: 1,
+            vertical: 1,
+        });
+
+        // Must be inside inner area
+        if col < inner.x
+            || row < inner.y
+            || col >= inner.x + inner.width
+            || row >= inner.y + inner.height
+        {
+            return None;
+        }
+
+        // Must be past the time column
+        if col < inner.x + TIME_COLUMN_WIDTH {
+            return None;
+        }
+
+        let y = row.saturating_sub(inner.y);
+        let slot = (y as u8 / 2).min(self.max_time_slot());
+
+        let practitioner_cols = inner.width.saturating_sub(TIME_COLUMN_WIDTH);
+        if practitioner_cols == 0 || self.practitioners_view.is_empty() {
+            return None;
+        }
+
+        let col_width = practitioner_cols / self.practitioners_view.len() as u16;
+        if col_width == 0 {
+            return None;
+        }
+
+        let x = col.saturating_sub(inner.x + TIME_COLUMN_WIDTH);
+        let practitioner_index = (x / col_width) as usize;
+        if practitioner_index >= self.practitioners_view.len() {
+            return None;
+        }
+
+        Some((practitioner_index, slot))
+    }
+
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> Option<ScheduleAction> {
         match mouse.kind {
             MouseEventKind::Moved => {
-                // Track which slot is hovered
-                let time_column_width = TIME_COLUMN_WIDTH;
-                let inner = area.inner(ratatui::layout::Margin {
-                    horizontal: 1,
-                    vertical: 1,
-                });
-
-                // Check if mouse is within schedule area
-                if mouse.column < inner.x || mouse.row < inner.y {
+                if let Some((prac_idx, slot)) = self.hit_test(mouse.column, mouse.row, area) {
+                    self.hovered_slot
+                        .set_hovered((prac_idx, slot), (mouse.column, mouse.row));
+                } else {
                     self.hovered_slot.clear_hover();
-                    return None;
                 }
-
-                let y = mouse.row.saturating_sub(inner.y);
-                let slot = (y as u8 / 2).min(self.max_time_slot());
-
-                // Only set hover if not in time column
-                if mouse.column >= inner.x + time_column_width {
-                    let col = mouse.column.saturating_sub(inner.x + time_column_width);
-                    let practitioner_cols = inner.width.saturating_sub(time_column_width);
-
-                    if practitioner_cols > 0 && !self.practitioners_view.is_empty() {
-                        let col_width = practitioner_cols / self.practitioners_view.len() as u16;
-                        if col_width > 0 {
-                            let practitioner_index = (col / col_width) as usize;
-                            if practitioner_index < self.practitioners_view.len() {
-                                self.hovered_slot.set_hovered(
-                                    (practitioner_index, slot),
-                                    (mouse.column, mouse.row),
-                                );
-                                return None;
-                            }
-                        }
-                    }
-                }
-                self.hovered_slot.clear_hover();
                 None
             }
             MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
-                let time_column_width = TIME_COLUMN_WIDTH;
                 let inner = area.inner(ratatui::layout::Margin {
                     horizontal: 1,
                     vertical: 1,
@@ -578,34 +628,22 @@ impl AppointmentState {
                 let slot = (y as u8 / 2).min(self.max_time_slot());
                 self.selected_time_slot = slot;
 
-                if mouse.column < inner.x + time_column_width {
+                if let Some((prac_idx, slot)) = self.hit_test(mouse.column, mouse.row, area) {
+                    self.selected_practitioner_index = prac_idx;
+                    self.selected_time_slot = slot;
+
+                    if let Some(apt) = self.get_appointment_at_slot_for_practitioner(slot, prac_idx)
+                    {
+                        return Some(ScheduleAction::SelectAppointment(apt.id));
+                    }
+
+                    return Some(ScheduleAction::SelectPractitioner(
+                        self.practitioners_view[prac_idx].id,
+                    ));
+                } else {
+                    // Clicked in time column — still update slot
                     return Some(ScheduleAction::NavigateTimeSlot(0));
                 }
-
-                let col = mouse.column.saturating_sub(inner.x + time_column_width);
-                let practitioner_cols = inner.width.saturating_sub(time_column_width);
-
-                if practitioner_cols > 0 && !self.practitioners_view.is_empty() {
-                    let col_width = practitioner_cols / self.practitioners_view.len() as u16;
-                    if col_width > 0 {
-                        let practitioner_index = (col / col_width) as usize;
-                        if practitioner_index < self.practitioners_view.len() {
-                            self.selected_practitioner_index = practitioner_index;
-
-                            if let Some(apt) = self.get_appointment_at_slot_for_practitioner(
-                                slot,
-                                self.selected_practitioner_index,
-                            ) {
-                                return Some(ScheduleAction::SelectAppointment(apt.id));
-                            }
-
-                            return Some(ScheduleAction::SelectPractitioner(
-                                self.practitioners_view[practitioner_index].id,
-                            ));
-                        }
-                    }
-                }
-                None
             }
             MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
                 // Check for double-click
@@ -613,7 +651,6 @@ impl AppointmentState {
                     .schedule_double_click_detector
                     .check_double_click_now(&mouse)
                 {
-                    let time_column_width = TIME_COLUMN_WIDTH;
                     let inner = area.inner(ratatui::layout::Margin {
                         horizontal: 1,
                         vertical: 1,
@@ -623,41 +660,24 @@ impl AppointmentState {
                     let slot = (y as u8 / 2).min(self.max_time_slot());
                     self.selected_time_slot = slot;
 
-                    if mouse.column >= inner.x + time_column_width {
-                        let col = mouse.column.saturating_sub(inner.x + time_column_width);
-                        let practitioner_cols = inner.width.saturating_sub(time_column_width);
+                    if let Some((prac_idx, slot)) = self.hit_test(mouse.column, mouse.row, area) {
+                        self.selected_practitioner_index = prac_idx;
+                        self.selected_time_slot = slot;
 
-                        if practitioner_cols > 0 && !self.practitioners_view.is_empty() {
-                            let col_width =
-                                practitioner_cols / self.practitioners_view.len() as u16;
-                            if col_width > 0 {
-                                let practitioner_index = (col / col_width) as usize;
-                                if practitioner_index < self.practitioners_view.len() {
-                                    self.selected_practitioner_index = practitioner_index;
-
-                                    // Try to select existing appointment, or trigger new creation
-                                    if let Some(apt) = self
-                                        .get_appointment_at_slot_for_practitioner(
-                                            slot,
-                                            self.selected_practitioner_index,
-                                        )
-                                    {
-                                        return Some(ScheduleAction::SelectAppointment(apt.id));
-                                    } else {
-                                        // Create new appointment at this slot
-                                        let time_str = self.slot_to_time(slot);
-                                        return Some(ScheduleAction::CreateAtSlot {
-                                            practitioner_id: self.practitioners_view
-                                                [practitioner_index]
-                                                .id,
-                                            date: self
-                                                .selected_date
-                                                .unwrap_or_else(|| chrono::Utc::now().date_naive()),
-                                            time: time_str,
-                                        });
-                                    }
-                                }
-                            }
+                        // Try to select existing appointment, or trigger new creation
+                        if let Some(apt) = self.get_appointment_at_slot_for_practitioner(slot, prac_idx)
+                        {
+                            return Some(ScheduleAction::SelectAppointment(apt.id));
+                        } else {
+                            // Create new appointment at this slot
+                            let time_str = self.slot_to_time(slot);
+                            return Some(ScheduleAction::CreateAtSlot {
+                                practitioner_id: self.practitioners_view[prac_idx].id,
+                                date: self
+                                    .selected_date
+                                    .unwrap_or_else(|| chrono::Utc::now().date_naive()),
+                                time: time_str,
+                            });
                         }
                     }
                 }
@@ -665,48 +685,24 @@ impl AppointmentState {
             }
             MouseEventKind::Down(crossterm::event::MouseButton::Right) => {
                 // Right-click context menu
-                let time_column_width = TIME_COLUMN_WIDTH;
-                let inner = area.inner(ratatui::layout::Margin {
-                    horizontal: 1,
-                    vertical: 1,
-                });
+                if let Some((prac_idx, slot)) = self.hit_test(mouse.column, mouse.row, area) {
+                    self.selected_practitioner_index = prac_idx;
+                    self.selected_time_slot = slot;
 
-                let y = mouse.row.saturating_sub(inner.y);
-                let slot = (y as u8 / 2).min(self.max_time_slot());
-
-                if mouse.column >= inner.x + time_column_width {
-                    let col = mouse.column.saturating_sub(inner.x + time_column_width);
-                    let practitioner_cols = inner.width.saturating_sub(time_column_width);
-
-                    if practitioner_cols > 0 && !self.practitioners_view.is_empty() {
-                        let col_width = practitioner_cols / self.practitioners_view.len() as u16;
-                        if col_width > 0 {
-                            let practitioner_index = (col / col_width) as usize;
-                            if practitioner_index < self.practitioners_view.len() {
-                                self.selected_practitioner_index = practitioner_index;
-                                self.selected_time_slot = slot;
-
-                                // For context menu, try to select appointment or prepare new creation
-                                if let Some(apt) = self.get_appointment_at_slot_for_practitioner(
-                                    slot,
-                                    practitioner_index,
-                                ) {
-                                    return Some(ScheduleAction::SelectAppointment(apt.id));
-                                } else {
-                                    // Return new creation action for context menu
-                                    let time_str = self.slot_to_time(slot);
-                                    return Some(ScheduleAction::CreateAtSlot {
-                                        practitioner_id: self.practitioners_view
-                                            [practitioner_index]
-                                            .id,
-                                        date: self
-                                            .selected_date
-                                            .unwrap_or_else(|| chrono::Utc::now().date_naive()),
-                                        time: time_str,
-                                    });
-                                }
-                            }
-                        }
+                    // For context menu, try to select appointment or prepare new creation
+                    if let Some(apt) = self.get_appointment_at_slot_for_practitioner(slot, prac_idx)
+                    {
+                        return Some(ScheduleAction::SelectAppointment(apt.id));
+                    } else {
+                        // Return new creation action for context menu
+                        let time_str = self.slot_to_time(slot);
+                        return Some(ScheduleAction::CreateAtSlot {
+                            practitioner_id: self.practitioners_view[prac_idx].id,
+                            date: self
+                                .selected_date
+                                .unwrap_or_else(|| chrono::Utc::now().date_naive()),
+                            time: time_str,
+                        });
                     }
                 }
                 None

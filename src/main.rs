@@ -1538,7 +1538,6 @@ fn handle_mouse_event(state: &mut AppState, ctx: &mut GlobalState, mouse: crosst
     use opengp_ui::ui::components::billing::{BillingView, ClaimList, InvoiceList, PaymentList};
     use opengp_ui::ui::components::clinical_row::{ClinicalMenuKind, ClinicalRow};
     use opengp_ui::ui::components::status_bar::STATUS_BAR_HEIGHT;
-    use opengp_ui::ui::input::HandleMouse;
 
     let area = state.terminal_size;
 
@@ -1611,12 +1610,15 @@ fn handle_mouse_event(state: &mut AppState, ctx: &mut GlobalState, mouse: crosst
     }
 
     if state.tab_bar.selected() == Tab::Schedule {
-        let appointment_content_area = Rect::new(
-            area.x,
-            area.y + clinical_row_offset,
-            area.width,
-            area.height.saturating_sub(clinical_row_offset + STATUS_BAR_HEIGHT),
-        );
+        let appointment_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Min(1),
+                Constraint::Length(1),
+            ])
+            .split(area);
+        let appointment_content_area = appointment_layout[1];
 
         match state.appointment_state.current_view {
             AppointmentView::Calendar => {
