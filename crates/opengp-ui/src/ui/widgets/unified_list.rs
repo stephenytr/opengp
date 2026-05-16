@@ -9,6 +9,7 @@ use ratatui::layout::{Constraint, Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table, Widget};
+use sublime_fuzzy::best_match;
 
 use crate::ui::input::DoubleClickDetector;
 use crate::ui::shared::{hover_style, invert_color, selected_hover_style};
@@ -102,6 +103,9 @@ pub struct UnifiedListConfig<T> {
     pub header_rows: u16,
     pub empty_message: String,
     pub sort_fn: Option<Box<dyn Fn(&T, &T) -> Ordering>>,
+    pub search_enabled: bool,
+    pub search_placeholder: String,
+    pub search_filter_fn: Option<Box<dyn Fn(&T, &str) -> bool>>,
 }
 
 impl<T> UnifiedListConfig<T> {
@@ -115,6 +119,9 @@ impl<T> UnifiedListConfig<T> {
             header_rows,
             empty_message: empty_message.into(),
             sort_fn: None,
+            search_enabled: false,
+            search_placeholder: String::new(),
+            search_filter_fn: None,
         }
     }
 
@@ -122,9 +129,20 @@ impl<T> UnifiedListConfig<T> {
         self.sort_fn = Some(Box::new(sort_fn));
         self
     }
+
+    pub fn with_search(mut self, placeholder: impl Into<String>) -> Self {
+        self.search_enabled = true;
+        self.search_placeholder = placeholder.into();
+        self
+    }
+
+    pub fn with_search_filter(mut self, filter_fn: impl Fn(&T, &str) -> bool + 'static) -> Self {
+        self.search_filter_fn = Some(Box::new(filter_fn));
+        self
+    }
 }
 
-pub struct UnifiedList<T: Clone> {
+pub struct UnifiedList<T: Clone + std::fmt::Debug> {
     pub items: Vec<T>,
     pub columns: Vec<UnifiedColumnDef<T>>,
     pub selected_index: usize,
@@ -135,9 +153,12 @@ pub struct UnifiedList<T: Clone> {
     pub double_click_detector: DoubleClickDetector,
     pub config: UnifiedListConfig<T>,
     pub focus: FocusFlag,
+    pub searching: bool,
+    pub search_query: String,
+    pub filtered_indices: Vec<usize>,
 }
 
-impl<T: Clone> UnifiedList<T> {
+impl<T: Clone + std::fmt::Debug> UnifiedList<T> {
     pub fn new(
         mut items: Vec<T>,
         columns: Vec<UnifiedColumnDef<T>>,
@@ -158,6 +179,9 @@ impl<T: Clone> UnifiedList<T> {
             double_click_detector: DoubleClickDetector::default(),
             config,
             focus: FocusFlag::default(),
+            searching: false,
+            search_query: String::new(),
+            filtered_indices: Vec::new(),
         }
     }
 
@@ -205,13 +229,90 @@ impl<T: Clone> UnifiedList<T> {
         self.move_up();
     }
 
+    pub fn apply_search_filter(&mut self) {
+        if !self.config.search_enabled || self.search_query.is_empty() {
+            self.filtered_indices = (0..self.items.len()).collect();
+            return;
+        }
+
+        self.filtered_indices.clear();
+
+        if let Some(ref filter_fn) = self.config.search_filter_fn {
+            for (idx, item) in self.items.iter().enumerate() {
+                if filter_fn(item, &self.search_query) {
+                    self.filtered_indices.push(idx);
+                }
+            }
+        } else {
+            for (idx, item) in self.items.iter().enumerate() {
+                let searchable = format!("{:?}", item);
+                if best_match(&self.search_query, &searchable).is_some() {
+                    self.filtered_indices.push(idx);
+                }
+            }
+        }
+
+        self.selected_index = 0;
+        self.scroll_offset = 0;
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<UnifiedListAction<T>> {
         if key.kind != KeyEventKind::Press {
             return None;
         }
 
+        if self.searching {
+            match key.code {
+                crossterm::event::KeyCode::Esc => {
+                    self.searching = false;
+                    self.search_query.clear();
+                    self.apply_search_filter();
+                    return Some(UnifiedListAction::Select(self.selected_index));
+                }
+                crossterm::event::KeyCode::Backspace => {
+                    self.search_query.pop();
+                    self.apply_search_filter();
+                    return Some(UnifiedListAction::Select(self.selected_index));
+                }
+                crossterm::event::KeyCode::Up => {
+                    if self.selected_index > 0 {
+                        self.selected_index -= 1;
+                    }
+                    self.adjust_scroll(10);
+                    return Some(UnifiedListAction::Select(self.selected_index));
+                }
+                crossterm::event::KeyCode::Down => {
+                    if self.selected_index < self.filtered_indices.len().saturating_sub(1) {
+                        self.selected_index += 1;
+                    }
+                    self.adjust_scroll(10);
+                    return Some(UnifiedListAction::Select(self.selected_index));
+                }
+                _ => {
+                    if let crossterm::event::KeyCode::Char(c) = key.code {
+                        self.search_query.push(c);
+                        self.apply_search_filter();
+                        return Some(UnifiedListAction::Select(self.selected_index));
+                    }
+                }
+            }
+            return None;
+        }
+
         let event = Event::Key(key);
         match &event {
+            ct_event!(key press '/') => {
+                if self.config.search_enabled {
+                    self.searching = true;
+                    self.search_query.clear();
+                    self.filtered_indices = (0..self.items.len()).collect();
+                    self.selected_index = 0;
+                    self.scroll_offset = 0;
+                    Some(UnifiedListAction::Select(self.selected_index))
+                } else {
+                    None
+                }
+            }
             ct_event!(keycode press Up) | ct_event!(key press 'k') => {
                 self.move_up();
                 self.adjust_scroll(10);
@@ -360,7 +461,7 @@ impl<T: Clone> UnifiedList<T> {
     }
 }
 
-impl<T: Clone> Widget for UnifiedList<T> {
+impl<T: Clone + std::fmt::Debug> Widget for UnifiedList<T> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         if area.is_empty() {
             return;
@@ -657,7 +758,7 @@ mod tests {
     }
 }
 
-impl<T: Clone> HasFocus for UnifiedList<T> {
+impl<T: Clone + std::fmt::Debug> HasFocus for UnifiedList<T> {
     fn build(&self, builder: &mut FocusBuilder) {
         builder.leaf_widget(self);
     }
